@@ -1,0 +1,3 @@
+[submodule "lib/coq-bitblasting"]
+	path = lib/coq-bitblasting
+	url = fm1:/home/git/coq-bitblasting.git
