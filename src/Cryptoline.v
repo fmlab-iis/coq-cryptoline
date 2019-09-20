@@ -279,7 +279,7 @@ Section Cryptoline.
   (* The first nat is the size of the subexpression *)
   Inductive rexp : Set :=
   | Rvar : var -> rexp
-  | Rconst : nat -> Z -> rexp
+  | Rconst : nat -> bits -> rexp
   | Runop : nat -> runop -> rexp -> rexp
   | Rbinop : nat -> rbinop -> rexp -> rexp -> rexp
   | Ruext : nat -> rexp -> nat -> rexp
@@ -296,7 +296,7 @@ Section Cryptoline.
     end.
 
   Definition rvar v := Rvar v.
-  Definition rconst w n := Rconst w n.
+  Definition rconst n := Rconst (size n) n.
   Definition rnegb w e := Runop w Rnegb e.
   Definition rnotb w e := Runop w Rnotb e.
   Definition radd w e1 e2 := Rbinop w Radd e1 e2.
@@ -312,14 +312,14 @@ Section Cryptoline.
 
   Definition radds w es :=
     match es with
-    | [::] => rconst w 0
+    | [::] => rconst (from_nat w 0)
     | e::[::] => e
     | e::es => foldl (fun res e => radd w res e) e es
     end.
 
   Definition rmuls w es :=
     match es with
-    | [::] => rconst w 1
+    | [::] => rconst (from_nat w 1)
     | e::[::] => e
     | e::es => foldl (fun res e => rmul w res e) e es
     end.
@@ -422,7 +422,8 @@ Section Cryptoline.
   Definition rsle w e1 e2 := Rcmp w Rsle e1 e2.
   Definition rsgt w e1 e2 := Rcmp w Rsgt e1 e2.
   Definition rsge w e1 e2 := Rcmp w Rsge e1 e2.
-  Definition reqmod w e1 e2 m := req w (rsrem w (rsub w e1 e2) m) (rconst w 0).
+  Definition reqmod w e1 e2 m :=
+    req w (rsrem w (rsub w e1 e2) m) (rconst (from_nat w 0)).
 
   Definition rneg e :=
     match e with
@@ -488,15 +489,21 @@ Section Cryptoline.
 
   Inductive atomic : Set :=
   | Avar : var -> atomic
-  | Aconst : typ -> Z -> atomic.
+  | Aconst : typ -> bits -> atomic.
+
+  Definition atyp (a : atomic) (te : TypEnv.t) : typ :=
+    match a with
+    | Avar v => TypEnv.find v te
+    | Aconst ty _ => ty
+    end.
 
   Inductive instr : Type :=
   (* Imov (v, a): v = a *)
   | Imov of var * atomic
   (* Ishl (v, a, n): v = a * 2^n, overflow is forbidden *)
-  | Ishl of var * atomic * Z
+  | Ishl of var * atomic * nat
   (* Icshl (vh, vl, a1, a2, n) *)
-  | Icshl of var * var * atomic * atomic * Z
+  | Icshl of var * var * atomic * atomic * nat
   (* Inondet v: v = a nondeterministic value *)
   | Inondet of var
   (* Icmov (v, c, a1, a2): if c then v = a1 else v = a2 *)
@@ -550,7 +557,7 @@ Section Cryptoline.
   (* Isplit (vh, vl, a, n): vh is the high (w - n) bits (signed extended to w bits)
      of a and vl is the low n bits (zero extended to w bits) of a where w is the
      bit-width of a *)
-  | Isplit of var * var * atomic * Z
+  | Isplit of var * var * atomic * nat
   (* == Instructions that cannot be translated to polynomials == *)
   (* Iand (v, a1, a2): v = the bitwise AND of a1 and a2 *)
   | Iand of var * atomic * atomic
@@ -572,15 +579,15 @@ Section Cryptoline.
   | Ircut of rbexp * seq prove_with_spec
   | Ighost of VS.t * bexp.
 
-  Definition program := seq instr.
+  Record program := { pinputs : TypEnv.t;
+                      pbody : seq instr }.
 
 
 
   (* Specifications *)
 
   Record spec : Type :=
-    { sin : TypEnv.t;
-      spre : bexp;
+    { spre : bexp;
       sprog : program;
       spost : bexp;
       sepwss : seq prove_with_spec;
@@ -593,24 +600,146 @@ Section Cryptoline.
       espwss : seq prove_with_spec }.
 
   Record rspec :=
-    { rsin : TypEnv.t;
-      rspre : rbexp;
+    { rspre : rbexp;
       rsprog : program;
       rspost : rbexp;
       rspwss : seq prove_with_spec }.
 
-  Definition espec_of_spec s :=
+  Coercion espec_of_spec s :=
     {| espre := eqn_bexp (spre s);
        esprog := sprog s;
        espost := eqn_bexp (spost s);
        espwss := sepwss s |}.
 
-  Definition rspec_of_spec s :=
-    {| rsin := sin s;
-       rspre := rng_bexp (spre s);
+  Coercion rspec_of_spec s :=
+    {| rspre := rng_bexp (spre s);
        rsprog := sprog s;
        rspost := rng_bexp (spost s);
        rspwss := srpwss s |}.
+
+  (* Semantics *)
+
+  Definition eval_eunop (op : eunop) (v : Z) : Z :=
+    match op with
+    | Eneg => - v
+    end.
+
+  Definition eval_ebinop (op : ebinop) (v1 v2 : Z) : Z :=
+    match op with
+    | Eadd => v1 + v2
+    | Esub => v1 - v2
+    | Emul => v1 * v2
+    end.
+
+  Definition eval_runop (op : runop) (v : bits) : bits :=
+    match op with
+    | Rnegb => negB v
+    | Rnotb => invB v
+    end.
+
+  Definition eval_rbinop (op : rbinop) (v1 v2 : bits) : bits :=
+    match op with
+    | Radd => addB v1 v2
+    | Rsub => subB v1 v2
+    | Rmul => mulB v1 v2
+    | Rumod => [::] (* TODO: Add correct semantics *)
+    | Rsrem => [::] (* TODO: Add correct semantics *)
+    | Rsmod => [::] (* TODO: Add correct semantics *)
+    | Randb => andB v1 v2
+    | Rorb => orB v1 v2
+    | Rxorb => xorB v1 v2
+    end.
+
+  Definition eval_rcmpop (op : rcmpop) (v1 v2 : bits) : bool :=
+    match op with
+    | Rult => ltB v1 v2
+    | Rule => leB v1 v2
+    | Rugt => gtB v1 v2
+    | Ruge => geB v1 v2
+    | Rslt => false (* TODO: Add correct semantics *)
+    | Rsle => false (* TODO: Add correct semantics *)
+    | Rsgt => false (* TODO: Add correct semantics *)
+    | Rsge => false (* TODO: Add correct semantics *)
+    end.
+
+  Fixpoint eval_eexp (e : eexp) (te : TypEnv.t) (s : Store.t) : Z :=
+    match e with
+    | Evar v => match TypEnv.find v te with
+                | Tuint _ => to_Zpos (Store.acc v s)
+                | Tsint _ => to_Z (Store.acc v s)
+                end
+    | Econst n => n
+    | Eunop op e => eval_eunop op (eval_eexp e te s)
+    | Ebinop op e1 e2 => eval_ebinop op (eval_eexp e1 te s) (eval_eexp e2 te s)
+    end.
+
+  Fixpoint eval_rexp (e : rexp) (te : TypEnv.t) (s : Store.t) : bits :=
+    match e with
+    | Rvar v => Store.acc v s
+    | Rconst w n => n
+    | Runop _ op e => eval_runop op (eval_rexp e te s)
+    | Rbinop _ op e1 e2 => eval_rbinop op (eval_rexp e1 te s) (eval_rexp e2 te s)
+    | Ruext _ e i => zext i (eval_rexp e te s)
+    | Rsext _ e i => sext i (eval_rexp e te s)
+    end.
+
+  Fixpoint eval_ebexp (e : ebexp) (te : TypEnv.t) (s : Store.t) : Prop :=
+    match e with
+    | Etrue => True
+    | Eeq e1 e2 => eval_eexp e1 te s = eval_eexp e2 te s
+    | Eeqmod e1 e2 p =>
+      modulo (eval_eexp e1 te s) (eval_eexp e2 te s) (eval_eexp p te s)
+    | Eand e1 e2 => eval_ebexp e1 te s /\ eval_ebexp e2 te s
+    end.
+
+  Fixpoint eval_rbexp (e : rbexp) (te : TypEnv.t) (s : Store.t) : Prop :=
+    match e with
+    | Rtrue => True
+    | Req _ e1 e2 => eval_rexp e1 te s = eval_rexp e2 te s
+    | Rcmp _ op e1 e2 => eval_rcmpop op (eval_rexp e1 te s) (eval_rexp e2 te s)
+    | Rneg e => ~ (eval_rbexp e te s)
+    | Rand e1 e2 => eval_rbexp e1 te s /\ eval_rbexp e2 te s
+    | Ror e1 e2 => eval_rbexp e1 te s \/ eval_rbexp e2 te s
+    end.
+
+  Definition eval_bexp (e : bexp) (te : TypEnv.t) (s : Store.t) : Prop :=
+    eval_ebexp (eqn_bexp e) te s /\ eval_rbexp (rng_bexp e) te s.
+
+  Definition valid (e : bexp) (te : TypEnv.t) : Prop :=
+    forall s : Store.t, conform s te -> eval_bexp e te s.
+
+  Definition entails (f g : bexp) (te : TypEnv.t) : Prop :=
+    forall s : Store.t, conform s te -> eval_bexp f te s -> eval_bexp g te s.
+
+  Definition eval_atomic (a : atomic) (te : TypEnv.t) (s : Store.t) : bits :=
+    match a with
+    | Avar v => Store.acc v s
+    | Aconst _ n => n
+    end.
+
+  (* Note: the correctness relies on well-formedness of instr *)
+  Definition instr_typenv (i : instr) (te : TypEnv.t) : TypEnv.t :=
+    match i with
+    | Imov (v, a) => TypEnv.add v (atyp a te) te
+    | Ishl (v, a, _) => TypEnv.add v (atyp a te) te
+    | Icshl (v1, v2, a1, a2, _) =>
+      TypEnv.add v1 (atyp a1 te) (TypEnv.add v2 (atyp a2 te) te)
+    | Inondet v => te
+    | Icmov (v, c, a1, a2) => TypEnv.add v (atyp a1 te) te
+    | Inop => te
+    | _ => te (* TODO: Correct this *)
+    end.
+
+  Definition eval_instr (i : instr) (te : TypEnv.t) (s : Store.t) : Store.t :=
+    match i with
+    | Imov (v, a) => Store.upd v (eval_atomic a te s) s
+    | Ishl (v, a, i) => Store.upd v (shlB i (eval_atomic a te s)) s
+    | _ => s (* TODO: Correct this *)
+    end.
+
+  (* TODO: Define well-formedness *)
+
+  (* TODO: Define SSA translation *)
 
 End Cryptoline.
 
