@@ -730,16 +730,36 @@ Section Cryptoline.
     | _ => te (* TODO: Correct this *)
     end.
 
-  Definition eval_instr (i : instr) (te : TypEnv.t) (s : Store.t) : Store.t :=
-    match i with
-    | Imov (v, a) => Store.upd v (eval_atomic a te s) s
-    | Ishl (v, a, i) => Store.upd v (shlB i (eval_atomic a te s)) s
-    | _ => s (* TODO: Correct this *)
-    end.
+  (* TODO: Finish this *)
+  Inductive eval_instr (te : TypEnv.t) : instr -> state -> state -> Prop :=
+  | Eerr i : eval_instr te i ERR ERR
+  | Emov v a s t :
+      Store.Upd v (eval_atomic a te s) s t ->
+      eval_instr te (Imov (v, a)) (OK s) (OK t)
+  | Eshl v a i s t :
+      Store.Upd v (shlB i (eval_atomic a te s)) s t ->
+      eval_instr te (Ishl (v, a, i)) (OK s) (OK t)
+  | Enondet v s t n :
+      size n = size (Store.acc v s) ->
+      Store.Upd v n s t ->
+      eval_instr te (Inondet v) (OK s) (OK t)
+  | Eassume e s :
+      eval_bexp e te s -> eval_instr te (Iassume e) (OK s) (OK s)
+  | EassertOK e s :
+      eval_bexp e te s -> eval_instr te (Iassert e) (OK s) (OK s)
+  | EassertERR e s :
+      ~ eval_bexp e te s -> eval_instr te (Iassert e) (OK s) ERR
+  .
+
+  Inductive eval_instrs (te : TypEnv.t) : seq instr -> state -> state -> Prop :=
+  | Enil s : eval_instrs te [::] s s
+  | Econs hd tl s t u : eval_instr te hd s t ->
+                  eval_instrs (instr_typenv hd te) tl t u ->
+                  eval_instrs te (hd::tl) s u.
+
+  Definition eval_program p s t : Prop := eval_instrs (pinputs p) (pbody p) s t.
 
   (* TODO: Define well-formedness *)
-
-  (* TODO: Define SSA translation *)
 
 End Cryptoline.
 

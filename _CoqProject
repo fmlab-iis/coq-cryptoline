@@ -3,3 +3,4 @@
 -Q lib/coq-bitblasting/src BitBlasting
 -Q src Cryptoline
 src/Cryptoline.v
+src/SSA.v
