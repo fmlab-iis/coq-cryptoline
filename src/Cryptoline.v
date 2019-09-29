@@ -259,6 +259,13 @@ Section Cryptoline.
   Definition eexp_eqMixin := EqMixin eexp_eqP.
   Canonical eexp_eqType := Eval hnf in EqType eexp eexp_eqMixin.
 
+  Fixpoint vars_eexp (e : eexp) : VS.t :=
+    match e with
+    | Evar v => VS.singleton v
+    | Econst n => VS.empty
+    | Eunop op e => vars_eexp e
+    | Ebinop op e1 e2 => VS.union (vars_eexp e1) (vars_eexp e2)
+    end.
 
 
   (* Limbs *)
@@ -380,6 +387,16 @@ Section Cryptoline.
   Definition rexp_eqMixin := EqMixin rexp_eqP.
   Canonical rexp_eqType := Eval hnf in EqType rexp rexp_eqMixin.
 
+  Fixpoint vars_rexp (e : rexp) : VS.t :=
+    match e with
+    | Rvar v => VS.singleton v
+    | Rconst w n => VS.empty
+    | Runop w op e => vars_rexp e
+    | Rbinop w op e1 e2 => VS.union (vars_rexp e1) (vars_rexp e2)
+    | Ruext w e i => vars_rexp e
+    | Rsext w e i => vars_rexp e
+    end.
+
 
 
   (* Algebraic Predicates *)
@@ -397,7 +414,56 @@ Section Cryptoline.
 
   Definition eands es := foldl (fun res e => eand res e) Etrue es.
 
-  (* TODO: Prove that ebexp is an eqType *)
+  Fixpoint ebexp_eqn (e1 e2 : ebexp) : bool :=
+    match e1, e2 with
+    | Etrue, Etrue => true
+    | Eeq e1 e2, Eeq e3 e4 => (e1 == e3) && (e2 == e4)
+    | Eeqmod e1 e2 m1, Eeqmod e3 e4 m2 => (e1 == e3) && (e2 == e4) && (m1 == m2)
+    | Eand e1 e2, Eand e3 e4 => ebexp_eqn e1 e3 && ebexp_eqn e2 e4
+    | _, _ => false
+    end.
+
+  Lemma ebexp_eqn_eq (e1 e2 : ebexp) : ebexp_eqn e1 e2 -> e1 = e2.
+  Proof.
+    elim: e1 e2 => [| e1 e2 | e1 e2 m | e1 IH1 e2 IH2] [] //=.
+    - by move=> ? ? /andP [/eqP -> /eqP ->].
+    - by move=> ? ? ? /andP [/andP [/eqP -> /eqP ->] /eqP ->].
+    - by move=> ? ? /andP [H1 H2]; rewrite (IH1 _ H1) (IH2 _ H2).
+  Qed.
+
+  Lemma ebexp_eqn_refl (e : ebexp) : ebexp_eqn e e.
+  Proof.
+    elim: e => //=; try by (move=> *; rewrite !eqxx). by move=> e1 -> e2 ->.
+  Qed.
+
+  Lemma ebexp_eqn_sym {e1 e2 : ebexp} : ebexp_eqn e1 e2 -> ebexp_eqn e2 e1.
+  Proof. move=> H; rewrite (ebexp_eqn_eq H); exact: ebexp_eqn_refl. Qed.
+
+  Lemma ebexp_eqn_trans {e1 e2 e3 : ebexp} :
+    ebexp_eqn e1 e2 -> ebexp_eqn e2 e3 -> ebexp_eqn e1 e3.
+  Proof.
+    move=> H1 H2. rewrite (ebexp_eqn_eq H1) (ebexp_eqn_eq H2). exact: ebexp_eqn_refl.
+  Qed.
+
+  Lemma ebexp_eqP (e1 e2 : ebexp) : reflect (e1 = e2) (ebexp_eqn e1 e2).
+  Proof.
+    case H: (ebexp_eqn e1 e2).
+    - apply: ReflectT. exact: (ebexp_eqn_eq H).
+    - apply: ReflectF => Heq. move/negP: H; apply. rewrite Heq.
+      exact: ebexp_eqn_refl.
+  Qed.
+
+  Definition ebexp_eqMixin := EqMixin ebexp_eqP.
+  Canonical ebexp_eqType := Eval hnf in EqType ebexp ebexp_eqMixin.
+
+  Fixpoint vars_ebexp (e : ebexp) : VS.t :=
+    match e with
+    | Etrue => VS.empty
+    | Eeq e1 e2 => VS.union (vars_eexp e1) (vars_eexp e2)
+    | Eeqmod e1 e2 m =>
+      VS.union (VS.union (vars_eexp e1) (vars_eexp e2)) (vars_eexp m)
+    | Eand e1 e2 => VS.union (vars_ebexp e1) (vars_ebexp e2)
+    end.
 
 
 
@@ -452,7 +518,65 @@ Section Cryptoline.
   Definition rands es := foldl (fun res e => rand res e) Rtrue es.
   Definition rors es := foldl (fun res e => ror res e) (Rneg Rtrue) es.
 
-  (* TODO: Prove that rbexp is an eqType *)
+  Fixpoint rbexp_eqn (e1 e2 : rbexp) : bool :=
+    match e1, e2 with
+    | Rtrue, Rtrue => true
+    | Req n1 e1 e2, Req n2 e3 e4 => (n1 == n2) && (e1 == e3) && (e2 == e4)
+    | Rcmp n1 op1 e1 e2, Rcmp n2 op2 e3 e4 =>
+      (n1 == n2) && (op1 == op2) && (e1 == e3) && (e2 == e4)
+    | Rneg e1, Rneg e2 => rbexp_eqn e1 e2
+    | Rand e1 e2, Rand e3 e4
+    | Ror e1 e2, Ror e3 e4 => rbexp_eqn e1 e3 && rbexp_eqn e2 e4
+    | _, _ => false
+    end.
+
+  Lemma rbexp_eqn_eq (e1 e2 : rbexp) : rbexp_eqn e1 e2 -> e1 = e2.
+  Proof.
+    elim: e1 e2 =>
+    [| n1 e1 e2 | n1 op1 e1 e2 | e1 IH1 | e1 IH1 e2 IH2 | e1 IH1 e2 IH2] [] //=.
+    - by move=> ? ? ? /andP [/andP [/eqP -> /eqP ->] /eqP ->].
+    - by move=> ? ? ? ? /andP [/andP [/andP [/eqP -> /eqP ->] /eqP ->] /eqP ->].
+    - by move=> ? H; rewrite (IH1 _ H).
+    - by move=> ? ? /andP [H1 H2]; rewrite (IH1 _ H1) (IH2 _ H2).
+    - by move=> ? ? /andP [H1 H2]; rewrite (IH1 _ H1) (IH2 _ H2).
+  Qed.
+
+  Lemma rbexp_eqn_refl (e : rbexp) : rbexp_eqn e e.
+  Proof.
+    elim: e => //=; try by (move=> *; rewrite !eqxx).
+    - by move=> e1 -> e2 ->.
+    - by move=> e1 -> e2 ->.
+  Qed.
+
+  Lemma rbexp_eqn_sym {e1 e2 : rbexp} : rbexp_eqn e1 e2 -> rbexp_eqn e2 e1.
+  Proof. move=> H; rewrite (rbexp_eqn_eq H); exact: rbexp_eqn_refl. Qed.
+
+  Lemma rbexp_eqn_trans {e1 e2 e3 : rbexp} :
+    rbexp_eqn e1 e2 -> rbexp_eqn e2 e3 -> rbexp_eqn e1 e3.
+  Proof.
+    move=> H1 H2. rewrite (rbexp_eqn_eq H1) (rbexp_eqn_eq H2). exact: rbexp_eqn_refl.
+  Qed.
+
+  Lemma rbexp_eqP (e1 e2 : rbexp) : reflect (e1 = e2) (rbexp_eqn e1 e2).
+  Proof.
+    case H: (rbexp_eqn e1 e2).
+    - apply: ReflectT. exact: (rbexp_eqn_eq H).
+    - apply: ReflectF => Heq. move/negP: H; apply. rewrite Heq.
+      exact: rbexp_eqn_refl.
+  Qed.
+
+  Definition rbexp_eqMixin := EqMixin rbexp_eqP.
+  Canonical rbexp_eqType := Eval hnf in EqType rbexp rbexp_eqMixin.
+
+  Fixpoint vars_rbexp (e : rbexp) : VS.t :=
+    match e with
+    | Rtrue => VS.empty
+    | Req w e1 e2 => VS.union (vars_rexp e1) (vars_rexp e2)
+    | Rcmp w op e1 e2 => VS.union (vars_rexp e1) (vars_rexp e2)
+    | Rneg e => vars_rbexp e
+    | Rand e1 e2
+    | Ror e1 e2 => VS.union (vars_rbexp e1) (vars_rbexp e2)
+    end.
 
 
 
@@ -476,6 +600,9 @@ Section Cryptoline.
 
   Definition bands es := foldl (fun res e => band res e) btrue es.
   Definition bands2 es rs := (eands es, rands rs).
+
+  Definition vars_bexp (e : bexp) : VS.t :=
+    VS.union (vars_ebexp (eqn_bexp e)) (vars_rbexp (rng_bexp e)).
 
 
 
