@@ -1019,7 +1019,7 @@ Section Cryptoline.
     end.
 
   (* Note: the correctness relies on well-formedness of instr *)
-  Definition instr_typenv (i : instr) (te : TypEnv.t) : TypEnv.t :=
+  Definition instr_succ_typenv (i : instr) (te : TypEnv.t) : TypEnv.t :=
     match i with
     | Imov v a => TypEnv.add v (atyp a te) te
     | Ishl v a _ => TypEnv.add v (atyp a te) te
@@ -1055,12 +1055,62 @@ Section Cryptoline.
   Inductive eval_instrs (te : TypEnv.t) : seq instr -> state -> state -> Prop :=
   | Enil s : eval_instrs te [::] s s
   | Econs hd tl s t u : eval_instr te hd s t ->
-                  eval_instrs (instr_typenv hd te) tl t u ->
+                  eval_instrs (instr_succ_typenv hd te) tl t u ->
                   eval_instrs te (hd::tl) s u.
+
+  Definition program_succ_typenv (p : program) (te : TypEnv.t) : TypEnv.t :=
+    foldl (fun te i => instr_succ_typenv i te) te p.
 
   Definition eval_program (te : TypEnv.t) p s t : Prop := eval_instrs te p s t.
 
+  (* Partial correctness *)
+  Definition spec_partial_correctness (s : spec) : Prop :=
+    forall s1 s2,
+      eval_bexp (spre s) (sinputs s) s1 ->
+      eval_program (sinputs s) (sprog s) (OK s1) (OK s2) ->
+      eval_bexp (spost s) (program_succ_typenv (sprog s) (sinputs s)) s2.
+
+  (* Total correctness *)
+  Definition spec_total_correctness (s : spec) : Prop :=
+    forall s1,
+      eval_bexp (spre s) (sinputs s) s1 ->
+      exists s2,
+        eval_program (sinputs s) (sprog s) (OK s1) (OK s2) /\
+        eval_bexp (spost s) (program_succ_typenv (sprog s) (sinputs s)) s2.
+
+  Definition spec_not_err (s : spec) : Prop :=
+    forall s1,
+      eval_bexp (spre s) (sinputs s) s1 ->
+      ~ eval_program (sinputs s) (sprog s) (OK s1) ERR.
+
+  Local Notation "te , s |= f" := (eval_bexp f te s) (at level 74, no associativity).
+  Local Notation "f ===> g" := (entails f g) (at level 82, no associativity).
+  Local Notation "te |= {{ f }} p {{ g }} -- epwss , rpwss" :=
+    (spec_partial_correctness {| sinputs := te;
+                                 spre := f;
+                                 sprog := p;
+                                 spost := g;
+                                 sepwss := epwss;
+                                 srpwss := rpwss |}) (at level 83).
+  Local Notation "te |= [[ f ]] p [[ g ]] -- epwss , rpwss" :=
+    (spec_total_correctness {| sinputs := te;
+                               spre := f;
+                               sprog := p;
+                               spost := g;
+                               sepwss := epwss;
+                               srpwss := rpwss |}) (at level 83).
+  Local Notation "te |= {{ f }} p {{ g }} -- epwss , rpwss ~\> 'err'" :=
+    (spec_not_err {| sinputs := te;
+                     spre := f;
+                     sprog := p;
+                     spost := g;
+                     sepwss := epwss;
+                     srpwss := rpwss |}) (at level 83).
+
   (* TODO: Define well-formedness *)
 
-End Cryptoline.
+  (* Note: Use TypEnv.mem v te to determine if v is defined *)
+  Definition well_formed_program (te : TypEnv.t) (p : program) : bool :=
+    true.
 
+End Cryptoline.
