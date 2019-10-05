@@ -2,5 +2,6 @@
 -Q lib/coq-bitblasting/lib/coq-nbits/src nbits
 -Q lib/coq-bitblasting/src BitBlasting
 -Q src Cryptoline
-src/Cryptoline.v
+src/DSL.v
 src/SSA.v
+src/ZDSL.v

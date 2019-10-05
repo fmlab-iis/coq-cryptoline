@@ -1,7 +1,8 @@
 
 From Coq Require Import List ZArith.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
-From BitBlasting Require Import Typ Var TypEnv State QFBV CNF.
+From nbits Require Import NBits.
+From BitBlasting Require Import Typ Var TypEnv State.
 From ssrlib Require Import SsrOrdered ZAriths Tactics.
 
 Set Implicit Arguments.
@@ -1064,19 +1065,59 @@ Section Cryptoline.
   Definition eval_program (te : TypEnv.t) p s t : Prop := eval_instrs te p s t.
 
   (* Partial correctness *)
-  Definition spec_partial_correctness (s : spec) : Prop :=
+
+  Definition spec_partial_correct (s : spec) : Prop :=
     forall s1 s2,
       eval_bexp (spre s) (sinputs s) s1 ->
       eval_program (sinputs s) (sprog s) (OK s1) (OK s2) ->
       eval_bexp (spost s) (program_succ_typenv (sprog s) (sinputs s)) s2.
 
+  Definition espec_partial_correct (s : espec) : Prop :=
+    forall s1 s2,
+      eval_ebexp (espre s) (esinputs s) s1 ->
+      eval_program (esinputs s) (esprog s) (OK s1) (OK s2) ->
+      eval_ebexp (espost s) (program_succ_typenv (esprog s) (esinputs s)) s2.
+
+  Definition rspec_partial_correct (s : rspec) : Prop :=
+    forall s1 s2,
+      eval_rbexp (rspre s) (rsinputs s) s1 ->
+      eval_program (rsinputs s) (rsprog s) (OK s1) (OK s2) ->
+      eval_rbexp (rspost s) (program_succ_typenv (rsprog s) (rsinputs s)) s2.
+
+  Lemma spec_partial_correct_split (s : spec) :
+    espec_partial_correct (espec_of_spec s) ->
+    rspec_partial_correct (rspec_of_spec s) ->
+    spec_partial_correct s.
+  Proof.
+    move=> He Hr s1 s2 [Hepre Hrpre] Hprog. split.
+    - exact: (He _ _ Hepre Hprog).
+    - exact: (Hr _ _ Hrpre Hprog).
+  Qed.
+
   (* Total correctness *)
-  Definition spec_total_correctness (s : spec) : Prop :=
+
+  Definition spec_total_correct (s : spec) : Prop :=
     forall s1,
       eval_bexp (spre s) (sinputs s) s1 ->
       exists s2,
         eval_program (sinputs s) (sprog s) (OK s1) (OK s2) /\
         eval_bexp (spost s) (program_succ_typenv (sprog s) (sinputs s)) s2.
+
+  Definition espec_total_correct (s : espec) : Prop :=
+    forall s1,
+      eval_ebexp (espre s) (esinputs s) s1 ->
+      exists s2,
+        eval_program (esinputs s) (esprog s) (OK s1) (OK s2) /\
+        eval_ebexp (espost s) (program_succ_typenv (esprog s) (esinputs s)) s2.
+
+  Definition rspec_total_correct (s : spec) : Prop :=
+    forall s1,
+      eval_rbexp (rspre s) (rsinputs s) s1 ->
+      exists s2,
+        eval_program (rsinputs s) (rsprog s) (OK s1) (OK s2) /\
+        eval_rbexp (rspost s) (program_succ_typenv (rsprog s) (rsinputs s)) s2.
+
+  (* ERR unreachable *)
 
   Definition spec_not_err (s : spec) : Prop :=
     forall s1,
@@ -1086,19 +1127,19 @@ Section Cryptoline.
   Local Notation "te , s |= f" := (eval_bexp f te s) (at level 74, no associativity).
   Local Notation "f ===> g" := (entails f g) (at level 82, no associativity).
   Local Notation "te |= {{ f }} p {{ g }} -- epwss , rpwss" :=
-    (spec_partial_correctness {| sinputs := te;
-                                 spre := f;
-                                 sprog := p;
-                                 spost := g;
-                                 sepwss := epwss;
-                                 srpwss := rpwss |}) (at level 83).
+    (spec_partial_correct {| sinputs := te;
+                             spre := f;
+                             sprog := p;
+                             spost := g;
+                             sepwss := epwss;
+                             srpwss := rpwss |}) (at level 83).
   Local Notation "te |= [[ f ]] p [[ g ]] -- epwss , rpwss" :=
-    (spec_total_correctness {| sinputs := te;
-                               spre := f;
-                               sprog := p;
-                               spost := g;
-                               sepwss := epwss;
-                               srpwss := rpwss |}) (at level 83).
+    (spec_total_correct {| sinputs := te;
+                           spre := f;
+                           sprog := p;
+                           spost := g;
+                           sepwss := epwss;
+                           srpwss := rpwss |}) (at level 83).
   Local Notation "te |= {{ f }} p {{ g }} -- epwss , rpwss ~\> 'err'" :=
     (spec_not_err {| sinputs := te;
                      spre := f;

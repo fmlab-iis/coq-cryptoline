@@ -3,7 +3,7 @@ From Coq Require Import List ZArith.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From BitBlasting Require Import Typ Var TypEnv State.
 From ssrlib Require Import SsrOrdered FMaps ZAriths Tactics.
-From Cryptoline Require Import Cryptoline.
+From Cryptoline Require Import DSL.
 
 (* A map from a variable to its current index *)
 Definition vmap : Type := VM.t N.
