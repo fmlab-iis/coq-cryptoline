@@ -213,7 +213,9 @@ Section Cryptoline.
     | e::es => foldl (fun res e => emul res e) e es
     end.
 
-  Definition e2pow n := Z.pow 2%Z n.
+  Definition zexpn2 n := Z.pow 2%Z n.
+
+  Definition eexpn2 n := econst (Z.pow 2%Z n).
 
   Fixpoint eexp_eqn (e1 e2 : eexp) : bool :=
     match e1, e2 with
@@ -275,7 +277,7 @@ Section Cryptoline.
     match es with
     | [::] => econst Z.zero
     | e::[::] => e
-    | e::es => eadd (emul e (econst (e2pow (Z.of_nat i * r)))) (limbsi (i + 1) r es)
+    | e::es => eadd (emul e (eexpn2 (Z.of_nat i * r))) (limbsi (i + 1) r es)
     end.
 
   Definition limbs (r : Z) (es : seq eexp) := limbsi 0 r es.
