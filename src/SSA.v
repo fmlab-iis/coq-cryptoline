@@ -1,19 +1,20 @@
 From Coq Require Import List ZArith FSets OrderedType.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
-From BitBlasting Require Import Typ Var TypEnv State.
-From ssrlib Require Import SsrOrdered FMaps ZAriths Tactics Lists FSets.
+From BitBlasting Require Import Typ TypEnv State.
+From ssrlib Require Import Var SsrOrder FMaps ZAriths Tactics Lists FSets.
 From Cryptoline Require Import DSL.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
+Module SSA := MakeDSL SSAVarOrder SSAVS SSAVM SSATE SSAStore.
+
 Module M2 := Map2 VS VS.
 
-Section SSA.
+Section MakeSSA.
 
-  Open Scope N_scope.
-
+  Local Open Scope N_scope.
 
   (* A map from a variable to its current index *)
   Definition vmap : Type := VM.t N.
@@ -38,57 +39,58 @@ Section SSA.
     | Some i => VM.add v (i + 1) m
     end.
 
-  Definition ssa_var (m : vmap) (v : var) : var :=
-    {| vname := vname v; vidx := get_index v m |}.
+  Definition ssa_var (m : vmap) (v : var) : ssavar := (v, get_index v m).
 
-  Definition ssa_vars (m : vmap) (vs : VS.t) : VS.t :=
-    VS.Lemmas.OP.P.of_list (map (ssa_var m) (VS.elements vs)).
+  Definition ssa_vars (m : vmap) (vs : VS.t) : SSAVS.t :=
+    SSAVS.Lemmas.OP.P.of_list (map (ssa_var m) (VS.elements vs)).
 
-  Definition ssa_atomic (m : vmap) (a : atomic) : atomic :=
+  Definition ssa_atomic (m : vmap) (a : DSL.atomic) : SSA.atomic :=
     match a with
-    | Avar v => Avar (ssa_var m v)
-    | Aconst ty n => Aconst ty n
+    | DSL.Avar v => SSA.Avar (ssa_var m v)
+    | DSL.Aconst ty n => SSA.Aconst ty n
     end.
 
-  Fixpoint ssa_eexp (m: vmap) (e: eexp) :=
+  Fixpoint ssa_eexp (m : vmap) (e : DSL.eexp) : SSA.eexp :=
     match e with
-    | Evar v => Evar (ssa_var m v)
-    | Econst c => Econst c
-    | Eunop op e => Eunop op (ssa_eexp m e)
-    | Ebinop op e1 e2 => Ebinop op (ssa_eexp m e1) (ssa_eexp m e2)
+    | Evar v => SSA.evar (ssa_var m v)
+    | Econst c => SSA.econst c
+    | Eunop op e => SSA.eunary op (ssa_eexp m e)
+    | Ebinop op e1 e2 => SSA.ebinary op (ssa_eexp m e1) (ssa_eexp m e2)
     end.
 
-  Fixpoint ssa_rexp (m: vmap) (e: rexp) :=
+  Fixpoint ssa_rexp (m : vmap) (e : DSL.rexp) :=
     match e with
-    | Rvar v => Rvar (ssa_var m v)
-    | Rconst w n => Rconst w n
-    | Runop w op e => Runop w op (ssa_rexp m e)
-    | Rbinop w op e1 e2 => Rbinop w op (ssa_rexp m e1) (ssa_rexp m e2)
-    | Ruext w e i => Ruext w (ssa_rexp m e) i
-    | Rsext w e i => Rsext w (ssa_rexp m e) i
+    | Rvar v => SSA.rvar (ssa_var m v)
+    | Rconst w n => SSA.rconst w n
+    | Runop w op e => SSA.runary w op (ssa_rexp m e)
+    | Rbinop w op e1 e2 => SSA.rbinary w op (ssa_rexp m e1) (ssa_rexp m e2)
+    | Ruext w e i => SSA.ruext w (ssa_rexp m e) i
+    | Rsext w e i => SSA.rsext w (ssa_rexp m e) i
     end.
 
-  Fixpoint ssa_ebexp (m: vmap) (e: ebexp) :=
+  Fixpoint ssa_ebexp (m : vmap) (e : DSL.ebexp) :=
     match e with
-    | Etrue => Etrue
-    | Eeq e1 e2 => Eeq ( ssa_eexp m e1 ) ( ssa_eexp m e2 )
-    | Eeqmod e1 e2 p => Eeqmod ( ssa_eexp m e1 ) ( ssa_eexp m e2 ) ( ssa_eexp m p )
-    | Eand e1 e2 => Eand ( ssa_ebexp m e1 ) ( ssa_ebexp m e2 )
+    | Etrue => SSA.etrue
+    | Eeq e1 e2 => SSA.eeq (ssa_eexp m e1) (ssa_eexp m e2)
+    | Eeqmod e1 e2 p => SSA.eeqmod (ssa_eexp m e1) (ssa_eexp m e2) (ssa_eexp m p)
+    | Eand e1 e2 => SSA.eand (ssa_ebexp m e1) (ssa_ebexp m e2)
     end.
 
-  Fixpoint ssa_rbexp (m: vmap) (e: rbexp) :=
+  Fixpoint ssa_rbexp (m : vmap) (e : DSL.rbexp) :=
     match e with
-    | Rtrue => Rtrue
-    | Req w e1 e2 => Req w ( ssa_rexp m e1 ) ( ssa_rexp m e2 )
-    | Rcmp w op e1 e2 => Rcmp w op ( ssa_rexp m e1 ) ( ssa_rexp m e2 )
-    | Rneg e => Rneg ( ssa_rbexp m e )
-    | Rand e1 e2 => Rand ( ssa_rbexp m e1 ) ( ssa_rbexp m e2 )
-    | Ror e1 e2 => Ror ( ssa_rbexp m e1 ) ( ssa_rbexp m e2 )
+    | Rtrue => SSA.rtrue
+    | Req w e1 e2 => SSA.req w (ssa_rexp m e1) (ssa_rexp m e2)
+    | Rcmp w op e1 e2 => SSA.rcmp w op (ssa_rexp m e1) (ssa_rexp m e2)
+    | Rneg e => SSA.rneg (ssa_rbexp m e)
+    | Rand e1 e2 => SSA.rand (ssa_rbexp m e1) (ssa_rbexp m e2)
+    | Ror e1 e2 => SSA.ror (ssa_rbexp m e1) (ssa_rbexp m e2)
     end.
 
-  Definition ssa_bexp m e := (ssa_ebexp m (eqn_bexp e) , ssa_rbexp m (rng_bexp e)).
+  Definition ssa_bexp (m : vmap) (e : DSL.bexp) :=
+    (ssa_ebexp m (DSL.eqn_bexp e) , ssa_rbexp m (DSL.rng_bexp e)).
 
 
+  (*
   Definition ssa_instr (m : vmap) (i : instr) : vmap * instr :=
     match i with
     | Imov v a =>
@@ -934,4 +936,6 @@ Section SSA.
     rewrite (ssa_vars_mem1 m Hux Huxs).
     assumption.
   Qed.
-End SSA.
+  *)
+
+End MakeSSA.

@@ -2,19 +2,17 @@
 From Coq Require Import List ZArith.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
-From BitBlasting Require Import Typ Var TypEnv State.
-From ssrlib Require Import SsrOrdered ZAriths Tactics.
+From BitBlasting Require Import Typ TypEnv State.
+From ssrlib Require Import Var SsrOrder ZAriths FSets FMaps Tactics.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
-Delimit Scope cryptoline with cryptoline.
-Local Open Scope cryptoline.
+Delimit Scope dsl with dsl.
+Local Open Scope dsl.
 
-Section Cryptoline.
-
-  (* Operators *)
+Section Operators.
 
   Inductive eunop : Set :=
   | Eneg.
@@ -181,11 +179,15 @@ Section Cryptoline.
   Definition rcmpop_eqMixin := EqMixin rcmpop_eqP.
   Canonical rcmpop_eqType := Eval hnf in EqType rcmpop rcmpop_eqMixin.
 
+End Operators.
 
 
-  (* Algebraic Expressions *)
 
-  Inductive eexp : Set :=
+Section DSLRaw.
+
+  Variable var : eqType.
+
+  Inductive eexp : Type :=
   | Evar : var -> eexp
   | Econst : Z -> eexp
   | Eunop : eunop -> eexp -> eexp
@@ -193,6 +195,8 @@ Section Cryptoline.
 
   Definition evar v := Evar v.
   Definition econst n := Econst n.
+  Definition eunary op e := Eunop op e.
+  Definition ebinary op e1 e2 := Ebinop op e1 e2.
   Definition eneg e := Eunop Eneg e.
   Definition eadd e1 e2 := Ebinop Eadd e1 e2.
   Definition esub e1 e2 := Ebinop Esub e1 e2.
@@ -262,15 +266,6 @@ Section Cryptoline.
   Definition eexp_eqMixin := EqMixin eexp_eqP.
   Canonical eexp_eqType := Eval hnf in EqType eexp eexp_eqMixin.
 
-  Fixpoint vars_eexp (e : eexp) : VS.t :=
-    match e with
-    | Evar v => VS.singleton v
-    | Econst n => VS.empty
-    | Eunop op e => vars_eexp e
-    | Ebinop op e1 e2 => VS.union (vars_eexp e1) (vars_eexp e2)
-    end.
-
-
   (* Limbs *)
 
   Fixpoint limbsi (i : nat) (r : Z) (es : seq eexp) :=
@@ -282,12 +277,10 @@ Section Cryptoline.
 
   Definition limbs (r : Z) (es : seq eexp) := limbsi 0 r es.
 
-
-
   (* Range Expressions *)
 
   (* The first nat is the size of the subexpression *)
-  Inductive rexp : Set :=
+  Inductive rexp : Type :=
   | Rvar : var -> rexp
   | Rconst : nat -> bits -> rexp
   | Runop : nat -> runop -> rexp -> rexp
@@ -295,18 +288,11 @@ Section Cryptoline.
   | Ruext : nat -> rexp -> nat -> rexp
   | Rsext : nat -> rexp -> nat -> rexp.
 
-  Fixpoint size_of_rexp (e : rexp) (te : TypEnv.t) : nat :=
-    match e with
-    | Rvar v => TypEnv.vsize v te
-    | Rconst w n => w
-    | Runop w _ _ => w
-    | Rbinop w _ _ _ => w
-    | Ruext w _ i => w + i
-    | Rsext w _ i => w + i
-    end.
-
   Definition rvar v := Rvar v.
-  Definition rconst n := Rconst (size n) n.
+  Definition rconst w n := Rconst w n.
+  Definition rbits n := Rconst (size n) n.
+  Definition runary w op e := Runop w op e.
+  Definition rbinary w op e1 e2 := Rbinop w op e1 e2.
   Definition rnegb w e := Runop w Rnegb e.
   Definition rnotb w e := Runop w Rnotb e.
   Definition radd w e1 e2 := Rbinop w Radd e1 e2.
@@ -322,14 +308,14 @@ Section Cryptoline.
 
   Definition radds w es :=
     match es with
-    | [::] => rconst (from_nat w 0)
+    | [::] => rbits (from_nat w 0)
     | e::[::] => e
     | e::es => foldl (fun res e => radd w res e) e es
     end.
 
   Definition rmuls w es :=
     match es with
-    | [::] => rconst (from_nat w 1)
+    | [::] => rbits (from_nat w 1)
     | e::[::] => e
     | e::es => foldl (fun res e => rmul w res e) e es
     end.
@@ -390,21 +376,9 @@ Section Cryptoline.
   Definition rexp_eqMixin := EqMixin rexp_eqP.
   Canonical rexp_eqType := Eval hnf in EqType rexp rexp_eqMixin.
 
-  Fixpoint vars_rexp (e : rexp) : VS.t :=
-    match e with
-    | Rvar v => VS.singleton v
-    | Rconst w n => VS.empty
-    | Runop w op e => vars_rexp e
-    | Rbinop w op e1 e2 => VS.union (vars_rexp e1) (vars_rexp e2)
-    | Ruext w e i => vars_rexp e
-    | Rsext w e i => vars_rexp e
-    end.
-
-
-
   (* Algebraic Predicates *)
 
-  Inductive ebexp : Set :=
+  Inductive ebexp : Type :=
   | Etrue
   | Eeq : eexp -> eexp -> ebexp
   | Eeqmod : eexp -> eexp -> eexp -> ebexp
@@ -459,20 +433,9 @@ Section Cryptoline.
   Definition ebexp_eqMixin := EqMixin ebexp_eqP.
   Canonical ebexp_eqType := Eval hnf in EqType ebexp ebexp_eqMixin.
 
-  Fixpoint vars_ebexp (e : ebexp) : VS.t :=
-    match e with
-    | Etrue => VS.empty
-    | Eeq e1 e2 => VS.union (vars_eexp e1) (vars_eexp e2)
-    | Eeqmod e1 e2 m =>
-      VS.union (vars_eexp e1) (VS.union (vars_eexp e2) (vars_eexp m))
-    | Eand e1 e2 => VS.union (vars_ebexp e1) (vars_ebexp e2)
-    end.
-
-
-
   (* Range Predicates *)
 
-  Inductive rbexp : Set :=
+  Inductive rbexp : Type :=
   | Rtrue
   | Req : nat -> rexp -> rexp -> rbexp
   | Rcmp : nat -> rcmpop -> rexp -> rexp -> rbexp
@@ -483,6 +446,7 @@ Section Cryptoline.
   Definition rtrue := Rtrue.
   Definition rfalse := Rneg Rtrue.
   Definition req w e1 e2 := Req w e1 e2.
+  Definition rcmp w op e1 e2 := Rcmp w op e1 e2.
   Definition rult w e1 e2 := Rcmp w Rult e1 e2.
   Definition rule w e1 e2 := Rcmp w Rule e1 e2.
   Definition rugt w e1 e2 := Rcmp w Rugt e1 e2.
@@ -492,7 +456,7 @@ Section Cryptoline.
   Definition rsgt w e1 e2 := Rcmp w Rsgt e1 e2.
   Definition rsge w e1 e2 := Rcmp w Rsge e1 e2.
   Definition reqmod w e1 e2 m :=
-    req w (rsrem w (rsub w e1 e2) m) (rconst (from_nat w 0)).
+    req w (rsrem w (rsub w e1 e2) m) (rbits (from_nat w 0)).
 
   Definition rneg e :=
     match e with
@@ -571,6 +535,157 @@ Section Cryptoline.
   Definition rbexp_eqMixin := EqMixin rbexp_eqP.
   Canonical rbexp_eqType := Eval hnf in EqType rbexp rbexp_eqMixin.
 
+End DSLRaw.
+
+
+
+Module MakeDSL
+       (V : SsrOrder)
+       (VS : SsrFSet with Module SE := V)
+       (VM : SsrFMap with Module SE := V)
+       (TE : TypEnv with Module SE := V)
+       (S : BitsStore V TE).
+
+  (* Operators *)
+
+  Local Notation var := V.t.
+
+
+
+  (* Algebraic Expressions *)
+
+  Definition eexp := eexp V.T.
+
+  Definition evar (v : V.t) : eexp := @Evar V.T v.
+  Definition econst (n : Z) : eexp := @Econst V.T n.
+  Definition eunary (op : eunop) (e : eexp) : eexp := @Eunop V.T op e.
+  Definition ebinary (op : ebinop) (e1 e2 : eexp) : eexp := @Ebinop V.T op e1 e2.
+  Definition eneg (e : eexp) : eexp := @Eunop V.T Eneg e.
+  Definition eadd (e1 e2 : eexp) : eexp := @Ebinop V.T Eadd e1 e2.
+  Definition esub (e1 e2 : eexp) : eexp := @Ebinop V.T Esub e1 e2.
+  Definition emul (e1 e2 : eexp) : eexp := @Ebinop V.T Emul e1 e2.
+  Definition esq (e : eexp) : eexp := @Ebinop V.T Emul e e.
+
+  Definition eadds (es : seq eexp) : eexp := eadds es.
+  Definition emuls (es : seq eexp) : eexp := emuls es.
+
+  Definition zexpn2 n := Z.pow 2%Z n.
+  Definition eexpn2 n := econst (Z.pow 2%Z n).
+
+  Fixpoint vars_eexp (e : eexp) : VS.t :=
+    match e with
+    | Evar v => VS.singleton v
+    | Econst n => VS.empty
+    | Eunop op e => vars_eexp e
+    | Ebinop op e1 e2 => VS.union (vars_eexp e1) (vars_eexp e2)
+    end.
+
+
+
+  (* Limbs *)
+
+  Definition limbsi (i : nat) (r : Z) (es : seq eexp) : eexp := limbsi i r es.
+  Definition limbs (r : Z) (es : seq eexp) : eexp := limbsi 0 r es.
+
+
+
+  (* Range Expressions *)
+
+  Definition rexp := rexp V.T.
+
+  Fixpoint size_of_rexp (e : rexp) (te : TE.env) : nat :=
+    match e with
+    | Rvar v => TE.vsize v te
+    | Rconst w n => w
+    | Runop w _ _ => w
+    | Rbinop w _ _ _ => w
+    | Ruext w _ i => w + i
+    | Rsext w _ i => w + i
+    end.
+
+  Definition rvar v : rexp := @Rvar V.T v.
+  Definition rconst w (n : bits) : rexp := @Rconst V.T w n.
+  Definition rbits (n : bits) : rexp := @rbits V.T n.
+  Definition runary w (op : runop) (e : rexp) : rexp := @Runop V.T w op e.
+  Definition rbinary w (op : rbinop) (e1 e2 : rexp) : rexp := @Rbinop V.T w op e1 e2.
+  Definition rnegb w (e : rexp) : rexp := @Runop V.T w Rnegb e.
+  Definition rnotb w (e : rexp) : rexp := @Runop V.T w Rnotb e.
+  Definition radd w (e1 e2 : rexp) : rexp := @Rbinop V.T w Radd e1 e2.
+  Definition rsub w (e1 e2 : rexp) : rexp := @Rbinop V.T w Rsub e1 e2.
+  Definition rmul w (e1 e2 : rexp) : rexp := @Rbinop V.T w Rmul e1 e2.
+  Definition rumod w (e1 e2 : rexp) : rexp := @Rbinop V.T w Rumod e1 e2.
+  Definition rsrem w (e1 e2 : rexp) : rexp := @Rbinop V.T w Rsrem e1 e2.
+  Definition rsmod w (e1 e2 : rexp) : rexp := @Rbinop V.T w Rsmod e1 e2.
+  Definition randb w (e1 e2 : rexp) : rexp := @Rbinop V.T w Randb e1 e2.
+  Definition rorb w (e1 e2 : rexp) : rexp := @Rbinop V.T w Rorb e1 e2.
+  Definition rxorb w (e1 e2 : rexp) : rexp := @Rbinop V.T w Rxorb e1 e2.
+  Definition rsq w (e : rexp) : rexp := @Rbinop V.T w Rmul e e.
+  Definition ruext w (e : rexp) i : rexp := @Ruext V.T w e i.
+  Definition rsext w (e : rexp) i : rexp := @Rsext V.T w e i.
+
+  Definition radds w (es : seq rexp) : rexp := radds w es.
+  Definition rmuls w (es : seq rexp) : rexp := rmuls w es.
+
+  Fixpoint vars_rexp (e : rexp) : VS.t :=
+    match e with
+    | Rvar v => VS.singleton v
+    | Rconst w n => VS.empty
+    | Runop w op e => vars_rexp e
+    | Rbinop w op e1 e2 => VS.union (vars_rexp e1) (vars_rexp e2)
+    | Ruext w e i => vars_rexp e
+    | Rsext w e i => vars_rexp e
+    end.
+
+
+
+  (* Algebraic Predicates *)
+
+  Definition ebexp : Type := ebexp V.T.
+
+  Definition etrue : ebexp := @Etrue V.T.
+  Definition eeq (e1 e2 : eexp) : ebexp := @Eeq V.T e1 e2.
+  Definition eeqmod (e1 e2 m : eexp) : ebexp := @Eeqmod V.T e1 e2 m.
+  Definition eand (b1 b2 : ebexp) : ebexp := @Eand V.T b1 b2.
+
+  Definition eands (es : seq ebexp) : ebexp := @eands V.T es.
+
+  Fixpoint vars_ebexp (e : ebexp) : VS.t :=
+    match e with
+    | Etrue => VS.empty
+    | Eeq e1 e2 => VS.union (vars_eexp e1) (vars_eexp e2)
+    | Eeqmod e1 e2 m =>
+      VS.union (vars_eexp e1) (VS.union (vars_eexp e2) (vars_eexp m))
+    | Eand e1 e2 => VS.union (vars_ebexp e1) (vars_ebexp e2)
+    end.
+
+
+
+  (* Range Predicates *)
+
+  Definition rbexp : Type := rbexp V.T.
+
+  Definition rtrue : rbexp := @Rtrue V.T.
+  Definition rfalse : rbexp := @Rneg V.T rtrue.
+  Definition req w (e1 e2 : rexp) : rbexp := @Req V.T w e1 e2.
+  Definition rcmp w (op : rcmpop) (e1 e2 : rexp) : rbexp := @Rcmp V.T w op e1 e2.
+  Definition rult w (e1 e2 : rexp) : rbexp := @Rcmp V.T w Rult e1 e2.
+  Definition rule w (e1 e2 : rexp) : rbexp := @Rcmp V.T w Rule e1 e2.
+  Definition rugt w (e1 e2 : rexp) : rbexp := @Rcmp V.T w Rugt e1 e2.
+  Definition ruge w (e1 e2 : rexp) : rbexp := @Rcmp V.T w Ruge e1 e2.
+  Definition rslt w (e1 e2 : rexp) : rbexp := @Rcmp V.T w Rslt e1 e2.
+  Definition rsle w (e1 e2 : rexp) : rbexp := @Rcmp V.T w Rsle e1 e2.
+  Definition rsgt w (e1 e2 : rexp) : rbexp := @Rcmp V.T w Rsgt e1 e2.
+  Definition rsge w (e1 e2 : rexp) : rbexp := @Rcmp V.T w Rsge e1 e2.
+  Definition reqmod w (e1 e2 m : rexp) : rbexp :=
+    req w (rsrem w (rsub w e1 e2) m) (rbits (from_nat w 0)).
+
+  Definition rneg (e : rbexp) : rbexp := @rneg V.T e.
+  Definition rand (e1 e2 : rbexp) : rbexp := @rand V.T e1 e2.
+  Definition ror (e1 e2 : rbexp) : rbexp := @ror V.T e1 e2.
+
+  Definition rands (es : seq rbexp) : rbexp := @rands V.T es.
+  Definition rors (es : seq rbexp) : rbexp := @rors V.T es.
+
   Fixpoint vars_rbexp (e : rbexp) : VS.t :=
     match e with
     | Rtrue => VS.empty
@@ -585,9 +700,9 @@ Section Cryptoline.
 
   (* Predicates *)
 
-  Definition bexp : Set := ebexp * rbexp.
+  Definition bexp : Type := ebexp * rbexp.
 
-  Definition btrue : bexp := (Etrue, Rtrue).
+  Definition btrue : bexp := (etrue, rtrue).
 
   Definition eqn_bexp (e : bexp) : ebexp := e.1.
   Definition rng_bexp (e : bexp) : rbexp := e.2.
@@ -617,35 +732,35 @@ Section Cryptoline.
   | AllAssumes
   | AllGhosts.
 
-  Inductive atomic : Set :=
+  Inductive atomic : Type :=
   | Avar : var -> atomic
   | Aconst : typ -> bits -> atomic.
 
-  Definition atyp (a : atomic) (te : TypEnv.t) : typ :=
+  Definition atyp (a : atomic) (te : TE.env) : typ :=
     match a with
-    | Avar v => TypEnv.find v te
+    | Avar v => TE.vtyp v te
     | Aconst ty _ => ty
     end.
 
   Definition Tbit := Tuint 1.
 
   Definition is_unsigned (ty : typ) : bool :=
-    match ty with 
+    match ty with
     | Tuint _ => true
     | _ => false
-    end.                 
+    end.
 
   Definition is_signed (ty : typ) : bool :=
     match ty with
     | Tsint _ => true
     | _ => false
     end.
-  
+
   Definition unsigned_typ (ty : typ) : typ :=
     match ty with
-    | Tuint w 
+    | Tuint w
     | Tsint w => Tuint w
-    end. 
+    end.
 
   Definition double_typ (ty : typ) : typ :=
     match ty with
@@ -736,12 +851,12 @@ Section Cryptoline.
   | Iassume : bexp -> instr
   | Iecut : ebexp -> seq prove_with_spec -> instr
   | Ircut : rbexp -> seq prove_with_spec -> instr.
-  (* | Ighost : TypEnv.t -> bexp -> instr. (* TypEnv.t specifies types of ghost vars. *) *)
+  (* | Ighost : TE.t -> bexp -> instr. (* TE.t specifies types of ghost vars. *) *)
 
   Definition program := seq instr.
 
-  Definition vars_env (m : TypEnv.t) : VS.t :=
-    VM.fold (fun x _ s => VS.add x s) m VS.empty.
+  Definition vars_env (m : TE.env) : VS.t :=
+    TE.fold (fun x _ s => VS.add x s) m VS.empty.
 
   Definition vars_atomic (a : atomic) : VS.t :=
     match a with
@@ -928,7 +1043,7 @@ Section Cryptoline.
   (* Specifications *)
 
   Record spec : Type :=
-    { sinputs : TypEnv.t;
+    { sinputs : TE.env;
       spre : bexp;
       sprog : program;
       spost : bexp;
@@ -936,14 +1051,14 @@ Section Cryptoline.
       srpwss : seq prove_with_spec }.
 
   Record espec :=
-    { esinputs : TypEnv.t;
+    { esinputs : TE.env;
       espre : ebexp;
       esprog : program;
       espost : ebexp;
       espwss : seq prove_with_spec }.
 
   Record rspec :=
-    { rsinputs : TypEnv.t;
+    { rsinputs : TE.env;
       rspre : rbexp;
       rsprog : program;
       rspost : rbexp;
@@ -1008,20 +1123,20 @@ Section Cryptoline.
     | Rsge => false (* TODO: Add correct semantics *)
     end.
 
-  Fixpoint eval_eexp (e : eexp) (te : TypEnv.t) (s : Store.t) : Z :=
+  Fixpoint eval_eexp (e : eexp) (te : TE.env) (s : S.t) : Z :=
     match e with
-    | Evar v => match TypEnv.find v te with
-                | Tuint _ => to_Zpos (Store.acc v s)
-                | Tsint _ => to_Z (Store.acc v s)
+    | Evar v => match TE.vtyp v te with
+                | Tuint _ => to_Zpos (S.acc v s)
+                | Tsint _ => to_Z (S.acc v s)
                 end
     | Econst n => n
     | Eunop op e => eval_eunop op (eval_eexp e te s)
     | Ebinop op e1 e2 => eval_ebinop op (eval_eexp e1 te s) (eval_eexp e2 te s)
     end.
 
-  Fixpoint eval_rexp (e : rexp) (te : TypEnv.t) (s : Store.t) : bits :=
+  Fixpoint eval_rexp (e : rexp) (te : TE.env) (s : S.t) : bits :=
     match e with
-    | Rvar v => Store.acc v s
+    | Rvar v => S.acc v s
     | Rconst w n => n
     | Runop _ op e => eval_runop op (eval_rexp e te s)
     | Rbinop _ op e1 e2 => eval_rbinop op (eval_rexp e1 te s) (eval_rexp e2 te s)
@@ -1029,7 +1144,7 @@ Section Cryptoline.
     | Rsext _ e i => sext i (eval_rexp e te s)
     end.
 
-  Fixpoint eval_ebexp (e : ebexp) (te : TypEnv.t) (s : Store.t) : Prop :=
+  Fixpoint eval_ebexp (e : ebexp) (te : TE.env) (s : S.t) : Prop :=
     match e with
     | Etrue => True
     | Eeq e1 e2 => eval_eexp e1 te s = eval_eexp e2 te s
@@ -1038,7 +1153,7 @@ Section Cryptoline.
     | Eand e1 e2 => eval_ebexp e1 te s /\ eval_ebexp e2 te s
     end.
 
-  Fixpoint eval_rbexp (e : rbexp) (te : TypEnv.t) (s : Store.t) : Prop :=
+  Fixpoint eval_rbexp (e : rbexp) (te : TE.env) (s : S.t) : Prop :=
     match e with
     | Rtrue => True
     | Req _ e1 e2 => eval_rexp e1 te s = eval_rexp e2 te s
@@ -1048,89 +1163,91 @@ Section Cryptoline.
     | Ror e1 e2 => eval_rbexp e1 te s \/ eval_rbexp e2 te s
     end.
 
-  Definition eval_bexp (e : bexp) (te : TypEnv.t) (s : Store.t) : Prop :=
+  Definition eval_bexp (e : bexp) (te : TE.env) (s : S.t) : Prop :=
     eval_ebexp (eqn_bexp e) te s /\ eval_rbexp (rng_bexp e) te s.
 
-  Definition valid (e : bexp) (te : TypEnv.t) : Prop :=
-    forall s : Store.t, conform s te -> eval_bexp e te s.
+  Definition valid (e : bexp) (te : TE.env) : Prop :=
+    forall s : S.t, S.conform s te -> eval_bexp e te s.
 
-  Definition entails (f g : bexp) (te : TypEnv.t) : Prop :=
-    forall s : Store.t, conform s te -> eval_bexp f te s -> eval_bexp g te s.
+  Definition entails (f g : bexp) (te : TE.env) : Prop :=
+    forall s : S.t, S.conform s te -> eval_bexp f te s -> eval_bexp g te s.
 
-  Definition eval_atomic (a : atomic) (te : TypEnv.t) (s : Store.t) : bits :=
+  Definition eval_atomic (a : atomic) (te : TE.env) (s : S.t) : bits :=
     match a with
-    | Avar v => Store.acc v s
+    | Avar v => S.acc v s
     | Aconst _ n => n
     end.
 
   (* Note: the correctness relies on well-formedness of instr *)
-  Definition instr_succ_typenv (i : instr) (te : TypEnv.t) : TypEnv.t :=
+  Definition instr_succ_typenv (i : instr) (te : TE.env) : TE.env :=
     match i with
-    | Imov v a => TypEnv.add v (atyp a te) te
-    | Ishl v a _ => TypEnv.add v (atyp a te) te
+    | Imov v a => TE.add v (atyp a te) te
+    | Ishl v a _ => TE.add v (atyp a te) te
     | Icshl v1 v2 a1 a2 _ =>
-      TypEnv.add v1 (atyp a1 te) (TypEnv.add v2 (atyp a2 te) te)
-    | Inondet v t => TypEnv.add v t te
-    | Icmov v c a1 a2 => TypEnv.add v (atyp a1 te) te
+      TE.add v1 (atyp a1 te) (TE.add v2 (atyp a2 te) te)
+    | Inondet v t => TE.add v t te
+    | Icmov v c a1 a2 => TE.add v (atyp a1 te) te
     | Inop => te
     | _ => te
-    (* | Inot v a => TypEnv.add v (atyp a te) te *)
-    (* | Iadd v a1 a2 => TypEnv.add v (atyp a1 te) te *)
+    (* | Inot v a => TE.add v (atyp a te) te *)
+    (* | Iadd v a1 a2 => TE.add v (atyp a1 te) te *)
     (* | Iadds c v a1 a2 *)
     (* | Iaddr c v a1 a2 => *)
-    (*   TypEnv.add c Tbit (TypEnv.add v (atyp a1 te) te) *)
-    (* | Iadc v a1 a2 y => TypEnv.add v (atyp a1 te) te *)
+    (*   TE.add c Tbit (TE.add v (atyp a1 te) te) *)
+    (* | Iadc v a1 a2 y => TE.add v (atyp a1 te) te *)
     (* | Iadcs c v a1 a2 y *)
     (* | Iadcr c v a1 a2 y => *)
-    (*   TypEnv.add c Tbit (TypEnv.add v (atyp a1 te) te) *)
-    (* | Isub v a1 a2 => TypEnv.add v (atyp a1 te) te *)
+    (*   TE.add c Tbit (TE.add v (atyp a1 te) te) *)
+    (* | Isub v a1 a2 => TE.add v (atyp a1 te) te *)
     (* | Isubc c v a1 a2 *)
     (* | Isubb c v a1 a2 *)
     (* | Isubr c v a1 a2 => *)
-    (*   TypEnv.add c Tbit (TypEnv.add v (atyp a1 te) te) *)
-    (* | Isbc v a1 a2 y => TypEnv.add v (atyp a1 te) te *)
+    (*   TE.add c Tbit (TE.add v (atyp a1 te) te) *)
+    (* | Isbc v a1 a2 y => TE.add v (atyp a1 te) te *)
     (* | Isbcs c v a1 a2 y *)
     (* | Isbcr c v a1 a2 y => *)
-    (*   TypEnv.add c Tbit (TypEnv.add v (atyp a1 te) te) *)
-    (* | Isbb v a1 a2 y => TypEnv.add v (atyp a1 te) te *)
+    (*   TE.add c Tbit (TE.add v (atyp a1 te) te) *)
+    (* | Isbb v a1 a2 y => TE.add v (atyp a1 te) te *)
     (* | Isbbs c v a1 a2 y *)
     (* | Isbbr c v a1 a2 y => *)
-    (*   TypEnv.add c Tbit (TypEnv.add v (atyp a1 te) te) *)
-    (* | Imul v a1 a2 => TypEnv.add v (atyp a1 te) te *)
+    (*   TE.add c Tbit (TE.add v (atyp a1 te) te) *)
+    (* | Imul v a1 a2 => TE.add v (atyp a1 te) te *)
     (* | Imuls c v a1 a2 *)
     (* | Imulr c v a1 a2 => *)
-    (*   TypEnv.add c Tbit (TypEnv.add v (atyp a1 te) te) *)
+    (*   TE.add c Tbit (TE.add v (atyp a1 te) te) *)
     (* | Imull vh vl a1 a2 => *)
-    (*   TypEnv.add vh (atyp a1 te) (TypEnv.add vl (unsigned_typ (atyp a2 te)) te)  *)
-    (* | Imulj v a1 a2 => TypEnv.add v (double_typ (atyp a1 te)) te *)
+    (*   TE.add vh (atyp a1 te) (TE.add vl (unsigned_typ (atyp a2 te)) te)  *)
+    (* | Imulj v a1 a2 => TE.add v (double_typ (atyp a1 te)) te *)
     (* | Isplit vh vl a n => *)
-    (*   TypEnv.add vh (atyp a te) (TypEnv.add vl (unsigned_typ (atyp a te)) te) *)
+    (*   TE.add vh (atyp a te) (TE.add vl (unsigned_typ (atyp a te)) te) *)
     (* | Iand v a1 a2 *)
     (* | Ior v a1 a2 *)
-    (* | Ixor v a1 a2 => TypEnv.add v (atyp a1 te) te *)
+    (* | Ixor v a1 a2 => TE.add v (atyp a1 te) te *)
     (* | Icast v t a *)
-    (* | Ivpc v t a => TypEnv.add v t te *)
-    (* | Ijoin v ah al => TypEnv.add v (double_typ (atyp ah te)) te *)
+    (* | Ivpc v t a => TE.add v t te *)
+    (* | Ijoin v ah al => TE.add v (double_typ (atyp ah te)) te *)
     (* | Iassert e *)
     (* | Iassume e => te *)
     (* | Iecut e _ *)
     (* | Ircut e _ => te *)
-    (* | Ighost gte e => VM.fold (fun gv gt env => TypEnv.add gv gt env) gte te  *)
+    (* | Ighost gte e => VM.fold (fun gv gt env => TE.add gv gt env) gte te  *)
     end.
 
+  Local Notation state := (state S.t).
+  Local Notation ERR := (ERR S.t).
 
   (* TODO: Finish this *)
-  Inductive eval_instr (te : TypEnv.t) : instr -> state -> state -> Prop :=
+  Inductive eval_instr (te : TE.env) : instr -> state -> state -> Prop :=
   | Eerr i : eval_instr te i ERR ERR
   | Emov v a s t :
-      Store.Upd v (eval_atomic a te s) s t ->
+      S.Upd v (eval_atomic a te s) s t ->
       eval_instr te (Imov v a) (OK s) (OK t)
   | Eshl v a i s t :
-      Store.Upd v (shlB i (eval_atomic a te s)) s t ->
+      S.Upd v (shlB i (eval_atomic a te s)) s t ->
       eval_instr te (Ishl v a i) (OK s) (OK t)
   | Enondet v s t n ty :
-      size n = size (Store.acc v s) ->
-      Store.Upd v n s t ->
+      size n = size (S.acc v s) ->
+      S.Upd v n s t ->
       eval_instr te (Inondet v ty) (OK s) (OK t)
   | Eassume e s :
       eval_bexp e te s -> eval_instr te (Iassume e) (OK s) (OK s)
@@ -1140,16 +1257,16 @@ Section Cryptoline.
       ~ eval_bexp e te s -> eval_instr te (Iassert e) (OK s) ERR
   .
 
-  Inductive eval_instrs (te : TypEnv.t) : seq instr -> state -> state -> Prop :=
+  Inductive eval_instrs (te : TE.env) : seq instr -> state -> state -> Prop :=
   | Enil s : eval_instrs te [::] s s
   | Econs hd tl s t u : eval_instr te hd s t ->
                   eval_instrs (instr_succ_typenv hd te) tl t u ->
                   eval_instrs te (hd::tl) s u.
 
-  Definition program_succ_typenv (p : program) (te : TypEnv.t) : TypEnv.t :=
+  Definition program_succ_typenv (p : program) (te : TE.env) : TE.env :=
     foldl (fun te i => instr_succ_typenv i te) te p.
 
-  Definition eval_program (te : TypEnv.t) p s t : Prop := eval_instrs te p s t.
+  Definition eval_program (te : TE.env) p s t : Prop := eval_instrs te p s t.
 
   (* Partial correctness *)
 
@@ -1242,7 +1359,7 @@ Section Cryptoline.
   (* Note: we could also check the definedness of variables in well-typedness. *)
 
 (*
-  Fixpoint well_typed_eexp (e : eexp) (te : TypEnv.t) : bool :=
+  Fixpoint well_typed_eexp (e : eexp) (te : TE.t) : bool :=
     match e with
     | Evar v => true
     | Econst n => true
@@ -1250,7 +1367,7 @@ Section Cryptoline.
     | Ebinop op e1 e2 => (well_typed_eexp e1 te) && (well_typed_eexp e2 te)
     end.
 
-  Fixpoint well_typed_rexp (e : rexp) (te : TypEnv.t) : bool :=
+  Fixpoint well_typed_rexp (e : rexp) (te : TE.t) : bool :=
     match e with
     | Rvar _
     | Rconst _ _ => true
@@ -1262,7 +1379,7 @@ Section Cryptoline.
     | Rsext w e i => (well_typed_rexp e te) && (size_of_rexp e te == w)
     end.
 
-  Fixpoint well_typed_ebexp (e : ebexp) (te : TypEnv.t) : bool :=
+  Fixpoint well_typed_ebexp (e : ebexp) (te : TE.t) : bool :=
     match e with
     | Etrue => true
     | Eeq e1 e2 => (well_typed_eexp e1 te) && (well_typed_eexp e2 te)
@@ -1271,7 +1388,7 @@ Section Cryptoline.
     | Eand e1 e2 => (well_typed_ebexp e1 te) && (well_typed_ebexp e2 te)
     end.
 
-  Fixpoint well_typed_rbexp (e : rbexp) (te : TypEnv.t) : bool :=
+  Fixpoint well_typed_rbexp (e : rbexp) (te : TE.t) : bool :=
     match e with
     | Rtrue => true
     | Req w e1 e2 
@@ -1283,10 +1400,10 @@ Section Cryptoline.
     | Ror e1 e2 => (well_typed_rbexp e1 te) && (well_typed_rbexp e2 te)
     end.
 
-  Definition well_typed_bexp (e : bexp) (te : TypEnv.t) : bool :=
+  Definition well_typed_bexp (e : bexp) (te : TE.t) : bool :=
     (well_typed_ebexp (eqn_bexp e) te) && (well_typed_rbexp (rng_bexp e) te).
 
-  Definition well_typed_instr (te : TypEnv.t) (i : instr) : bool :=
+  Definition well_typed_instr (te : TE.t) (i : instr) : bool :=
     match i with
     | Imov v a => true
     | Ishl v a _ => true
@@ -1339,16 +1456,16 @@ Section Cryptoline.
 
   (* TODO: Define well-formedness *)
 
-  (* Note: Use TypEnv.mem v te to determine if v is defined *)
+  (* Note: Use TE.mem v te to determine if v is defined *)
 
 (*
-  Definition is_defined (v : var) (te : TypEnv.t) : bool :=
-    TypEnv.mem v te.
+  Definition is_defined (v : var) (te : TE.t) : bool :=
+    TE.mem v te.
 
-  Definition are_defined (vs : VS.t) (te : TypEnv.t) : bool :=
+  Definition are_defined (vs : VS.t) (te : TE.t) : bool :=
     VS.for_all (fun v => is_defined v te) vs.
 
-  Definition well_formed_instr (te : TypEnv.t) (i : instr) : bool :=
+  Definition well_formed_instr (te : TE.t) (i : instr) : bool :=
     match i with
     | Imov v a => are_defined (vars_atomic a) te
     | Ishl v a _ => are_defined (vars_atomic a) te
@@ -1433,7 +1550,9 @@ Section Cryptoline.
     end.
 *)
 
-  Definition well_formed_program (te : TypEnv.t) (p : program) : bool :=
+  Definition well_formed_program (te : TE.env) (p : program) : bool :=
     true.
 
-End Cryptoline.
+End MakeDSL.
+
+Module DSL := MakeDSL VarOrder VS VM TE Store.
