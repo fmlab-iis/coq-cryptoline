@@ -625,6 +625,35 @@ Section Cryptoline.
     | Aconst ty _ => ty
     end.
 
+  Definition Tbit := Tuint 1.
+
+  Definition is_unsigned (ty : typ) : bool :=
+    match ty with 
+    | Tuint _ => true
+    | _ => false
+    end.                 
+
+  Definition is_signed (ty : typ) : bool :=
+    match ty with
+    | Tsint _ => true
+    | _ => false
+    end.
+  
+  Definition unsigned_typ (ty : typ) : typ :=
+    match ty with
+    | Tuint w 
+    | Tsint w => Tuint w
+    end. 
+
+  Definition double_typ (ty : typ) : typ :=
+    match ty with
+    | Tuint w => Tuint (2 * w)
+    | Tsint w => Tsint (2 * w)
+    end.
+
+  Definition compatible (t1 t2 : typ) : bool :=
+    sizeof_typ t1 == sizeof_typ t2.
+
   Inductive instr : Type :=
   (* Imov (v, a): v = a *)
   | Imov : var -> atomic -> instr
@@ -632,26 +661,26 @@ Section Cryptoline.
   | Ishl : var -> atomic -> nat -> instr
   (* Icshl (vh, vl, a1, a2, n) *)
   | Icshl : var -> var -> atomic -> atomic -> nat -> instr
-  (* Inondet v: v = a nondeterministic value *)
-  | Inondet : var -> instr
+  (* Inondet (v, t): v = a nondeterministic value of type t *)
+  | Inondet : var -> typ -> instr
   (* Icmov (v, c, a1, a2): if c then v = a1 else v = a2 *)
   | Icmov : var -> atomic -> atomic -> atomic -> instr
   (* Inop: do nothing *)
   | Inop : instr
-  (* Inot (v, a): v = not(a), the one's complement of a *)
-  | Inot : var -> atomic -> instr
+  (* Inot (v, t, a): v = not(a), the one's complement of a, v is of type t *)
+  | Inot : var -> typ -> atomic -> instr
   (* Iadd (v, a1, a2): v = a1 + a2, overflow is forbidden *)
   | Iadd : var -> atomic -> atomic -> instr
   (* Iadds (c, v, a1, a2): v = a1 + a2, c = carry flag *)
   | Iadds : var -> var -> atomic -> atomic -> instr
   (* Iaddr (c, v, a1, a2): v = a1 + a2, c = 0 *)
-  | Iaddr : var -> var -> atomic -> atomic -> instr
+  (* | Iaddr : var -> var -> atomic -> atomic -> instr *)
   (* Iadc (v, a1, a2, y): v = a1 + a2 + y, overflow is forbidden *)
   | Iadc : var -> atomic -> atomic -> atomic -> instr
   (* Iadcs (c, v, a1, a2, y): v = a1 + a2 + y, c = carry flag *)
   | Iadcs : var -> var -> atomic -> atomic -> atomic -> instr
   (* Iadcr (c, v, a1, a2, y): v = a1 + a2 + y, c = 0 *)
-  | Iadcr : var -> var -> atomic -> atomic -> atomic -> instr
+  (* | Iadcr : var -> var -> atomic -> atomic -> atomic -> instr *)
   (* Isub (v, a1, a2): v = a1 - a2, overflow is forbidden *)
   | Isub : var -> atomic -> atomic -> instr
   (* Isubc (c, v, a1, a2): v = a1 + not(a2) + 1, c = carry flag *)
@@ -659,23 +688,23 @@ Section Cryptoline.
   (* Isous (b, v, a1, a2): v = a1 - a2, b = borrow flag *)
   | Isubb : var -> var -> atomic -> atomic -> instr
   (* Isubr (c, v, a1, a2): v = a1 - a2, c = 0 *)
-  | Isubr : var -> var -> atomic -> atomic -> instr
+  (* | Isubr : var -> var -> atomic -> atomic -> instr *)
   (* Isbc (v, a1, a2, y): v = a1 + not(a2) + y *)
   | Isbc : var -> atomic -> atomic -> atomic -> instr
   (* Isbcs (c, v, a1, a2, y): v = a1 + not(a2) + y, c = carry flag *)
   | Isbcs : var -> var -> atomic -> atomic -> atomic -> instr
   (* Isbcr (c, v, a1, a2, y): v = a1 + not(a2) + y, c = 0 *)
-  | Isbcr : var -> var -> atomic -> atomic -> atomic -> instr
+  (* | Isbcr : var -> var -> atomic -> atomic -> atomic -> instr *)
   (* Isbb (v, a1, a2, y): v = a1 - a2 - y *)
   | Isbb : var -> atomic -> atomic -> atomic -> instr
   (* Isbbs (b, v, a1, a2, y): v = a1 - a2 - y, b = borrow flag *)
   | Isbbs : var -> var -> atomic -> atomic -> atomic -> instr
   (* Isbbr (b, v, a1, a2, y): v = a1 - a2 - y, b = 0 *)
-  | Isbbr : var -> var -> atomic -> atomic -> atomic -> instr
+  (* | Isbbr : var -> var -> atomic -> atomic -> atomic -> instr *)
   (* Imul (v, a1, a2): v = a1 * a2, overflow is forbidden *)
   | Imul : var -> atomic -> atomic -> instr
-  | Imuls : var -> var -> atomic -> atomic -> instr
-  | Imulr : var -> var -> atomic -> atomic -> instr
+  (* | Imuls : var -> var -> atomic -> atomic -> instr *)
+  (* | Imulr : var -> var -> atomic -> atomic -> instr *)
   (* Imull (vh, vl, a1, a2): vh and vl are respectively the high part and
      the low part of the full multiplication a1 * a2 *)
   | Imull : var -> var -> atomic -> atomic -> instr
@@ -687,27 +716,30 @@ Section Cryptoline.
      bit-width of a *)
   | Isplit : var -> var -> atomic -> nat -> instr
   (* == Instructions that cannot be translated to polynomials == *)
-  (* Iand (v, a1, a2): v = the bitwise AND of a1 and a2 *)
-  | Iand : var -> atomic -> atomic -> instr
-  (* Ior (v, a1, a2): v = the bitwise OR of a1 and a2 *)
-  | Ior : var -> atomic -> atomic -> instr
-  (* Ixor (v, a1, a2): v = the bitwise XOR of a1 and a2 *)
-  | Ixor : var -> atomic -> atomic -> instr
+  (* Iand (v, t, a1, a2): v = the bitwise AND of a1 and a2, v is of type t *)
+  | Iand : var -> typ -> atomic -> atomic -> instr
+  (* Ior (v, t, a1, a2): v = the bitwise OR of a1 and a2, v is of type t *)
+  | Ior : var -> typ -> atomic -> atomic -> instr
+  (* Ixor (v, t, a1, a2): v = the bitwise XOR of a1 and a2, v is of type t *)
+  | Ixor : var -> typ -> atomic -> atomic -> instr
   (* == Type conversions == *)
-  (* Icast (v, a): v = the value of a represented by the type of v *)
-  | Icast : var -> atomic -> instr
-  (* Ivpc (v, a): v = a, value preserved casting *)
-  | Ivpc : var -> atomic -> instr
+  (* Icast (v, t, a): v = the value of a represented by the type t of v *)
+  | Icast : var -> typ -> atomic -> instr
+  (* Ivpc (v, t, a): v = a, value preserved casting to type t *)
+  | Ivpc : var -> typ -> atomic -> instr
   (* Ijoin (v, ah, al): v = ah * 2^w + al where w is the bit-width of al *)
   | Ijoin : var -> atomic -> atomic -> instr
   (* Specifications *)
   | Iassert : bexp -> instr
   | Iassume : bexp -> instr
   | Iecut : ebexp -> seq prove_with_spec -> instr
-  | Ircut : rbexp -> seq prove_with_spec -> instr
-  | Ighost : VS.t -> bexp -> instr.
+  | Ircut : rbexp -> seq prove_with_spec -> instr.
+  (* | Ighost : TypEnv.t -> bexp -> instr. (* TypEnv.t specifies types of ghost vars. *) *)
 
   Definition program := seq instr.
+
+  Definition vars_env (m : TypEnv.t) : VS.t :=
+    VM.fold (fun x _ s => VS.add x s) m VS.empty.
 
   Definition vars_atomic (a : atomic) : VS.t :=
     match a with
@@ -721,62 +753,70 @@ Section Cryptoline.
     | Ishl v a _ => VS.add v (vars_atomic a)
     | Icshl vh vl a1 a2 _ =>
       VS.add vh (VS.add vl (VS.union (vars_atomic a1) (vars_atomic a2)))
-    | Inondet v => VS.singleton v
+    | Inondet v _ => VS.singleton v
     | Icmov v c a1 a2 =>
       VS.add v (VS.union (vars_atomic c)
                          (VS.union (vars_atomic a1) (vars_atomic a2)))
     | Inop => VS.empty
-    | Inot v a => VS.add v (vars_atomic a)
+    | Inot v _ a => VS.add v (vars_atomic a)
     | Iadd v a1 a2 => VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
-    | Iadds c v a1 a2
-    | Iaddr c v a1 a2 =>
+    | Iadds c v a1 a2 =>
       VS.add c (VS.add v (VS.union (vars_atomic a1) (vars_atomic a2)))
+    (* | Iaddr c v a1 a2 => *)
+    (*   VS.add c (VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))) *)
     | Iadc v a1 a2 y =>
       VS.add v (VS.union (vars_atomic a1)
                          (VS.union (vars_atomic a2) (vars_atomic y)))
-    | Iadcs c v a1 a2 y
-    | Iadcr c v a1 a2 y =>
+    | Iadcs c v a1 a2 y =>
       VS.add c (VS.add v (VS.union (vars_atomic a1)
                                    (VS.union (vars_atomic a2) (vars_atomic y))))
+    (* | Iadcr c v a1 a2 y => *)
+    (*   VS.add c (VS.add v (VS.union (vars_atomic a1) *)
+    (*                                (VS.union (vars_atomic a2) (vars_atomic y)))) *)
     | Isub v a1 a2 => VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
     | Isubc c v a1 a2
-    | Isubb c v a1 a2
-    | Isubr c v a1 a2 =>
+    | Isubb c v a1 a2 => 
       VS.add c (VS.add v (VS.union (vars_atomic a1) (vars_atomic a2)))
+    (* | Isubr c v a1 a2 => *)
+    (*   VS.add c (VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))) *)
     | Isbc v a1 a2 y =>
       VS.add v (VS.union (vars_atomic a1)
                          (VS.union (vars_atomic a2) (vars_atomic y)))
-    | Isbcs c v a1 a2 y
-    | Isbcr c v a1 a2 y =>
+    | Isbcs c v a1 a2 y =>
       VS.add c (VS.add v (VS.union (vars_atomic a1)
                                    (VS.union (vars_atomic a2) (vars_atomic y))))
+    (* | Isbcr c v a1 a2 y => *)
+    (*   VS.add c (VS.add v (VS.union (vars_atomic a1) *)
+    (*                                (VS.union (vars_atomic a2) (vars_atomic y)))) *)
     | Isbb v a1 a2 y =>
       VS.add v (VS.union (vars_atomic a1)
                          (VS.union (vars_atomic a2) (vars_atomic y)))
-    | Isbbs c v a1 a2 y
-    | Isbbr c v a1 a2 y =>
+    | Isbbs c v a1 a2 y =>
       VS.add c (VS.add v (VS.union (vars_atomic a1)
                                    (VS.union (vars_atomic a2) (vars_atomic y))))
+    (* | Isbbr c v a1 a2 y => *)
+    (*   VS.add c (VS.add v (VS.union (vars_atomic a1) *)
+    (*                                (VS.union (vars_atomic a2) (vars_atomic y)))) *)
     | Imul v a1 a2 => VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
-    | Imuls c v a1 a2
-    | Imulr c v a1 a2 =>
-      VS.add c (VS.add v (VS.union (vars_atomic a1) (vars_atomic a2)))
+    (* | Imuls c v a1 a2 *)
+    (* | Imulr c v a1 a2 => *)
+    (*   VS.add c (VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))) *)
     | Imull vh vl a1 a2 =>
       VS.add vh (VS.add vl (VS.union (vars_atomic a1) (vars_atomic a2)))
     | Imulj v a1 a2 => VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
     | Isplit vh vl a n =>
       VS.add vh (VS.add vl (vars_atomic a))
-    | Iand v a1 a2
-    | Ior v a1 a2
-    | Ixor v a1 a2 => VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
-    | Icast v a
-    | Ivpc v a => VS.add v (vars_atomic a)
+    | Iand v _ a1 a2
+    | Ior v _ a1 a2
+    | Ixor v _ a1 a2 => VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
+    | Icast v t a
+    | Ivpc v t a => VS.add v (vars_atomic a)
     | Ijoin v ah al => VS.add v (VS.union (vars_atomic ah) (vars_atomic al))
     | Iassert e => vars_bexp e
     | Iassume e => vars_bexp e
     | Iecut e _ => vars_ebexp e
     | Ircut e _ => vars_rbexp e
-    | Ighost vs e => VS.union vs (vars_bexp e)
+    (* | Ighost te e => VS.union (vars_env te) (vars_bexp e) *)
     end.
 
   Definition lvs_instr (i : instr) : VS.t :=
@@ -784,43 +824,43 @@ Section Cryptoline.
     | Imov v _
     | Ishl v _ _ => VS.singleton v
     | Icshl vh vl _ _ _ => VS.add vh (VS.singleton vl)
-    | Inondet v
+    | Inondet v _
     | Icmov v _ _ _ => VS.singleton v
     | Inop => VS.empty
-    | Inot v _
+    | Inot v _ _
     | Iadd v _ _ => VS.singleton v
-    | Iadds c v _ _
-    | Iaddr c v _ _ => VS.add c (VS.singleton v)
+    | Iadds c v _ _ => VS.add c (VS.singleton v)
+    (* | Iaddr c v _ _ => VS.add c (VS.singleton v) *)
     | Iadc v _ _ _ => VS.singleton v
-    | Iadcs c v _ _ _
-    | Iadcr c v _ _ _ => VS.add c (VS.singleton v)
+    | Iadcs c v _ _ _ => VS.add c (VS.singleton v)
+    (* | Iadcr c v _ _ _ => VS.add c (VS.singleton v) *)
     | Isub v _ _ => VS.singleton v
     | Isubc c v _ _
-    | Isubb c v _ _
-    | Isubr c v _ _ => VS.add c (VS.singleton v)
+    | Isubb c v _ _ => VS.add c (VS.singleton v)
+    (* | Isubr c v _ _ => VS.add c (VS.singleton v) *)
     | Isbc v _ _ _ => VS.singleton v
-    | Isbcs c v _ _ _
-    | Isbcr c v _ _ _ => VS.add c (VS.singleton v)
+    | Isbcs c v _ _ _ => VS.add c (VS.singleton v)
+    (* | Isbcr c v _ _ _ => VS.add c (VS.singleton v) *)
     | Isbb v _ _ _ => VS.singleton v
-    | Isbbs c v _ _ _
-    | Isbbr c v _ _ _ => VS.add c (VS.singleton v)
+    | Isbbs c v _ _ _ => VS.add c (VS.singleton v)
+    (* | Isbbr c v _ _ _ => VS.add c (VS.singleton v) *)
     | Imul v _ _ => VS.singleton v
-    | Imuls c v _ _
-    | Imulr c v _ _ => VS.add c (VS.singleton v)
+    (* | Imuls c v _ _ *)
+    (* | Imulr c v _ _ => VS.add c (VS.singleton v) *)
     | Imull vh vl _ _ => VS.add vh (VS.singleton vl)
     | Imulj v _ _ => VS.singleton v
     | Isplit vh vl _ _ => VS.add vh (VS.singleton vl)
-    | Iand v _ _
-    | Ior v _ _
-    | Ixor v _ _
-    | Icast v _
-    | Ivpc v _
+    | Iand v _ _ _
+    | Ior v _ _ _
+    | Ixor v _ _ _
+    | Icast v _ _
+    | Ivpc v _ _
     | Ijoin v _ _ => VS.singleton v
     | Iassert _
     | Iassume _
     | Iecut _ _
-    | Ircut _ _
-    | Ighost _ _ => VS.empty
+    | Ircut _ _ => VS.empty
+    (* | Ighost _ _ => VS.empty *)
     end.
 
   Definition rvs_instr (i : instr) : VS.t :=
@@ -828,46 +868,48 @@ Section Cryptoline.
     | Imov _ a
     | Ishl _ a _ => vars_atomic a
     | Icshl _ _ a1 a2 _ => VS.union (vars_atomic a1) (vars_atomic a2)
-    | Inondet _ => VS.empty
+    | Inondet _ _ => VS.empty
     | Icmov _ c a1 a2 => VS.union (vars_atomic c)
                                   (VS.union (vars_atomic a1) (vars_atomic a2))
     | Inop => VS.empty
-    | Inot _ a => vars_atomic a
+    | Inot _ _ a => vars_atomic a
     | Iadd _ a1 a2
-    | Iadds _ _ a1 a2
-    | Iaddr _ _ a1 a2 => VS.union (vars_atomic a1) (vars_atomic a2)
+    | Iadds _ _ a1 a2 => VS.union (vars_atomic a1) (vars_atomic a2)
+    (* | Iaddr _ _ a1 a2 => VS.union (vars_atomic a1) (vars_atomic a2) *)
     | Iadc _ a1 a2 y
-    | Iadcs _ _ a1 a2 y
-    | Iadcr _ _ a1 a2 y => VS.union (vars_atomic a1)
+    | Iadcs _ _ a1 a2 y => VS.union (vars_atomic a1)
                                     (VS.union (vars_atomic a2) (vars_atomic y))
+    (* | Iadcr _ _ a1 a2 y => VS.union (vars_atomic a1) *)
+    (*                                 (VS.union (vars_atomic a2) (vars_atomic y)) *)
     | Isub _ a1 a2
     | Isubc _ _ a1 a2
-    | Isubb _ _ a1 a2
-    | Isubr _ _ a1 a2 => VS.union (vars_atomic a1) (vars_atomic a2)
+    | Isubb _ _ a1 a2 => VS.union (vars_atomic a1) (vars_atomic a2)
+    (* | Isubr _ _ a1 a2 => VS.union (vars_atomic a1) (vars_atomic a2) *)
     | Isbc _ a1 a2 y
     | Isbcs _ _ a1 a2 y
-    | Isbcr _ _ a1 a2 y
+    (* | Isbcr _ _ a1 a2 y *)
     | Isbb _ a1 a2 y
-    | Isbbs _ _ a1 a2 y
-    | Isbbr _ _ a1 a2 y => VS.union (vars_atomic a1)
+    | Isbbs _ _ a1 a2 y => VS.union (vars_atomic a1)
                                     (VS.union (vars_atomic a2) (vars_atomic y))
+    (* | Isbbr _ _ a1 a2 y => VS.union (vars_atomic a1) *)
+    (*                                 (VS.union (vars_atomic a2) (vars_atomic y)) *)
     | Imul _ a1 a2
-    | Imuls _ _ a1 a2
-    | Imulr _ _ a1 a2
+    (* | Imuls _ _ a1 a2 *)
+    (* | Imulr _ _ a1 a2 *)
     | Imull _ _ a1 a2
     | Imulj _ a1 a2 => VS.union (vars_atomic a1) (vars_atomic a2)
     | Isplit _ _ a _ => vars_atomic a
-    | Iand _ a1 a2
-    | Ior _ a1 a2
-    | Ixor _ a1 a2 => VS.union (vars_atomic a1) (vars_atomic a2)
-    | Icast _ a
-    | Ivpc _ a => vars_atomic a
+    | Iand _ _ a1 a2
+    | Ior _ _ a1 a2
+    | Ixor _ _ a1 a2 => VS.union (vars_atomic a1) (vars_atomic a2)
+    | Icast _ _ a
+    | Ivpc _ _ a => vars_atomic a
     | Ijoin _ ah al => VS.union (vars_atomic ah) (vars_atomic al)
     | Iassert e => vars_bexp e
     | Iassume e => vars_bexp e
     | Iecut e _ => vars_ebexp e
     | Ircut e _ => vars_rbexp e
-    | Ighost vs e => VS.union vs (vars_bexp e)
+    (* | Ighost te e => VS.union (vars_env te) (vars_bexp e) *)
     end.
 
   Definition vars_program (p : program) : VS.t :=
@@ -1026,11 +1068,54 @@ Section Cryptoline.
     | Ishl v a _ => TypEnv.add v (atyp a te) te
     | Icshl v1 v2 a1 a2 _ =>
       TypEnv.add v1 (atyp a1 te) (TypEnv.add v2 (atyp a2 te) te)
-    | Inondet v => te
+    | Inondet v t => TypEnv.add v t te
     | Icmov v c a1 a2 => TypEnv.add v (atyp a1 te) te
     | Inop => te
-    | _ => te (* TODO: Correct this *)
+    | _ => te
+    (* | Inot v a => TypEnv.add v (atyp a te) te *)
+    (* | Iadd v a1 a2 => TypEnv.add v (atyp a1 te) te *)
+    (* | Iadds c v a1 a2 *)
+    (* | Iaddr c v a1 a2 => *)
+    (*   TypEnv.add c Tbit (TypEnv.add v (atyp a1 te) te) *)
+    (* | Iadc v a1 a2 y => TypEnv.add v (atyp a1 te) te *)
+    (* | Iadcs c v a1 a2 y *)
+    (* | Iadcr c v a1 a2 y => *)
+    (*   TypEnv.add c Tbit (TypEnv.add v (atyp a1 te) te) *)
+    (* | Isub v a1 a2 => TypEnv.add v (atyp a1 te) te *)
+    (* | Isubc c v a1 a2 *)
+    (* | Isubb c v a1 a2 *)
+    (* | Isubr c v a1 a2 => *)
+    (*   TypEnv.add c Tbit (TypEnv.add v (atyp a1 te) te) *)
+    (* | Isbc v a1 a2 y => TypEnv.add v (atyp a1 te) te *)
+    (* | Isbcs c v a1 a2 y *)
+    (* | Isbcr c v a1 a2 y => *)
+    (*   TypEnv.add c Tbit (TypEnv.add v (atyp a1 te) te) *)
+    (* | Isbb v a1 a2 y => TypEnv.add v (atyp a1 te) te *)
+    (* | Isbbs c v a1 a2 y *)
+    (* | Isbbr c v a1 a2 y => *)
+    (*   TypEnv.add c Tbit (TypEnv.add v (atyp a1 te) te) *)
+    (* | Imul v a1 a2 => TypEnv.add v (atyp a1 te) te *)
+    (* | Imuls c v a1 a2 *)
+    (* | Imulr c v a1 a2 => *)
+    (*   TypEnv.add c Tbit (TypEnv.add v (atyp a1 te) te) *)
+    (* | Imull vh vl a1 a2 => *)
+    (*   TypEnv.add vh (atyp a1 te) (TypEnv.add vl (unsigned_typ (atyp a2 te)) te)  *)
+    (* | Imulj v a1 a2 => TypEnv.add v (double_typ (atyp a1 te)) te *)
+    (* | Isplit vh vl a n => *)
+    (*   TypEnv.add vh (atyp a te) (TypEnv.add vl (unsigned_typ (atyp a te)) te) *)
+    (* | Iand v a1 a2 *)
+    (* | Ior v a1 a2 *)
+    (* | Ixor v a1 a2 => TypEnv.add v (atyp a1 te) te *)
+    (* | Icast v t a *)
+    (* | Ivpc v t a => TypEnv.add v t te *)
+    (* | Ijoin v ah al => TypEnv.add v (double_typ (atyp ah te)) te *)
+    (* | Iassert e *)
+    (* | Iassume e => te *)
+    (* | Iecut e _ *)
+    (* | Ircut e _ => te *)
+    (* | Ighost gte e => VM.fold (fun gv gt env => TypEnv.add gv gt env) gte te  *)
     end.
+
 
   (* TODO: Finish this *)
   Inductive eval_instr (te : TypEnv.t) : instr -> state -> state -> Prop :=
@@ -1041,10 +1126,10 @@ Section Cryptoline.
   | Eshl v a i s t :
       Store.Upd v (shlB i (eval_atomic a te s)) s t ->
       eval_instr te (Ishl v a i) (OK s) (OK t)
-  | Enondet v s t n :
+  | Enondet v s t n ty :
       size n = size (Store.acc v s) ->
       Store.Upd v n s t ->
-      eval_instr te (Inondet v) (OK s) (OK t)
+      eval_instr te (Inondet v ty) (OK s) (OK t)
   | Eassume e s :
       eval_bexp e te s -> eval_instr te (Iassume e) (OK s) (OK s)
   | EassertOK e s :
@@ -1148,9 +1233,204 @@ Section Cryptoline.
                      sepwss := epwss;
                      srpwss := rpwss |}) (at level 83).
 
+
+  (* Well-typedness *)
+
+  (* Here we define well-typedness assuming all used variables are defined. *)
+  (* Note: we could also check the definedness of variables in well-typedness. *)
+
+(*
+  Fixpoint well_typed_eexp (e : eexp) (te : TypEnv.t) : bool :=
+    match e with
+    | Evar v => true
+    | Econst n => true
+    | Eunop op e => well_typed_eexp e te
+    | Ebinop op e1 e2 => (well_typed_eexp e1 te) && (well_typed_eexp e2 te)
+    end.
+
+  Fixpoint well_typed_rexp (e : rexp) (te : TypEnv.t) : bool :=
+    match e with
+    | Rvar _
+    | Rconst _ _ => true
+    | Runop w op e => (well_typed_rexp e te) && (size_of_rexp e te == w)
+    | Rbinop w op e1 e2 => 
+      (well_typed_rexp e1 te) && (size_of_rexp e1 te == w)
+      && (well_typed_rexp e2 te) && (size_of_rexp e2 te == w)
+    | Ruext w e i
+    | Rsext w e i => (well_typed_rexp e te) && (size_of_rexp e te == w)
+    end.
+
+  Fixpoint well_typed_ebexp (e : ebexp) (te : TypEnv.t) : bool :=
+    match e with
+    | Etrue => true
+    | Eeq e1 e2 => (well_typed_eexp e1 te) && (well_typed_eexp e2 te)
+    | Eeqmod e1 e2 p =>
+      (well_typed_eexp e1 te) && (well_typed_eexp e2 te) && (well_typed_eexp p te)
+    | Eand e1 e2 => (well_typed_ebexp e1 te) && (well_typed_ebexp e2 te)
+    end.
+
+  Fixpoint well_typed_rbexp (e : rbexp) (te : TypEnv.t) : bool :=
+    match e with
+    | Rtrue => true
+    | Req w e1 e2 
+    | Rcmp w _ e1 e2 => 
+      (well_typed_rexp e1 te) && (size_of_rexp e1 te == w) 
+      && (well_typed_rexp e2 te) && (size_of_rexp e2 te == w) 
+    | Rneg e => well_typed_rbexp e te
+    | Rand e1 e2
+    | Ror e1 e2 => (well_typed_rbexp e1 te) && (well_typed_rbexp e2 te)
+    end.
+
+  Definition well_typed_bexp (e : bexp) (te : TypEnv.t) : bool :=
+    (well_typed_ebexp (eqn_bexp e) te) && (well_typed_rbexp (rng_bexp e) te).
+
+  Definition well_typed_instr (te : TypEnv.t) (i : instr) : bool :=
+    match i with
+    | Imov v a => true
+    | Ishl v a _ => true
+    | Icshl v1 v2 a1 a2 _ =>
+      is_unsigned (atyp a2 te) && compatible (atyp a1 te) (atyp a2 te)
+    | Inondet v t => true
+    | Icmov v c a1 a2 => 
+      (atyp c te == Tbit) && (atyp a1 te == atyp a2 te)
+    | Inop => true
+    | Inot v a => true
+    | Iadd v a1 a2 
+    | Iadds _ v a1 a2
+    | Iaddr _ v a1 a2 => atyp a1 te == atyp a2 te
+    | Iadc v a1 a2 y
+    | Iadcs _ v a1 a2 y
+    | Iadcr _ v a1 a2 y =>
+      (atyp a1 te == atyp a2 te) && (atyp y te == Tbit)
+    | Isub v a1 a2
+    | Isubc _ v a1 a2
+    | Isubb _ v a1 a2
+    | Isubr _ v a1 a2 => atyp a1 te == atyp a2 te
+    | Isbc v a1 a2 y
+    | Isbcs _ v a1 a2 y
+    | Isbcr _ v a1 a2 y =>
+      (atyp a1 te == atyp a2 te) && (atyp y te == Tbit)
+    | Isbb v a1 a2 y
+    | Isbbs _ v a1 a2 y
+    | Isbbr _ v a1 a2 y =>
+      (atyp a1 te == atyp a2 te) && (atyp y te == Tbit)
+    | Imul v a1 a2
+    | Imuls _ v a1 a2
+    | Imulr _ v a1 a2 => atyp a1 te == atyp a2 te
+    | Imull vh vl a1 a2 => atyp a1 te == atyp a2 te
+    | Imulj v a1 a2 => atyp a1 te == atyp a2 te
+    | Isplit vh vl a n => true
+    | Iand v a1 a2
+    | Ior v a1 a2
+    | Ixor v a1 a2 => atyp a1 te == atyp a2 te
+    | Icast v t a
+    | Ivpc v t a => true
+    | Ijoin v ah al =>
+      is_unsigned (atyp al te) && compatible (atyp ah te) (atyp al te)
+    | Iassert e
+    | Iassume e => well_typed_bexp e te
+    | Iecut e _ => well_typed_ebexp e te
+    | Ircut e _ => well_typed_rbexp e te
+    | Ighost gte e => well_typed_bexp e te
+    end.
+*)
+
   (* TODO: Define well-formedness *)
 
   (* Note: Use TypEnv.mem v te to determine if v is defined *)
+
+(*
+  Definition is_defined (v : var) (te : TypEnv.t) : bool :=
+    TypEnv.mem v te.
+
+  Definition are_defined (vs : VS.t) (te : TypEnv.t) : bool :=
+    VS.for_all (fun v => is_defined v te) vs.
+
+  Definition well_formed_instr (te : TypEnv.t) (i : instr) : bool :=
+    match i with
+    | Imov v a => are_defined (vars_atomic a) te
+    | Ishl v a _ => are_defined (vars_atomic a) te
+    | Icshl v1 v2 a1 a2 _ => 
+      (v1 != v2) && are_defined (vars_atomic a1) te 
+                 && are_defined (vars_atomic a2) te
+    | Inondet v t => true
+    | Icmov v c a1 a2 =>
+      (are_defined (vars_atomic c) te) && are_defined (vars_atomic a1) te
+                                       && are_defined (vars_atomic a2) te
+    | Inop => true
+    | Inot v a => are_defined (vars_atomic a) te
+    | Iadd v a1 a2 => 
+      are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
+    | Iadds c v a1 a2
+    | Iaddr c v a1 a2 =>
+      (c != v) && are_defined (vars_atomic a1) te 
+               && are_defined (vars_atomic a2) te
+    | Iadc v a1 a2 y => 
+      are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
+                  && are_defined (vars_atomic y) te
+    | Iadcs c v a1 a2 y
+    | Iadcr c v a1 a2 y =>
+      (c != v) && are_defined (vars_atomic a1) te 
+               && are_defined (vars_atomic a2) te
+               && are_defined (vars_atomic y) te
+    | Isub v a1 a2 =>
+      are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
+    | Isubc c v a1 a2
+    | Isubb c v a1 a2
+    | Isubr c v a1 a2 => 
+      (c != v) && are_defined (vars_atomic a1) te 
+               && are_defined (vars_atomic a2) te
+    | Isbc v a1 a2 y =>
+      are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
+                  && are_defined (vars_atomic y) te
+    | Isbcs c v a1 a2 y
+    | Isbcr c v a1 a2 y =>
+      (c != v) && are_defined (vars_atomic a1) te 
+               && are_defined (vars_atomic a2) te
+               && are_defined (vars_atomic y) te
+    | Isbb v a1 a2 y =>
+      are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
+                  && are_defined (vars_atomic y) te
+    | Isbbs c v a1 a2 y
+    | Isbbr c v a1 a2 y =>
+      (c != v) && are_defined (vars_atomic a1) te 
+               && are_defined (vars_atomic a2) te
+               && are_defined (vars_atomic y) te
+    | Imul v a1 a2 =>
+      are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
+    | Imuls c v a1 a2
+    | Imulr c v a1 a2 =>
+      (c != v) && are_defined (vars_atomic a1) te 
+               && are_defined (vars_atomic a2) te
+    | Imull vh vl a1 a2 => 
+      (vh != vl) && are_defined (vars_atomic a1) te 
+                 && are_defined (vars_atomic a2) te
+    | Imulj v a1 a2 => 
+      are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
+    | Isplit vh vl a n => (vh != vl) && are_defined (vars_atomic a) te 
+    | Iand v a1 a2
+    | Ior v a1 a2
+    | Ixor v a1 a2 => 
+      are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
+    | Icast v t a
+    | Ivpc v t a => are_defined (vars_atomic a) te
+    | Ijoin v ah al =>
+      are_defined (vars_atomic ah) te && are_defined (vars_atomic al) te
+    | Iassert e
+    | Iassume e => are_defined (vars_bexp e) te
+    | Iecut e _ => are_defined (vars_ebexp e) te
+    | Ircut e _ => are_defined (vars_rbexp e) te
+    (* TODO: Ighost should check whether ghost variables are already defined *)
+
+    | _ => false
+    end 
+    && well_typed_instr te i.
+
+
+    | Ighost gte e => well_typed_bexp e te
+    end.
+*)
+
   Definition well_formed_program (te : TypEnv.t) (p : program) : bool :=
     true.
 
