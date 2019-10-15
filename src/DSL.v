@@ -742,6 +742,9 @@ Module MakeDSL
     | Aconst ty _ => ty
     end.
 
+  (* ========================================== *)
+  (* Probably better to move this part to Typ.v *)
+
   Definition Tbit := Tuint 1.
 
   Definition is_unsigned (ty : typ) : bool :=
@@ -770,6 +773,9 @@ Module MakeDSL
 
   Definition compatible (t1 t2 : typ) : bool :=
     sizeof_typ t1 == sizeof_typ t2.
+
+  (* ========================================== *)
+
 
   Inductive instr : Type :=
   (* Imov (v, a): v = a *)
@@ -855,9 +861,6 @@ Module MakeDSL
 
   Definition program := seq instr.
 
-  Definition vars_env (m : TE.env) : VS.t :=
-    TE.fold (fun x _ s => VS.add x s) m VS.empty.
-
   Definition vars_atomic (a : atomic) : VS.t :=
     match a with
     | Avar v => VS.singleton v
@@ -921,8 +924,7 @@ Module MakeDSL
     | Imull vh vl a1 a2 =>
       VS.add vh (VS.add vl (VS.union (vars_atomic a1) (vars_atomic a2)))
     | Imulj v a1 a2 => VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
-    | Isplit vh vl a n =>
-      VS.add vh (VS.add vl (vars_atomic a))
+    | Isplit vh vl a n => VS.add vh (VS.add vl (vars_atomic a))
     | Iand v _ a1 a2
     | Ior v _ a1 a2
     | Ixor v _ a1 a2 => VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
@@ -1188,50 +1190,55 @@ Module MakeDSL
     | Inondet v t => TE.add v t te
     | Icmov v c a1 a2 => TE.add v (atyp a1 te) te
     | Inop => te
-    | _ => te
-    (* | Inot v a => TE.add v (atyp a te) te *)
-    (* | Iadd v a1 a2 => TE.add v (atyp a1 te) te *)
-    (* | Iadds c v a1 a2 *)
+    | Inot v t a => TE.add v t te
+    | Iadd v a1 a2 => TE.add v (atyp a1 te) te
+    | Iadds c v a1 a2 =>
+      TE.add c Tbit (TE.add v (atyp a1 te) te)
     (* | Iaddr c v a1 a2 => *)
     (*   TE.add c Tbit (TE.add v (atyp a1 te) te) *)
-    (* | Iadc v a1 a2 y => TE.add v (atyp a1 te) te *)
-    (* | Iadcs c v a1 a2 y *)
+    | Iadc v a1 a2 y => TE.add v (atyp a1 te) te
+    | Iadcs c v a1 a2 y =>
+      TE.add c Tbit (TE.add v (atyp a1 te) te)
     (* | Iadcr c v a1 a2 y => *)
     (*   TE.add c Tbit (TE.add v (atyp a1 te) te) *)
-    (* | Isub v a1 a2 => TE.add v (atyp a1 te) te *)
-    (* | Isubc c v a1 a2 *)
-    (* | Isubb c v a1 a2 *)
+    | Isub v a1 a2 => TE.add v (atyp a1 te) te
+    | Isubc c v a1 a2
+    | Isubb c v a1 a2 =>
+      TE.add c Tbit (TE.add v (atyp a1 te) te)
     (* | Isubr c v a1 a2 => *)
     (*   TE.add c Tbit (TE.add v (atyp a1 te) te) *)
-    (* | Isbc v a1 a2 y => TE.add v (atyp a1 te) te *)
-    (* | Isbcs c v a1 a2 y *)
+    | Isbc v a1 a2 y => TE.add v (atyp a1 te) te
+    | Isbcs c v a1 a2 y =>
+      TE.add c Tbit (TE.add v (atyp a1 te) te)
     (* | Isbcr c v a1 a2 y => *)
     (*   TE.add c Tbit (TE.add v (atyp a1 te) te) *)
-    (* | Isbb v a1 a2 y => TE.add v (atyp a1 te) te *)
-    (* | Isbbs c v a1 a2 y *)
+    | Isbb v a1 a2 y => TE.add v (atyp a1 te) te
+    | Isbbs c v a1 a2 y =>
+      TE.add c Tbit (TE.add v (atyp a1 te) te)
     (* | Isbbr c v a1 a2 y => *)
     (*   TE.add c Tbit (TE.add v (atyp a1 te) te) *)
-    (* | Imul v a1 a2 => TE.add v (atyp a1 te) te *)
+    | Imul v a1 a2 => TE.add v (atyp a1 te) te
     (* | Imuls c v a1 a2 *)
     (* | Imulr c v a1 a2 => *)
     (*   TE.add c Tbit (TE.add v (atyp a1 te) te) *)
-    (* | Imull vh vl a1 a2 => *)
-    (*   TE.add vh (atyp a1 te) (TE.add vl (unsigned_typ (atyp a2 te)) te)  *)
-    (* | Imulj v a1 a2 => TE.add v (double_typ (atyp a1 te)) te *)
-    (* | Isplit vh vl a n => *)
-    (*   TE.add vh (atyp a te) (TE.add vl (unsigned_typ (atyp a te)) te) *)
-    (* | Iand v a1 a2 *)
-    (* | Ior v a1 a2 *)
-    (* | Ixor v a1 a2 => TE.add v (atyp a1 te) te *)
-    (* | Icast v t a *)
-    (* | Ivpc v t a => TE.add v t te *)
-    (* | Ijoin v ah al => TE.add v (double_typ (atyp ah te)) te *)
-    (* | Iassert e *)
-    (* | Iassume e => te *)
-    (* | Iecut e _ *)
-    (* | Ircut e _ => te *)
-    (* | Ighost gte e => VM.fold (fun gv gt env => TE.add gv gt env) gte te  *)
+    | Imull vh vl a1 a2 =>
+      TE.add vh (atyp a1 te) (TE.add vl (unsigned_typ (atyp a2 te)) te)
+    | Imulj v a1 a2 => TE.add v (double_typ (atyp a1 te)) te
+    | Isplit vh vl a n =>
+      TE.add vh (atyp a te) (TE.add vl (unsigned_typ (atyp a te)) te)
+    | Iand v t a1 a2
+    | Ior v t a1 a2
+    | Ixor v t a1 a2 => TE.add v t te
+    | Icast v t a
+    | Ivpc v t a => TE.add v t te
+    | Ijoin v ah al => TE.add v (double_typ (atyp ah te)) te
+    | Iassert e
+    | Iassume e => te
+    | Iecut e _
+    | Ircut e _ => te
+    (* | Ighost gte e => VM.fold (fun gv gt env => TE.add gv gt env) gte te                                *)
     end.
+
 
   Local Notation state := (state S.t).
   Local Notation ERR := (ERR S.t).
@@ -1358,8 +1365,7 @@ Module MakeDSL
   (* Here we define well-typedness assuming all used variables are defined. *)
   (* Note: we could also check the definedness of variables in well-typedness. *)
 
-(*
-  Fixpoint well_typed_eexp (e : eexp) (te : TE.t) : bool :=
+  Fixpoint well_typed_eexp (e : eexp) (te : TE.env) : bool :=
     match e with
     | Evar v => true
     | Econst n => true
@@ -1367,7 +1373,7 @@ Module MakeDSL
     | Ebinop op e1 e2 => (well_typed_eexp e1 te) && (well_typed_eexp e2 te)
     end.
 
-  Fixpoint well_typed_rexp (e : rexp) (te : TE.t) : bool :=
+  Fixpoint well_typed_rexp (e : rexp) (te : TE.env) : bool :=
     match e with
     | Rvar _
     | Rconst _ _ => true
@@ -1379,7 +1385,7 @@ Module MakeDSL
     | Rsext w e i => (well_typed_rexp e te) && (size_of_rexp e te == w)
     end.
 
-  Fixpoint well_typed_ebexp (e : ebexp) (te : TE.t) : bool :=
+  Fixpoint well_typed_ebexp (e : ebexp) (te : TE.env) : bool :=
     match e with
     | Etrue => true
     | Eeq e1 e2 => (well_typed_eexp e1 te) && (well_typed_eexp e2 te)
@@ -1388,7 +1394,7 @@ Module MakeDSL
     | Eand e1 e2 => (well_typed_ebexp e1 te) && (well_typed_ebexp e2 te)
     end.
 
-  Fixpoint well_typed_rbexp (e : rbexp) (te : TE.t) : bool :=
+  Fixpoint well_typed_rbexp (e : rbexp) (te : TE.env) : bool :=
     match e with
     | Rtrue => true
     | Req w e1 e2 
@@ -1400,10 +1406,10 @@ Module MakeDSL
     | Ror e1 e2 => (well_typed_rbexp e1 te) && (well_typed_rbexp e2 te)
     end.
 
-  Definition well_typed_bexp (e : bexp) (te : TE.t) : bool :=
+  Definition well_typed_bexp (e : bexp) (te : TE.env) : bool :=
     (well_typed_ebexp (eqn_bexp e) te) && (well_typed_rbexp (rng_bexp e) te).
 
-  Definition well_typed_instr (te : TE.t) (i : instr) : bool :=
+  Definition well_typed_instr (te : TE.env) (i : instr) : bool :=
     match i with
     | Imov v a => true
     | Ishl v a _ => true
@@ -1413,35 +1419,39 @@ Module MakeDSL
     | Icmov v c a1 a2 => 
       (atyp c te == Tbit) && (atyp a1 te == atyp a2 te)
     | Inop => true
-    | Inot v a => true
+    | Inot v t a => compatible t (atyp a te)
     | Iadd v a1 a2 
-    | Iadds _ v a1 a2
-    | Iaddr _ v a1 a2 => atyp a1 te == atyp a2 te
+    | Iadds _ v a1 a2 => atyp a1 te == atyp a2 te
+    (* | Iaddr _ v a1 a2 => atyp a1 te == atyp a2 te *)
     | Iadc v a1 a2 y
-    | Iadcs _ v a1 a2 y
-    | Iadcr _ v a1 a2 y =>
+    | Iadcs _ v a1 a2 y =>
       (atyp a1 te == atyp a2 te) && (atyp y te == Tbit)
+    (* | Iadcr _ v a1 a2 y => *)
+    (*   (atyp a1 te == atyp a2 te) && (atyp y te == Tbit) *)
     | Isub v a1 a2
     | Isubc _ v a1 a2
-    | Isubb _ v a1 a2
-    | Isubr _ v a1 a2 => atyp a1 te == atyp a2 te
+    | Isubb _ v a1 a2 => atyp a1 te == atyp a2 te
+    (* | Isubr _ v a1 a2 => atyp a1 te == atyp a2 te *)
     | Isbc v a1 a2 y
-    | Isbcs _ v a1 a2 y
-    | Isbcr _ v a1 a2 y =>
+    | Isbcs _ v a1 a2 y =>
       (atyp a1 te == atyp a2 te) && (atyp y te == Tbit)
+    (* | Isbcr _ v a1 a2 y => *)
+    (*   (atyp a1 te == atyp a2 te) && (atyp y te == Tbit) *)
     | Isbb v a1 a2 y
-    | Isbbs _ v a1 a2 y
-    | Isbbr _ v a1 a2 y =>
+    | Isbbs _ v a1 a2 y =>
       (atyp a1 te == atyp a2 te) && (atyp y te == Tbit)
-    | Imul v a1 a2
-    | Imuls _ v a1 a2
-    | Imulr _ v a1 a2 => atyp a1 te == atyp a2 te
+    (* | Isbbr _ v a1 a2 y => *)
+    (*   (atyp a1 te == atyp a2 te) && (atyp y te == Tbit) *)
+    | Imul v a1 a2 => atyp a1 te == atyp a2 te
+    (* | Imuls _ v a1 a2 *)
+    (* | Imulr _ v a1 a2 => atyp a1 te == atyp a2 te *)
     | Imull vh vl a1 a2 => atyp a1 te == atyp a2 te
     | Imulj v a1 a2 => atyp a1 te == atyp a2 te
     | Isplit vh vl a n => true
-    | Iand v a1 a2
-    | Ior v a1 a2
-    | Ixor v a1 a2 => atyp a1 te == atyp a2 te
+    | Iand v t a1 a2
+    | Ior v t a1 a2
+    | Ixor v t a1 a2 => 
+      compatible t (atyp a1 te) && (atyp a1 te == atyp a2 te)
     | Icast v t a
     | Ivpc v t a => true
     | Ijoin v ah al =>
@@ -1450,22 +1460,21 @@ Module MakeDSL
     | Iassume e => well_typed_bexp e te
     | Iecut e _ => well_typed_ebexp e te
     | Ircut e _ => well_typed_rbexp e te
-    | Ighost gte e => well_typed_bexp e te
+    (* | Ighost gte e => well_typed_bexp e te *)
     end.
-*)
+
 
   (* TODO: Define well-formedness *)
 
   (* Note: Use TE.mem v te to determine if v is defined *)
 
-(*
-  Definition is_defined (v : var) (te : TE.t) : bool :=
+  Definition is_defined (v : var) (te : TE.env) : bool :=
     TE.mem v te.
 
-  Definition are_defined (vs : VS.t) (te : TE.t) : bool :=
+  Definition are_defined (vs : VS.t) (te : TE.env) : bool :=
     VS.for_all (fun v => is_defined v te) vs.
 
-  Definition well_formed_instr (te : TE.t) (i : instr) : bool :=
+  Definition well_formed_instr (te : TE.env) (i : instr) : bool :=
     match i with
     | Imov v a => are_defined (vars_atomic a) te
     | Ishl v a _ => are_defined (vars_atomic a) te
@@ -1477,59 +1486,72 @@ Module MakeDSL
       (are_defined (vars_atomic c) te) && are_defined (vars_atomic a1) te
                                        && are_defined (vars_atomic a2) te
     | Inop => true
-    | Inot v a => are_defined (vars_atomic a) te
+    | Inot v t a => are_defined (vars_atomic a) te
     | Iadd v a1 a2 => 
       are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
-    | Iadds c v a1 a2
-    | Iaddr c v a1 a2 =>
+    | Iadds c v a1 a2 =>
       (c != v) && are_defined (vars_atomic a1) te 
                && are_defined (vars_atomic a2) te
+    (* | Iaddr c v a1 a2 => *)
+    (*   (c != v) && are_defined (vars_atomic a1) te  *)
+    (*            && are_defined (vars_atomic a2) te *)
     | Iadc v a1 a2 y => 
       are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
                   && are_defined (vars_atomic y) te
-    | Iadcs c v a1 a2 y
-    | Iadcr c v a1 a2 y =>
+    | Iadcs c v a1 a2 y =>
       (c != v) && are_defined (vars_atomic a1) te 
                && are_defined (vars_atomic a2) te
                && are_defined (vars_atomic y) te
+    (* | Iadcr c v a1 a2 y => *)
+    (*   (c != v) && are_defined (vars_atomic a1) te  *)
+    (*            && are_defined (vars_atomic a2) te *)
+    (*            && are_defined (vars_atomic y) te *)
     | Isub v a1 a2 =>
       are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
     | Isubc c v a1 a2
-    | Isubb c v a1 a2
-    | Isubr c v a1 a2 => 
+    | Isubb c v a1 a2 =>
       (c != v) && are_defined (vars_atomic a1) te 
                && are_defined (vars_atomic a2) te
+    (* | Isubr c v a1 a2 =>  *)
+    (*   (c != v) && are_defined (vars_atomic a1) te  *)
+    (*            && are_defined (vars_atomic a2) te *)
     | Isbc v a1 a2 y =>
       are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
                   && are_defined (vars_atomic y) te
-    | Isbcs c v a1 a2 y
-    | Isbcr c v a1 a2 y =>
+    | Isbcs c v a1 a2 y =>
       (c != v) && are_defined (vars_atomic a1) te 
                && are_defined (vars_atomic a2) te
                && are_defined (vars_atomic y) te
+    (* | Isbcr c v a1 a2 y => *)
+    (*   (c != v) && are_defined (vars_atomic a1) te  *)
+    (*            && are_defined (vars_atomic a2) te *)
+    (*            && are_defined (vars_atomic y) te *)
     | Isbb v a1 a2 y =>
       are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
                   && are_defined (vars_atomic y) te
-    | Isbbs c v a1 a2 y
-    | Isbbr c v a1 a2 y =>
+    | Isbbs c v a1 a2 y =>
       (c != v) && are_defined (vars_atomic a1) te 
                && are_defined (vars_atomic a2) te
                && are_defined (vars_atomic y) te
+    (* | Isbbr c v a1 a2 y => *)
+    (*   (c != v) && are_defined (vars_atomic a1) te  *)
+    (*            && are_defined (vars_atomic a2) te *)
+    (*            && are_defined (vars_atomic y) te *)
     | Imul v a1 a2 =>
       are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
-    | Imuls c v a1 a2
-    | Imulr c v a1 a2 =>
-      (c != v) && are_defined (vars_atomic a1) te 
-               && are_defined (vars_atomic a2) te
+    (* | Imuls c v a1 a2 *)
+    (* | Imulr c v a1 a2 => *)
+    (*   (c != v) && are_defined (vars_atomic a1) te  *)
+    (*            && are_defined (vars_atomic a2) te *)
     | Imull vh vl a1 a2 => 
       (vh != vl) && are_defined (vars_atomic a1) te 
                  && are_defined (vars_atomic a2) te
     | Imulj v a1 a2 => 
       are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
     | Isplit vh vl a n => (vh != vl) && are_defined (vars_atomic a) te 
-    | Iand v a1 a2
-    | Ior v a1 a2
-    | Ixor v a1 a2 => 
+    | Iand v t a1 a2
+    | Ior v t a1 a2
+    | Ixor v t a1 a2 => 
       are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
     | Icast v t a
     | Ivpc v t a => are_defined (vars_atomic a) te
@@ -1539,19 +1561,18 @@ Module MakeDSL
     | Iassume e => are_defined (vars_bexp e) te
     | Iecut e _ => are_defined (vars_ebexp e) te
     | Ircut e _ => are_defined (vars_rbexp e) te
-    (* TODO: Ighost should check whether ghost variables are already defined *)
-
-    | _ => false
     end 
     && well_typed_instr te i.
 
 
-    | Ighost gte e => well_typed_bexp e te
+  Fixpoint well_formed_program (te : TE.env) (p : program) : bool :=
+    match p with
+    | [::] => true
+    | hd::tl =>
+      well_formed_instr te hd &&
+      well_formed_program (instr_succ_typenv hd te) tl
     end.
-*)
 
-  Definition well_formed_program (te : TE.env) (p : program) : bool :=
-    true.
 
 End MakeDSL.
 
