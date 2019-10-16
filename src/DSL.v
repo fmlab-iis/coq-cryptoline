@@ -546,6 +546,8 @@ Module MakeDSL
        (TE : TypEnv with Module SE := V)
        (S : BitsStore V TE).
 
+  Module VSLemmas := FSetLemmas VS.
+
   (* Operators *)
 
   Local Notation var := V.t.
@@ -1031,6 +1033,7 @@ Module MakeDSL
     (* | Ighost te e => VS.union (vars_env te) (vars_bexp e) *)
     end.
 
+  (*
   Definition vars_program (p : program) : VS.t :=
     foldl (fun vs i => VS.union vs (vars_instr i)) VS.empty p.
 
@@ -1039,7 +1042,170 @@ Module MakeDSL
 
   Definition rvs_program (p : program) : VS.t :=
     foldl (fun vs i => VS.union vs (rvs_instr i)) VS.empty p.
+   *)
 
+  Fixpoint vars_program (p : program) : VS.t :=
+    match p with
+    | [::] => VS.empty
+    | hd::tl => VS.union (vars_instr hd) (vars_program tl)
+    end.
+
+  Fixpoint lvs_program (p : program) : VS.t :=
+    match p with
+    | [::] => VS.empty
+    | hd::tl => VS.union (lvs_instr hd) (lvs_program tl)
+    end.
+
+  Fixpoint rvs_program (p : program) : VS.t :=
+    match p with
+    | [::] => VS.empty
+    | hd::tl => VS.union (rvs_instr hd) (rvs_program tl)
+    end.
+
+  Lemma vars_instr_split i :
+    VS.Equal (vars_instr i) (VS.union (lvs_instr i) (rvs_instr i)).
+  Proof.
+    elim : i => /=; move=> *; by VSLemmas.dp_Equal.
+  Qed.
+
+  Lemma mem_vars_instr1 v i :
+    VS.mem v (vars_instr i) ->
+    VS.mem v (lvs_instr i) \/ VS.mem v (rvs_instr i).
+  Proof.
+    rewrite vars_instr_split => H.
+    case: (VSLemmas.mem_union1 H) => {H} H.
+    - by left.
+    - by right.
+  Qed.
+
+  Lemma mem_vars_instr2 v i :
+    VS.mem v (lvs_instr i) ->
+    VS.mem v (vars_instr i).
+  Proof.
+    rewrite vars_instr_split => H.
+    by apply: VSLemmas.mem_union2.
+  Qed.
+
+  Lemma mem_vars_instr3 v i :
+    VS.mem v (rvs_instr i) ->
+    VS.mem v (vars_instr i).
+  Proof.
+    rewrite vars_instr_split => H.
+    by apply: VSLemmas.mem_union3.
+  Qed.
+
+  Lemma lvs_instr_subset i :
+    VS.subset (lvs_instr i) (vars_instr i).
+  Proof.
+    rewrite vars_instr_split.
+    exact: VSLemmas.union_subset_1.
+  Qed.
+
+  Lemma rvs_instr_subset i :
+    VS.subset (rvs_instr i) (vars_instr i).
+  Proof.
+    rewrite vars_instr_split.
+    exact: VSLemmas.union_subset_2.
+  Qed.
+
+  Lemma vars_program_split p :
+    VS.Equal (vars_program p) (VS.union (lvs_program p) (rvs_program p)).
+  Proof.
+    elim: p => /=.
+    - rewrite VSLemmas.union_emptyl.
+      reflexivity.
+    - move=> hd tl IH.
+      have: VS.Equal (VS.union (VS.union (lvs_instr hd) (lvs_program tl))
+                               (VS.union (rvs_instr hd) (rvs_program tl)))
+                     (VS.union (VS.union (lvs_instr hd) (rvs_instr hd))
+                               (VS.union (lvs_program tl) (rvs_program tl))) by
+          VSLemmas.dp_Equal.
+      move=> ->. rewrite -IH. rewrite -vars_instr_split. reflexivity.
+  Qed.
+
+  Lemma mem_vars_program1 v p :
+    VS.mem v (vars_program p) ->
+    VS.mem v (lvs_program p) \/ VS.mem v (rvs_program p).
+  Proof.
+    rewrite vars_program_split => H.
+    case: (VSLemmas.mem_union1 H) => {H} H.
+    - by left.
+    - by right.
+  Qed.
+
+  Lemma mem_vars_program2 v p :
+    VS.mem v (lvs_program p) ->
+    VS.mem v (vars_program p).
+  Proof.
+    rewrite vars_program_split => H.
+    by apply: VSLemmas.mem_union2.
+  Qed.
+
+  Lemma mem_vars_program3 v p :
+    VS.mem v (rvs_program p) ->
+    VS.mem v (vars_program p).
+  Proof.
+    rewrite vars_program_split => H.
+    by apply: VSLemmas.mem_union3.
+  Qed.
+
+  Lemma lvs_program_subset p :
+    VS.subset (lvs_program p) (vars_program p).
+  Proof.
+    rewrite vars_program_split.
+    exact: VSLemmas.union_subset_1.
+  Qed.
+
+  Lemma rvs_program_subset p :
+    VS.subset (rvs_program p) (vars_program p).
+  Proof.
+    rewrite vars_program_split.
+    exact: VSLemmas.union_subset_2.
+  Qed.
+
+  Lemma vars_program_concat p1 p2 :
+    VS.Equal (vars_program (p1 ++ p2)) (VS.union (vars_program p1) (vars_program p2)).
+  Proof.
+    elim: p1 p2 => /=.
+    - move=> p2.
+      rewrite VSLemmas.union_emptyl.
+      reflexivity.
+    - move=> hd tl IH p2.
+      rewrite IH.
+      rewrite VSLemmas.OP.P.union_assoc.
+      reflexivity.
+  Qed.
+
+  Lemma lvs_program_concat p1 p2 :
+    VS.Equal (lvs_program (p1 ++ p2)) (VS.union (lvs_program p1) (lvs_program p2)).
+  Proof.
+    elim: p1 p2 => /=.
+    - move=> p2.
+      rewrite VSLemmas.union_emptyl.
+      reflexivity.
+    - move=> hd tl IH p2.
+      rewrite IH.
+      rewrite VSLemmas.OP.P.union_assoc.
+      reflexivity.
+  Qed.
+
+  Lemma vars_program_rcons p i :
+    VS.Equal (vars_program (rcons p i)) (VS.union (vars_program p) (vars_instr i)).
+  Proof.
+    rewrite -cats1.
+    rewrite vars_program_concat /=.
+    rewrite VSLemmas.union_emptyr.
+    reflexivity.
+  Qed.
+
+  Lemma lvs_program_rcons p i :
+    VS.Equal (lvs_program (rcons p i)) (VS.union (lvs_program p) (lvs_instr i)).
+  Proof.
+    rewrite -cats1.
+    rewrite lvs_program_concat /=.
+    rewrite VSLemmas.union_emptyr.
+    reflexivity.
+  Qed.
 
 
   (* Specifications *)
