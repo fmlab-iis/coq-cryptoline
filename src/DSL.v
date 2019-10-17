@@ -679,9 +679,9 @@ Module MakeDSL
   Definition reqmod w (e1 e2 m : rexp) : rbexp :=
     req w (rsrem w (rsub w e1 e2) m) (rbits (from_nat w 0)).
 
-  Definition rneg (e : rbexp) : rbexp := @rneg V.T e.
-  Definition rand (e1 e2 : rbexp) : rbexp := @rand V.T e1 e2.
-  Definition ror (e1 e2 : rbexp) : rbexp := @ror V.T e1 e2.
+  Definition rneg (e : rbexp) : rbexp := @Rneg V.T e.
+  Definition rand (e1 e2 : rbexp) : rbexp := @Rand V.T e1 e2.
+  Definition ror (e1 e2 : rbexp) : rbexp := @Ror V.T e1 e2.
 
   Definition rands (es : seq rbexp) : rbexp := @rands V.T es.
   Definition rors (es : seq rbexp) : rbexp := @rors V.T es.
@@ -892,7 +892,7 @@ Module MakeDSL
     (*                                (VS.union (vars_atomic a2) (vars_atomic y)))) *)
     | Isub v a1 a2 => VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
     | Isubc c v a1 a2
-    | Isubb c v a1 a2 => 
+    | Isubb c v a1 a2 =>
       VS.add c (VS.add v (VS.union (vars_atomic a1) (vars_atomic a2)))
     (* | Isubr c v a1 a2 => *)
     (*   VS.add c (VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))) *)
@@ -1029,16 +1029,23 @@ Module MakeDSL
     (* | Ighost te e => VS.union (vars_env te) (vars_bexp e) *)
     end.
 
-  Definition vars_program (p : program) : VS.t :=
-    foldl (fun vs i => VS.union vs (vars_instr i)) VS.empty p.
+  Fixpoint vars_program (p : program) : VS.t :=
+    match p with
+    | [::] => VS.empty
+    | hd::tl => VS.union (vars_instr hd) (vars_program tl)
+    end.
 
-  Definition lvs_program (p : program) : VS.t :=
-    foldl (fun vs i => VS.union vs (lvs_instr i)) VS.empty p.
+  Fixpoint lvs_program (p : program) : VS.t :=
+    match p with
+    | [::] => VS.empty
+    | hd::tl => VS.union (lvs_instr hd) (lvs_program tl)
+    end.
 
-  Definition rvs_program (p : program) : VS.t :=
-    foldl (fun vs i => VS.union vs (rvs_instr i)) VS.empty p.
-
-
+  Fixpoint rvs_program (p : program) : VS.t :=
+    match p with
+    | [::] => VS.empty
+    | hd::tl => VS.union (rvs_instr hd) (rvs_program tl)
+    end.
 
   (* Specifications *)
 
@@ -1372,7 +1379,7 @@ Module MakeDSL
     | Rvar _
     | Rconst _ _ => true
     | Runop w op e => (well_typed_rexp e te) && (size_of_rexp e te == w)
-    | Rbinop w op e1 e2 => 
+    | Rbinop w op e1 e2 =>
       (well_typed_rexp e1 te) && (size_of_rexp e1 te == w)
       && (well_typed_rexp e2 te) && (size_of_rexp e2 te == w)
     | Ruext w e i
@@ -1391,10 +1398,10 @@ Module MakeDSL
   Fixpoint well_typed_rbexp (e : rbexp) (te : TE.t) : bool :=
     match e with
     | Rtrue => true
-    | Req w e1 e2 
-    | Rcmp w _ e1 e2 => 
-      (well_typed_rexp e1 te) && (size_of_rexp e1 te == w) 
-      && (well_typed_rexp e2 te) && (size_of_rexp e2 te == w) 
+    | Req w e1 e2
+    | Rcmp w _ e1 e2 =>
+      (well_typed_rexp e1 te) && (size_of_rexp e1 te == w)
+      && (well_typed_rexp e2 te) && (size_of_rexp e2 te == w)
     | Rneg e => well_typed_rbexp e te
     | Rand e1 e2
     | Ror e1 e2 => (well_typed_rbexp e1 te) && (well_typed_rbexp e2 te)
@@ -1410,11 +1417,11 @@ Module MakeDSL
     | Icshl v1 v2 a1 a2 _ =>
       is_unsigned (atyp a2 te) && compatible (atyp a1 te) (atyp a2 te)
     | Inondet v t => true
-    | Icmov v c a1 a2 => 
+    | Icmov v c a1 a2 =>
       (atyp c te == Tbit) && (atyp a1 te == atyp a2 te)
     | Inop => true
     | Inot v a => true
-    | Iadd v a1 a2 
+    | Iadd v a1 a2
     | Iadds _ v a1 a2
     | Iaddr _ v a1 a2 => atyp a1 te == atyp a2 te
     | Iadc v a1 a2 y
@@ -1469,8 +1476,8 @@ Module MakeDSL
     match i with
     | Imov v a => are_defined (vars_atomic a) te
     | Ishl v a _ => are_defined (vars_atomic a) te
-    | Icshl v1 v2 a1 a2 _ => 
-      (v1 != v2) && are_defined (vars_atomic a1) te 
+    | Icshl v1 v2 a1 a2 _ =>
+      (v1 != v2) && are_defined (vars_atomic a1) te
                  && are_defined (vars_atomic a2) te
     | Inondet v t => true
     | Icmov v c a1 a2 =>
@@ -1478,33 +1485,33 @@ Module MakeDSL
                                        && are_defined (vars_atomic a2) te
     | Inop => true
     | Inot v a => are_defined (vars_atomic a) te
-    | Iadd v a1 a2 => 
+    | Iadd v a1 a2 =>
       are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
     | Iadds c v a1 a2
     | Iaddr c v a1 a2 =>
-      (c != v) && are_defined (vars_atomic a1) te 
+      (c != v) && are_defined (vars_atomic a1) te
                && are_defined (vars_atomic a2) te
-    | Iadc v a1 a2 y => 
+    | Iadc v a1 a2 y =>
       are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
                   && are_defined (vars_atomic y) te
     | Iadcs c v a1 a2 y
     | Iadcr c v a1 a2 y =>
-      (c != v) && are_defined (vars_atomic a1) te 
+      (c != v) && are_defined (vars_atomic a1) te
                && are_defined (vars_atomic a2) te
                && are_defined (vars_atomic y) te
     | Isub v a1 a2 =>
       are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
     | Isubc c v a1 a2
     | Isubb c v a1 a2
-    | Isubr c v a1 a2 => 
-      (c != v) && are_defined (vars_atomic a1) te 
+    | Isubr c v a1 a2 =>
+      (c != v) && are_defined (vars_atomic a1) te
                && are_defined (vars_atomic a2) te
     | Isbc v a1 a2 y =>
       are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
                   && are_defined (vars_atomic y) te
     | Isbcs c v a1 a2 y
     | Isbcr c v a1 a2 y =>
-      (c != v) && are_defined (vars_atomic a1) te 
+      (c != v) && are_defined (vars_atomic a1) te
                && are_defined (vars_atomic a2) te
                && are_defined (vars_atomic y) te
     | Isbb v a1 a2 y =>
@@ -1512,24 +1519,24 @@ Module MakeDSL
                   && are_defined (vars_atomic y) te
     | Isbbs c v a1 a2 y
     | Isbbr c v a1 a2 y =>
-      (c != v) && are_defined (vars_atomic a1) te 
+      (c != v) && are_defined (vars_atomic a1) te
                && are_defined (vars_atomic a2) te
                && are_defined (vars_atomic y) te
     | Imul v a1 a2 =>
       are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
     | Imuls c v a1 a2
     | Imulr c v a1 a2 =>
-      (c != v) && are_defined (vars_atomic a1) te 
+      (c != v) && are_defined (vars_atomic a1) te
                && are_defined (vars_atomic a2) te
-    | Imull vh vl a1 a2 => 
-      (vh != vl) && are_defined (vars_atomic a1) te 
+    | Imull vh vl a1 a2 =>
+      (vh != vl) && are_defined (vars_atomic a1) te
                  && are_defined (vars_atomic a2) te
-    | Imulj v a1 a2 => 
+    | Imulj v a1 a2 =>
       are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
-    | Isplit vh vl a n => (vh != vl) && are_defined (vars_atomic a) te 
+    | Isplit vh vl a n => (vh != vl) && are_defined (vars_atomic a) te
     | Iand v a1 a2
     | Ior v a1 a2
-    | Ixor v a1 a2 => 
+    | Ixor v a1 a2 =>
       are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
     | Icast v t a
     | Ivpc v t a => are_defined (vars_atomic a) te
@@ -1542,7 +1549,7 @@ Module MakeDSL
     (* TODO: Ighost should check whether ghost variables are already defined *)
 
     | _ => false
-    end 
+    end
     && well_typed_instr te i.
 
 
