@@ -724,6 +724,17 @@ Module MakeDSL
   Definition vars_bexp (e : bexp) : VS.t :=
     VS.union (vars_ebexp (eqn_bexp e)) (vars_rbexp (rng_bexp e)).
 
+  Lemma vars_ebexp_subset e :
+    VS.subset (vars_ebexp (eqn_bexp e)) (vars_bexp e).
+  Proof.
+    apply: VSLemmas.subset_union1. exact: VSLemmas.subset_refl.
+  Qed.
+
+  Lemma vars_rbexp_subset e :
+    VS.subset (vars_rbexp (rng_bexp e)) (vars_bexp e).
+  Proof.
+    apply: VSLemmas.subset_union2. exact: VSLemmas.subset_refl.
+  Qed.
 
 
   (* Instructions and programs *)
@@ -1531,49 +1542,49 @@ Module MakeDSL
   (* Here we define well-typedness assuming all used variables are defined. *)
   (* Note: we could also check the definedness of variables in well-typedness. *)
 
-  Fixpoint well_typed_eexp (e : eexp) (te : TE.env) : bool :=
+  Fixpoint well_typed_eexp (te : TE.env) (e : eexp) : bool :=
     match e with
     | Evar v => true
     | Econst n => true
-    | Eunop op e => well_typed_eexp e te
-    | Ebinop op e1 e2 => (well_typed_eexp e1 te) && (well_typed_eexp e2 te)
+    | Eunop op e => well_typed_eexp te e
+    | Ebinop op e1 e2 => (well_typed_eexp te e1) && (well_typed_eexp te e2)
     end.
 
-  Fixpoint well_typed_rexp (e : rexp) (te : TE.env) : bool :=
+  Fixpoint well_typed_rexp (te : TE.env) (e : rexp) : bool :=
     match e with
     | Rvar _
     | Rconst _ _ => true
-    | Runop w op e => (well_typed_rexp e te) && (size_of_rexp e te == w)
+    | Runop w op e => (well_typed_rexp te e) && (size_of_rexp e te == w)
     | Rbinop w op e1 e2 => 
-      (well_typed_rexp e1 te) && (size_of_rexp e1 te == w)
-      && (well_typed_rexp e2 te) && (size_of_rexp e2 te == w)
+      (well_typed_rexp te e1) && (size_of_rexp e1 te == w) &&
+      (well_typed_rexp te e2) && (size_of_rexp e2 te == w)
     | Ruext w e i
-    | Rsext w e i => (well_typed_rexp e te) && (size_of_rexp e te == w)
+    | Rsext w e i => (well_typed_rexp te e) && (size_of_rexp e te == w)
     end.
 
-  Fixpoint well_typed_ebexp (e : ebexp) (te : TE.env) : bool :=
+  Fixpoint well_typed_ebexp (te : TE.env) (e : ebexp) : bool :=
     match e with
     | Etrue => true
-    | Eeq e1 e2 => (well_typed_eexp e1 te) && (well_typed_eexp e2 te)
+    | Eeq e1 e2 => (well_typed_eexp te e1) && (well_typed_eexp te e2)
     | Eeqmod e1 e2 p =>
-      (well_typed_eexp e1 te) && (well_typed_eexp e2 te) && (well_typed_eexp p te)
-    | Eand e1 e2 => (well_typed_ebexp e1 te) && (well_typed_ebexp e2 te)
+      (well_typed_eexp te e1) && (well_typed_eexp te e2) && (well_typed_eexp te p)
+    | Eand e1 e2 => (well_typed_ebexp te e1) && (well_typed_ebexp te e2)
     end.
 
-  Fixpoint well_typed_rbexp (e : rbexp) (te : TE.env) : bool :=
+  Fixpoint well_typed_rbexp (te : TE.env) (e : rbexp) : bool :=
     match e with
     | Rtrue => true
     | Req w e1 e2 
     | Rcmp w _ e1 e2 => 
-      (well_typed_rexp e1 te) && (size_of_rexp e1 te == w) 
-      && (well_typed_rexp e2 te) && (size_of_rexp e2 te == w) 
-    | Rneg e => well_typed_rbexp e te
+      (well_typed_rexp te e1) && (size_of_rexp e1 te == w) &&
+      (well_typed_rexp te e2) && (size_of_rexp e2 te == w) 
+    | Rneg e => well_typed_rbexp te e
     | Rand e1 e2
-    | Ror e1 e2 => (well_typed_rbexp e1 te) && (well_typed_rbexp e2 te)
+    | Ror e1 e2 => (well_typed_rbexp te e1) && (well_typed_rbexp te e2)
     end.
 
-  Definition well_typed_bexp (e : bexp) (te : TE.env) : bool :=
-    (well_typed_ebexp (eqn_bexp e) te) && (well_typed_rbexp (rng_bexp e) te).
+  Definition well_typed_bexp (te : TE.env) (e : bexp) : bool :=
+    (well_typed_ebexp te (eqn_bexp e)) && (well_typed_rbexp te (rng_bexp e)).
 
   Definition well_typed_instr (te : TE.env) (i : instr) : bool :=
     match i with
@@ -1623,22 +1634,42 @@ Module MakeDSL
     | Ijoin v ah al =>
       is_unsigned (atyp al te) && compatible (atyp ah te) (atyp al te)
     | Iassert e
-    | Iassume e => well_typed_bexp e te
-    | Iecut e _ => well_typed_ebexp e te
-    | Ircut e _ => well_typed_rbexp e te
-    (* | Ighost gte e => well_typed_bexp e te *)
+    | Iassume e => well_typed_bexp te e
+    | Iecut e _ => well_typed_ebexp te e
+    | Ircut e _ => well_typed_rbexp te e
+    (* | Ighost gte e => well_typed_bexp te e *)
     end.
 
 
   (* TODO: Define well-formedness *)
 
-  (* Note: Use TE.mem v te to determine if v is defined *)
+  Module TEKS := MapKeySet V TE VS.
 
+  (* the set of defined variables *)
+  Definition vars_env (te : TE.env) := TEKS.key_set te.
+
+  (* Note: Use TE.mem v te to determine if v is defined *)
+  (*
   Definition is_defined (v : var) (te : TE.env) : bool :=
     TE.mem v te.
 
   Definition are_defined (vs : VS.t) (te : TE.env) : bool :=
     VS.for_all (fun v => is_defined v te) vs.
+
+  Lemma is_defined_mem v te :
+    is_defined v te -> VS.mem v (vars_env te).
+  Proof.
+    rewrite /is_defined /vars_env. exact: TEKS.mem_key_set.
+  Qed.
+   *)
+
+  (* Use VS.mem v (vars_env te) to determine if v is defined *)
+
+  Definition is_defined (v : var) (te : TE.env) :=
+    VS.mem v (vars_env te).
+
+  Definition are_defined (vs : VS.t) (te : TE.env) :=
+    VS.subset vs (vars_env te).
 
   Definition well_formed_instr (te : TE.env) (i : instr) : bool :=
     match i with
@@ -1738,6 +1769,243 @@ Module MakeDSL
       well_formed_instr te hd &&
       well_formed_program (instr_succ_typenv hd te) tl
     end.
+
+  Fixpoint find_non_well_formed_instr (te : TE.env) (p : program) : option instr :=
+    match p with
+    | [::] => None
+    | hd::tl =>
+      if well_formed_instr te hd
+      then find_non_well_formed_instr (instr_succ_typenv hd te) tl
+      else Some hd
+    end.
+
+  Ltac check_well_formedness te p :=
+    let res := constr:(find_non_well_formed_instr te p) in
+    let res := eval compute in res in
+        match res with
+        | None => idtac "The program is well-formed."
+        | Some ?i => idtac "The program is not well-formed,"
+                           "caused by the following instruction."; idtac i
+        end.
+
+  Definition well_formed_bexp (te : TE.env) (e : bexp) :=
+    are_defined (vars_bexp e) te && well_typed_bexp te e.
+
+  Definition well_formed_spec (s : spec) : bool :=
+    well_formed_bexp (sinputs s) (spre s) &&
+    well_formed_program (sinputs s) (sprog s) &&
+    well_formed_bexp (program_succ_typenv (sprog s) (sinputs s)) (spost s).
+
+
+  Lemma well_formed_program_concat te p1 p2 :
+    well_formed_program te (p1 ++ p2) =
+    well_formed_program te p1 &&
+                        well_formed_program (program_succ_typenv p1 te) p2.
+  Proof.
+    case H: (well_formed_program te p1 &&
+             well_formed_program (program_succ_typenv p1 te) p2).
+    - move/andP: H => [Hp1 Hp2].
+      elim: p1 te p2 Hp1 Hp2 => /=.
+      + done. 
+      + move=> hd tl IH te p2 /andP [Hhd Htl] Hp2.
+        rewrite Hhd /=.
+        apply: (IH _ _ Htl).
+        exact: Hp2.
+    - move/negP: H => Hneg.
+      apply/negP => H; apply: Hneg; apply/andP.
+      elim: p1 te p2 H => /=.
+      + done. 
+      + move=> hd tl IH te p2 /andP [Hhd Htlp2].
+        move: (IH _ _ Htlp2) => {IH Htlp2} [Htl Hp2].
+        split.
+        * by rewrite Hhd Htl.
+        * exact: Hp2.
+  Qed.
+
+  Lemma well_formed_program_concat1 te p1 p2 :
+    well_formed_program te (p1 ++ p2) ->
+    well_formed_program te p1.
+  Proof.
+    rewrite well_formed_program_concat.
+    by move=> /andP [H _].
+  Qed.
+
+  Lemma well_formed_program_concat2 te p1 p2 :
+    well_formed_program te (p1 ++ p2) ->
+    well_formed_program (program_succ_typenv p1 te) p2.
+  Proof.
+    rewrite well_formed_program_concat.
+    by move=> /andP [_ H].
+  Qed.
+
+  Lemma well_formed_program_concat3 te p1 p2 :
+    well_formed_program te p1 ->
+    well_formed_program (program_succ_typenv p1 te) p2 ->
+    well_formed_program te (p1 ++ p2).
+  Proof.
+    rewrite well_formed_program_concat.
+    by move=> H1 H2; rewrite H1 H2.
+  Qed.
+
+  Lemma well_formed_program_cons1 te p i :
+    well_formed_program te (i::p) ->
+    well_formed_instr te i.
+  Proof.
+    by move=> /andP [H _].
+  Qed.
+
+  Lemma well_formed_program_cons2 te p i :
+    well_formed_program te (i::p) ->
+    well_formed_program (instr_succ_typenv i te) p.
+  Proof.
+    by move=> /andP [_ H].
+  Qed.
+
+  Lemma well_formed_program_cons3 te p i :
+    well_formed_instr te i ->
+    well_formed_program (instr_succ_typenv i te) p ->
+    well_formed_program te (i::p).
+  Proof.
+    move=> H1 H2.
+    by rewrite /= H1 H2.
+  Qed.
+
+  Lemma well_formed_program_rcons te p i :
+    well_formed_program te (rcons p i) =
+    well_formed_program te p &&
+                        well_formed_instr (program_succ_typenv p te) i.
+  Proof.
+    rewrite -cats1.
+    rewrite well_formed_program_concat /=.
+    by rewrite Bool.andb_true_r.
+  Qed.
+
+  Lemma well_formed_program_rcons1 te p i :
+    well_formed_program te (rcons p i) ->
+    well_formed_program te p.
+  Proof.
+    rewrite well_formed_program_rcons.
+    by move=> /andP [H _].
+  Qed.
+
+  Lemma well_formed_program_rcons2 te p i :
+    well_formed_program te (rcons p i) ->
+    well_formed_instr (program_succ_typenv p te) i.
+  Proof.
+    rewrite well_formed_program_rcons.
+    by move=> /andP [_ H].
+  Qed.
+
+  Lemma well_formed_program_rcons3 te p i :
+    well_formed_program te p ->
+    well_formed_instr (program_succ_typenv p te) i ->
+    well_formed_program te (rcons p i).
+  Proof.
+    rewrite well_formed_program_rcons.
+    by move=> H1 H2; rewrite H1 H2.
+  Qed.
+
+  (* Probably useful *)
+  (* TO BE confirmed: how to modify (VS.subset vs1 vs2) and (VS.Equal vs1 vs2) *)
+
+  (*
+  Lemma well_formed_instr_subset_rvs vs i :
+    well_formed_instr vs i ->
+    VS.subset (rvs_instr i) vs.
+  Proof.
+    elim: i => /=; intros;
+    (let rec tac :=
+         match goal with
+         | H : ?a |- ?a => assumption
+         | H : is_true (_ && _) |- _ =>
+           let H1 := fresh in let H2 := fresh in move/andP: H => [H1 H2]; tac
+         | |- is_true (VS.subset (VS.add _ _) _) =>
+           apply: VSLemmas.subset_add3; tac
+         | |- is_true (VS.subset (VS.union _ _) _) =>
+           apply: VSLemmas.subset_union3; tac
+         | |- _ => idtac
+         end in
+     tac).
+  Qed.
+
+  Lemma well_formed_instr_subset vs1 vs2 i :
+    well_formed_instr vs1 i ->
+    VS.subset vs1 vs2 ->
+    well_formed_instr vs2 i.
+  Proof.
+    elim: i vs1 vs2 => /=; move=> *; hyps_splitb; repeat splitb;
+    (match goal with
+     | H: ?a |- ?a => assumption
+     | |- is_true (VS.subset _ _) => by VSLemmas.dp_subset
+     | |- is_true (VS.mem _ _) => by VSLemmas.dp_mem
+     | |- _ => idtac
+     end).
+  Qed.
+
+  Lemma well_formed_instr_replace vs1 vs2 i :
+    well_formed_instr vs1 i ->
+    VS.Equal vs1 vs2 ->
+    well_formed_instr vs2 i.
+  Proof.
+    move=> Hwell Heq.
+    apply: (well_formed_instr_subset Hwell).
+    rewrite Heq.
+    exact: VSLemmas.subset_refl.
+  Qed.
+
+  Lemma well_formed_program_subset vs1 vs2 p :
+    well_formed_program vs1 p ->
+    VS.subset vs1 vs2 ->
+    well_formed_program vs2 p.
+  Proof.
+    elim: p vs1 vs2 => //=.
+    move=> hd tl IH vs1 vs2 /andP [Hhd Htl] Hsub.
+    apply/andP; split.
+    - exact: (well_formed_instr_subset Hhd Hsub).
+    - apply: (IH _ _ Htl).
+      apply: (VSLemmas.union_subsets Hsub).
+      exact: VSLemmas.subset_refl.
+  Qed.
+
+  Lemma well_formed_program_replace vs1 vs2 p :
+    well_formed_program vs1 p ->
+    VS.Equal vs1 vs2 ->
+    well_formed_program vs2 p.
+  Proof.
+    move=> Hwell Heq.
+    apply: (well_formed_program_subset Hwell).
+    rewrite Heq.
+    exact: VSLemmas.subset_refl.
+  Qed.
+
+  *)
+
+  (* Probably useful in slicing *)
+
+  (*
+  Lemma well_formed_instr_vars vs i :
+    well_formed_instr vs i ->
+    VS.Equal (VS.union vs (vars_instr i)) (VS.union vs (lvs_instr i)).
+  Proof.
+    case: i => /=; intros; hyps_splitb; by VSLemmas.dp_Equal.
+  Qed.
+
+  Lemma well_formed_program_vars vs p :
+    well_formed_program vs p ->
+    VS.Equal (VS.union vs (vars_program p)) (VS.union vs (lvs_program p)).
+  Proof.
+    elim: p vs => /=.
+    - move=> vs _.
+      reflexivity.
+    - move=> hd tl IH vs /andP [Hhd Htl].
+      move: (IH _ Htl) => {IH Htl} => Heq.
+      rewrite -(@VSLemmas.OP.P.union_assoc _ (lvs_instr hd)).
+      rewrite -{}Heq.
+      rewrite -(well_formed_instr_vars Hhd).
+      rewrite VSLemmas.OP.P.union_assoc.
+      reflexivity.
+  Qed.
+  *)
 
 
 End MakeDSL.
