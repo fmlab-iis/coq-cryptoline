@@ -681,9 +681,9 @@ Module MakeDSL
   Definition reqmod w (e1 e2 m : rexp) : rbexp :=
     req w (rsrem w (rsub w e1 e2) m) (rbits (from_nat w 0)).
 
-  Definition rneg (e : rbexp) : rbexp := @rneg V.T e.
-  Definition rand (e1 e2 : rbexp) : rbexp := @rand V.T e1 e2.
-  Definition ror (e1 e2 : rbexp) : rbexp := @ror V.T e1 e2.
+  Definition rneg (e : rbexp) : rbexp := @Rneg V.T e.
+  Definition rand (e1 e2 : rbexp) : rbexp := @Rand V.T e1 e2.
+  Definition ror (e1 e2 : rbexp) : rbexp := @Ror V.T e1 e2.
 
   Definition rands (es : seq rbexp) : rbexp := @rands V.T es.
   Definition rors (es : seq rbexp) : rbexp := @rors V.T es.
@@ -908,7 +908,7 @@ Module MakeDSL
     (*                                (VS.union (vars_atomic a2) (vars_atomic y)))) *)
     | Isub v a1 a2 => VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
     | Isubc c v a1 a2
-    | Isubb c v a1 a2 => 
+    | Isubb c v a1 a2 =>
       VS.add c (VS.add v (VS.union (vars_atomic a1) (vars_atomic a2)))
     (* | Isubr c v a1 a2 => *)
     (*   VS.add c (VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))) *)
@@ -1593,7 +1593,7 @@ Module MakeDSL
     | Icshl v1 v2 a1 a2 _ =>
       is_unsigned (atyp a2 te) && compatible (atyp a1 te) (atyp a2 te)
     | Inondet v t => true
-    | Icmov v c a1 a2 => 
+    | Icmov v c a1 a2 =>
       (atyp c te == Tbit) && (atyp a1 te == atyp a2 te)
     | Inop => true
     | Inot v t a => compatible t (atyp a te)
@@ -1675,8 +1675,8 @@ Module MakeDSL
     match i with
     | Imov v a => are_defined (vars_atomic a) te
     | Ishl v a _ => are_defined (vars_atomic a) te
-    | Icshl v1 v2 a1 a2 _ => 
-      (v1 != v2) && are_defined (vars_atomic a1) te 
+    | Icshl v1 v2 a1 a2 _ =>
+      (v1 != v2) && are_defined (vars_atomic a1) te
                  && are_defined (vars_atomic a2) te
     | Inondet v t => true
     | Icmov v c a1 a2 =>
@@ -1743,7 +1743,7 @@ Module MakeDSL
     | Imull vh vl a1 a2 => 
       (vh != vl) && are_defined (vars_atomic a1) te 
                  && are_defined (vars_atomic a2) te
-    | Imulj v a1 a2 => 
+    | Imulj v a1 a2 =>
       are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
     | Isplit vh vl a n => (vh != vl) && are_defined (vars_atomic a) te 
     | Iand v t a1 a2
