@@ -1298,10 +1298,10 @@ Module MakeDSL
     | Rule => leB v1 v2
     | Rugt => gtB v1 v2
     | Ruge => geB v1 v2
-    | Rslt => false (* TODO: Add correct semantics *)
-    | Rsle => false (* TODO: Add correct semantics *)
-    | Rsgt => false (* TODO: Add correct semantics *)
-    | Rsge => false (* TODO: Add correct semantics *)
+    | Rslt => sltB v1 v2
+    | Rsle => sleB v1 v2
+    | Rsgt => sgtB v1 v2
+    | Rsge => sgeB v1 v2
     end.
 
   Fixpoint eval_eexp (e : eexp) (te : TE.env) (s : S.t) : Z :=
@@ -1424,22 +1424,183 @@ Module MakeDSL
 
   (* TODO: Finish this *)
   Inductive eval_instr (te : TE.env) : instr -> state -> state -> Prop :=
-  | Eerr i : eval_instr te i ERR ERR
-  | Emov v a s t :
+  | EIerr i : eval_instr te i ERR ERR
+  | EImov v a s t :
       S.Upd v (eval_atomic a te s) s t ->
       eval_instr te (Imov v a) (OK s) (OK t)
-  | Eshl v a i s t :
+  | EIshl v a i s t :
       S.Upd v (shlB i (eval_atomic a te s)) s t ->
       eval_instr te (Ishl v a i) (OK s) (OK t)
-  | Enondet v s t n ty :
-      size n = size (S.acc v s) ->
+  | EIcshl vh vl a1 a2 i s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->
+      S.Upd2 vh (high (size (eval_atomic a1 te s)) 
+                      (shlB i 
+                            (cat (eval_atomic a2 te s) (eval_atomic a1 te s))))
+             vl (shrB i 
+                      (low (size (eval_atomic a2 te s)) 
+                           (shlB i 
+                                 (cat (eval_atomic a2 te s) (eval_atomic a1 te s)))))
+             s t ->
+      eval_instr te (Icshl vh vl a1 a2 i) (OK s) (OK t)
+  | EInondet v ty s t n :
+      size n = sizeof_typ ty ->
       S.Upd v n s t ->
       eval_instr te (Inondet v ty) (OK s) (OK t)
-  | Eassume e s :
+  | EIcmovT v c a1 a2 s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->
+      eval_atomic c te s = ones 1 ->
+      S.Upd v (eval_atomic a1 te s) s t ->
+      eval_instr te (Icmov v c a1 a2) (OK s) (OK t)
+  | EIcmovF v c a1 a2 s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->
+      eval_atomic c te s = zeros 1 ->
+      S.Upd v (eval_atomic a2 te s) s t ->
+      eval_instr te (Icmov v c a1 a2) (OK s) (OK t)
+  | EInop s : eval_instr te Inop (OK s) (OK s)
+  | EInot v ty a s t :
+      size (eval_atomic a te s) = sizeof_typ ty ->
+      S.Upd v (invB (eval_atomic a te s)) s t ->
+      eval_instr te (Inot v ty a) (OK s) (OK t)
+  | EIadd v a1 a2 s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->
+      S.Upd v (addB (eval_atomic a1 te s) (eval_atomic a2 te s)) s t ->
+      eval_instr te (Iadd v a1 a2) (OK s) (OK t)
+  | EIadds c v a1 a2 s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->      
+      S.Upd2 c (copy 1 
+                     (carry_addB (eval_atomic a1 te s) (eval_atomic a2 te s)))
+             v (addB (eval_atomic a1 te s) (eval_atomic a2 te s)) 
+             s t ->
+      eval_instr te (Iadds c v a1 a2) (OK s) (OK t)
+  | EIadc v a1 a2 y s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->            
+      size (eval_atomic y te s) = 1 ->
+      S.Upd v (adcB (lsb (eval_atomic y te s)) 
+                    (eval_atomic a1 te s) 
+                    (eval_atomic a2 te s)).2 
+            s t ->
+      eval_instr te (Iadc v a1 a2 y) (OK s) (OK t)
+  | EIadcs c v a1 a2 y s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->            
+      size (eval_atomic y te s) = 1 ->
+      S.Upd2 c (copy 1
+                     (adcB (lsb (eval_atomic y te s)) 
+                           (eval_atomic a1 te s) 
+                           (eval_atomic a2 te s)).1)
+             v (adcB (lsb (eval_atomic y te s)) 
+                     (eval_atomic a1 te s) 
+                     (eval_atomic a2 te s)).2 
+             s t ->
+      eval_instr te (Iadcs c v a1 a2 y) (OK s) (OK t)
+  | EIsub v a1 a2 s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->
+      S.Upd v (subB (eval_atomic a1 te s) (eval_atomic a2 te s)) s t ->
+      eval_instr te (Isub v a1 a2) (OK s) (OK t)
+  | EIsubc c v a1 a2 s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->      
+      S.Upd2 c (copy 1 
+                     (carry_addB (eval_atomic a1 te s) (negB (eval_atomic a2 te s))))
+             v (addB (eval_atomic a1 te s) (negB (eval_atomic a2 te s))) 
+             s t ->
+      eval_instr te (Isubc c v a1 a2) (OK s) (OK t)
+  | EIsubb b v a1 a2 s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->      
+      S.Upd2 b (copy 1 
+                     (borrow_subB (eval_atomic a1 te s) (eval_atomic a2 te s)))
+             v (subB (eval_atomic a1 te s) (eval_atomic a2 te s)) 
+             s t ->
+      eval_instr te (Isubb b v a1 a2) (OK s) (OK t)
+  | EIsbc v a1 a2 y s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->            
+      size (eval_atomic y te s) = 1 ->
+      S.Upd v (adcB (lsb (eval_atomic y te s))
+                    (eval_atomic a1 te s) 
+                    (invB (eval_atomic a2 te s))).2
+            s t ->
+      eval_instr te (Isbc v a1 a2 y) (OK s) (OK t)
+  | EIsbcs c v a1 a2 y s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->            
+      size (eval_atomic y te s) = 1 ->
+      S.Upd2 c (copy 1
+                     (adcB (lsb (eval_atomic y te s)) 
+                           (eval_atomic a1 te s) 
+                           (invB (eval_atomic a2 te s))).1)
+             v (adcB (lsb (eval_atomic y te s)) 
+                     (eval_atomic a1 te s) 
+                     (invB (eval_atomic a2 te s))).2 
+             s t ->
+      eval_instr te (Isbcs c v a1 a2 y) (OK s) (OK t)
+  | EIsbb v a1 a2 y s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->            
+      size (eval_atomic y te s) = 1 ->
+      S.Upd v (sbbB (lsb (eval_atomic y te s)) 
+                    (eval_atomic a1 te s) 
+                    (eval_atomic a2 te s)).2 
+            s t ->
+      eval_instr te (Isbb v a1 a2 y) (OK s) (OK t)
+  | EIsbbs b v a1 a2 y s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->            
+      size (eval_atomic y te s) = 1 ->
+      S.Upd2 b (copy 1
+                     (sbbB (lsb (eval_atomic y te s)) 
+                           (eval_atomic a1 te s) 
+                           (eval_atomic a2 te s)).1)
+             v (sbbB (lsb (eval_atomic y te s)) 
+                     (eval_atomic a1 te s) 
+                     (eval_atomic a2 te s)).2 
+             s t ->
+      eval_instr te (Isbbs b v a1 a2 y) (OK s) (OK t)
+  | EImul v a1 a2 s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->
+      S.Upd v (mulB (eval_atomic a1 te s) (eval_atomic a2 te s)) s t ->
+      eval_instr te (Imul v a1 a2) (OK s) (OK t)
+  | EImull vh vl a1 a2 s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->      
+      S.Upd2 vh (high (size (eval_atomic a1 te s)) 
+                      (full_mul (eval_atomic a1 te s) (eval_atomic a2 te s)))
+             vl (low (size (eval_atomic a2 te s)) 
+                     (full_mul (eval_atomic a1 te s) (eval_atomic a2 te s)))
+             s t ->
+      eval_instr te (Imull vh vl a1 a2) (OK s) (OK t)
+  | EImulj v a1 a2 s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) ->      
+      S.Upd v (full_mul (eval_atomic a1 te s) (eval_atomic a2 te s)) s t ->
+      eval_instr te (Imulj v a1 a2) (OK s) (OK t)
+  | EIsplit vh vl a n s t :
+      n <= size (eval_atomic a te s) ->
+      S.Upd2 vh (sext n (high ((size (eval_atomic a te s)) - n) 
+                              (eval_atomic a te s)))
+             vl (zext ((size (eval_atomic a te s)) - n) 
+                      (low n (eval_atomic a te s)))
+             s t ->
+      eval_instr te (Isplit vh vl a n) (OK s) (OK t)
+  | EIand v ty a1 a2 s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) -> 
+      size (eval_atomic a1 te s) = sizeof_typ ty -> 
+      S.Upd v (andB (eval_atomic a1 te s) (eval_atomic a2 te s)) s t ->
+      eval_instr te (Iand v ty a1 a2) (OK s) (OK t)
+  | EIor v ty a1 a2 s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) -> 
+      size (eval_atomic a1 te s) = sizeof_typ ty -> 
+      S.Upd v (orB (eval_atomic a1 te s) (eval_atomic a2 te s)) s t ->
+      eval_instr te (Ior v ty a1 a2) (OK s) (OK t)
+  | EIxor v ty a1 a2 s t :
+      size (eval_atomic a1 te s) = size (eval_atomic a2 te s) -> 
+      size (eval_atomic a1 te s) = sizeof_typ ty -> 
+      S.Upd v (xorB (eval_atomic a1 te s) (eval_atomic a2 te s)) s t ->
+      eval_instr te (Ixor v ty a1 a2) (OK s) (OK t)
+  (* TODO: Type conversions *) 
+  (* Icast (v, t, a): v = the value of a represented by the type t of v *)
+  (* Ivpc (v, t, a): v = a, value preserved casting to type t *)
+  | EIjoin v ah al s t :
+      size (eval_atomic ah te s) = size (eval_atomic al te s) -> 
+      S.Upd v (cat (eval_atomic al te s) (eval_atomic ah te s)) s t ->
+      eval_instr te (Ijoin v ah al) (OK s) (OK t)
+  | EIassume e s :
       eval_bexp e te s -> eval_instr te (Iassume e) (OK s) (OK s)
-  | EassertOK e s :
+  | EIassertOK e s :
       eval_bexp e te s -> eval_instr te (Iassert e) (OK s) (OK s)
-  | EassertERR e s :
+  | EIassertERR e s :
       ~ eval_bexp e te s -> eval_instr te (Iassert e) (OK s) ERR
   .
 
