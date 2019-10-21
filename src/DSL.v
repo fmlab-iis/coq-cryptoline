@@ -739,11 +739,13 @@ Module MakeDSL
 
   (* Instructions and programs *)
 
+  (*
   Inductive prove_with_spec : Set :=
   | Precondition
   | AllCuts
   | AllAssumes
   | AllGhosts.
+   *)
 
   Inductive atomic : Type :=
   | Avar : var -> atomic
@@ -867,9 +869,9 @@ Module MakeDSL
   | Ijoin : var -> atomic -> atomic -> instr
   (* Specifications *)
   | Iassert : bexp -> instr
-  | Iassume : bexp -> instr
-  | Iecut : ebexp -> seq prove_with_spec -> instr
-  | Ircut : rbexp -> seq prove_with_spec -> instr.
+  | Iassume : bexp -> instr.
+  (* | Iecut : ebexp -> seq prove_with_spec -> instr *)
+  (* | Ircut : rbexp -> seq prove_with_spec -> instr. *)
   (* | Ighost : TE.t -> bexp -> instr. (* TE.t specifies types of ghost vars. *) *)
 
   Definition program := seq instr.
@@ -946,8 +948,8 @@ Module MakeDSL
     | Ijoin v ah al => VS.add v (VS.union (vars_atomic ah) (vars_atomic al))
     | Iassert e => vars_bexp e
     | Iassume e => vars_bexp e
-    | Iecut e _ => vars_ebexp e
-    | Ircut e _ => vars_rbexp e
+    (* | Iecut e _ => vars_ebexp e *)
+    (* | Ircut e _ => vars_rbexp e *)
     (* | Ighost te e => VS.union (vars_env te) (vars_bexp e) *)
     end.
 
@@ -989,9 +991,9 @@ Module MakeDSL
     | Ivpc v _ _
     | Ijoin v _ _ => VS.singleton v
     | Iassert _
-    | Iassume _
-    | Iecut _ _
-    | Ircut _ _ => VS.empty
+    | Iassume _ => VS.empty
+    (* | Iecut _ _ *)
+    (* | Ircut _ _ => VS.empty *)
     (* | Ighost _ _ => VS.empty *)
     end.
 
@@ -1039,8 +1041,8 @@ Module MakeDSL
     | Ijoin _ ah al => VS.union (vars_atomic ah) (vars_atomic al)
     | Iassert e => vars_bexp e
     | Iassume e => vars_bexp e
-    | Iecut e _ => vars_ebexp e
-    | Ircut e _ => vars_rbexp e
+    (* | Iecut e _ => vars_ebexp e *)
+    (* | Ircut e _ => vars_rbexp e *)
     (* | Ighost te e => VS.union (vars_env te) (vars_bexp e) *)
     end.
 
@@ -1225,37 +1227,37 @@ Module MakeDSL
     { sinputs : TE.env;
       spre : bexp;
       sprog : program;
-      spost : bexp;
-      sepwss : seq prove_with_spec;
-      srpwss : seq prove_with_spec }.
+      spost : bexp }.
+      (* sepwss : seq prove_with_spec; *)
+      (* srpwss : seq prove_with_spec }. *)
 
   Record espec :=
     { esinputs : TE.env;
       espre : ebexp;
       esprog : program;
-      espost : ebexp;
-      espwss : seq prove_with_spec }.
+      espost : ebexp }.
+      (* espwss : seq prove_with_spec }. *)
 
   Record rspec :=
     { rsinputs : TE.env;
       rspre : rbexp;
       rsprog : program;
-      rspost : rbexp;
-      rspwss : seq prove_with_spec }.
+      rspost : rbexp }.
+      (* rspwss : seq prove_with_spec }. *)
 
   Coercion espec_of_spec s :=
     {| esinputs := sinputs s;
        espre := eqn_bexp (spre s);
        esprog := sprog s;
-       espost := eqn_bexp (spost s);
-       espwss := sepwss s |}.
+       espost := eqn_bexp (spost s) |}.
+       (* espwss := sepwss s |}. *)
 
   Coercion rspec_of_spec s :=
     {| rsinputs := sinputs s;
        rspre := rng_bexp (spre s);
        rsprog := sprog s;
-       rspost := rng_bexp (spost s);
-       rspwss := srpwss s |}.
+       rspost := rng_bexp (spost s) |}.
+       (* rspwss := srpwss s |}. *)
 
   (* Semantics *)
 
@@ -1411,8 +1413,8 @@ Module MakeDSL
     | Ijoin v ah al => TE.add v (double_typ (atyp ah te)) te
     | Iassert e
     | Iassume e => te
-    | Iecut e _
-    | Ircut e _ => te
+    (* | Iecut e _ *)
+    (* | Ircut e _ => te *)
     (* | Ighost gte e => VM.fold (fun gv gt env => TE.add gv gt env) gte te                                *)
     end.
 
@@ -1514,6 +1516,23 @@ Module MakeDSL
 
   Local Notation "te , s |= f" := (eval_bexp f te s) (at level 74, no associativity).
   Local Notation "f ===> g" := (entails f g) (at level 82, no associativity).
+  Local Notation "te |= {{ f }} p {{ g }}" :=
+    (spec_partial_correct {| sinputs := te;
+                             spre := f;
+                             sprog := p;
+                             spost := g |}) (at level 83).
+  Local Notation "te |= [[ f ]] p [[ g ]]" :=
+    (spec_total_correct {| sinputs := te;
+                           spre := f;
+                           sprog := p;
+                           spost := g |}) (at level 83).
+  Local Notation "te |= {{ f }} p {{ g }} ~\> 'err'" :=
+    (spec_not_err {| sinputs := te;
+                     spre := f;
+                     sprog := p;
+                     spost := g |}) (at level 83).
+
+  (*
   Local Notation "te |= {{ f }} p {{ g }} -- epwss , rpwss" :=
     (spec_partial_correct {| sinputs := te;
                              spre := f;
@@ -1535,6 +1554,7 @@ Module MakeDSL
                      spost := g;
                      sepwss := epwss;
                      srpwss := rpwss |}) (at level 83).
+  *)
 
 
   (* Well-typedness *)
@@ -1635,13 +1655,13 @@ Module MakeDSL
       is_unsigned (atyp al te) && compatible (atyp ah te) (atyp al te)
     | Iassert e
     | Iassume e => well_typed_bexp te e
-    | Iecut e _ => well_typed_ebexp te e
-    | Ircut e _ => well_typed_rbexp te e
+    (* | Iecut e _ => well_typed_ebexp te e *)
+    (* | Ircut e _ => well_typed_rbexp te e *)
     (* | Ighost gte e => well_typed_bexp te e *)
     end.
 
 
-  (* TODO: Define well-formedness *)
+  (* Well-formedness *)
 
   Module TEKS := MapKeySet V TE VS.
 
@@ -1756,8 +1776,8 @@ Module MakeDSL
       are_defined (vars_atomic ah) te && are_defined (vars_atomic al) te
     | Iassert e
     | Iassume e => are_defined (vars_bexp e) te
-    | Iecut e _ => are_defined (vars_ebexp e) te
-    | Ircut e _ => are_defined (vars_rbexp e) te
+    (* | Iecut e _ => are_defined (vars_ebexp e) te *)
+    (* | Ircut e _ => are_defined (vars_rbexp e) te *)
     end 
     && well_typed_instr te i.
 
