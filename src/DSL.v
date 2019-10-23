@@ -817,7 +817,6 @@ Module MakeDSL
   (* Ijoin (v, ah, al): v = ah * 2^w + al where w is the bit-width of al *)
   | Ijoin : var -> atomic -> atomic -> instr
   (* Specifications *)
-  | Iassert : bexp -> instr
   | Iassume : bexp -> instr.
 
   Definition program := seq instr.
@@ -876,7 +875,6 @@ Module MakeDSL
     | Icast v t a
     | Ivpc v t a => VS.add v (vars_atomic a)
     | Ijoin v ah al => VS.add v (VS.union (vars_atomic ah) (vars_atomic al))
-    | Iassert e => vars_bexp e
     | Iassume e => vars_bexp e
     end.
 
@@ -910,7 +908,6 @@ Module MakeDSL
     | Icast v _ _
     | Ivpc v _ _
     | Ijoin v _ _ => VS.singleton v
-    | Iassert _
     | Iassume _ => VS.empty
     end.
 
@@ -947,7 +944,6 @@ Module MakeDSL
     | Icast _ _ a
     | Ivpc _ _ a => vars_atomic a
     | Ijoin _ ah al => VS.union (vars_atomic ah) (vars_atomic al)
-    | Iassert e => vars_bexp e
     | Iassume e => vars_bexp e
     end.
 
@@ -1215,22 +1211,19 @@ Module MakeDSL
     | Icast v t a
     | Ivpc v t a => TE.add v t te
     | Ijoin v ah al => TE.add v (double_typ (atyp ah te)) te
-    | Iassert e
     | Iassume e => te
     end.
 
-  Local Notation state := (state S.t).
-  Local Notation ERR := (ERR S.t).
+  Local Notation state := S.t.
 
   (* TODO: Finish this *)
   Inductive eval_instr (te : TE.env) : instr -> state -> state -> Prop :=
-  | EIerr i : eval_instr te i ERR ERR
   | EImov v a s t :
       S.Upd v (eval_atomic a s) s t ->
-      eval_instr te (Imov v a) (OK s) (OK t)
+      eval_instr te (Imov v a) s t
   | EIshl v a i s t :
       S.Upd v (shlB i (eval_atomic a s)) s t ->
-      eval_instr te (Ishl v a i) (OK s) (OK t)
+      eval_instr te (Ishl v a i) s t
   | EIcshl vh vl a1 a2 i s t :
       S.Upd2 vh (high (size (eval_atomic a1 s))
                       (shlB i
@@ -1240,38 +1233,38 @@ Module MakeDSL
                            (shlB i
                                  (cat (eval_atomic a2 s) (eval_atomic a1 s)))))
              s t ->
-      eval_instr te (Icshl vh vl a1 a2 i) (OK s) (OK t)
+      eval_instr te (Icshl vh vl a1 a2 i) s t
   | EInondet v ty s t n :
       size n = sizeof_typ ty ->
       S.Upd v n s t ->
-      eval_instr te (Inondet v ty) (OK s) (OK t)
+      eval_instr te (Inondet v ty) s t
   | EIcmovT v c a1 a2 s t :
       to_bool (eval_atomic c s) ->
       S.Upd v (eval_atomic a1 s) s t ->
-      eval_instr te (Icmov v c a1 a2) (OK s) (OK t)
+      eval_instr te (Icmov v c a1 a2) s t
   | EIcmovF v c a1 a2 s t :
       ~~ to_bool (eval_atomic c s) ->
       S.Upd v (eval_atomic a2 s) s t ->
-      eval_instr te (Icmov v c a1 a2) (OK s) (OK t)
-  | EInop s : eval_instr te Inop (OK s) (OK s)
+      eval_instr te (Icmov v c a1 a2) s t
+  | EInop s : eval_instr te Inop s s
   | EInot v ty a s t :
       S.Upd v (invB (eval_atomic a s)) s t ->
-      eval_instr te (Inot v ty a) (OK s) (OK t)
+      eval_instr te (Inot v ty a) s t
   | EIadd v a1 a2 s t :
       S.Upd v (addB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
-      eval_instr te (Iadd v a1 a2) (OK s) (OK t)
+      eval_instr te (Iadd v a1 a2) s t
   | EIadds c v a1 a2 s t :
       S.Upd2 c (1-bits of bool
                        (carry_addB (eval_atomic a1 s) (eval_atomic a2 s)))
              v (addB (eval_atomic a1 s) (eval_atomic a2 s))
              s t ->
-      eval_instr te (Iadds c v a1 a2) (OK s) (OK t)
+      eval_instr te (Iadds c v a1 a2) s t
   | EIadc v a1 a2 y s t :
       S.Upd v (adcB (to_bool (eval_atomic y s))
                     (eval_atomic a1 s)
                     (eval_atomic a2 s)).2
             s t ->
-      eval_instr te (Iadc v a1 a2 y) (OK s) (OK t)
+      eval_instr te (Iadc v a1 a2 y) s t
   | EIadcs c v a1 a2 y s t :
       S.Upd2 c (1-bits of bool
                        ((adcB (to_bool (eval_atomic y s))
@@ -1281,28 +1274,28 @@ Module MakeDSL
                      (eval_atomic a1 s)
                      (eval_atomic a2 s)).2
              s t ->
-      eval_instr te (Iadcs c v a1 a2 y) (OK s) (OK t)
+      eval_instr te (Iadcs c v a1 a2 y) s t
   | EIsub v a1 a2 s t :
       S.Upd v (subB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
-      eval_instr te (Isub v a1 a2) (OK s) (OK t)
+      eval_instr te (Isub v a1 a2) s t
   | EIsubc c v a1 a2 s t :
       S.Upd2 c (1-bits of bool
                        (carry_addB (eval_atomic a1 s) (negB (eval_atomic a2 s))))
              v (addB (eval_atomic a1 s) (negB (eval_atomic a2 s)))
              s t ->
-      eval_instr te (Isubc c v a1 a2) (OK s) (OK t)
+      eval_instr te (Isubc c v a1 a2) s t
   | EIsubb b v a1 a2 s t :
       S.Upd2 b (1-bits of bool
                        (borrow_subB (eval_atomic a1 s) (eval_atomic a2 s)))
              v (subB (eval_atomic a1 s) (eval_atomic a2 s))
              s t ->
-      eval_instr te (Isubb b v a1 a2) (OK s) (OK t)
+      eval_instr te (Isubb b v a1 a2) s t
   | EIsbc v a1 a2 y s t :
       S.Upd v (adcB (to_bool (eval_atomic y s))
                     (eval_atomic a1 s)
                     (invB (eval_atomic a2 s))).2
             s t ->
-      eval_instr te (Isbc v a1 a2 y) (OK s) (OK t)
+      eval_instr te (Isbc v a1 a2 y) s t
   | EIsbcs c v a1 a2 y s t :
       S.Upd2 c (1-bits of bool
                        ((adcB (to_bool (eval_atomic y s))
@@ -1312,13 +1305,13 @@ Module MakeDSL
                      (eval_atomic a1 s)
                      (invB (eval_atomic a2 s))).2
              s t ->
-      eval_instr te (Isbcs c v a1 a2 y) (OK s) (OK t)
+      eval_instr te (Isbcs c v a1 a2 y) s t
   | EIsbb v a1 a2 y s t :
       S.Upd v (sbbB (to_bool (eval_atomic y s))
                     (eval_atomic a1 s)
                     (eval_atomic a2 s)).2
             s t ->
-      eval_instr te (Isbb v a1 a2 y) (OK s) (OK t)
+      eval_instr te (Isbb v a1 a2 y) s t
   | EIsbbs b v a1 a2 y s t :
       S.Upd2 b (1-bits of bool
                        ((sbbB (to_bool (eval_atomic y s))
@@ -1328,20 +1321,20 @@ Module MakeDSL
                      (eval_atomic a1 s)
                      (eval_atomic a2 s)).2
              s t ->
-      eval_instr te (Isbbs b v a1 a2 y) (OK s) (OK t)
+      eval_instr te (Isbbs b v a1 a2 y) s t
   | EImul v a1 a2 s t :
       S.Upd v (mulB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
-      eval_instr te (Imul v a1 a2) (OK s) (OK t)
+      eval_instr te (Imul v a1 a2) s t
   | EImull vh vl a1 a2 s t :
       S.Upd2 vh (high (size (eval_atomic a1 s))
                       (full_mul (eval_atomic a1 s) (eval_atomic a2 s)))
              vl (low (size (eval_atomic a2 s))
                      (full_mul (eval_atomic a1 s) (eval_atomic a2 s)))
              s t ->
-      eval_instr te (Imull vh vl a1 a2) (OK s) (OK t)
+      eval_instr te (Imull vh vl a1 a2) s t
   | EImulj v a1 a2 s t :
       S.Upd v (full_mul (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
-      eval_instr te (Imulj v a1 a2) (OK s) (OK t)
+      eval_instr te (Imulj v a1 a2) s t
   | EIsplitU vh vl a n s t :
       is_unsigned (TE.vtyp vh te) ->
       S.Upd2 vh (zext n (high ((size (eval_atomic a s)) - n)
@@ -1349,7 +1342,7 @@ Module MakeDSL
              vl (zext ((size (eval_atomic a s)) - n)
                       (low n (eval_atomic a s)))
              s t ->
-      eval_instr te (Isplit vh vl a n) (OK s) (OK t)
+      eval_instr te (Isplit vh vl a n) s t
   | EIsplitS vh vl a n s t :
       is_signed (TE.vtyp vh te) ->
       S.Upd2 vh (sext n (high ((size (eval_atomic a s)) - n)
@@ -1357,31 +1350,27 @@ Module MakeDSL
              vl (zext ((size (eval_atomic a s)) - n)
                       (low n (eval_atomic a s)))
              s t ->
-      eval_instr te (Isplit vh vl a n) (OK s) (OK t)
+      eval_instr te (Isplit vh vl a n) s t
   | EIand v ty a1 a2 s t :
       S.Upd v (andB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
-      eval_instr te (Iand v ty a1 a2) (OK s) (OK t)
+      eval_instr te (Iand v ty a1 a2) s t
   | EIor v ty a1 a2 s t :
       S.Upd v (orB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
-      eval_instr te (Ior v ty a1 a2) (OK s) (OK t)
+      eval_instr te (Ior v ty a1 a2) s t
   | EIxor v ty a1 a2 s t :
       S.Upd v (xorB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
-      eval_instr te (Ixor v ty a1 a2) (OK s) (OK t)
+      eval_instr te (Ixor v ty a1 a2) s t
   | EIcast v ty a s t :
       S.Upd v (tcast (eval_atomic a s) (atyp a te) ty) s t ->
-      eval_instr te (Icast v ty a) (OK s) (OK t)
+      eval_instr te (Icast v ty a) s t
   | EIvpc v ty a s t :
       S.Upd v (tcast (eval_atomic a s) (atyp a te) ty) s t ->
-      eval_instr te (Ivpc v ty a) (OK s) (OK t)
+      eval_instr te (Ivpc v ty a) s t
   | EIjoin v ah al s t :
       S.Upd v (cat (eval_atomic al s) (eval_atomic ah s)) s t ->
-      eval_instr te (Ijoin v ah al) (OK s) (OK t)
+      eval_instr te (Ijoin v ah al) s t
   | EIassume e s :
-      eval_bexp e te s -> eval_instr te (Iassume e) (OK s) (OK s)
-  | EIassertOK e s :
-      eval_bexp e te s -> eval_instr te (Iassert e) (OK s) (OK s)
-  | EIassertERR e s :
-      ~ eval_bexp e te s -> eval_instr te (Iassert e) (OK s) ERR
+      eval_bexp e te s -> eval_instr te (Iassume e) s s
   .
 
   Inductive eval_instrs (te : TE.env) : seq instr -> state -> state -> Prop :=
@@ -1397,88 +1386,54 @@ Module MakeDSL
 
   (* Partial correctness *)
 
-  Definition spec_partial_correct (s : spec) : Prop :=
+  Definition valid_spec (s : spec) : Prop :=
     forall s1 s2,
       S.conform s1 (sinputs s) ->
       eval_bexp (spre s) (sinputs s) s1 ->
-      eval_program (sinputs s) (sprog s) (OK s1) (OK s2) ->
+      eval_program (sinputs s) (sprog s) s1 s2 ->
       eval_bexp (spost s) (program_succ_typenv (sprog s) (sinputs s)) s2.
 
-  Definition espec_partial_correct (s : espec) : Prop :=
+  Definition valid_espec (s : espec) : Prop :=
     forall s1 s2,
       S.conform s1 (esinputs s) ->
       eval_ebexp (espre s) (esinputs s) s1 ->
-      eval_program (esinputs s) (esprog s) (OK s1) (OK s2) ->
+      eval_program (esinputs s) (esprog s) s1 s2 ->
       eval_ebexp (espost s) (program_succ_typenv (esprog s) (esinputs s)) s2.
 
-  Definition rspec_partial_correct (s : rspec) : Prop :=
+  Definition valid_rspec (s : rspec) : Prop :=
     forall s1 s2,
       S.conform s1 (rsinputs s) ->
       eval_rbexp (rspre s) s1 ->
-      eval_program (rsinputs s) (rsprog s) (OK s1) (OK s2) ->
+      eval_program (rsinputs s) (rsprog s) s1 s2 ->
       eval_rbexp (rspost s) s2.
 
-  Lemma spec_partial_correct_split (s : spec) :
-    espec_partial_correct (espec_of_spec s) ->
-    rspec_partial_correct (rspec_of_spec s) ->
-    spec_partial_correct s.
+  Lemma valid_spec_split (s : spec) :
+    valid_espec (espec_of_spec s) ->
+    valid_rspec (rspec_of_spec s) ->
+    valid_spec s.
   Proof.
     move=> He Hr s1 s2 Hcon [Hepre Hrpre] Hprog. split.
     - exact: (He _ _ Hcon Hepre Hprog).
     - exact: (Hr _ _ Hcon Hrpre Hprog).
   Qed.
 
-  (* Total correctness *)
-
-  Definition spec_total_correct (s : spec) : Prop :=
-    forall s1,
-      S.conform s1 (sinputs s) ->
-      eval_bexp (spre s) (sinputs s) s1 ->
-      exists s2,
-        eval_program (sinputs s) (sprog s) (OK s1) (OK s2) /\
-        eval_bexp (spost s) (program_succ_typenv (sprog s) (sinputs s)) s2.
-
-  Definition espec_total_correct (s : espec) : Prop :=
-    forall s1,
-      S.conform s1 (esinputs s) ->
-      eval_ebexp (espre s) (esinputs s) s1 ->
-      exists s2,
-        eval_program (esinputs s) (esprog s) (OK s1) (OK s2) /\
-        eval_ebexp (espost s) (program_succ_typenv (esprog s) (esinputs s)) s2.
-
-  Definition rspec_total_correct (s : spec) : Prop :=
-    forall s1,
-      S.conform s1 (rsinputs s) ->
-      eval_rbexp (rspre s) s1 ->
-      exists s2,
-        eval_program (rsinputs s) (rsprog s) (OK s1) (OK s2) /\
-        eval_rbexp (rspost s) s2.
-
-  (* ERR unreachable *)
-
-  Definition spec_not_err (s : spec) : Prop :=
-    forall s1,
-      S.conform s1 (sinputs s) ->
-      eval_bexp (spre s) (sinputs s) s1 ->
-      ~ eval_program (sinputs s) (sprog s) (OK s1) ERR.
-
   Local Notation "te , s |= f" := (eval_bexp f te s) (at level 74, no associativity).
   Local Notation "f ===> g" := (entails f g) (at level 82, no associativity).
   Local Notation "te |= {{ f }} p {{ g }}" :=
-    (spec_partial_correct {| sinputs := te;
-                             spre := f;
-                             sprog := p;
-                             spost := g |}) (at level 83).
-  Local Notation "te |= [[ f ]] p [[ g ]]" :=
-    (spec_total_correct {| sinputs := te;
-                           spre := f;
-                           sprog := p;
-                           spost := g |}) (at level 83).
-  Local Notation "te |= {{ f }} p {{ g }} ~\> 'err'" :=
-    (spec_not_err {| sinputs := te;
-                     spre := f;
-                     sprog := p;
-                     spost := g |}) (at level 83).
+    (valid_spec {| sinputs := te;
+                   spre := f;
+                   sprog := p;
+                   spost := g |}) (at level 83).
+  Local Notation "te |='e' {{ f }} p {{ g }}" :=
+    (valid_espec {| esinputs := te;
+                    espre := f;
+                    esprog := p;
+                    espost := g |}) (at level 83).
+  Local Notation "te |='r' {{ f }} p {{ g }}" :=
+    (valid_espec {| rsinputs := te;
+                    rspre := f;
+                    rsprog := p;
+                    rspost := g |}) (at level 83).
 
 
 
@@ -1568,7 +1523,6 @@ Module MakeDSL
     | Ivpc v t a => true
     | Ijoin v ah al =>
       is_unsigned (atyp al te) && compatible (atyp ah te) (atyp al te)
-    | Iassert e
     | Iassume e => well_typed_bexp te e
     end.
 
@@ -1664,7 +1618,6 @@ Module MakeDSL
     | Ivpc v t a => are_defined (vars_atomic a) te
     | Ijoin v ah al =>
       are_defined (vars_atomic ah) te && are_defined (vars_atomic al) te
-    | Iassert e
     | Iassume e => are_defined (vars_bexp e) te
     end.
 
@@ -1924,17 +1877,11 @@ Module MakeDSL
     | _ => false
     end.
 
-  Definition is_assert (i : instr) : bool :=
-    match i with
-    | Iassert _ => true
-    | _ => false
-    end.
-
-  (* Given a store, the evaluation of every instruction except assume and assert
+  (* Given a store, the evaluation of every instruction except assume
      should result in a store *)
   Lemma instr_nonblocking (te : TE.env) (i : instr) (s : S.t) :
-    ~~ is_assume i && ~~ is_assert i ->
-    exists (t : S.t), eval_instr te i (OK s) (OK t).
+    ~~ is_assume i ->
+    exists (t : S.t), eval_instr te i s t.
   Proof.
     case: i => //=.
     - (* Imov *) move=> ? ? _. eexists. apply: EImov. exact: S.Upd_upd.
