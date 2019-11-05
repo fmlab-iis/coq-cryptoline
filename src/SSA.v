@@ -111,6 +111,7 @@ Section MakeSSA.
   Definition ssa_bexp (m : vmap) (e : DSL.bexp) :=
     (ssa_ebexp m (DSL.eqn_bexp e) , ssa_rbexp m (DSL.rng_bexp e)).
 
+  (*
   Definition ssa_pws (pwss: DSL.prove_with_spec) : SSA.prove_with_spec :=
     match pwss with
     | DSL.Precondition => SSA.Precondition
@@ -120,7 +121,8 @@ Section MakeSSA.
     end.
 
   Definition ssa_pwss pwss := seq.map ssa_pws pwss.
-
+   *)
+  
   Definition ssa_instr (m : vmap) (i : DSL.instr) : vmap * SSA.instr :=
     match i with
     | DSL.Imov v a =>
@@ -312,12 +314,14 @@ Section MakeSSA.
       let al := ssa_atomic m al in
       let m := upd_index v m in
       (m, SSA.Ijoin (ssa_var m v) ah al)
-    | DSL.Iassert e => (m, SSA.Iassert (ssa_bexp m e))
     | DSL.Iassume e => (m, SSA.Iassume (ssa_bexp m e))
+        (*
+    | DSL.Iassert e => (m, SSA.Iassert (ssa_bexp m e))
     | DSL.Iecut e pwss => (m, SSA.Iecut (ssa_ebexp m e) (ssa_pwss pwss))
     | DSL.Ircut e pwss => (m, SSA.Ircut  (ssa_rbexp m e) (ssa_pwss pwss))
                             (* | DSL.Ighost vs e => (m, SSA.Ighost (ssa_vars m vs) (ssa_bexp m e)) *)
                            (* | _ => (m, i) *)
+         *)
     end.
 
   Fixpoint ssa_program (m : vmap) (p : DSL.program) : vmap * SSA.program :=
@@ -342,14 +346,18 @@ Section MakeSSA.
     let f := ssa_bexp m (DSL.spre s) in
     let (m, p) := ssa_program m (DSL.sprog s) in
     let g := ssa_bexp m (DSL.spost s) in
+    (*
     let sep := ssa_pwss (DSL.sepwss s) in
     let srp := ssa_pwss (DSL.srpwss s) in
+     *)
     {| SSA.sinputs := si;
        SSA.spre := f;
        SSA.sprog := p;
        SSA.spost := g;
+       (*
        SSA.sepwss := sep;
        SSA.srpwss := srp;
+        *)
     |}.
 
   Lemma ssa_program_empty : forall m, ssa_program m [::] = (m, [::]).
@@ -383,9 +391,11 @@ Section MakeSSA.
       SSA.sinputs (ssa_spec s) = ssa_typenv empty_vmap (DSL.sinputs s) /\
       SSA.spre (ssa_spec s) = ssa_bexp empty_vmap (DSL.spre s) /\
       (m, SSA.sprog (ssa_spec s)) = ssa_program empty_vmap (DSL.sprog s) /\
-      SSA.spost (ssa_spec s) = ssa_bexp m (DSL.spost s) /\
+      SSA.spost (ssa_spec s) = ssa_bexp m (DSL.spost s).
+    (*
       SSA.sepwss (ssa_spec s) = ssa_pwss (DSL.sepwss s) /\
       SSA.srpwss (ssa_spec s) = ssa_pwss (DSL.srpwss s).
+     *)
   Proof.
     destruct s as [si f p g sep srp] => /=.
     rewrite /ssa_spec /=.
@@ -1452,12 +1462,14 @@ Section MakeSSA.
       exact: SSAVS.Lemmas.subset_refl.
     - rewrite ssa_vars_union. rewrite ssa_vars_bexp_comm.
       exact: SSAVS.Lemmas.subset_refl.
+      (*
     - rewrite ssa_vars_union. rewrite ssa_vars_bexp_comm.
       exact: SSAVS.Lemmas.subset_refl.
     - rewrite ssa_vars_union. rewrite ssa_vars_ebexp_comm.
       exact: SSAVS.Lemmas.subset_refl.
     - rewrite ssa_vars_union. rewrite ssa_vars_rbexp_comm.
       exact: SSAVS.Lemmas.subset_refl.
+       *)
   Qed.
 
   Lemma ssa_vars_post_subset vs m1 m2 p sp g :
@@ -1556,9 +1568,9 @@ Section MakeSSA.
       by case.
   Qed.
 
-  Lemma ssa_eval_atomic m TE s ss a :
+  Lemma ssa_eval_atomic m s ss a :
     state_equiv m s ss ->
-    SSA.eval_atomic (ssa_atomic m a) (ssa_typenv m TE) ss = DSL.eval_atomic a TE s.
+    SSA.eval_atomic (ssa_atomic m a) ss = DSL.eval_atomic a s.
   Proof.
     move=> Heq; elim: a => /=.
     - move=> v.
@@ -1580,9 +1592,9 @@ Section MakeSSA.
     - move=> op e1 IH1 e2 IH2. rewrite IH1 IH2. reflexivity.
   Qed.
 
-  Lemma ssa_eval_rexp m TE s ss (e : DSL.rexp) :
+  Lemma ssa_eval_rexp m s ss (e : DSL.rexp) :
     state_equiv m s ss ->
-    SSA.eval_rexp (ssa_rexp m e) (ssa_typenv m TE) ss = DSL.eval_rexp e TE s.
+    SSA.eval_rexp (ssa_rexp m e) ss = DSL.eval_rexp e s.
   Proof.
     move=> Heq; elim: e => /=.
     - move=> v. exact: (Logic.eq_sym (Heq v)).
@@ -1622,34 +1634,34 @@ Section MakeSSA.
     exact: (H2 He).
   Qed.
 
-  Lemma ssa_eval_rbexp m TE s ss e :
+  Lemma ssa_eval_rbexp m s ss e :
     state_equiv m s ss ->
-    SSA.eval_rbexp (ssa_rbexp m e) (ssa_typenv m TE) ss <-> DSL.eval_rbexp e TE s.
+    SSA.eval_rbexp (ssa_rbexp m e) ss <-> DSL.eval_rbexp e s.
   Proof.
     move=> Heq; elim: e => /=.
     - done.
-    - move=> w e1 e2. rewrite 2!(ssa_eval_rexp TE _ Heq). done.
-    - move=> w op e1 e2. rewrite 2!(ssa_eval_rexp TE _ Heq) ssa_eval_rcmpop. done.
+    - move=> w e1 e2. rewrite 2!(ssa_eval_rexp _ Heq). done.
+    - move=> w op e1 e2. rewrite 2!(ssa_eval_rexp _ Heq) ssa_eval_rcmpop. done.
     - move=> e1 [IH11 IH12]. tauto.
     - move=> e1 [IH11 IH12] e2 [IH21 IH22]. tauto.
     - move=> e1 [IH11 IH12] e2 [IH21 IH22]. tauto.
   Qed.
 
-  Lemma ssa_eval_rbexp1 m TE s ss e :
+  Lemma ssa_eval_rbexp1 m s ss e :
     state_equiv m s ss ->
-    SSA.eval_rbexp (ssa_rbexp m e) (ssa_typenv m TE) ss -> DSL.eval_rbexp e TE s.
+    SSA.eval_rbexp (ssa_rbexp m e) ss -> DSL.eval_rbexp e s.
   Proof.
     move=> Heq He.
-    move: (ssa_eval_rbexp TE e Heq) => [H1 H2].
+    move: (ssa_eval_rbexp e Heq) => [H1 H2].
     exact: (H1 He).
   Qed.
 
-  Lemma ssa_eval_rbexp2 m TE s ss e :
+  Lemma ssa_eval_rbexp2 m s ss e :
     state_equiv m s ss ->
-    DSL.eval_rbexp e TE s -> SSA.eval_rbexp (ssa_rbexp m e) (ssa_typenv m TE) ss.
+    DSL.eval_rbexp e s -> SSA.eval_rbexp (ssa_rbexp m e) ss.
   Proof.
     move=> Heq He.
-    move: (ssa_eval_rbexp TE e Heq) => [H1 H2].
+    move: (ssa_eval_rbexp e Heq) => [H1 H2].
     exact: (H2 He).
   Qed.
 
