@@ -1975,6 +1975,12 @@ Section MakeSSA.
 Definition ssa_var_unchanged_instr v i : bool :=
   ~~ (SSAVS.mem v (SSA.lvs_instr i)).
 
+Definition ssa_unchanged_instr_var i v : bool :=
+  ssa_var_unchanged_instr v i .
+
+Definition ssa_vars_unchanged_instr vs i : bool :=
+  SSAVS.for_all (ssa_unchanged_instr_var i) vs .
+
 Definition ssa_unchanged_program_var p v : bool :=
   all (ssa_var_unchanged_instr v) p .
 
@@ -2110,5 +2116,328 @@ Proof .
   rewrite -(acc_unchanged_program Hun2 Hep2) -(acc_unchanged_program Hun1 Hep1) .
   split; reflexivity .
 Qed.
+
+Lemma ssa_unchanged_instr_var_compat i :
+  SetoidList.compat_bool SSAVS.E.eq (ssa_unchanged_instr_var i).
+Proof.
+  move=> x y Heq; rewrite (eqP Heq) // .
+Qed .
+
+Lemma ssa_unchanged_program_var_compat p :
+  SetoidList.compat_bool SSAVS.E.eq (ssa_unchanged_program_var p) .
+Proof .
+  move=> x y Heq; rewrite (eqP Heq) // .
+Qed .
+
+Lemma ssa_unchanged_instr_mem v vs i :
+  ssa_vars_unchanged_instr vs i ->
+  SSAVS.mem v vs ->
+  ssa_var_unchanged_instr v i .
+Proof.
+  move=> Hun Hmem.
+  apply: (SSAVS.for_all_2 (ssa_unchanged_instr_var_compat i) Hun).
+  apply/SSA.VSLemmas.memP; assumption.
+Qed.
+
+Lemma ssa_unchanged_program_mem v vs p :
+  ssa_vars_unchanged_program vs p ->
+  SSAVS.mem v vs ->
+  ssa_unchanged_program_var p v.
+Proof.
+  move=> Hun Hmem.
+  apply: (SSAVS.for_all_2 (ssa_unchanged_program_var_compat p) Hun).
+  apply/SSA.VSLemmas.memP; assumption.
+Qed.
+
+Lemma ssa_var_unchanged_instr_not_mem v i :
+  ssa_var_unchanged_instr v i = ~~ SSAVS.mem v (SSA.lvs_instr i).
+Proof.
+  case Hmem: (SSAVS.mem v (SSA.lvs_instr i)) => /=.
+  - apply/negPn. exact: Hmem.
+  - move/negP/idP: Hmem. by apply.
+Qed.
+
+Lemma ssa_var_unchanged_program_not_mem v p :
+  ssa_unchanged_program_var p v = ~~ SSAVS.mem v (SSA.lvs_program p) .
+Proof .
+  case Hmem: (SSAVS.mem v (SSA.lvs_program p)) => /= .
+  - elim: p Hmem => /=.
+    + done.
+    + move=> hd tl IH Hmem. case: (SSA.VSLemmas.mem_union1 Hmem) =>
+                            {Hmem} Hmem.
+      * rewrite /ssa_var_unchanged_instr Hmem. done.
+      * rewrite (IH Hmem). by case: (ssa_var_unchanged_instr v hd).
+  - move/negP/idP: Hmem => Hmem. elim: p Hmem => /=.
+    + done.
+    + move=> hd tl IH Hmem. move: (SSA.VSLemmas.not_mem_union1 Hmem) =>
+                            {Hmem} [Hmem1 Hmem2]. move: (IH Hmem2) => Hun.
+      rewrite ssa_var_unchanged_instr_not_mem Hmem1 Hun. done.
+Qed.
+
+Lemma ssa_unchanged_instr_global vs i :
+  (forall v, SSAVS.mem v vs -> ssa_var_unchanged_instr v i) ->
+  ssa_vars_unchanged_instr vs i.
+Proof.
+  move=> H.
+  apply: (SSAVS.for_all_1 (ssa_unchanged_instr_var_compat i)).
+  move=> v Hin.
+  apply: H; apply/SSA.VSLemmas.memP; assumption.
+Qed.
+
+Lemma ssa_unchanged_program_global vs p :
+  (forall v, SSAVS.mem v vs -> ssa_unchanged_program_var p v) ->
+  ssa_vars_unchanged_program vs p.
+Proof.
+  move=> H.
+  apply: (SSAVS.for_all_1 (ssa_unchanged_program_var_compat p)).
+  move=> v Hin.
+  apply: H; apply/SSA.VSLemmas.memP; assumption.
+Qed.
+
+Lemma ssa_unchanged_instr_local vs i :
+  ssa_vars_unchanged_instr vs i ->
+  (forall v, SSAVS.mem v vs -> ssa_var_unchanged_instr v i).
+Proof.
+  move=> H v Hmem.
+  apply: (SSAVS.for_all_2 (ssa_unchanged_instr_var_compat i) H).
+  apply/SSA.VSLemmas.memP; assumption.
+Qed.
+
+Lemma ssa_unchanged_program_local vs p :
+  ssa_vars_unchanged_program vs p ->
+  (forall v, SSAVS.mem v vs -> ssa_unchanged_program_var p v).
+Proof.
+  move=> H v Hmem.
+  exact: (ssa_unchanged_program_mem H Hmem).
+Qed.
+
+Lemma ssa_unchanged_program_cons1 vs hd tl :
+  ssa_vars_unchanged_program vs (hd::tl) ->
+  ssa_vars_unchanged_instr vs hd /\ ssa_vars_unchanged_program vs tl.
+Proof.
+  move=> H. move: (ssa_unchanged_program_local H) => {H} H. split.
+  - apply: ssa_unchanged_instr_global => v Hmem.
+    move: (H v Hmem) => {H} H.
+    exact: (proj1 (ssa_var_unchanged_program_cons1 H)).
+  - apply: ssa_unchanged_program_global => v Hmem.
+    move: (H v Hmem) => {H} H.
+    exact: (proj2 (ssa_var_unchanged_program_cons1 H)).
+Qed.
+
+Lemma ssa_unchanged_program_cons2 vs hd tl :
+  ssa_vars_unchanged_instr vs hd ->
+  ssa_vars_unchanged_program vs tl ->
+  ssa_vars_unchanged_program vs (hd::tl).
+Proof.
+  move=> [Hhd Htl]. apply: ssa_unchanged_program_global => v Hmem.
+  apply/andP; split.
+  - exact: (ssa_unchanged_instr_local Hhd Hmem).
+  - exact: (ssa_unchanged_program_local Htl Hmem).
+Qed.
+
+Lemma ssa_unchanged_program_concat1 vs p1 p2 :
+  ssa_vars_unchanged_program vs (p1 ++ p2) ->
+  ssa_vars_unchanged_program vs p1 /\ ssa_vars_unchanged_program vs p2.
+Proof.
+  move=> H; split; apply: ssa_unchanged_program_global => v Hmem.
+  - exact: (proj1 (ssa_var_unchanged_program_concat1
+                     (ssa_unchanged_program_local H Hmem))).
+  - exact: (proj2 (ssa_var_unchanged_program_concat1
+                     (ssa_unchanged_program_local H Hmem))).
+Qed.
+
+Lemma ssa_unchanged_program_concat2 vs p1 p2 :
+  ssa_vars_unchanged_program vs p1 ->
+  ssa_vars_unchanged_program vs p2 ->
+  ssa_vars_unchanged_program vs (p1 ++ p2).
+Proof.
+  move=> Hp1 Hp2. apply: ssa_unchanged_program_global => v Hmem.
+  apply: ssa_var_unchanged_program_concat2.
+  - exact: (ssa_unchanged_program_local Hp1 Hmem).
+  - exact: (ssa_unchanged_program_local Hp2 Hmem).
+Qed.
+
+Lemma ssa_unchanged_program_hd vs hd tl :
+  ssa_vars_unchanged_program vs (hd::tl) ->
+  ssa_vars_unchanged_instr vs hd.
+Proof.
+  move=> Hun; move: (ssa_unchanged_program_cons1 Hun) => [Hhd Htl]; assumption.
+Qed.
+
+Lemma ssa_unchanged_program_tl vs hd tl :
+  ssa_vars_unchanged_program vs (hd::tl) ->
+  ssa_vars_unchanged_program vs tl.
+Proof.
+  move=> Hun; move: (ssa_unchanged_program_cons1 Hun) => [Hhd Htl]; assumption.
+Qed.
+
+Lemma ssa_unchanged_instr_singleton1 v i :
+  ssa_vars_unchanged_instr (SSAVS.singleton v) i ->
+  ssa_var_unchanged_instr v i.
+Proof.
+  move=> Hun.
+  apply: (ssa_unchanged_instr_mem Hun).
+  apply: SSA.VSLemmas.mem_singleton2.
+  exact: eqxx.
+Qed.
+
+Lemma ssa_unchanged_program_singleton1 v p :
+  ssa_vars_unchanged_program (SSAVS.singleton v) p ->
+  ssa_unchanged_program_var p v.
+Proof.
+  move=> Hun.
+  apply: (ssa_unchanged_program_mem Hun).
+  apply: SSA.VSLemmas.mem_singleton2.
+  exact: eqxx.
+Qed.
+
+Lemma ssa_unchanged_instr_singleton2 v i :
+  ssa_var_unchanged_instr v i ->
+  ssa_vars_unchanged_instr (SSAVS.singleton v) i.
+Proof.
+  move=> Hun.
+  apply: ssa_unchanged_instr_global => x Hmem.
+  move: (SSA.VSLemmas.mem_singleton1 Hmem) => Heq.
+  rewrite (eqP Heq); assumption.
+Qed.
+
+Lemma ssa_unchanged_program_singleton2 v p :
+  ssa_unchanged_program_var p v ->
+  ssa_vars_unchanged_program (SSAVS.singleton v) p.
+Proof.
+  move=> Hun.
+  apply: ssa_unchanged_program_global => x Hmem.
+  move: (SSA.VSLemmas.mem_singleton1 Hmem) => Heq.
+  rewrite (eqP Heq); assumption.
+Qed.
+
+Lemma ssa_unchanged_instr_union1 s1 s2 i :
+  ssa_vars_unchanged_instr (SSAVS.union s1 s2) i ->
+  ssa_vars_unchanged_instr s1 i /\ ssa_vars_unchanged_instr s2 i.
+Proof.
+  move=> Hun.
+  move: (ssa_unchanged_instr_local Hun) => {Hun} Hun.
+  split; apply: ssa_unchanged_instr_global => v Hmem.
+  - apply: Hun.
+    exact: SSA.VSLemmas.mem_union2.
+  - apply: Hun.
+    exact: SSA.VSLemmas.mem_union3.
+Qed.
+
+Lemma ssa_unchanged_program_union1 s1 s2 p :
+  ssa_vars_unchanged_program (SSAVS.union s1 s2) p ->
+  ssa_vars_unchanged_program s1 p /\ ssa_vars_unchanged_program s2 p.
+Proof.
+  move=> Hun.
+  move: (ssa_unchanged_program_local Hun) => {Hun} Hun.
+  split; apply: ssa_unchanged_program_global => v Hmem.
+  - apply: Hun.
+    exact: SSA.VSLemmas.mem_union2.
+  - apply: Hun.
+    exact: SSA.VSLemmas.mem_union3.
+Qed.
+
+Lemma ssa_unchanged_instr_union2 s1 s2 i :
+  ssa_vars_unchanged_instr s1 i -> ssa_vars_unchanged_instr s2 i ->
+  ssa_vars_unchanged_instr (SSAVS.union s1 s2) i.
+Proof.
+  move=> Hun1 Hun2.
+  apply: ssa_unchanged_instr_global => x Hmem.
+  move: (SSA.VSLemmas.mem_union1 Hmem); case => {Hmem} Hmem.
+  - exact: (ssa_unchanged_instr_mem Hun1 Hmem).
+  - exact: (ssa_unchanged_instr_mem Hun2 Hmem).
+Qed.
+
+Lemma ssa_unchanged_program_union2 s1 s2 p :
+  ssa_vars_unchanged_program s1 p -> ssa_vars_unchanged_program s2 p ->
+  ssa_vars_unchanged_program (SSAVS.union s1 s2) p.
+Proof.
+  move=> Hun1 Hun2.
+  apply: ssa_unchanged_program_global => x Hmem.
+  move: (SSA.VSLemmas.mem_union1 Hmem); case => {Hmem} Hmem.
+  - exact: (ssa_unchanged_program_mem Hun1 Hmem).
+  - exact: (ssa_unchanged_program_mem Hun2 Hmem).
+Qed.
+
+Lemma ssa_unchanged_instr_subset vs1 vs2 i :
+  ssa_vars_unchanged_instr vs2 i ->
+  SSAVS.subset vs1 vs2 ->
+  ssa_vars_unchanged_instr vs1 i.
+Proof.
+  move=> Hun Hsub.
+  move: (ssa_unchanged_instr_local Hun) => {Hun} Hun.
+  apply: ssa_unchanged_instr_global.
+  move=> v Hmem; apply: Hun.
+  exact: (SSA.VSLemmas.mem_subset Hmem Hsub).
+Qed.
+
+Lemma ssa_unchanged_program_subset vs1 vs2 p :
+  ssa_vars_unchanged_program vs2 p ->
+  SSAVS.subset vs1 vs2 ->
+  ssa_vars_unchanged_program vs1 p.
+Proof.
+  move=> Hun Hsub.
+  move: (ssa_unchanged_program_local Hun) => {Hun} Hun.
+  apply: ssa_unchanged_program_global.
+  move=> v Hmem; apply: Hun.
+  exact: (SSA.VSLemmas.mem_subset Hmem Hsub).
+Qed.
+
+Lemma ssa_unchanged_instr_add1 v s p :
+  ssa_vars_unchanged_instr (SSAVS.add v s) p ->
+  ssa_var_unchanged_instr v p /\ ssa_vars_unchanged_instr s p.
+Proof.
+  move=> H; split.
+  - apply: (ssa_unchanged_instr_mem H).
+    apply: SSA.VSLemmas.mem_add2.
+    exact: SSAVS.E.eq_refl.
+  - apply: (ssa_unchanged_instr_subset H).
+    exact: (SSA.VSLemmas.subset_add _ (SSA.VSLemmas.subset_refl s)).
+Qed.
+
+Lemma ssa_unchanged_instr_add2 v s p :
+  ssa_var_unchanged_instr v p /\ ssa_vars_unchanged_instr s p ->
+  ssa_vars_unchanged_instr (SSAVS.add v s) p.
+Proof.
+  move=> [H1 H2].
+  apply: ssa_unchanged_instr_global => x Hmem.
+  case: (SSA.VSLemmas.mem_add1 Hmem) => {Hmem}.
+  - move=> Heq. by rewrite (eqP Heq).
+  - move=> Hmem. exact: (ssa_unchanged_instr_mem H2 Hmem).
+Qed.
+
+Lemma ssa_unchanged_program_add1 v s p :
+  ssa_vars_unchanged_program (SSAVS.add v s) p ->
+  ssa_unchanged_program_var p v /\ ssa_vars_unchanged_program s p.
+Proof.
+  move=> H; split.
+  - apply: (ssa_unchanged_program_mem H).
+    apply: SSA.VSLemmas.mem_add2.
+    exact: SSAVS.E.eq_refl.
+  - apply: (ssa_unchanged_program_subset H).
+    exact: (SSA.VSLemmas.subset_add _ (SSA.VSLemmas.subset_refl s)).
+Qed.
+
+Lemma ssa_unchanged_program_add2 v s p :
+  ssa_unchanged_program_var p v /\ ssa_vars_unchanged_program s p ->
+  ssa_vars_unchanged_program (SSAVS.add v s) p.
+Proof.
+  move=> [H1 H2].
+  apply: ssa_unchanged_program_global => x Hmem.
+  case: (SSA.VSLemmas.mem_add1 Hmem) => {Hmem}.
+  - move=> Heq.
+    by rewrite (eqP Heq).
+  - move=> Hmem.
+    exact: (ssa_unchanged_program_mem H2 Hmem).
+Qed.
+
+Lemma ssa_unchanged_program_empty vs :
+  ssa_vars_unchanged_program vs [::].
+Proof.
+  apply: ssa_unchanged_program_global => v Hv.
+  done.
+Qed.
+
+
 
 End MakeSSA.
