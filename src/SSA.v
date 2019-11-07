@@ -1970,4 +1970,145 @@ Section MakeSSA.
 
  *)
 
+  (** Well-formed SSA *)
+
+Definition ssa_var_unchanged_instr v i : bool :=
+  ~~ (SSAVS.mem v (SSA.lvs_instr i)).
+
+Definition ssa_unchanged_program_var p v : bool :=
+  all (ssa_var_unchanged_instr v) p .
+
+Definition ssa_vars_unchanged_program vs p : bool :=
+  SSAVS.for_all (ssa_unchanged_program_var p) vs .
+
+Ltac neq_store_upd_acc :=
+  match goal with
+  | Hupd : SSAStore.Upd _ _ ?s1 ?s2
+    |- SSAStore.acc _ ?s1 = SSAStore.acc _ ?s2 =>
+    rewrite (SSAStore.acc_Upd_neq _ Hupd) //
+  | H : SSAStore.Upd2 _ _ _ _ ?s1 ?s2
+    |- SSAStore.acc _ ?s1 = SSAStore.acc _ ?s2 =>
+    rewrite (SSAStore.acc_Upd2_neq _ _ H) //
+  end .
+
+Ltac acc_unchanged_instr_upd :=
+  match goal with
+  | Hun : is_true (ssa_var_unchanged_instr ?x ?i),
+    Heval : SSA.eval_instr _ (?i) ?s1 ?s2
+    |- SSAStore.acc ?x ?s1 = SSAStore.acc ?x ?s2 =>
+    rewrite /ssa_var_unchanged_instr /SSA.lvs_instr in Hun;
+     move : (SSA.VSLemmas.not_mem_singleton1 Hun) => {Hun};
+     rewrite /SSAVS.SE.eq => /negP Hneq;
+     inversion_clear Heval;
+     neq_store_upd_acc
+  | Hun : is_true (ssa_var_unchanged_instr ?x ?i),
+    Heval : SSA.eval_instr _ (?i) ?s1 ?s2
+    |- SSAStore.acc ?x ?s1 = SSAStore.acc ?x ?s2 =>
+    let Hun1 := fresh in
+    let Hneqw := fresh in
+    let Hneqv := fresh in
+    rewrite /ssa_var_unchanged_instr /SSA.lvs_instr in Hun;
+    move : (SSA.VSLemmas.not_mem_add1 Hun) => {Hun} [Hneqv Hun1];
+    move : (SSA.VSLemmas.not_mem_singleton1 Hun1) Hneqv => {Hun1};
+    rewrite /SSAVS.SE.eq => /negP Hneqw /negP Hneqv;
+    inversion_clear Heval;
+    neq_store_upd_acc
+  | Hun : is_true (ssa_var_unchanged_instr ?x ?i),
+    Heval : SSA.eval_instr _ (?i) ?s1 ?s2
+    |- SSAStore.acc ?x ?s1 = SSAStore.acc ?x ?s2 =>
+    rewrite /ssa_var_unchanged_instr /SSA.lvs_instr in Hun;
+    inversion_clear Heval;
+    trivial
+  end .
+
+Lemma acc_unchanged_instr te v i s1 s2 :
+  ssa_var_unchanged_instr v i ->
+  SSA.eval_instr te i s1 s2 ->
+  SSAStore.acc v s1 = SSAStore.acc v s2.
+Proof .
+  elim : i => /=; intros; acc_unchanged_instr_upd .
+Qed .
+
+Lemma acc_unchanged_program te v p s1 s2 :
+  ssa_unchanged_program_var p v ->
+  SSA.eval_program te p s1 s2 ->
+  SSAStore.acc v s1 = SSAStore.acc v s2.
+Proof .
+  elim: p te s1 s2 => /= .
+  - move=> te s1 s2 _ Hep.
+    inversion_clear Hep.
+    reflexivity.
+  - move=> hd tl IH te s1 s2 /andP [Huchd Huctl] Hep.
+    inversion_clear Hep .
+    rewrite (acc_unchanged_instr Huchd H).
+    apply (IH _ _ _ Huctl H0) .
+Qed.
+
+Lemma ssa_var_unchanged_program_cons1 v hd tl :
+  ssa_unchanged_program_var (hd::tl) v ->
+  ssa_var_unchanged_instr v hd /\ ssa_unchanged_program_var tl v .
+Proof.
+  move => /andP H // .
+Qed .
+
+Lemma ssa_var_unchanged_program_cons2 v hd tl :
+  ssa_var_unchanged_instr v hd ->
+  ssa_unchanged_program_var tl v ->
+  ssa_unchanged_program_var (hd::tl) v .
+Proof .
+  move=> Hhd Htl.
+  rewrite /ssa_unchanged_program_var /= -/(ssa_unchanged_program_var tl v) Hhd Htl // .
+Qed .
+
+Lemma ssa_var_unchanged_program_concat1 v p1 p2 :
+  ssa_unchanged_program_var (p1 ++ p2) v ->
+  ssa_unchanged_program_var p1 v /\ ssa_unchanged_program_var p2 v .
+Proof.
+  elim: p1 p2.
+  - move=> /= p2; done .
+  - move=> hd tl IH p2 /andP [Hhd Htlp2] .
+    move: (IH _ Htlp2) => {IH Htlp2} [Htl Hp2] .
+    rewrite /= Hhd Htl Hp2 // .
+Qed .
+
+Lemma ssa_var_unchanged_program_concat2 v p1 p2 :
+  ssa_unchanged_program_var p1 v ->
+  ssa_unchanged_program_var p2 v ->
+  ssa_unchanged_program_var (p1 ++ p2) v .
+Proof.
+  elim: p1 p2.
+  - move=> /= p2 _ Hp2 // .
+  - move=> hd tl IH p2 [Hhdtl Hp2].
+    move: (ssa_var_unchanged_program_cons1 Hhdtl) => {Hhdtl} [Hhd Htl].
+    apply/andP; split; first done .
+    exact: (IH _ Htl Hp2) .
+Qed .
+
+Lemma acc_unchanged_program_cons te v hd tl s1 s2 s3 :
+  ssa_unchanged_program_var (hd::tl) v ->
+  SSA.eval_instr te hd s1 s2 ->
+  SSA.eval_program te tl s2 s3 ->
+  SSAStore.acc v s2 = SSAStore.acc v s1 /\
+  SSAStore.acc v s3 = SSAStore.acc v s1 .
+Proof .
+  move=> /andP [Hunhd Huntl] Hehd Hetl .
+  move: (acc_unchanged_instr Hunhd Hehd) (acc_unchanged_program Huntl Hetl) =>
+    H21 H32 .
+  rewrite -H32 -H21 .
+  split; reflexivity .
+Qed .
+
+Lemma acc_unchanged_program_concat te v p1 p2 s1 s2 s3 :
+  ssa_unchanged_program_var (p1 ++ p2) v ->
+  SSA.eval_program te p1 s1 s2 ->
+  SSA.eval_program te p2 s2 s3 ->
+  SSAStore.acc v s2 = SSAStore.acc v s1 /\
+  SSAStore.acc v s3 = SSAStore.acc v s1 .
+Proof .
+  move=> Hun12 Hep1 Hep2.
+  move: (ssa_var_unchanged_program_concat1 Hun12) => {Hun12} [Hun1 Hun2] .
+  rewrite -(acc_unchanged_program Hun2 Hep2) -(acc_unchanged_program Hun1 Hep1) .
+  split; reflexivity .
+Qed.
+
 End MakeSSA.

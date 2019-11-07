@@ -423,6 +423,13 @@ Proof.
   move: (eval_bexp_rbexp e s) => [H1 H2]. exact: H2.
 Qed.
 
+Lemma eval_bexp_instr te i p s1 s2 :
+  SSA.ssa_vars_unchanged_program (SSA.vars_instr i) p ->
+  eval_program te p s1 s2 ->
+  QFBV.eval_bexp (bexp_instr te i) s1 ->
+  QFBV.eval_bexp (bexp_instr te i) s2 .
+Admitted .
+
 (* Define the safety condition in terms of a QFBV expression *)
 (* TODO: see bexp_program_safe in certified_qhasm_vcg/mqhasm/bvSSA2QFBV.v *)
 Definition bexp_program_safe (p : program) : QFBV.bexp := QFBV.Btrue.
