@@ -423,12 +423,40 @@ Proof.
   move: (eval_bexp_rbexp e s) => [H1 H2]. exact: H2.
 Qed.
 
+Ltac rewrite_eval_exp_atomic :=
+  repeat rewrite -> eval_exp_atomic in *.
+
 Lemma eval_bexp_instr te i p s1 s2 :
   SSA.ssa_vars_unchanged_program (SSA.vars_instr i) p ->
   eval_program te p s1 s2 ->
   QFBV.eval_bexp (bexp_instr te i) s1 ->
   QFBV.eval_bexp (bexp_instr te i) s2 .
-Admitted .
+Proof .
+  case : i => /=; intros; rewrite_eval_exp_atomic;
+  (let rec tac :=
+     match goal with
+     | H : is_true (ssa_vars_unchanged_program (SSAVS.add _ _) ?p) |- _ =>
+       let H1 := fresh in
+       let H2 := fresh in
+       move: (ssa_unchanged_program_add1 H) => {H} [H1 H2]; tac
+     | H : is_true (ssa_vars_unchanged_program (SSAVS.union _ _) ?p) |- _ =>
+       let H1 := fresh in
+       let H2 := fresh in
+       move: (ssa_unchanged_program_union1 H) => {H} [H1 H2]; tac
+     | H1 : eval_program _ ?p ?s1 ?s2,
+       H2 : is_true (ssa_unchanged_program_var ?p ?v) |-
+       context f [SSAStore.acc ?v ?s2] =>
+       (* convert (SSAState.acc v s2) to (SSAState.acc v s1) *)
+       rewrite -(acc_unchanged_program H2 H1); tac
+     | H1 : eval_program _ ?p ?s1 ?s2,
+       H2 : is_true (ssa_vars_unchanged_program (vars_atomic ?a) ?p) |-
+       context f [eval_atomic ?a ?s2] =>
+       (* convert (eval_atomic a s2) to (eval_atomic a s1) *)
+       rewrite -(ssa_unchanged_program_eval_atomic H2 H1); tac
+     | _ => by assumption
+     end in tac) .
+Qed .
+
 
 (* Define the safety condition in terms of a QFBV expression *)
 (* TODO: see bexp_program_safe in certified_qhasm_vcg/mqhasm/bvSSA2QFBV.v *)

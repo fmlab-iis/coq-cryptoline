@@ -2438,6 +2438,337 @@ Proof.
   done.
 Qed.
 
+Lemma ssa_unchanged_instr_disjoint_lvs vs i :
+  ssa_vars_unchanged_instr vs i =
+  SSA.VSLemmas.disjoint vs (SSA.lvs_instr i) .
+Proof.
+  case Hdisj: (SSA.VSLemmas.disjoint vs (SSA.lvs_instr i)) .
+  - apply: ssa_unchanged_instr_global => v Hmem .
+    exact: (SSA.VSLemmas.mem_disjoint1 Hdisj Hmem) .
+  - apply/negP => Hunch. move/negP: Hdisj; apply .
+    move: (ssa_unchanged_instr_local Hunch) => {Hunch} Hunch .
+    exact: (SSA.VSLemmas.mem_disjoint3 Hunch) .
+Qed .
+
+Lemma ssa_unchanged_program_disjoint_lvs vs p :
+  ssa_vars_unchanged_program vs p =
+  SSA.VSLemmas.disjoint vs (SSA.lvs_program p) .
+Proof.
+  case Hdisj: (SSA.VSLemmas.disjoint vs (SSA.lvs_program p)) .
+  - elim: p vs Hdisj => /=.
+    + move=> vs _. exact: ssa_unchanged_program_empty.
+    + move=> hd tl IH vs Hdisj. rewrite SSA.VSLemmas.disjoint_union in Hdisj.
+      move/andP: Hdisj => [Hdisjhd Hdisjtl]. apply: ssa_unchanged_program_cons2.
+      * rewrite ssa_unchanged_instr_disjoint_lvs. exact: Hdisjhd.
+      * exact: (IH _ Hdisjtl).
+  - apply/negP => Hunch. move/negP: Hdisj; apply.
+    move: (ssa_unchanged_program_local Hunch) => {Hunch} Hunch.
+    apply: SSA.VSLemmas.mem_disjoint3. move=> x Hmem.
+    move: (Hunch x Hmem). rewrite ssa_var_unchanged_program_not_mem. done.
+Qed.
+
+Lemma ssa_unchanged_program_replace vs1 vs2 p :
+  SSAVS.Equal vs1 vs2 ->
+  ssa_vars_unchanged_program vs1 p ->
+  ssa_vars_unchanged_program vs2 p.
+Proof.
+  move=> Heq H.
+  move: (ssa_unchanged_program_local H) => {H} H.
+  apply: ssa_unchanged_program_global => v Hv.
+  apply: H.
+  rewrite Heq.
+  assumption.
+Qed.
+
+Lemma ssa_unchanged_instr_eval_singleton v te s1 s2 i :
+  ssa_vars_unchanged_instr (SSAVS.singleton v) i ->
+  SSA.eval_instr te i s1 s2 ->
+  SSAStore.acc v s1 = SSAStore.acc v s2.
+Proof.
+  move=> Hun Hei.
+  move: (ssa_unchanged_instr_singleton1 Hun) => {Hun} Hun.
+  exact: (acc_unchanged_instr Hun Hei).
+Qed.
+
+Lemma ssa_unchanged_instr_eval_atomic a te s1 s2 i :
+  ssa_vars_unchanged_instr (SSA.vars_atomic a) i ->
+  SSA.eval_instr te i s1 s2 ->
+  SSA.eval_atomic a s1 = SSA.eval_atomic a s2.
+Proof.
+  case: a => /=.
+  - move=> v. exact: ssa_unchanged_instr_eval_singleton.
+  - reflexivity.
+Qed.
+
+Lemma ssa_unchanged_instr_eval_eexp e te s1 s2 i :
+  ssa_vars_unchanged_instr (SSA.vars_eexp e) i ->
+  SSA.eval_instr te i s1 s2 ->
+  SSA.eval_eexp e te s1 = SSA.eval_eexp e te s2.
+Proof.
+  elim: e => /=.
+  - move=> a Hun Hei. rewrite (ssa_unchanged_instr_eval_singleton Hun Hei).
+    reflexivity.
+  - reflexivity.
+  - move=> op e IH Hun Hei. rewrite (IH Hun Hei); reflexivity.
+  - move=> op e1 IH1 e2 IH2 Hun Hei.
+    move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2].
+    rewrite (IH1 Hun1 Hei) (IH2 Hun2 Hei); reflexivity.
+Qed.
+
+Lemma ssa_unchanged_instr_eval_rexp e te s1 s2 i :
+  ssa_vars_unchanged_instr (SSA.vars_rexp e) i ->
+  SSA.eval_instr te i s1 s2 ->
+  SSA.eval_rexp e s1 = SSA.eval_rexp e s2.
+Proof.
+  elim: e => /=.
+  - move=> a. exact: ssa_unchanged_instr_eval_singleton.
+  - reflexivity.
+  - move=> _ op e0 IH0 Hun Hei .
+    rewrite (IH0 Hun Hei) // .
+  - move=> _ op e1 IH1 e2 IH2 Hun Hei.
+    move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2].
+    rewrite (IH1 Hun1 Hei) (IH2 Hun2 Hei); reflexivity.
+  - move=> _ e IH n Hun Hei. rewrite (IH Hun Hei); reflexivity.
+  - move=> _ e IH n Hun Hei. rewrite (IH Hun Hei) // .
+Qed.
+
+Lemma ssa_unchanged_program_eval_singleton v te s1 s2 p :
+  ssa_vars_unchanged_program (SSAVS.singleton v) p ->
+  SSA.eval_program te p s1 s2 ->
+  SSAStore.acc v s1 = SSAStore.acc v s2.
+Proof.
+  move=> Hun Hep.
+  move: (ssa_unchanged_program_singleton1 Hun) => {Hun} Hun.
+  exact: (acc_unchanged_program Hun Hep).
+Qed.
+
+Lemma ssa_unchanged_program_eval_atomic a te s1 s2 p :
+  ssa_vars_unchanged_program (SSA.vars_atomic a) p ->
+  SSA.eval_program te p s1 s2 ->
+  SSA.eval_atomic a s1 = SSA.eval_atomic a s2.
+Proof.
+  case: a => /=.
+  - move=> v. exact: ssa_unchanged_program_eval_singleton.
+  - reflexivity.
+Qed.
+
+Lemma ssa_unchanged_program_eval_eexp e te s1 s2 p :
+  ssa_vars_unchanged_program (SSA.vars_eexp e) p ->
+  SSA.eval_program te p s1 s2 ->
+  SSA.eval_eexp e te s1 = SSA.eval_eexp e te s2.
+Proof.
+  elim: e => /=.
+  - move=> a Hun Hep. rewrite (ssa_unchanged_program_eval_singleton Hun Hep).
+    reflexivity.
+  - reflexivity.
+  - move=> op e IH Hun Hep. rewrite (IH Hun Hep); reflexivity.
+  - move=> op e1 IH1 e2 IH2 Hun Hep.
+    move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
+    rewrite (IH1 Hun1 Hep) (IH2 Hun2 Hep); reflexivity.
+Qed.
+
+Lemma ssa_unchanged_program_eval_rexp e te s1 s2 p :
+  ssa_vars_unchanged_program (SSA.vars_rexp e) p ->
+  SSA.eval_program te p s1 s2 ->
+  SSA.eval_rexp e s1 = SSA.eval_rexp e s2.
+Proof.
+  elim: e => /=.
+  - move=> a Hun Hep.
+    exact: (ssa_unchanged_program_eval_singleton Hun Hep).
+  - reflexivity.
+  - move=> _ e v IH Hun Hep.
+    rewrite (IH Hun Hep) // .
+  - move=> _ op e1 IH1 e2 IH2 Hun Hep.
+    move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
+    rewrite (IH1 Hun1 Hep) (IH2 Hun2 Hep); reflexivity.
+  - move=> _ e IH n Hun Hep.
+    rewrite (IH Hun Hep); reflexivity.
+  - move=> _ e IH n Hun Hep.
+    rewrite (IH Hun Hep); reflexivity.
+Qed.
+
+Lemma ssa_unchanged_instr_eval_ebexp e te s1 s2 i :
+  ssa_vars_unchanged_instr (SSA.vars_ebexp e) i ->
+  SSA.eval_instr te i s1 s2 ->
+  SSA.eval_ebexp e te s1 <-> SSA.eval_ebexp e te s2.
+Proof.
+  elim: e => /=.
+  - done.
+  - move=> e1 e2 Hun Hei.
+    move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2].
+    rewrite (ssa_unchanged_instr_eval_eexp Hun1 Hei)
+            (ssa_unchanged_instr_eval_eexp Hun2 Hei).
+    done.
+  - move=> e1 e2 p Hun Hei.
+    move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2].
+    move: (ssa_unchanged_instr_union1 Hun2) => {Hun2} [Hun2 Hunp].
+    rewrite (ssa_unchanged_instr_eval_eexp Hun1 Hei)
+            (ssa_unchanged_instr_eval_eexp Hun2 Hei)
+            (ssa_unchanged_instr_eval_eexp Hunp Hei).
+    done.
+  - move=> e1 IH1 e2 IH2 Hun Hei.
+    move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2].
+    rewrite (IH1 Hun1 Hei) (IH2 Hun2 Hei).
+    done.
+Qed.
+
+Lemma ssa_unchanged_instr_eval_rbexp e te s1 s2 i :
+  ssa_vars_unchanged_instr (SSA.vars_rbexp e) i ->
+  SSA.eval_instr te i s1 s2 ->
+  SSA.eval_rbexp e s1 <-> SSA.eval_rbexp e s2.
+Proof.
+  elim: e => /=.
+  - done.
+  - move=> _ e1 e2 Hun Hei .
+    move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2] .
+    rewrite (ssa_unchanged_instr_eval_rexp Hun1 Hei)
+            (ssa_unchanged_instr_eval_rexp Hun2 Hei) // .
+  - move=> _ op e1 e2 Hun Hei.
+    move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2].
+    rewrite (ssa_unchanged_instr_eval_rexp Hun1 Hei)
+            (ssa_unchanged_instr_eval_rexp Hun2 Hei) // .
+  - move=> e IH Hun Hei .
+    rewrite (IH Hun Hei) // .
+  - move=> e1 IH1 e2 IH2 Hun Hei.
+    move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2].
+    rewrite (IH1 Hun1 Hei) (IH2 Hun2 Hei) // .
+  - move=> e1 IH1 e2 IH2 Hun Hei.
+    move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2].
+    rewrite (IH1 Hun1 Hei) (IH2 Hun2 Hei) //.
+Qed.
+
+Lemma ssa_unchanged_instr_eval_bexp e te s1 s2 i :
+  ssa_vars_unchanged_instr (SSA.vars_bexp e) i ->
+  SSA.eval_instr te i s1 s2 ->
+  SSA.eval_bexp e te s1 <-> SSA.eval_bexp e te s2.
+Proof.
+  move=> Hun Hei. move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2].
+  split; move => [H1 H2].
+  - exact: (conj (proj1 (ssa_unchanged_instr_eval_ebexp Hun1 Hei) H1)
+                 (proj1 (ssa_unchanged_instr_eval_rbexp Hun2 Hei) H2)).
+  - exact: (conj (proj2 (ssa_unchanged_instr_eval_ebexp Hun1 Hei) H1)
+                 (proj2 (ssa_unchanged_instr_eval_rbexp Hun2 Hei) H2)).
+Qed.
+
+Lemma ssa_unchanged_program_eval_ebexp e te s1 s2 p :
+  ssa_vars_unchanged_program (SSA.vars_ebexp e) p ->
+  SSA.eval_program te p s1 s2 ->
+  SSA.eval_ebexp e te s1 <-> SSA.eval_ebexp e te s2.
+Proof.
+  elim: e => /=.
+  - done.
+  - move=> e1 e2 Hun Hep.
+    move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
+    rewrite (ssa_unchanged_program_eval_eexp Hun1 Hep)
+            (ssa_unchanged_program_eval_eexp Hun2 Hep).
+    done.
+  - move=> e1 e2 n Hun Hep.
+    move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
+    move: (ssa_unchanged_program_union1 Hun2) => {Hun2} [Hun2 Hunp].
+    rewrite (ssa_unchanged_program_eval_eexp Hun1 Hep)
+            (ssa_unchanged_program_eval_eexp Hun2 Hep)
+            (ssa_unchanged_program_eval_eexp Hunp Hep).
+    done.
+  - move=> e1 IH1 e2 IH2 Hun Hep.
+    move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
+    rewrite (IH1 Hun1 Hep) (IH2 Hun2 Hep).
+    done.
+Qed.
+
+Lemma ssa_unchanged_program_eval_ebexp1 te e s1 s2 p :
+  ssa_vars_unchanged_program (SSA.vars_ebexp e) p ->
+  SSA.eval_program te p s1 s2 ->
+  SSA.eval_ebexp e te s1 -> SSA.eval_ebexp e te s2.
+Proof.
+  move=> Hun Hep He.
+  exact: (proj1 (ssa_unchanged_program_eval_ebexp Hun Hep) He).
+Qed.
+
+Lemma ssa_unchanged_program_eval_ebexp2 e te s1 s2 p :
+  ssa_vars_unchanged_program (SSA.vars_ebexp e) p ->
+  SSA.eval_program te p s1 s2 ->
+  SSA.eval_ebexp e te s2 -> SSA.eval_ebexp e te s1.
+Proof.
+  move=> Hun Hep He.
+  exact: (proj2 (ssa_unchanged_program_eval_ebexp Hun Hep) He).
+Qed.
+
+Lemma ssa_unchanged_program_eval_rbexp e te s1 s2 p :
+  ssa_vars_unchanged_program (SSA.vars_rbexp e) p ->
+  SSA.eval_program te p s1 s2 ->
+  SSA.eval_rbexp e s1 <-> SSA.eval_rbexp e s2.
+Proof.
+  elim: e => /=.
+  - done.
+  - move => _ e1 e2 Hun Hep .
+    move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
+    rewrite (ssa_unchanged_program_eval_rexp Hun1 Hep)
+            (ssa_unchanged_program_eval_rexp Hun2 Hep) // .
+  - move=> _ op e1 e2 Hun Hep.
+    move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
+    rewrite (ssa_unchanged_program_eval_rexp Hun1 Hep)
+            (ssa_unchanged_program_eval_rexp Hun2 Hep) // .
+  - move=> e IH Hun Hep.
+    rewrite (IH Hun Hep) // .
+  - move=> e1 IH1 e2 IH2 Hun Hep.
+    move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
+    rewrite (IH1 Hun1 Hep) (IH2 Hun2 Hep) // .
+  - move=> e1 IH1 e2 IH2 Hun Hep.
+    move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
+    rewrite (IH1 Hun1 Hep) (IH2 Hun2 Hep) //.
+Qed.
+
+Lemma ssa_unchanged_program_eval_rbexp1 e te s1 s2 p :
+  ssa_vars_unchanged_program (SSA.vars_rbexp e) p ->
+  SSA.eval_program te p s1 s2 ->
+  SSA.eval_rbexp e s1 -> SSA.eval_rbexp e s2.
+Proof.
+  move=> Hun Hep He.
+  exact: (proj1 (ssa_unchanged_program_eval_rbexp Hun Hep) He).
+Qed.
+
+Lemma ssa_unchanged_program_eval_rbexp2 e te s1 s2 p :
+  ssa_vars_unchanged_program (SSA.vars_rbexp e) p ->
+  SSA.eval_program te p s1 s2 ->
+  SSA.eval_rbexp e s2 -> SSA.eval_rbexp e s1.
+Proof.
+  move=> Hun Hep He.
+  exact: (proj2 (ssa_unchanged_program_eval_rbexp Hun Hep) He).
+Qed.
+
+Lemma ssa_unchanged_program_eval_bexp e te s1 s2 p :
+  ssa_vars_unchanged_program (SSA.vars_bexp e) p ->
+  SSA.eval_program te p s1 s2 ->
+  SSA.eval_bexp e te s1 <-> SSA.eval_bexp e te s2.
+Proof.
+  move=> Hun Hep. move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
+  split; move=> [H1 H2].
+  - exact: (conj (proj1 (ssa_unchanged_program_eval_ebexp Hun1 Hep) H1)
+                 (proj1 (ssa_unchanged_program_eval_rbexp Hun2 Hep) H2)).
+  - exact: (conj (proj2 (ssa_unchanged_program_eval_ebexp Hun1 Hep) H1)
+                 (proj2 (ssa_unchanged_program_eval_rbexp Hun2 Hep) H2)).
+Qed.
+
+Lemma ssa_unchanged_program_eval_bexp1 e te s1 s2 p :
+  ssa_vars_unchanged_program (SSA.vars_bexp e) p ->
+  SSA.eval_program te p s1 s2 ->
+  SSA.eval_bexp e te s1 -> SSA.eval_bexp e te s2.
+Proof.
+  move=> Hunch Hp He.
+  move: (ssa_unchanged_program_eval_bexp Hunch Hp) => [H1 H2].
+  exact: (H1 He).
+Qed.
+
+Lemma ssa_unchanged_program_eval_bexp2 e te s1 s2 p :
+  ssa_vars_unchanged_program (SSA.vars_bexp e) p ->
+  SSA.eval_program te p s1 s2 ->
+  SSA.eval_bexp e te s2 -> SSA.eval_bexp e te s1.
+Proof.
+  move=> Hunch Hp He.
+  move: (ssa_unchanged_program_eval_bexp Hunch Hp) => [H1 H2].
+  exact: (H2 He).
+Qed.
+
 
 
 End MakeSSA.
