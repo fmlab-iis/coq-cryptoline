@@ -1770,11 +1770,11 @@ Module MakeDSL
   (* Probably useful *)
   (* TO BE confirmed: how to modify (VS.subset vs1 vs2) and (VS.Equal vs1 vs2) *)
 
-  (*
-  Lemma well_formed_instr_subset_rvs vs i :
-    well_formed_instr vs i ->
-    VS.subset (rvs_instr i) vs.
+  Lemma well_formed_instr_subset_rvs te i :
+    well_formed_instr te i ->
+    VS.subset (rvs_instr i) (vars_env te).
   Proof.
+    rewrite /well_formed_instr.
     elim: i => /=; intros;
     (let rec tac :=
          match goal with
@@ -1785,11 +1785,15 @@ Module MakeDSL
            apply: VSLemmas.subset_add3; tac
          | |- is_true (VS.subset (VS.union _ _) _) =>
            apply: VSLemmas.subset_union3; tac
+         | |- is_true (VS.subset VS.empty _) =>
+           exact: VSLemmas.subset_empty
          | |- _ => idtac
          end in
      tac).
   Qed.
 
+
+  (*
   Lemma well_formed_instr_subset vs1 vs2 i :
     well_formed_instr vs1 i ->
     VS.subset vs1 vs2 ->
@@ -1868,6 +1872,13 @@ Module MakeDSL
       reflexivity.
   Qed.
   *)
+
+  (* Some Lemmas for vars_env and instr_succ_typenv *)
+  Lemma vars_env_instr_succ_typenv instr te:
+    vars_env (instr_succ_typenv instr te) =
+    VS.union (vars_env te) (lvs_instr instr).
+  Proof. Admitted.
+
 
   (* Non-blocking *)
 
