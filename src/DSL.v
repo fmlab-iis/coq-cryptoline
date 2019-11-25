@@ -1225,13 +1225,13 @@ Module MakeDSL
       S.Upd v (shlB i (eval_atomic a s)) s t ->
       eval_instr te (Ishl v a i) s t
   | EIcshl vh vl a1 a2 i s t :
-      S.Upd2 vh (high (size (eval_atomic a1 s))
-                      (shlB i
-                            (cat (eval_atomic a2 s) (eval_atomic a1 s))))
-             vl (shrB i
+      S.Upd2 vl (shrB i
                       (low (size (eval_atomic a2 s))
                            (shlB i
                                  (cat (eval_atomic a2 s) (eval_atomic a1 s)))))
+             vh (high (size (eval_atomic a1 s))
+                      (shlB i
+                            (cat (eval_atomic a2 s) (eval_atomic a1 s))))
              s t ->
       eval_instr te (Icshl vh vl a1 a2 i) s t
   | EInondet v ty s t n :
@@ -1254,9 +1254,9 @@ Module MakeDSL
       S.Upd v (addB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
       eval_instr te (Iadd v a1 a2) s t
   | EIadds c v a1 a2 s t :
-      S.Upd2 c (1-bits of bool
+      S.Upd2 v (addB (eval_atomic a1 s) (eval_atomic a2 s))
+             c (1-bits of bool
                        (carry_addB (eval_atomic a1 s) (eval_atomic a2 s)))
-             v (addB (eval_atomic a1 s) (eval_atomic a2 s))
              s t ->
       eval_instr te (Iadds c v a1 a2) s t
   | EIadc v a1 a2 y s t :
@@ -1266,28 +1266,28 @@ Module MakeDSL
             s t ->
       eval_instr te (Iadc v a1 a2 y) s t
   | EIadcs c v a1 a2 y s t :
-      S.Upd2 c (1-bits of bool
+      S.Upd2 v (adcB (to_bool (eval_atomic y s))
+                     (eval_atomic a1 s)
+                     (eval_atomic a2 s)).2
+             c (1-bits of bool
                        ((adcB (to_bool (eval_atomic y s))
                              (eval_atomic a1 s)
                              (eval_atomic a2 s)).1))
-             v (adcB (to_bool (eval_atomic y s))
-                     (eval_atomic a1 s)
-                     (eval_atomic a2 s)).2
              s t ->
       eval_instr te (Iadcs c v a1 a2 y) s t
   | EIsub v a1 a2 s t :
       S.Upd v (subB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
       eval_instr te (Isub v a1 a2) s t
   | EIsubc c v a1 a2 s t :
-      S.Upd2 c (1-bits of bool
+      S.Upd2 v (addB (eval_atomic a1 s) (negB (eval_atomic a2 s)))
+             c (1-bits of bool
                        (carry_addB (eval_atomic a1 s) (negB (eval_atomic a2 s))))
-             v (addB (eval_atomic a1 s) (negB (eval_atomic a2 s)))
              s t ->
       eval_instr te (Isubc c v a1 a2) s t
   | EIsubb b v a1 a2 s t :
-      S.Upd2 b (1-bits of bool
+      S.Upd2 v (subB (eval_atomic a1 s) (eval_atomic a2 s))
+             b (1-bits of bool
                        (borrow_subB (eval_atomic a1 s) (eval_atomic a2 s)))
-             v (subB (eval_atomic a1 s) (eval_atomic a2 s))
              s t ->
       eval_instr te (Isubb b v a1 a2) s t
   | EIsbc v a1 a2 y s t :
@@ -1297,13 +1297,13 @@ Module MakeDSL
             s t ->
       eval_instr te (Isbc v a1 a2 y) s t
   | EIsbcs c v a1 a2 y s t :
-      S.Upd2 c (1-bits of bool
+      S.Upd2 v (adcB (to_bool (eval_atomic y s))
+                     (eval_atomic a1 s)
+                     (invB (eval_atomic a2 s))).2
+             c (1-bits of bool
                        ((adcB (to_bool (eval_atomic y s))
                              (eval_atomic a1 s)
                              (invB (eval_atomic a2 s))).1))
-             v (adcB (to_bool (eval_atomic y s))
-                     (eval_atomic a1 s)
-                     (invB (eval_atomic a2 s))).2
              s t ->
       eval_instr te (Isbcs c v a1 a2 y) s t
   | EIsbb v a1 a2 y s t :
@@ -1313,23 +1313,23 @@ Module MakeDSL
             s t ->
       eval_instr te (Isbb v a1 a2 y) s t
   | EIsbbs b v a1 a2 y s t :
-      S.Upd2 b (1-bits of bool
+      S.Upd2 v (sbbB (to_bool (eval_atomic y s))
+                     (eval_atomic a1 s)
+                     (eval_atomic a2 s)).2
+             b (1-bits of bool
                        ((sbbB (to_bool (eval_atomic y s))
                              (eval_atomic a1 s)
                              (eval_atomic a2 s)).1))
-             v (sbbB (to_bool (eval_atomic y s))
-                     (eval_atomic a1 s)
-                     (eval_atomic a2 s)).2
              s t ->
       eval_instr te (Isbbs b v a1 a2 y) s t
   | EImul v a1 a2 s t :
       S.Upd v (mulB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
       eval_instr te (Imul v a1 a2) s t
   | EImull vh vl a1 a2 s t :
-      S.Upd2 vh (high (size (eval_atomic a1 s))
-                      (full_mul (eval_atomic a1 s) (eval_atomic a2 s)))
-             vl (low (size (eval_atomic a2 s))
+      S.Upd2 vl (low (size (eval_atomic a2 s))
                      (full_mul (eval_atomic a1 s) (eval_atomic a2 s)))
+             vh (high (size (eval_atomic a1 s))
+                      (full_mul (eval_atomic a1 s) (eval_atomic a2 s)))
              s t ->
       eval_instr te (Imull vh vl a1 a2) s t
   | EImulj v a1 a2 s t :
@@ -1337,18 +1337,18 @@ Module MakeDSL
       eval_instr te (Imulj v a1 a2) s t
   | EIsplitU vh vl a n s t :
       is_unsigned (TE.vtyp vh te) ->
-      S.Upd2 vh (zext n (high ((size (eval_atomic a s)) - n)
-                              (eval_atomic a s)))
-             vl (zext ((size (eval_atomic a s)) - n)
+      S.Upd2 vl (zext ((size (eval_atomic a s)) - n)
                       (low n (eval_atomic a s)))
+             vh (zext n (high ((size (eval_atomic a s)) - n)
+                              (eval_atomic a s)))
              s t ->
       eval_instr te (Isplit vh vl a n) s t
   | EIsplitS vh vl a n s t :
       is_signed (TE.vtyp vh te) ->
-      S.Upd2 vh (sext n (high ((size (eval_atomic a s)) - n)
-                              (eval_atomic a s)))
-             vl (zext ((size (eval_atomic a s)) - n)
+      S.Upd2 vl (zext ((size (eval_atomic a s)) - n)
                       (low n (eval_atomic a s)))
+             vh (sext n (high ((size (eval_atomic a s)) - n)
+                              (eval_atomic a s)))
              s t ->
       eval_instr te (Isplit vh vl a n) s t
   | EIand v ty a1 a2 s t :
