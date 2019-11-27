@@ -1336,7 +1336,7 @@ Module MakeDSL
       S.Upd v (full_mul (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
       eval_instr te (Imulj v a1 a2) s t
   | EIsplitU vh vl a n s t :
-      is_unsigned (TE.vtyp vh te) ->
+      is_unsigned (atyp a te) ->
       S.Upd2 vl (zext ((size (eval_atomic a s)) - n)
                       (low n (eval_atomic a s)))
              vh (zext n (high ((size (eval_atomic a s)) - n)
@@ -1344,7 +1344,7 @@ Module MakeDSL
              s t ->
       eval_instr te (Isplit vh vl a n) s t
   | EIsplitS vh vl a n s t :
-      is_signed (TE.vtyp vh te) ->
+      is_signed (atyp a te) ->
       S.Upd2 vl (zext ((size (eval_atomic a s)) - n)
                       (low n (eval_atomic a s)))
              vh (sext n (high ((size (eval_atomic a s)) - n)
@@ -1921,7 +1921,7 @@ Module MakeDSL
     - (* Imul *) move=> ? ? ? _. eexists. apply: EImul. exact: S.Upd_upd.
     - (* Imull *) move=> ? ? ? ? _. eexists. apply: EImull. exact: S.Upd2_upd2.
     - (* Imulj *) move=> ? ? ? _. eexists. apply: EImulj. exact: S.Upd_upd.
-    - (* Isplit *) move=> vh vl a n _. case H: (is_signed (TE.vtyp vh te)).
+    - (* Isplit *) move=> vh vl a n _. case H: (is_signed (atyp a te)).
       + eexists. apply: (EIsplitS H). exact: S.Upd2_upd2.
       + move/idP/negP: H=> H. rewrite not_signed_is_unsigned in H. eexists.
         apply: (EIsplitU H). exact: S.Upd2_upd2.
