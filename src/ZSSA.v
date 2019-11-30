@@ -83,7 +83,7 @@ Module ZSSA.
              zsprog : zprogram;
              zspost : zbexp }.
 
-  Definition zspec_partial_correct (s : zspec) : Prop :=
+  Definition valid_zspec (s : zspec) : Prop :=
     forall s1 s2,
       eval_zbexp (zspre s) s1 ->
       eval_zprogram s1 (zsprog s) = s2 ->

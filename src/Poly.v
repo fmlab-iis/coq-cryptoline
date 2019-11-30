@@ -1,15 +1,13 @@
 
-From Coq Require Import List ZArith.
+From Coq Require Import List Arith ZArith.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
-From ssrlib Require Import Var Types SsrOrder ZAriths Store Tactics.
+From ssrlib Require Import Var Types SsrOrder Nats ZAriths Seqs Store Tactics.
 From BitBlasting Require Import State.
 From Cryptoline Require Import DSL SSA ZSSA.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
-
-(* Convert zspec to polynomial equations *)
 
 Section PSpec.
 
@@ -67,12 +65,40 @@ Section PSpec.
   Record pspec : Type := mkPolySpec { ppremises : seq szbexp;
                                       pconseq : szbexp }.
 
+  Definition pspec_eqn (ps1 ps2 : pspec) : bool :=
+    (ppremises ps1 == ppremises ps2) && (pconseq ps1 == pconseq ps2).
+
+  Lemma pspec_eqn_eq ps1 ps2 : pspec_eqn ps1 ps2 -> ps1 = ps2.
+  Proof.
+    case: ps1 => [pres1 post1]. case: ps2 => [pres2 post2]. rewrite /pspec_eqn /=.
+    move/andP=> [/eqP -> /eqP ->]. reflexivity.
+  Qed.
+
+  Lemma pspec_eqn_refl ps : pspec_eqn ps ps.
+  Proof. by rewrite /pspec_eqn 2!eqxx. Qed.
+
+  Lemma pspec_eqP (ps1 ps2 : pspec) : reflect (ps1 = ps2) (pspec_eqn ps1 ps2).
+  Proof.
+    case H: (pspec_eqn ps1 ps2).
+    - apply: ReflectT. exact: (pspec_eqn_eq H).
+    - apply: ReflectF => Heq. move/negP: H; apply. rewrite Heq. exact: pspec_eqn_refl.
+  Qed.
+
+  Definition pspec_eqMixin := EqMixin pspec_eqP.
+  Canonical pspec_eqType := Eval hnf in EqType pspec pspec_eqMixin.
+
   Definition valid_pspec (s : pspec) : Prop :=
     forall st : ZSSAStore.t,
       (forall e : szbexp, e \in (ppremises s) -> eval_szbexp e st) ->
       eval_szbexp (pconseq s) st.
 
-  (* Convert zspec to pspec *)
+End PSpec.
+
+
+
+(* Convert zspec to pspec *)
+
+Section ZSpec2Spec.
 
   Fixpoint split_zbexp (e : ZSSA.zbexp) : seq szbexp :=
     match e with
@@ -99,7 +125,22 @@ Section PSpec.
     let conseqs := split_zbexp (ZSSA.zspost s) in
     map (fun conseq => {| ppremises := premises; pconseq := conseq |}) conseqs.
 
-End PSpec.
+  (* TODO: prove this *)
+  Theorem pspecs_of_zspec_sound zs :
+    ZSSA.valid_zspec zs ->
+    forall ps, ps \in pspecs_of_zspec zs -> valid_pspec ps.
+  Proof.
+    move=> Hzs [ppres ppost] Hpin st /= Hppres.
+  Abort.
+
+  (* TODO: prove this *)
+  Theorem pspecs_of_zspec_complete zs :
+    (forall ps, ps \in pspecs_of_zspec zs -> valid_pspec ps) ->
+    ZSSA.valid_zspec zs.
+  Proof.
+  Abort.
+
+End ZSpec2Spec.
 
 
 
@@ -220,7 +261,117 @@ Section ZRing.
     forall l : list Z,
       zpexpr_all0 l ps -> ZPEeval l q1 = ZPEeval l q2.
 
+  Lemma ZPEeval_sub l e1 e2 : ZPEeval l (PEsub e1 e2) = ZPEeval l e1 - ZPEeval l e2.
+  Proof. reflexivity. Qed.
+
+  Lemma ZPEeval_mul l e1 e2 : ZPEeval l (PEmul e1 e2) = ZPEeval l e1 * ZPEeval l e2.
+  Proof. reflexivity. Qed.
+
+  (* zpexpr_bounded: variables in a PExpr Z are bounded by some positive *)
+
+  Fixpoint zpexpr_bounded (pe : PExpr Z) (g : positive) : Prop :=
+    match pe with
+   | PEO => true
+   | PEI => true
+   | PEc c => true
+   | PEX j => (j < g)%positive
+   | PEadd pe1 pe2
+   | PEsub pe1 pe2
+   | PEmul pe1 pe2 => zpexpr_bounded pe1 g /\ zpexpr_bounded pe2 g
+   | PEopp pe1 => zpexpr_bounded pe1 g
+   | PEpow pe1 n => zpexpr_bounded pe1 g
+    end.
+
+  Fixpoint zpexprs_bounded (pes : seq (PExpr Z)) (g : positive) : Prop :=
+    match pes with
+    | [::] => True
+    | hd::tl => zpexpr_bounded hd g /\ zpexprs_bounded tl g
+    end.
+
+  Lemma zpexpr_bounded_ge_bounded g g' pe :
+    (g <= g')%positive -> zpexpr_bounded pe g -> zpexpr_bounded pe g'.
+  Proof.
+    elim: pe g g' => //=.
+    - move=> p g g' Hle Hlt. exact: (Pos.lt_le_trans _ _ _ Hlt Hle).
+    - move=> e1 IH1 e2 IH2 g g' Hle [H1g H2g].
+      split; [exact: (IH1 _ _ Hle H1g) | exact: (IH2 _ _ Hle H2g)].
+    - move=> e1 IH1 e2 IH2 g g' Hle [H1g H2g].
+      split; [exact: (IH1 _ _ Hle H1g) | exact: (IH2 _ _ Hle H2g)].
+    - move=> e1 IH1 e2 IH2 g g' Hle [H1g H2g].
+      split; [exact: (IH1 _ _ Hle H1g) | exact: (IH2 _ _ Hle H2g)].
+  Qed.
+
 End ZRing.
+
+
+
+Section BinList.
+
+  Variable A : Type.
+  Variable default : A.
+
+  Local Notation snth := (seq.nth default).
+  Local Notation bnth := (BinList.nth default).
+  Local Notation bjump := (@BinList.jump A).
+
+  Lemma bjump_nil (p : positive) : bjump p [::] = [::].
+  Proof.
+    elim: p => //=.
+    - move=> p IH. rewrite 2!IH. reflexivity.
+    - move=> p IH. rewrite 2!IH. reflexivity.
+  Qed.
+
+  Lemma bnth_nil (p : positive) : bnth p [::] = default.
+  Proof.
+    elim: p => //=.
+    - move=> p IH. rewrite bjump_nil. exact: IH.
+    - move=> p IH. rewrite bjump_nil. exact: IH.
+  Qed.
+
+  Lemma snth_bjump (p : positive) (n : nat) (l : list A) :
+    snth (bjump p l) n = snth l (n + Pos.to_nat p).
+  Proof.
+    elim: p n l => /=.
+    - move=> p IH n l. rewrite 2!IH. rewrite nth_tl. rewrite Pos2Nat.inj_xI.
+      rewrite -Nat.double_twice. rewrite -(addnA n) -(addnA n) addn1. reflexivity.
+    - move=> p IH n j. rewrite 2!IH. rewrite Pos2Nat.inj_xO -Nat.double_twice.
+      rewrite -addnA. reflexivity.
+    - move=> n l. exact: nth_tl.
+  Qed.
+
+  Lemma bnth_snth (p : positive) (l : list A) : bnth p l = snth l (Pos.to_nat p - 1).
+  Proof.
+    elim: p l => /=.
+    - move=> p IH l. case: l => [| hd tl] /=.
+      + rewrite bjump_nil bnth_nil nth_nil. reflexivity.
+      + rewrite IH. rewrite snth_bjump. rewrite Pos2Nat.inj_xI.
+        rewrite -(addn1 (2 * Pos.to_nat p)). rewrite -subnBA; last by done.
+        rewrite subnn subn0. rewrite nth_cons;
+                               last by (rewrite muln_gt0 (pos_to_nat_is_pos p)).
+        rewrite (addnBAC _ (pos_to_nat_is_pos p)).
+        rewrite muln_mul -Nat.double_twice. reflexivity.
+    - move=> p IH l. rewrite IH. rewrite snth_bjump. rewrite Pos2Nat.inj_xO.
+      rewrite (addnBAC _ (pos_to_nat_is_pos p)). rewrite -Nat.double_twice.
+      reflexivity.
+    - by case.
+  Qed.
+
+  Lemma bnth_rcons (g : positive) (l : list A) (x : A) :
+    Pos.to_nat g <= size l -> bnth g (rcons l x) = bnth g l.
+  Proof.
+    move=> Hs. rewrite 2!bnth_snth. rewrite nth_rcons.
+    case H: (Pos.to_nat g - 1 < size l); first by reflexivity. move/idP/negP: H.
+    rewrite subn1. rewrite (ltn_predK (pos_to_nat_is_pos g)) Hs. discriminate.
+  Qed.
+
+  Lemma bnth_rcons_last (g : positive) (l : list A) (x : A) :
+    Pos.to_nat g = size l + 1 -> bnth g (rcons l x) = x.
+  Proof.
+    move=> Hs. rewrite bnth_snth. rewrite Hs. rewrite addn1 subn1 succnK.
+    rewrite nth_rcons. rewrite (ltnn (size l)) (eqxx (size l)). reflexivity.
+  Qed.
+
+End BinList.
 
 
 
@@ -228,11 +379,15 @@ End ZRing.
 
 Section PExpr.
 
+  Local Open Scope Z_scope.
+
   Definition init_pos : positive := 1.
 
   Definition init_vm := SSAVM.empty positive.
 
-  Definition zpexpr_of_var (g : positive) (t : SSAVM.t positive)  (v : ssavar) :
+  Definition init_vl : list Z := [::].
+
+  Definition zpexpr_of_var (g : positive) (t : SSAVM.t positive) (v : ssavar) :
     positive * SSAVM.t positive * PExpr Z :=
     match SSAVM.find v t with
     | None => ((g + 1)%positive, SSAVM.add v g t, PEX Z g)
@@ -276,7 +431,7 @@ Section PExpr.
       let '(g1, t1, e1) := zpexpr_of_zexp g t e1 in
       let '(g2, t2, e2) := zpexpr_of_zexp g1 t1 e2 in
       let '(gp, tp, p) := zpexpr_of_zexp g2 t2 p in
-      ((gp + 1)%positive, t, PEsub (PEsub e1 e2) (PEmul (PEc (Zpos gp)) p))
+      ((gp + 1)%positive, tp, PEsub (PEsub e1 e2) (PEmul (PEX Z gp) p))
     end.
 
   Fixpoint zpexprs_of_premises (g : positive) (t : SSAVM.t positive) (es : seq szbexp) :
@@ -294,23 +449,1193 @@ Section PExpr.
     | Seq e1 e2 =>
       let '(g1, t1, e1) := zpexpr_of_zexp g t e1 in
       let '(g2, t2, e2) := zpexpr_of_zexp g1 t1 e2 in
-      (g2, t2, PEsub e1 e2, PEc 0%Z)
+      (g2, t2, PEsub e1 e2, PEc 0)
     | Seqmod e1 e2 p =>
       let '(g1, t1, e1) := zpexpr_of_zexp g t e1 in
       let '(g2, t2, e2) := zpexpr_of_zexp g1 t1 e2 in
       let '(gp, tp, p) := zpexpr_of_zexp g2 t2 p in
-      (gp, t, PEsub e1 e2, p)
+      (gp, tp, PEsub e1 e2, p)
     end.
 
   (* ps: polynomials that equal 0
      m: modulus
      the goal is to prove that q = cs * ps + c * m for some coefficients cs and c *)
-  Definition zpexprs_of_pspec (s : pspec) : seq (PExpr Z) * PExpr Z * PExpr Z :=
+  Definition zpexprs_of_pspec (s : pspec) : positive * SSAVM.t positive * seq (PExpr Z) * PExpr Z * PExpr Z :=
     let g := init_pos in
     let t := init_vm in
     let '(g_p, t_p, ps) := zpexprs_of_premises g t (ppremises s) in
     let '(g_q, t_q, q, m) := zpexpr_of_conseq g_p t_p (pconseq s) in
-    (ps, m, q).
+    (g_q, t_q, ps, m, q).
+
+  Lemma zpexpr_of_eunop_zpeeval op vl pe :
+    ZPEeval vl (zpexpr_of_eunop op pe) = SSA.eval_eunop op (ZPEeval vl pe).
+  Proof. by case: op. Qed.
+
+  Lemma zpexpr_of_ebinop_zpeeval op vl pe1 pe2 :
+    ZPEeval vl (zpexpr_of_ebinop op pe1 pe2) =
+    SSA.eval_ebinop op (ZPEeval vl pe1) (ZPEeval vl pe2).
+  Proof. by case: op. Qed.
+
+
+
+  (* Conversion with valuation list *)
+
+  (* vl: list of integers of which i-th of vl is the value of i-th variable
+     in polynomials under a specific store *)
+  Definition zpexpr_of_var_vl (s : ZSSAStore.t) (vl : list Z) (g : positive) (t : SSAVM.t positive) (v : ssavar) :
+    list Z * positive * SSAVM.t positive * PExpr Z :=
+    match SSAVM.find v t with
+    | None => (rcons vl (ZSSAStore.acc v s), (g + 1)%positive, SSAVM.add v g t, PEX Z g)
+    | Some r => (vl, g, t, PEX Z r)
+    end.
+
+  Lemma zpexpr_of_var_vl_novl st vl g t v vl' g' t' pe :
+    zpexpr_of_var_vl st vl g t v = (vl', g', t', pe) ->
+    zpexpr_of_var g t v = (g', t', pe).
+  Proof.
+    rewrite /zpexpr_of_var_vl /zpexpr_of_var. case: (SSAVM.find v t).
+    - move=> ? [] ? ? ? ?; by subst.
+    - case=> ? ? ? ?; by subst.
+  Qed.
+
+  Fixpoint zpexpr_of_zexp_vl (s : ZSSAStore.t) (vl : list Z) (g : positive) (t : SSAVM.t positive) (e : ZSSA.zexp) :
+    list Z * positive * SSAVM.t positive * PExpr Z :=
+    match e with
+    | Evar v => zpexpr_of_var_vl s vl g t v
+    | Econst n => (vl, g, t, PEc n)
+    | Eunop op e =>
+      let '(vl', g', t', e') := zpexpr_of_zexp_vl s vl g t e in
+      (vl', g', t', zpexpr_of_eunop op e')
+    | Ebinop op e1 e2 =>
+      let '(vl1, g1, t1, e1) := zpexpr_of_zexp_vl s vl g t e1 in
+      let '(vl2, g2, t2, e2) := zpexpr_of_zexp_vl s vl1 g1 t1 e2 in
+      (vl2, g2, t2, zpexpr_of_ebinop op e1 e2)
+    end.
+
+  Lemma zpexpr_of_zexp_vl_novl st vl g t e vl' g' t' pe :
+    zpexpr_of_zexp_vl st vl g t e = (vl', g', t', pe) ->
+    zpexpr_of_zexp g t e = (g', t', pe).
+  Proof.
+    elim: e vl g t vl' g' t' pe => /=.
+    - move=> ? ? ? ? ? ? ? ?; exact: zpexpr_of_var_vl_novl.
+    - move=> ? ? ? ? ? ? ? ? [] ? ? ? ?; by subst.
+    - move=> op e IH ivl ig it ovl og ot pe.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e) =>
+      [[[[vl' g'] t'] pe'] Hvl]. case=> ? ? ? ?; subst. rewrite (IH _ _ _ _ _ _ _ Hvl).
+      reflexivity.
+    - move=> op e1 IH1 e2 IH2 ivl ig it ovl og ot pe.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hvl1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hvl2].
+      case=> ? ? ? ?; subst. rewrite (IH1 _ _ _ _ _ _ _ Hvl1) (IH2 _ _ _ _ _ _ _ Hvl2).
+      reflexivity.
+  Qed.
+
+  Definition zpexpr_of_premise_vl (s : ZSSAStore.t) (vl : list Z) (g : positive) (t : SSAVM.t positive) (e : szbexp) :
+    list Z * positive * SSAVM.t positive * PExpr Z :=
+    match e with
+    | Seq e1 e2 =>
+      let '(vl1, g1, t1, e1) := zpexpr_of_zexp_vl s vl g t e1 in
+      let '(vl2, g2, t2, e2) := zpexpr_of_zexp_vl s vl1 g1 t1 e2 in
+      (vl2, g2, t2, PEsub e1 e2)
+    | Seqmod e1 e2 p =>
+      let vp := if (ZSSA.eval_zexp p s) == 0 then
+                  0
+                else
+                  (Z.div ((ZSSA.eval_zexp e1 s) - (ZSSA.eval_zexp e2 s))
+                         (ZSSA.eval_zexp p s)) in
+      let '(vl1, g1, t1, e1) := zpexpr_of_zexp_vl s vl g t e1 in
+      let '(vl2, g2, t2, e2) := zpexpr_of_zexp_vl s vl1 g1 t1 e2 in
+      let '(vlp, gp, tp, p) := zpexpr_of_zexp_vl s vl2 g2 t2 p in
+      (rcons vlp vp, (gp + 1)%positive, tp, PEsub (PEsub e1 e2) (PEmul (PEX Z gp) p))
+    end.
+
+  Lemma zpexpr_of_premise_vl_novl st vl g t e vl' g' t' pe :
+    zpexpr_of_premise_vl st vl g t e = (vl', g', t', pe) ->
+    zpexpr_of_premise g t e = (g', t', pe).
+  Proof.
+    elim: e vl g t vl' g' t' pe => /=.
+    - move=> e1 e2 ivl ig it ovl og ot pe.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hvl1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hvl2].
+      case=> ? ? ? ?; subst. rewrite (zpexpr_of_zexp_vl_novl Hvl1)
+                                     (zpexpr_of_zexp_vl_novl Hvl2).
+      reflexivity.
+    - move=> e1 e2 e3 ivl ig it ovl og ot pe.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hvl1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hvl2].
+      dcase (zpexpr_of_zexp_vl st vl2 g2 t2 e3) => [[[[vl3 g3] t3] pe3] Hvl3].
+      case=> ? ? ? ?; subst.
+      rewrite (zpexpr_of_zexp_vl_novl Hvl1) (zpexpr_of_zexp_vl_novl Hvl2)
+              (zpexpr_of_zexp_vl_novl Hvl3).
+      reflexivity.
+  Qed.
+
+  Fixpoint zpexprs_of_premises_vl (s : ZSSAStore.t) (vl : list Z) (g : positive) (t : SSAVM.t positive) (es : seq szbexp) :
+    list Z * positive * SSAVM.t positive * seq (PExpr Z) :=
+    match es with
+    | [::] => (vl, g, t, [::])
+    | e::es =>
+      let '(vl_hd, g_hd, t_hd, es_hd) := zpexpr_of_premise_vl s vl g t e in
+      let '(vl_tl, g_tl, t_tl, es_tl) := zpexprs_of_premises_vl s vl_hd g_hd t_hd es in
+      (vl_tl, g_tl, t_tl, es_hd::es_tl)
+    end.
+
+  Lemma zpexprs_of_premises_vl_novl st vl g t es vl' g' t' pes :
+    zpexprs_of_premises_vl st vl g t es = (vl', g', t', pes) ->
+    zpexprs_of_premises g t es = (g', t', pes).
+  Proof.
+    elim: es vl g t vl' g' t' pes => [| hd tl IH] ivl ig it ovl og ot pes /=.
+    - by case=> ? ? ? ?; subst.
+    - dcase (zpexpr_of_premise_vl st ivl ig it hd) => [[[[vl1 g1] t1] pe1] Hvl1].
+      dcase (zpexprs_of_premises_vl st vl1 g1 t1 tl) => [[[[vl2 g2] t2] pe2] Hvl2].
+      case=> ? ? ? ?; subst. rewrite (zpexpr_of_premise_vl_novl Hvl1).
+      rewrite (IH _ _ _ _ _ _ _ Hvl2). reflexivity.
+  Qed.
+
+  Definition zpexpr_of_conseq_vl (s : ZSSAStore.t) (vl : list Z) (g : positive) (t : SSAVM.t positive) (e : szbexp) :
+    list Z * positive * SSAVM.t positive * PExpr Z * PExpr Z :=
+    match e with
+    | Seq e1 e2 =>
+      let '(vl1, g1, t1, e1) := zpexpr_of_zexp_vl s vl g t e1 in
+      let '(vl2, g2, t2, e2) := zpexpr_of_zexp_vl s vl1 g1 t1 e2 in
+      (vl2, g2, t2, PEsub e1 e2, PEc 0)
+    | Seqmod e1 e2 p =>
+      let '(vl1, g1, t1, e1) := zpexpr_of_zexp_vl s vl g t e1 in
+      let '(vl2, g2, t2, e2) := zpexpr_of_zexp_vl s vl1 g1 t1 e2 in
+      let '(vlp, gp, tp, p) := zpexpr_of_zexp_vl s vl2 g2 t2 p in
+      (vlp, gp, tp, PEsub e1 e2, p)
+    end.
+
+  Lemma zpexpr_of_conseq_vl_novl st vl g t e vl' g' t' pe pm :
+    zpexpr_of_conseq_vl st vl g t e = (vl', g', t', pe, pm) ->
+    zpexpr_of_conseq g t e = (g', t', pe, pm).
+  Proof.
+    elim: e vl g t vl' g' t' pe pm => /=.
+    - move=> e1 e2 ivl ig it ovl og ot pe pm.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hvl1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hvl2].
+      case=> ? ? ? ? ?; subst.
+      rewrite (zpexpr_of_zexp_vl_novl Hvl1) (zpexpr_of_zexp_vl_novl Hvl2).
+      reflexivity.
+    - move=> e1 e2 e3 ivl ig it ovl og ot pe pm.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hvl1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hvl2].
+      dcase (zpexpr_of_zexp_vl st vl2 g2 t2 e3) => [[[[vl3 g3] t3] pe3] Hvl3].
+      case=> ? ? ? ? ?; subst.
+      rewrite (zpexpr_of_zexp_vl_novl Hvl1) (zpexpr_of_zexp_vl_novl Hvl2)
+              (zpexpr_of_zexp_vl_novl Hvl3).
+      reflexivity.
+  Qed.
+
+  (* ps: polynomials that equal 0
+     m: modulus
+     the goal is to prove that q = cs * ps + c * m for some coefficients cs and c *)
+  Definition zpexprs_of_pspec_vl (st : ZSSAStore.t) (s : pspec) : list Z * positive * SSAVM.t positive * seq (PExpr Z) * PExpr Z * PExpr Z :=
+    let g := init_pos in
+    let t := init_vm in
+    let vl := init_vl in
+    let '(vl_p, g_p, t_p, ps) := zpexprs_of_premises_vl st init_vl g t (ppremises s) in
+    let '(vl_q, g_q, t_q, q, m) := zpexpr_of_conseq_vl st vl_p g_p t_p (pconseq s) in
+    (vl_q, g_q, t_q, ps, m, q).
+
+  Lemma zpexprs_of_pspec_vl_novl st sp vl g t pps pm pq :
+    zpexprs_of_pspec_vl st sp = (vl, g, t, pps, pm, pq) ->
+    zpexprs_of_pspec sp = (g, t, pps, pm, pq).
+  Proof.
+    rewrite /zpexprs_of_pspec_vl /zpexprs_of_pspec.
+    dcase (zpexprs_of_premises_vl st init_vl init_pos init_vm (ppremises sp)) =>
+    [[[[vl_p g_p] t_p] opps] Hvl_p].
+    dcase (zpexpr_of_conseq_vl st vl_p g_p t_p (pconseq sp)) =>
+    [[[[[vl_q g_q] t_q] opm] opq] Hvl_q].
+    case=> ? ? ? ? ? ?; subst. rewrite (zpexprs_of_premises_vl_novl Hvl_p).
+    rewrite (zpexpr_of_conseq_vl_novl Hvl_q). reflexivity.
+  Qed.
+
+
+
+  (* newer_than_vm *)
+
+  Definition newer_than_vm (g : positive) (t : SSAVM.t positive) : Prop :=
+    forall (v : ssavar) (pv : positive), SSAVM.find v t = Some pv ->
+                                         (pv < g)%positive.
+
+  Lemma init_newer_than_vm : newer_than_vm init_pos init_vm.
+  Proof.
+    move=> v pv Hfind. rewrite SSAVM.Lemmas.empty_o in Hfind. discriminate.
+  Qed.
+
+  Lemma newer_than_vm_add_var g t v :
+    newer_than_vm g t -> newer_than_vm (g + 1) (SSAVM.add v g t).
+  Proof.
+    move=> Hnew x px Hfind. case Hxv: (x == v).
+    - rewrite (SSAVM.Lemmas.find_add_eq Hxv) in Hfind. case: Hfind => <-.
+      exact: Pos.lt_add_r.
+    - move/negP: Hxv => Hxv. rewrite (SSAVM.Lemmas.find_add_neq Hxv) in Hfind.
+      move: (Hnew _ _ Hfind) => Hlt. apply: (Pos.lt_trans _ _ _ Hlt).
+      exact: Pos.lt_add_r.
+  Qed.
+
+  Lemma newer_than_vm_add_r g n t : newer_than_vm g t -> newer_than_vm (g + n) t.
+  Proof.
+    move=> Hnew x px Hfind. move: (Hnew _ _ Hfind) => Hlt. exact: (pos_lt_add_r _ Hlt).
+  Qed.
+
+  Lemma zpexpr_of_var_newer g t v g' t' pe :
+    zpexpr_of_var g t v = (g', t', pe) -> newer_than_vm g t -> newer_than_vm g' t'.
+  Proof.
+    rewrite /zpexpr_of_var. case: (SSAVM.find v t).
+    - move=> ? [] ? ? ? ?; subst. assumption.
+    - case=> ? ? ? ?; subst. exact: newer_than_vm_add_var.
+  Qed.
+
+  Lemma zpexpr_of_zexp_newer g t e g' t' pe :
+    zpexpr_of_zexp g t e = (g', t', pe) -> newer_than_vm g t -> newer_than_vm g' t'.
+  Proof.
+    elim: e g t g' t' pe => /=.
+    - move=> v ig it og ot pe Hzp Hnew. exact: (zpexpr_of_var_newer Hzp Hnew).
+    - move=> ? ? ? ? ? ? [] ? ? ? Hnew; subst. assumption.
+    - move=> op e IH ig it og ot ope.
+      dcase (zpexpr_of_zexp ig it e) => [[[g t] pe] Hzp]. case=> ? ? ? Hnew; subst.
+      exact: (IH _ _ _ _ _ Hzp Hnew).
+    - move=> op e1 IH1 e2 IH2 ig it og ot ope.
+      dcase (zpexpr_of_zexp ig it e1) => [[[g1 t1] pe1] Hzp1].
+      dcase (zpexpr_of_zexp g1 t1 e2) => [[[g2 t2] pe2] Hzp2].
+      case=> ? ? ? Hnew; subst. apply: (IH2 _ _ _ _ _ Hzp2).
+      exact: (IH1 _ _ _ _ _ Hzp1).
+  Qed.
+
+  Lemma zpexpr_of_premise_newer g t e g' t' pe :
+    zpexpr_of_premise g t e = (g', t', pe) -> newer_than_vm g t -> newer_than_vm g' t'.
+  Proof.
+    elim: e g t g' t' pe => /=.
+    - move=> e1 e2 ig it og ot ope.
+      dcase (zpexpr_of_zexp ig it e1) => [[[g1 t1] pe1] Hzp1].
+      dcase (zpexpr_of_zexp g1 t1 e2) => [[[g2 t2] pe2] Hzp2].
+      case=> ? ? ? Hnew; subst. apply: (zpexpr_of_zexp_newer Hzp2).
+      exact: (zpexpr_of_zexp_newer Hzp1).
+    - move=> e1 e2 e3 ig it og ot ope.
+      dcase (zpexpr_of_zexp ig it e1) => [[[g1 t1] pe1] Hzp1].
+      dcase (zpexpr_of_zexp g1 t1 e2) => [[[g2 t2] pe2] Hzp2].
+      dcase (zpexpr_of_zexp g2 t2 e3) => [[[g3 t3] pe3] Hzp3].
+      case=> ? ? ? Hnew; subst. apply: newer_than_vm_add_r.
+      apply: (zpexpr_of_zexp_newer Hzp3). apply: (zpexpr_of_zexp_newer Hzp2).
+      exact: (zpexpr_of_zexp_newer Hzp1).
+  Qed.
+
+  Lemma zpexprs_of_premises_newer g t es g' t' pes :
+    zpexprs_of_premises g t es = (g', t', pes) ->
+    newer_than_vm g t -> newer_than_vm g' t'.
+  Proof.
+    elim: es g t g' t' pes => [| e es IH] ig it og ot opes /=.
+    - case=> ? ? ? Hnew; subst. assumption.
+    - dcase (zpexpr_of_premise ig it e) => [[[g_hd t_hd] es_hd] Hzp_hd].
+      dcase (zpexprs_of_premises g_hd t_hd es) => [[[g_tl t_tl] es_tl] Hzp_tl].
+      case=> ? ? ? Hnew; subst. apply: (IH _ _ _ _ _ Hzp_tl).
+      exact: (zpexpr_of_premise_newer Hzp_hd Hnew).
+  Qed.
+
+  Lemma zpexpr_of_conseq_newer g t e g' t' pe pm :
+    zpexpr_of_conseq g t e = (g', t', pe, pm) ->
+    newer_than_vm g t -> newer_than_vm g' t'.
+  Proof.
+    elim: e g t g' t' pe pm => /=.
+    - move=> e1 e2 ig it og ot ope opm.
+      dcase (zpexpr_of_zexp ig it e1) => [[[g1 t1] pe1] Hzp1].
+      dcase (zpexpr_of_zexp g1 t1 e2) => [[[g2 t2] pe2] Hzp2].
+      case=> ? ? ? ? Hnew; subst. apply: (zpexpr_of_zexp_newer Hzp2).
+      exact: (zpexpr_of_zexp_newer Hzp1).
+    - move=> e1 e2 e3 ig it og ot ope opm.
+      dcase (zpexpr_of_zexp ig it e1) => [[[g1 t1] pe1] Hzp1].
+      dcase (zpexpr_of_zexp g1 t1 e2) => [[[g2 t2] pe2] Hzp2].
+      dcase (zpexpr_of_zexp g2 t2 e3) => [[[g3 t3] pe3] Hzp3].
+      case=> ? ? ? ? Hnew; subst. apply: (zpexpr_of_zexp_newer Hzp3).
+      apply: (zpexpr_of_zexp_newer Hzp2). exact: (zpexpr_of_zexp_newer Hzp1).
+  Qed.
+
+
+
+  (* Generator grows *)
+
+  Lemma zpexpr_of_var_gen g t v g' t' pe :
+    zpexpr_of_var g t v = (g', t', pe) -> (g <= g')%positive.
+  Proof.
+    rewrite /zpexpr_of_var. case: (SSAVM.find v t).
+    - move=> ? [] ? ? ?; subst. exact: Pos.le_refl.
+    - case=> ? ? ?; subst. exact: pos_le_add_diag_r.
+  Qed.
+
+  Lemma zpexpr_of_zexp_gen g t e g' t' pe :
+    zpexpr_of_zexp g t e = (g', t', pe) -> (g <= g')%positive.
+  Proof.
+    elim: e g t g' t' pe => /=.
+    - move=> v ig it og ot pe Hzp. exact: (zpexpr_of_var_gen Hzp).
+    - move=> ? ? ? ? ? ? [] ? ? ?; subst. exact: Pos.le_refl.
+    - move=> op e IH ig it og ot ope.
+      dcase (zpexpr_of_zexp ig it e) => [[[g t] pe] Hzp]. case=> ? ? ?; subst.
+      exact: (IH _ _ _ _ _ Hzp).
+    - move=> op e1 IH1 e2 IH2 ig it og ot ope.
+      dcase (zpexpr_of_zexp ig it e1) => [[[g1 t1] pe1] Hzp1].
+      dcase (zpexpr_of_zexp g1 t1 e2) => [[[g2 t2] pe2] Hzp2].
+      case=> ? ? ?; subst. apply: (Pos.le_trans _ _ _ _ (IH2 _ _ _ _ _ Hzp2)).
+      exact: (IH1 _ _ _ _ _ Hzp1).
+  Qed.
+
+  Lemma zpexpr_of_premise_gen g t e g' t' pe :
+    zpexpr_of_premise g t e = (g', t', pe) -> (g <= g')%positive.
+  Proof.
+    elim: e g t g' t' pe => /=.
+    - move=> e1 e2 ig it og ot ope.
+      dcase (zpexpr_of_zexp ig it e1) => [[[g1 t1] pe1] Hzp1].
+      dcase (zpexpr_of_zexp g1 t1 e2) => [[[g2 t2] pe2] Hzp2].
+      case=> ? ? ?; subst. exact: (Pos.le_trans _ _ _
+                                                (zpexpr_of_zexp_gen Hzp1)
+                                                (zpexpr_of_zexp_gen Hzp2)).
+    - move=> e1 e2 e3 ig it og ot ope.
+      dcase (zpexpr_of_zexp ig it e1) => [[[g1 t1] pe1] Hzp1].
+      dcase (zpexpr_of_zexp g1 t1 e2) => [[[g2 t2] pe2] Hzp2].
+      dcase (zpexpr_of_zexp g2 t2 e3) => [[[g3 t3] pe3] Hzp3].
+      case=> ? ? ?; subst. apply: pos_le_add_r.
+      apply: (Pos.le_trans _ _ _ _ (zpexpr_of_zexp_gen Hzp3)).
+      apply: (Pos.le_trans _ _ _ _ (zpexpr_of_zexp_gen Hzp2)).
+      exact: (zpexpr_of_zexp_gen Hzp1).
+  Qed.
+
+  Lemma zpexprs_of_premises_gen g t es g' t' pes :
+    zpexprs_of_premises g t es = (g', t', pes) -> (g <= g')%positive.
+  Proof.
+    elim: es g t g' t' pes => [| hd tl IH] /=.
+    - move=> ig it og ot opes [] ? ? ?; subst. exact: Pos.le_refl.
+    - move=> ig it og ot opes.
+      dcase (zpexpr_of_premise ig it hd) => [[[g_hd t_hd] es_hd] Hpe_hd].
+      dcase (zpexprs_of_premises g_hd t_hd tl) => [[[g_tl t_tl] es_tl] Hpe_tl].
+      case=> ? ? ?; subst. exact: (Pos.le_trans _ _ _
+                                                (zpexpr_of_premise_gen Hpe_hd)
+                                                (IH _ _ _ _ _ Hpe_tl)).
+  Qed.
+
+
+
+  (* Prefix of vl *)
+
+  Lemma zpexpr_of_var_vl_prefix st vl g t v vl' g' t' pe :
+    zpexpr_of_var_vl st vl g t v = (vl', g', t', pe) -> prefix_of vl vl'.
+  Proof.
+    rewrite /zpexpr_of_var_vl. case: (SSAVM.find v t).
+    - move=> ? [] ? ? ? ?; subst. exact: prefix_of_refl.
+    - case=> ? ? ? ?; subst. apply: prefix_of_rcons. exact: prefix_of_refl.
+  Qed.
+
+  Lemma zpexpr_of_zexp_vl_prefix_of st vl g t e vl' g' t' pe :
+    zpexpr_of_zexp_vl st vl g t e = (vl', g', t', pe) -> prefix_of vl vl'.
+  Proof.
+    elim: e vl g t vl' g' t' pe => /=.
+    - move=> v ivl ig it ovl og ot pe Hzp. exact: (zpexpr_of_var_vl_prefix Hzp).
+    - move=> n ivl ig it ovl og ot pe [] ? ? ? ?; subst. exact: prefix_of_refl.
+    - move=> op e IH ivl ig it ovl og ot ope.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e) => [[[[vl g] t] pe] Hzp].
+      case=> ? ? ? ?; subst. exact: (IH _ _ _ _ _ _ _ Hzp).
+    - move=> op e1 IH1 e2 IH2 ivl ig it ovl og ot ope.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hzp1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hzp2].
+      case=> ? ? ? ?; subst. apply: (prefix_of_trans _ (IH2 _ _ _ _ _ _ _ Hzp2)).
+      exact: (IH1 _ _ _ _ _ _ _ Hzp1).
+  Qed.
+
+  Lemma zpexpr_of_premise_vl_prefix_of st vl g t e vl' g' t' pe :
+    zpexpr_of_premise_vl st vl g t e = (vl', g', t', pe) -> prefix_of vl vl'.
+  Proof.
+    elim: e vl g t vl' g' t' pe => /=.
+    - move=> e1 e2 ivl ig it ovl og ot ope.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      case=> ? ? ? ?; subst.
+      exact: (prefix_of_trans (zpexpr_of_zexp_vl_prefix_of Hpe1)
+                              (zpexpr_of_zexp_vl_prefix_of Hpe2)).
+    - move=> e1 e2 e3 ivl ig it ovl og ot ope.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      dcase (zpexpr_of_zexp_vl st vl2 g2 t2 e3) => [[[[vl3 g3] t3] pe3] Hpe3].
+      case=> ? ? ? ?; subst. apply: prefix_of_rcons.
+      apply: (prefix_of_trans _ (zpexpr_of_zexp_vl_prefix_of Hpe3)).
+      apply: (prefix_of_trans _ (zpexpr_of_zexp_vl_prefix_of Hpe2)).
+      exact: (zpexpr_of_zexp_vl_prefix_of Hpe1).
+  Qed.
+
+  Lemma zpexprs_of_premises_vl_prefix_of st vl g t es vl' g' t' pes :
+    zpexprs_of_premises_vl st vl g t es = (vl', g', t', pes) -> prefix_of vl vl'.
+  Proof.
+    elim: es vl g t vl' g' t' pes => [| hd tl IH] /=.
+    - move=> ivl ig it ovl og ot opes [] ? ? ? ?; subst. exact: prefix_of_refl.
+    - move=> ivl ig it ovl og ot opes.
+      dcase (zpexpr_of_premise_vl st ivl ig it hd) =>
+      [[[[vl_hd g_hd] t_hd] es_hd] Hpe_hd].
+      dcase (zpexprs_of_premises_vl st vl_hd g_hd t_hd tl) =>
+      [[[[vl_tl g_tl] t_tl] es_tl] Hpe_tl].
+      case=> ? ? ? ?; subst. apply: (prefix_of_trans _ (IH _ _ _ _ _ _ _ Hpe_tl)).
+      exact: (zpexpr_of_premise_vl_prefix_of Hpe_hd).
+  Qed.
+
+  Lemma zpexpr_of_conseq_vl_prefix_of st vl g t e vl' g' t' pe pm :
+    zpexpr_of_conseq_vl st vl g t e = (vl', g', t', pe, pm) -> prefix_of vl vl'.
+  Proof.
+    elim: e vl g t vl' g' t' pe pm => /=.
+    - move=> e1 e2 ivl ig it ovl og ot ope opm.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      case=> ? ? ? ? ?; subst.
+      exact: (prefix_of_trans (zpexpr_of_zexp_vl_prefix_of Hpe1)
+                              (zpexpr_of_zexp_vl_prefix_of Hpe2)).
+    - move=> e1 e2 e3 ivl ig it ovl og ot ope opm.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      dcase (zpexpr_of_zexp_vl st vl2 g2 t2 e3) => [[[[vl3 g3] t3] pe3] Hpe3].
+      case=> ? ? ? ? ?; subst.
+      apply: (prefix_of_trans _ (zpexpr_of_zexp_vl_prefix_of Hpe3)).
+      apply: (prefix_of_trans _ (zpexpr_of_zexp_vl_prefix_of Hpe2)).
+      exact: (zpexpr_of_zexp_vl_prefix_of Hpe1).
+  Qed.
+
+
+
+  (* size of vl is bounded *)
+
+  Definition vl_size_bounded (vl : list Z) (g : positive) : Prop :=
+    size vl = (Pos.to_nat g - 1)%N.
+
+  Lemma init_vl_size_bounded : vl_size_bounded init_vl init_pos.
+  Proof. reflexivity. Qed.
+
+  Lemma find_bounded_by_vl vl g t v pv :
+    newer_than_vm g t -> vl_size_bounded vl g -> SSAVM.find v t = Some pv ->
+    (Pos.to_nat pv <= size vl)%N.
+  Proof.
+    rewrite /vl_size_bounded => Hnew Hsize Hfind. rewrite Hsize.
+    move: (Hnew v pv Hfind) => Hlt. move/(Pos2Nat.inj_lt _ _): Hlt => Hlt.
+    move/lt_ltn: Hlt => Hlt. exact: (ltn_leq_sub Hlt).
+  Qed.
+
+  Lemma rcons_vl_size_bounded vl v g :
+    vl_size_bounded vl g -> vl_size_bounded (rcons vl v) (g + 1).
+  Proof.
+    rewrite /vl_size_bounded=> Hsize. rewrite size_rcons Hsize. rewrite subn1.
+    rewrite Pos2Nat.inj_add. rewrite -addn_add -addnBA; last by done.
+    rewrite addn0 (prednK (pos_to_nat_is_pos g)). reflexivity.
+  Qed.
+
+  Lemma zpexpr_of_var_vl_size_bounded st vl g t v vl' g' t' pe :
+    zpexpr_of_var_vl st vl g t v = (vl', g', t', pe) -> vl_size_bounded vl g ->
+    vl_size_bounded vl' g'.
+  Proof.
+    rewrite /zpexpr_of_var_vl. case: (SSAVM.find v t).
+    - by move=> ? [] ? ? ? ?; subst.
+    - case=> ? ? ? ?; subst. move=> Hsize. exact: rcons_vl_size_bounded.
+  Qed.
+
+  Lemma zpexpr_of_zexp_vl_size_bounded st vl g t e vl' g' t' pe :
+    zpexpr_of_zexp_vl st vl g t e = (vl', g', t', pe) -> vl_size_bounded vl g ->
+    vl_size_bounded vl' g'.
+  Proof.
+    elim: e vl g t vl' g' t' pe => /=.
+    - move=> v ivl ig it ovl og ot pe Hvl Hsize.
+      exact: (zpexpr_of_var_vl_size_bounded Hvl Hsize).
+    - move=> n ivl ig it ovl og ot pe. case=> ? ? ? ? Hsize; subst. assumption.
+    - move=> op e IH ivl ig it ovl og ot pe.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e) => [[[[vl' g'] t'] pe'] Hpe].
+      case=> ? ? ? ? Hsize; subst. exact: (IH _ _ _ _ _ _ _ Hpe Hsize).
+    - move=> op e1 IH1 e2 IH2 ivl ig it ovl og ot pe.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      case=> ? ? ? ? Hsize; subst. apply: (IH2 _ _ _ _ _ _ _ Hpe2).
+      exact: (IH1 _ _ _ _ _ _ _ Hpe1).
+  Qed.
+
+  Lemma zpexpr_of_premise_vl_size_bounded st vl g t e vl' g' t' pe :
+    zpexpr_of_premise_vl st vl g t e = (vl', g', t', pe) -> vl_size_bounded vl g ->
+    vl_size_bounded vl' g'.
+  Proof.
+    elim: e vl g t vl' g' t' pe => /=.
+    - move=> e1 e2 ivl ig it ovl og ot ope.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      case=> ? ? ? ? Hsize; subst. apply: (zpexpr_of_zexp_vl_size_bounded Hpe2).
+      exact: (zpexpr_of_zexp_vl_size_bounded Hpe1).
+    - move=> e1 e2 e3 ivl ig it ovl og ot ope.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      dcase (zpexpr_of_zexp_vl st vl2 g2 t2 e3) => [[[[vl3 g3] t3] pe3] Hpe3].
+      case=> ? ? ? ? Hsize; subst. apply: rcons_vl_size_bounded.
+      apply: (zpexpr_of_zexp_vl_size_bounded Hpe3).
+      apply: (zpexpr_of_zexp_vl_size_bounded Hpe2).
+      exact: (zpexpr_of_zexp_vl_size_bounded Hpe1).
+  Qed.
+
+  Lemma zpexprs_of_premises_vl_size_bounded st vl g t es vl' g' t' pes :
+    zpexprs_of_premises_vl st vl g t es = (vl', g', t', pes) -> vl_size_bounded vl g ->
+    vl_size_bounded vl' g'.
+  Proof.
+    elim: es vl g t vl' g' t' pes => [| hd tl IH] /=.
+    - move=> ivl ig it ovl og ot opes [] ? ? ? ? Hsize; subst. assumption.
+    - move=> ivl ig it ovl og ot opes.
+      dcase (zpexpr_of_premise_vl st ivl ig it hd) =>
+      [[[[vl_hd g_hd] t_hd] es_hd] Hpe_hd].
+      dcase (zpexprs_of_premises_vl st vl_hd g_hd t_hd tl) =>
+      [[[[vl_tl g_tl] t_tl] es_tl] Hpe_tl].
+      case=> ? ? ? ? Hsize; subst. apply: (IH _ _ _ _ _ _ _ Hpe_tl).
+      exact: (zpexpr_of_premise_vl_size_bounded Hpe_hd).
+  Qed.
+
+  Lemma zpexpr_of_conseq_vl_size_bounded st vl g t e vl' g' t' pe pm :
+    zpexpr_of_conseq_vl st vl g t e = (vl', g', t', pe, pm) -> vl_size_bounded vl g ->
+    vl_size_bounded vl' g'.
+  Proof.
+    elim: e vl g t vl' g' t' pe pm => /=.
+    - move=> e1 e2 ivl ig it ovl og ot ope opm.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      case=> ? ? ? ? ? Hsize; subst. apply: (zpexpr_of_zexp_vl_size_bounded Hpe2).
+      exact: (zpexpr_of_zexp_vl_size_bounded Hpe1).
+    - move=> e1 e2 e3 ivl ig it ovl og ot ope opm.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      dcase (zpexpr_of_zexp_vl st vl2 g2 t2 e3) => [[[[vl3 g3] t3] pe3] Hpe3].
+      case=> ? ? ? ? ? Hsize; subst.
+      apply: (zpexpr_of_zexp_vl_size_bounded Hpe3).
+      apply: (zpexpr_of_zexp_vl_size_bounded Hpe2).
+      exact: (zpexpr_of_zexp_vl_size_bounded Hpe1).
+  Qed.
+
+
+
+  (* zpexpr_of_zexp and pexpr_bounded *)
+
+  Lemma zpexpr_of_var_zpexpr_bounded g t v g' t' pe :
+    zpexpr_of_var g t v = (g', t', pe) -> newer_than_vm g t -> zpexpr_bounded pe g'.
+  Proof.
+    rewrite /zpexpr_of_var. case Hfind: (SSAVM.find v t).
+    - case=> ? ? ? Hnew; subst. rewrite /=. exact: (Hnew _ _ Hfind).
+    - case=> ? ? ? Hnew; subst. rewrite /=. exact: Pos.lt_add_r.
+  Qed.
+
+  Lemma zpexpr_of_zexp_zpexpr_bounded g t e g' t' pe :
+    zpexpr_of_zexp g t e = (g', t', pe) -> newer_than_vm g t -> zpexpr_bounded pe g'.
+  Proof.
+    elim: e g t g' t' pe => /=.
+    - move=> v ig it og ot ope Hnew Hzp.
+      exact: (zpexpr_of_var_zpexpr_bounded Hnew Hzp).
+    - move=> n ig it og ot ope [] ? ? ? Hnew; subst => /=. done.
+    - move=> op e IH ig it og ot ope.
+      dcase (zpexpr_of_zexp ig it e) => [[[g'] t'] pe'] Hpe.
+      case=> ? ? ? Hnew; subst. rewrite /zpexpr_of_eunop. case: op => /=.
+      exact: (IH _ _ _ _ _ Hpe Hnew).
+    - move=> op e1 IH1 e2 IH2 ig it og ot ope.
+      dcase (zpexpr_of_zexp ig it e1) => [[[g1 t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp g1 t1 e2) => [[[g2 t2] pe2] Hpe2].
+      case=> ? ? ? Hnew; subst. move: (zpexpr_of_zexp_newer Hpe1 Hnew) => Hnew11.
+      rewrite /zpexpr_of_ebinop.
+      case: op => /=;
+        by (split;
+            [apply: (zpexpr_bounded_ge_bounded (zpexpr_of_zexp_gen Hpe2));
+             exact: (IH1 _ _ _ _ _ Hpe1 Hnew) |
+             exact: (IH2 _ _ _ _ _ Hpe2 Hnew11)]).
+  Qed.
+
+  Lemma zpexpr_of_premise_zpexpr_bounded g t e g' t' pe :
+    zpexpr_of_premise g t e = (g', t', pe) -> newer_than_vm g t ->
+    zpexpr_bounded pe g'.
+  Proof.
+    elim: e g t g' t' pe => /=.
+    - move=> e1 e2 ig it og ot ope.
+      dcase (zpexpr_of_zexp ig it e1) => [[[g1 t1] pe1] Hzp1].
+      dcase (zpexpr_of_zexp g1 t1 e2) => [[[g2 t2] pe2] Hzp2].
+      case=> ? ? ? Hnew; subst. move: (zpexpr_of_zexp_gen Hzp2) => Hg1. split.
+      + apply: (zpexpr_bounded_ge_bounded Hg1).
+        exact: (zpexpr_of_zexp_zpexpr_bounded Hzp1 Hnew).
+      + apply: (zpexpr_of_zexp_zpexpr_bounded Hzp2).
+        exact: (zpexpr_of_zexp_newer Hzp1 Hnew).
+    - move=> e1 e2 e3 ig it og ot ope.
+      dcase (zpexpr_of_zexp ig it e1) => [[[g1 t1] pe1] Hzp1].
+      dcase (zpexpr_of_zexp g1 t1 e2) => [[[g2 t2] pe2] Hzp2].
+      dcase (zpexpr_of_zexp g2 t2 e3) => [[[g3 t3] pe3] Hzp3].
+      case=> ? ? ? Hnew; subst.
+      move: (zpexpr_of_zexp_newer Hzp1 Hnew) => Hnew1.
+      move: (zpexpr_of_zexp_newer Hzp2 Hnew1) => Hnew2.
+      move: (zpexpr_of_zexp_gen Hzp2) => Hg12.
+      move: (zpexpr_of_zexp_gen Hzp3) => Hg23.
+      move: (Pos.le_trans _ _ _ Hg12 Hg23) => {Hg12} Hg13.
+      move: (@pos_le_add_r _ _ 1%positive Hg13) => {Hg13} Hg13succ.
+      move: (@pos_le_add_r _ _ 1%positive Hg23) => {Hg23} Hg23succ. repeat split.
+      + apply: (zpexpr_bounded_ge_bounded Hg13succ).
+        exact: (zpexpr_of_zexp_zpexpr_bounded Hzp1 Hnew).
+      + apply: (zpexpr_bounded_ge_bounded Hg23succ).
+        exact: (zpexpr_of_zexp_zpexpr_bounded Hzp2 Hnew1).
+      + simpl. exact: Pos.lt_add_r.
+      + apply: (zpexpr_bounded_ge_bounded (@pos_le_add_diag_r g3 1)).
+        exact: (zpexpr_of_zexp_zpexpr_bounded Hzp3 Hnew2).
+  Qed.
+
+  Lemma zpexprs_of_premises_zpexprs_bounded g t es g' t' pes :
+    zpexprs_of_premises g t es = (g', t', pes) -> newer_than_vm g t ->
+    zpexprs_bounded pes g'.
+  Proof.
+    elim: es g t g' t' pes => [| hd tl IH] /=.
+    - move=> ig it og ot opes [] ? ? ? Hnew; subst. done.
+    - move=> ig it og ot opes.
+      dcase (zpexpr_of_premise ig it hd) => [[[g_hd t_hd] es_hd] Hpe_hd].
+      dcase (zpexprs_of_premises g_hd t_hd tl) => [[[g_tl t_tl] es_tl] Hpe_tl].
+      case=> ? ? ? Hnew; subst. split.
+      + apply: (zpexpr_bounded_ge_bounded (zpexprs_of_premises_gen Hpe_tl)).
+        exact: (zpexpr_of_premise_zpexpr_bounded Hpe_hd).
+      + apply: (IH _ _ _ _ _ Hpe_tl). exact: (zpexpr_of_premise_newer Hpe_hd).
+  Qed.
+
+  Lemma zpexpr_of_conseq_zpexpr_bounded_e g t e g' t' pe pm :
+    zpexpr_of_conseq g t e = (g', t', pe, pm) -> newer_than_vm g t ->
+    zpexpr_bounded pe g'.
+  Proof.
+    elim: e g t g' t' pe pm => /=.
+    - move=> e1 e2 ig it og ot ope opm.
+      dcase (zpexpr_of_zexp ig it e1) => [[[g1 t1] pe1] Hzp1].
+      dcase (zpexpr_of_zexp g1 t1 e2) => [[[g2 t2] pe2] Hzp2].
+      case=> ? ? ? ? Hnew; subst. move: (zpexpr_of_zexp_gen Hzp2) => Hg1. split.
+      + apply: (zpexpr_bounded_ge_bounded Hg1).
+        exact: (zpexpr_of_zexp_zpexpr_bounded Hzp1 Hnew).
+      + apply: (zpexpr_of_zexp_zpexpr_bounded Hzp2).
+        exact: (zpexpr_of_zexp_newer Hzp1 Hnew).
+    - move=> e1 e2 e3 ig it og ot ope opm.
+      dcase (zpexpr_of_zexp ig it e1) => [[[g1 t1] pe1] Hzp1].
+      dcase (zpexpr_of_zexp g1 t1 e2) => [[[g2 t2] pe2] Hzp2].
+      dcase (zpexpr_of_zexp g2 t2 e3) => [[[g3 t3] pe3] Hzp3].
+      case=> ? ? ? ? Hnew; subst.
+      move: (zpexpr_of_zexp_newer Hzp1 Hnew) => Hnew1.
+      move: (zpexpr_of_zexp_newer Hzp2 Hnew1) => Hnew2.
+      move: (zpexpr_of_zexp_gen Hzp2) => Hg12.
+      move: (zpexpr_of_zexp_gen Hzp3) => Hg23.
+      move: (Pos.le_trans _ _ _ Hg12 Hg23) => Hg13. repeat split.
+      + apply: (zpexpr_bounded_ge_bounded Hg13).
+        exact: (zpexpr_of_zexp_zpexpr_bounded Hzp1 Hnew).
+      + apply: (zpexpr_bounded_ge_bounded Hg23).
+        exact: (zpexpr_of_zexp_zpexpr_bounded Hzp2 Hnew1).
+  Qed.
+
+  Lemma zpexpr_of_conseq_zpexpr_bounded_m g t e g' t' pe pm :
+    zpexpr_of_conseq g t e = (g', t', pe, pm) -> newer_than_vm g t ->
+    zpexpr_bounded pm g'.
+  Proof.
+    elim: e g t g' t' pe pm => /=.
+    - move=> e1 e2 ig it og ot ope opm.
+      dcase (zpexpr_of_zexp ig it e1) => [[[g1 t1] pe1] Hzp1].
+      dcase (zpexpr_of_zexp g1 t1 e2) => [[[g2 t2] pe2] Hzp2].
+      case=> ? ? ? ? Hnew; subst. done.
+    - move=> e1 e2 e3 ig it og ot ope opm.
+      dcase (zpexpr_of_zexp ig it e1) => [[[g1 t1] pe1] Hzp1].
+      dcase (zpexpr_of_zexp g1 t1 e2) => [[[g2 t2] pe2] Hzp2].
+      dcase (zpexpr_of_zexp g2 t2 e3) => [[[g3 t3] pe3] Hzp3].
+      case=> ? ? ? ? Hnew; subst.
+      move: (zpexpr_of_zexp_newer Hzp1 Hnew) => Hnew1.
+      move: (zpexpr_of_zexp_newer Hzp2 Hnew1) => Hnew2.
+      exact: (zpexpr_of_zexp_zpexpr_bounded Hzp3 Hnew2).
+  Qed.
+
+
+
+  (* Relate prefix_of, vl_size_bounded, zpexpr_bounded, and ZPEval *)
+
+  Lemma prefix_of_zpeeval vl1 vl2 g pe :
+    prefix_of vl1 vl2 -> vl_size_bounded vl1 g -> zpexpr_bounded pe g ->
+    ZPEeval vl1 pe = ZPEeval vl2 pe.
+  Proof.
+    elim: pe vl1 vl2 g => //=.
+    - move=> v vl1 vl2 g Hpre Hvl Hlt. rewrite 2!bnth_snth.
+      apply: (prefix_of_nth _ Hpre). rewrite Hvl. apply: lt_ltn. rewrite !subn1.
+      apply/(Nat.pred_lt_mono (Pos.to_nat v) (Pos.to_nat g) (@pos2nat_is_nonzero v)).
+      apply/Pos2Nat.inj_lt. assumption.
+    - move=> e1 IH1 e2 IH2 vl1 vl2 g Hpre Hvl [Hb1 Hb2].
+      rewrite (IH1 _ _ _ Hpre Hvl Hb1) (IH2 _ _ _ Hpre Hvl Hb2). reflexivity.
+    - move=> e1 IH1 e2 IH2 vl1 vl2 g Hpre Hvl [Hb1 Hb2].
+      rewrite (IH1 _ _ _ Hpre Hvl Hb1) (IH2 _ _ _ Hpre Hvl Hb2). reflexivity.
+    - move=> e1 IH1 e2 IH2 vl1 vl2 g Hpre Hvl [Hb1 Hb2].
+      rewrite (IH1 _ _ _ Hpre Hvl Hb1) (IH2 _ _ _ Hpre Hvl Hb2). reflexivity.
+    - move=> e IH vl1 vl2 g Hpre Hvl Hb. by rewrite (IH _ _ _ Hpre Hvl Hb).
+    - move=> e IH n vl1 vl2 g Hpre Hvl Hb. by rewrite (IH _ _ _ Hpre Hvl Hb).
+  Qed.
+
+  Lemma rcons_zpeeval vl v g pe :
+    vl_size_bounded vl g -> zpexpr_bounded pe g ->
+    ZPEeval vl pe = ZPEeval (rcons vl v) pe.
+  Proof.
+    move=> Hsize Hbounded. apply: (prefix_of_zpeeval _ Hsize Hbounded).
+    apply: prefix_of_rcons. exact: prefix_of_refl.
+  Qed.
+
+  Lemma prefix_of_zpexpr_all0 vl1 vl2 g pes :
+    prefix_of vl1 vl2 -> vl_size_bounded vl1 g -> zpexprs_bounded pes g ->
+    zpexpr_all0 vl1 pes -> zpexpr_all0 vl2 pes.
+  Proof.
+    elim: pes vl1 vl2 g => [| hd tl IH] //=.
+    move=> vl1 vl2 g Hpre Hsize1 [Hzb_hd Hzb_tl] [Heval_hd Heval_tl]. split.
+    - rewrite -(prefix_of_zpeeval Hpre Hsize1 Hzb_hd). assumption.
+    - exact: (IH _ _ _ Hpre Hsize1 Hzb_tl Heval_tl).
+  Qed.
+
+
+
+  (* Consistency between store and vl *)
+
+  Definition consistent (st : ZSSAStore.t) (vl : list Z) (t : SSAVM.t positive) :=
+    forall (v : ssavar) (pv : positive),
+      SSAVM.find v t = Some pv -> ZSSAStore.acc v st = BinList.nth 0 pv vl.
+
+  Lemma init_consistent st : consistent st init_vl init_vm.
+  Proof.
+    move=> v pv Hfind. rewrite SSAVM.Lemmas.empty_o in Hfind. discriminate.
+  Qed.
+
+  Lemma consistent_zpeeval_some st vl t v pv :
+    consistent st vl t -> SSAVM.find v t = Some pv ->
+    ZPEeval vl (PEX Z pv) = ZSSAStore.acc v st.
+  Proof. move=> Hcon Hfind. rewrite (Hcon v pv Hfind). reflexivity. Qed.
+
+  Lemma zpeeval_rcons_last vl g v :
+    vl_size_bounded vl g -> ZPEeval (rcons vl v) (PEX Z g) = v.
+  Proof.
+    move=> Hsize /=. rewrite bnth_rcons_last; first reflexivity.
+    rewrite Hsize subn1 addn1 prednK; first reflexivity. exact: (pos_to_nat_is_pos g).
+  Qed.
+
+  Lemma rcons_consistent st vl g t x :
+    newer_than_vm g t -> vl_size_bounded vl g ->
+    consistent st vl t -> consistent st (rcons vl x) t.
+  Proof.
+    move=> Hnew Hsize Hcon v pv Hfind.
+    rewrite (Hcon v pv Hfind) bnth_rcons; first reflexivity.
+    exact: (find_bounded_by_vl Hnew Hsize Hfind).
+   Qed.
+
+  Lemma rcons_add_consistent st vl g t v :
+    newer_than_vm g t -> vl_size_bounded vl g -> consistent st vl t ->
+    consistent st (rcons vl (ZSSAStore.acc v st)) (SSAVM.add v g t).
+  Proof.
+    move=> Hnew Hsize Hcon x px. case Hxv: (x == v).
+    - rewrite (SSAVM.Lemmas.find_add_eq Hxv). case=> ?; subst. rewrite bnth_snth.
+      rewrite -Hsize. replace (size vl) with (size (rcons vl (ZSSAStore.acc v st))).-1;
+                        last by rewrite size_rcons -pred_Sn; reflexivity.
+      rewrite nth_last last_rcons. rewrite (eqP Hxv). reflexivity.
+    - move/negP: Hxv => Hxv. rewrite (SSAVM.Lemmas.find_add_neq Hxv)=> Hfind.
+      rewrite (Hcon _ _ Hfind). move: (Hnew _ _ Hfind) => Hpxg.
+      rewrite bnth_rcons; first reflexivity.
+      rewrite Hsize. move/Pos2Nat.inj_lt: Hpxg => Hpxg. move/ltP: Hpxg => Hpxg.
+      exact: (ltn_leq_sub Hpxg).
+  Qed.
+
+  Lemma zpexpr_of_var_vl_consistent st vl g t v vl' g' t' pe :
+    zpexpr_of_var_vl st vl g t v = (vl', g', t', pe) ->
+    newer_than_vm g t -> vl_size_bounded vl g ->
+    consistent st vl t -> consistent st vl' t'.
+  Proof.
+    rewrite /zpexpr_of_var_vl. case Hfind: (SSAVM.find v t).
+    - case=> ? ? ? ? Hnew Hsize Hcon; subst. exact: Hcon.
+    - case=> ? ? ? ? Hnew Hsize Hcon; subst.
+      exact: (rcons_add_consistent Hnew Hsize Hcon).
+  Qed.
+
+  Lemma zpexpr_of_zexp_vl_consistent st vl g t e vl' g' t' pe :
+    zpexpr_of_zexp_vl st vl g t e = (vl', g', t', pe) ->
+    newer_than_vm g t -> vl_size_bounded vl g ->
+    consistent st vl t -> consistent st vl' t'.
+  Proof.
+    elim: e vl g t vl' g' t' pe => /=.
+    - move=> v ivl ig it ovl og ot pe Hvl Hnew Hsize Hcon.
+      exact: (zpexpr_of_var_vl_consistent Hvl Hnew Hsize Hcon).
+    - move=> n ivl ig it ovl og ot pe. case=> ? ? ? ? Hnew Hsize Hcon; subst.
+      exact: Hcon.
+    - move=> op e IH ivl ig it ovl og ot pe.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e) => [[[[vl' g'] t'] pe'] Hpe].
+      case=> ? ? ? ? Hnew Hsize Hcon; subst.
+      exact: (IH _ _ _ _ _ _ _ Hpe Hnew Hsize Hcon).
+    - move=> op e1 IH1 e2 IH2 ivl ig it ovl og ot pe.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      case=> ? ? ? ? Hnew Hsize Hcon; subst. apply: (IH2 _ _ _ _ _ _ _ Hpe2).
+      + exact: (zpexpr_of_zexp_newer (zpexpr_of_zexp_vl_novl Hpe1) Hnew).
+      + exact: (zpexpr_of_zexp_vl_size_bounded Hpe1 Hsize).
+      + exact: (IH1 _ _ _ _ _ _ _ Hpe1 Hnew Hsize Hcon).
+  Qed.
+
+  Lemma zpexpr_of_premise_vl_consistent st vl g t e vl' g' t' pe :
+    zpexpr_of_premise_vl st vl g t e = (vl', g', t', pe) ->
+    newer_than_vm g t -> vl_size_bounded vl g ->
+    consistent st vl t -> consistent st vl' t'.
+  Proof.
+    elim: e vl g t vl' g' t' pe => /=.
+    - move=> e1 e2 ivl ig it ovl og ot pe.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      case => ? ? ? ? Hnew Hsize Hcon; subst.
+      apply: (zpexpr_of_zexp_vl_consistent Hpe2).
+      + exact: (zpexpr_of_zexp_newer (zpexpr_of_zexp_vl_novl Hpe1) Hnew).
+      + exact: (zpexpr_of_zexp_vl_size_bounded Hpe1 Hsize).
+      + exact: (zpexpr_of_zexp_vl_consistent Hpe1 Hnew Hsize Hcon).
+    - move=> e1 e2 e3 ivl ig it ovl og ot pe.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      dcase (zpexpr_of_zexp_vl st vl2 g2 t2 e3) => [[[[vl3 g3] t3] pe3] Hpe3].
+      case => ? ? ? ? Hnew Hsize Hcon; subst.
+      move: (zpexpr_of_zexp_newer (zpexpr_of_zexp_vl_novl Hpe1) Hnew) => Hnew1.
+      move: (zpexpr_of_zexp_newer (zpexpr_of_zexp_vl_novl Hpe2) Hnew1) => Hnew2.
+      move: (zpexpr_of_zexp_newer (zpexpr_of_zexp_vl_novl Hpe3) Hnew2) => Hnew3.
+      move: (zpexpr_of_zexp_vl_size_bounded Hpe1 Hsize) => Hsize1.
+      move: (zpexpr_of_zexp_vl_size_bounded Hpe2 Hsize1) => Hsize2.
+      move: (zpexpr_of_zexp_vl_size_bounded Hpe3 Hsize2) => Hsize3.
+      move: (zpexpr_of_zexp_vl_consistent Hpe1 Hnew Hsize Hcon) => Hcon1.
+      move: (zpexpr_of_zexp_vl_consistent Hpe2 Hnew1 Hsize1 Hcon1) => Hcon2.
+      move: (zpexpr_of_zexp_vl_consistent Hpe3 Hnew2 Hsize2 Hcon2) => Hcon3.
+      exact: (rcons_consistent _ Hnew3 Hsize3 Hcon3).
+  Qed.
+
+  Lemma zpexprs_of_premises_vl_consistent st vl g t es vl' g' t' pes :
+    zpexprs_of_premises_vl st vl g t es = (vl', g', t', pes) ->
+    newer_than_vm g t -> vl_size_bounded vl g ->
+    consistent st vl t -> consistent st vl' t'.
+  Proof.
+    elim: es vl g t vl' g' t' pes => [| hd tl IH] /=.
+    - move=> ivl ig it ovl og ot opes [] ? ? ? ? Hnew Hsize Hcon; subst. assumption.
+    - move=> ivl ig it ovl og ot opes.
+      dcase (zpexpr_of_premise_vl st ivl ig it hd)
+      => [[[[vl_hd g_hd] t_hd] es_hd] Hpe_hd].
+      dcase (zpexprs_of_premises_vl st vl_hd g_hd t_hd tl) =>
+      [[[[vl_tl g_tl] t_tl] es_tl] Hpe_tl]. case=> ? ? ? ? Hnew Hsize Hcon; subst.
+      apply: (IH _ _ _ _ _ _ _ Hpe_tl).
+      + exact: (zpexpr_of_premise_newer (zpexpr_of_premise_vl_novl Hpe_hd) Hnew).
+      + exact: (zpexpr_of_premise_vl_size_bounded Hpe_hd).
+      + exact: (zpexpr_of_premise_vl_consistent Hpe_hd Hnew Hsize Hcon).
+  Qed.
+
+  Lemma zpexpr_of_conseq_vl_consistent st vl g t e vl' g' t' pe pm :
+    zpexpr_of_conseq_vl st vl g t e = (vl', g', t', pe, pm) ->
+    newer_than_vm g t -> vl_size_bounded vl g ->
+    consistent st vl t -> consistent st vl' t'.
+  Proof.
+    elim: e vl g t vl' g' t' pe pm => /=.
+    - move=> e1 e2 ivl ig it ovl og ot pe pm.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      case=> ? ? ? ? ? Hnew Hsize Hcon; subst.
+      apply: (zpexpr_of_zexp_vl_consistent Hpe2).
+      + exact: (zpexpr_of_zexp_newer (zpexpr_of_zexp_vl_novl Hpe1) Hnew).
+      + exact: (zpexpr_of_zexp_vl_size_bounded Hpe1 Hsize).
+      + exact: (zpexpr_of_zexp_vl_consistent Hpe1 Hnew Hsize Hcon).
+    - move=> e1 e2 e3 ivl ig it ovl og ot pe pm.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      dcase (zpexpr_of_zexp_vl st vl2 g2 t2 e3) => [[[[vl3 g3] t3] pe3] Hpe3].
+      case => ? ? ? ? ? Hnew Hsize Hcon; subst.
+      move: (zpexpr_of_zexp_newer (zpexpr_of_zexp_vl_novl Hpe1) Hnew) => Hnew1.
+      move: (zpexpr_of_zexp_newer (zpexpr_of_zexp_vl_novl Hpe2) Hnew1) => Hnew2.
+      move: (zpexpr_of_zexp_vl_size_bounded Hpe1 Hsize) => Hsize1.
+      move: (zpexpr_of_zexp_vl_size_bounded Hpe2 Hsize1) => Hsize2.
+      apply: (zpexpr_of_zexp_vl_consistent Hpe3 Hnew2 Hsize2).
+      apply: (zpexpr_of_zexp_vl_consistent Hpe2 Hnew1 Hsize1).
+      exact: (zpexpr_of_zexp_vl_consistent Hpe1 Hnew Hsize Hcon).
+  Qed.
+
+  Lemma zpexprs_of_pspec_vl_consistent st sp vl g t ps m q :
+    zpexprs_of_pspec_vl st sp = (vl, g, t, ps, m, q) ->
+    consistent st vl t.
+  Proof.
+    rewrite /zpexprs_of_pspec_vl.
+    dcase (zpexprs_of_premises_vl st init_vl init_pos init_vm (ppremises sp)) =>
+    [[[[vl_p g_p] t_p] ps_p] Hpe_p].
+    dcase (zpexpr_of_conseq_vl st vl_p g_p t_p (pconseq sp)) =>
+    [[[[[vl_q g_q] t_q] oq] om] Hpe_q].
+    case=> ? ? ? ? ? ?; subst.
+    move: (zpexprs_of_premises_newer (zpexprs_of_premises_vl_novl Hpe_p)
+                                     init_newer_than_vm) => Hnew_p.
+    move: (zpexprs_of_premises_vl_size_bounded Hpe_p init_vl_size_bounded) => Hsize_p.
+    apply: (zpexpr_of_conseq_vl_consistent Hpe_q Hnew_p Hsize_p).
+    apply: (zpexprs_of_premises_vl_consistent
+              Hpe_p init_newer_than_vm init_vl_size_bounded).
+    exact: init_consistent.
+  Qed.
+
+
+
+  (* Relate ZPEeval and ZSSA.eval_zexp *)
+
+  Lemma zpexpr_of_var_vl_zpeeval_some st vl g t v vl' g' t' pe pv :
+    consistent st vl t -> SSAVM.find v t = Some pv ->
+    zpexpr_of_var_vl st vl g t v = (vl', g', t', pe) ->
+    ZPEeval vl' pe = ZSSAStore.acc v st.
+  Proof.
+    move=> Hcon Hfind. rewrite /zpexpr_of_var_vl. rewrite Hfind.
+    case=> ? ? ? ?; subst. exact: (consistent_zpeeval_some Hcon Hfind).
+  Qed.
+
+  Lemma zpexpr_of_var_vl_zpeeval_none st vl g t v vl' g' t' pe :
+    vl_size_bounded vl g -> SSAVM.find v t = None ->
+    zpexpr_of_var_vl st vl g t v = (vl', g', t', pe) ->
+    ZPEeval vl' pe = ZSSAStore.acc v st.
+  Proof.
+    move=> Hsize Hfind. rewrite /zpexpr_of_var_vl. rewrite Hfind.
+    case=> ? ? ? ?; subst. exact: (zpeeval_rcons_last _ Hsize).
+  Qed.
+
+  Lemma zpexpr_of_var_vl_zpeeval st vl g t v vl' g' t' pe :
+    vl_size_bounded vl g -> consistent st vl t ->
+    zpexpr_of_var_vl st vl g t v = (vl', g', t', pe) ->
+    ZPEeval vl' pe = ZSSAStore.acc v st.
+  Proof.
+    move=> Hsize Hcon Hvl. case Hfind: (SSAVM.find v t).
+    - exact: (zpexpr_of_var_vl_zpeeval_some Hcon Hfind Hvl).
+    - exact: (zpexpr_of_var_vl_zpeeval_none Hsize Hfind Hvl).
+  Qed.
+
+  Lemma zpexpr_of_zexp_vl_zpeeval st vl g t e vl' g' t' pe :
+    zpexpr_of_zexp_vl st vl g t e = (vl', g', t', pe) ->
+    newer_than_vm g t -> vl_size_bounded vl g -> consistent st vl t ->
+    ZPEeval vl' pe = ZSSA.eval_zexp e st.
+  Proof.
+    elim: e vl g t vl' g' t' pe => /=.
+    - move=> v ivl ig it ovl og ot pe Hvl Hnew Hsize Hcon.
+      exact: (zpexpr_of_var_vl_zpeeval Hsize Hcon Hvl).
+    - move=> n ivl ig it ovl og ot pe [] ? ? ? ? Hnew Hsize Hcon; subst. reflexivity.
+    - move=> op e IH ivl ig it ovl og ot pe.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e) => [[[[vl' g'] t'] pe'] Hpe].
+      case=> ? ? ? ? Hnew Hsize Hcon; subst.
+      rewrite -(IH _ _ _ _ _ _ _ Hpe Hnew Hsize Hcon). exact: zpexpr_of_eunop_zpeeval.
+    - move=> op e1 IH1 e2 IH2 ivl ig it ovl og ot pe.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      case=> ? ? ? ? Hnew Hsize Hcon; subst.
+      move: (zpexpr_of_zexp_newer (zpexpr_of_zexp_vl_novl Hpe1) Hnew) => Hnew1.
+      move: (zpexpr_of_zexp_newer (zpexpr_of_zexp_vl_novl Hpe2) Hnew1) => Hnew2.
+      move: (zpexpr_of_zexp_vl_size_bounded Hpe1 Hsize) => Hsize1.
+      move: (zpexpr_of_zexp_vl_size_bounded Hpe2 Hsize1) => Hsize2.
+      move: (zpexpr_of_zexp_vl_consistent Hpe1 Hnew Hsize Hcon) => Hcon1.
+      move: (zpexpr_of_zexp_vl_consistent Hpe2 Hnew1 Hsize1 Hcon1) => Hcon2.
+      rewrite -(IH2 _ _ _ _ _ _ _ Hpe2 Hnew1 Hsize1 Hcon1).
+      rewrite -(IH1 _ _ _ _ _ _ _ Hpe1 Hnew Hsize Hcon).
+      rewrite (@prefix_of_zpeeval vl1 ovl g1 pe1).
+      + exact: zpexpr_of_ebinop_zpeeval.
+      + exact: (zpexpr_of_zexp_vl_prefix_of Hpe2).
+      + assumption.
+      + exact: (zpexpr_of_zexp_zpexpr_bounded (zpexpr_of_zexp_vl_novl Hpe1) Hnew).
+  Qed.
+
+  Lemma zpexpr_of_premise_vl_zpeeval st vl g t e vl' g' t' pe :
+    zpexpr_of_premise_vl st vl g t e = (vl', g', t', pe) ->
+    newer_than_vm g t -> vl_size_bounded vl g -> consistent st vl t ->
+    ZPEeval vl' pe = 0 <-> eval_szbexp e st.
+  Proof.
+    elim: e vl g t vl' g' t' pe => /=.
+    - move=> e1 e2 ivl ig it ovl og ot pe.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      case => ? ? ? ? Hnew Hsize Hcon; subst; simpl.
+      move: (zpexpr_of_zexp_newer (zpexpr_of_zexp_vl_novl Hpe1) Hnew) => Hnew1.
+      move: (zpexpr_of_zexp_vl_size_bounded Hpe1 Hsize) => Hsize1.
+      move: (zpexpr_of_zexp_vl_consistent Hpe1 Hnew Hsize Hcon) => Hcon1.
+      move: (zpexpr_of_zexp_zpexpr_bounded (zpexpr_of_zexp_vl_novl Hpe1) Hnew) => Hzb1.
+      move: (zpexpr_of_zexp_vl_prefix_of Hpe2) => Hprefix_of12.
+      rewrite (zpexpr_of_zexp_vl_zpeeval Hpe2 Hnew1 Hsize1 Hcon1).
+      rewrite -(prefix_of_zpeeval Hprefix_of12 Hsize1 Hzb1).
+      rewrite (zpexpr_of_zexp_vl_zpeeval Hpe1 Hnew Hsize Hcon).
+      split; [exact: Zminus_eq | exact: Zeq_minus].
+    - move=> e1 e2 e3 ivl ig it ovl og ot pe.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      dcase (zpexpr_of_zexp_vl st vl2 g2 t2 e3) => [[[[vl3 g3] t3] pe3] Hpe3].
+      case => ? ? ? ? Hnew Hsize Hcon; subst.
+      set m := (if ZSSA.eval_zexp e3 st == 0
+                then 0
+                else (ZSSA.eval_zexp e1 st - ZSSA.eval_zexp e2 st)
+                       / ZSSA.eval_zexp e3 st).
+      move: (zpexpr_of_zexp_newer (zpexpr_of_zexp_vl_novl Hpe1) Hnew) => Hnew1.
+      move: (zpexpr_of_zexp_newer (zpexpr_of_zexp_vl_novl Hpe2) Hnew1) => Hnew2.
+      move: (zpexpr_of_zexp_vl_size_bounded Hpe1 Hsize) => Hsize1.
+      move: (zpexpr_of_zexp_vl_size_bounded Hpe2 Hsize1) => Hsize2.
+      move: (zpexpr_of_zexp_vl_size_bounded Hpe3 Hsize2) => Hsize3.
+      move: (zpexpr_of_zexp_vl_consistent Hpe1 Hnew Hsize Hcon) => Hcon1.
+      move: (zpexpr_of_zexp_vl_consistent Hpe2 Hnew1 Hsize1 Hcon1) => Hcon2.
+      move: (zpexpr_of_zexp_gen (zpexpr_of_zexp_vl_novl Hpe2)) => Hg12.
+      move: (zpexpr_of_zexp_gen (zpexpr_of_zexp_vl_novl Hpe3)) => Hg23.
+      move: (Pos.le_trans _ _ _ Hg12 Hg23) => Hg13.
+      move: (zpexpr_of_zexp_zpexpr_bounded (zpexpr_of_zexp_vl_novl Hpe1) Hnew) =>
+      Hzb11.
+      move: (zpexpr_of_zexp_zpexpr_bounded (zpexpr_of_zexp_vl_novl Hpe2) Hnew1) =>
+      Hzb22.
+      move: (zpexpr_of_zexp_zpexpr_bounded (zpexpr_of_zexp_vl_novl Hpe3) Hnew2) =>
+      Hzb33.
+      move: (zpexpr_bounded_ge_bounded Hg13 Hzb11) => Hzb13.
+      move: (zpexpr_bounded_ge_bounded Hg23 Hzb22) => Hzb23.
+      move: (zpexpr_of_zexp_vl_prefix_of Hpe2) => Hprefix_of12.
+      move: (zpexpr_of_zexp_vl_prefix_of Hpe3) => Hprefix_of23.
+      move: (prefix_of_trans Hprefix_of12 Hprefix_of23) => Hprefix_of13.
+      rewrite 2!ZPEeval_sub ZPEeval_mul.
+      (* remove rcons *)
+      rewrite -(rcons_zpeeval m Hsize3 Hzb13).
+      rewrite -(rcons_zpeeval m Hsize3 Hzb23).
+      rewrite -(rcons_zpeeval m Hsize3 Hzb33).
+      rewrite (zpeeval_rcons_last _ Hsize3).
+      (* rewrite pe1 *)
+      rewrite -(prefix_of_zpeeval Hprefix_of13 Hsize1 Hzb11).
+      rewrite (zpexpr_of_zexp_vl_zpeeval Hpe1 Hnew Hsize Hcon).
+      (* rewrite pe2 *)
+      rewrite -(prefix_of_zpeeval Hprefix_of23 Hsize2 Hzb22).
+      rewrite (zpexpr_of_zexp_vl_zpeeval Hpe2 Hnew1 Hsize1 Hcon1).
+      (* rewrite pe3 *)
+      rewrite (zpexpr_of_zexp_vl_zpeeval Hpe3 Hnew2 Hsize2 Hcon2).
+      (* *)
+      split.
+      + move=> H. exists m. exact: (Zminus_eq _ _ H).
+      + move=> [m' H]. rewrite /m. case H3: (ZSSA.eval_zexp e3 st == 0).
+        * rewrite (eqP H3) in H. rewrite H. rewrite Z.mul_0_r Z.mul_0_l. reflexivity.
+        * rewrite H. move/eqP: H3 => H3. rewrite /m (Z.div_mul _ _ H3).
+          apply: Zeq_minus. reflexivity.
+  Qed.
+
+  Lemma zpexprs_of_premises_vl_zpeeval st vl g t es vl' g' t' pes :
+    zpexprs_of_premises_vl st vl g t es = (vl', g', t', pes) ->
+    newer_than_vm g t -> vl_size_bounded vl g -> consistent st vl t ->
+    (forall e : szbexp, e \in es -> eval_szbexp e st) ->
+    zpexpr_all0 vl' pes.
+  Proof.
+    elim: es vl g t vl' g' t' pes => [| hd tl IH] /=.
+    - move=> ivl ig it ovl og ot opes [] ? ? ? ? Hnew Hsize Hcon Hsz; subst. done.
+    - move=> ivl ig it ovl og ot opes.
+      dcase (zpexpr_of_premise_vl st ivl ig it hd) =>
+      [[[[vl_hd g_hd] t_hd] es_hd] Hpe_hd].
+      dcase (zpexprs_of_premises_vl st vl_hd g_hd t_hd tl) =>
+      [[[[vl_tl g_tl] t_tl] es_tl] Hpe_tl].
+      case=> ? ? ? ? Hnew Hsize Hcon Hsz; subst. split.
+      + move: (zpexprs_of_premises_vl_prefix_of Hpe_tl) => Hprefix_of_hd.
+        move: (zpexpr_of_premise_vl_size_bounded Hpe_hd Hsize) => Hsize_hd.
+        move: (zpexpr_of_premise_zpexpr_bounded (zpexpr_of_premise_vl_novl Hpe_hd)
+                                                Hnew) => Hbounded_hd.
+        rewrite -(prefix_of_zpeeval Hprefix_of_hd Hsize_hd Hbounded_hd).
+        apply/(zpexpr_of_premise_vl_zpeeval Hpe_hd Hnew Hsize Hcon). apply: Hsz.
+        by rewrite in_cons eqxx.
+      + move: (zpexpr_of_premise_newer (zpexpr_of_premise_vl_novl Hpe_hd) Hnew) =>
+        Hnew_hd. move: (zpexpr_of_premise_vl_size_bounded Hpe_hd Hsize) => Hsize_hd.
+        move: (zpexpr_of_premise_vl_consistent Hpe_hd Hnew Hsize Hcon) => Hcon_hd.
+        apply: (IH _ _ _ _ _ _ _ Hpe_tl Hnew_hd Hsize_hd Hcon_hd). move=> e Hin.
+        apply: Hsz. by rewrite in_cons Hin orbT.
+  Qed.
+
+  Lemma zpexpr_of_conseq_vl_eval_szbexp st vl g t e vl' g' t' pe pm :
+    zpexpr_of_conseq_vl st vl g t e = (vl', g', t', pe, pm) ->
+    newer_than_vm g t -> vl_size_bounded vl g -> consistent st vl t ->
+    (exists c : Z, ZPEeval vl' pe = c * ZPEeval vl' pm) ->
+    eval_szbexp e st.
+  Proof.
+    elim: e vl g t vl' g' t' pe pm => /=.
+    - move=> e1 e2 ivl ig it ovl og ot ope opm.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      case=> ? ? ? ? ? Hnew Hsize Hcon [c Heq]; subst.
+      rewrite /= Z.mul_0_r in Heq. move: (Zminus_eq _ _ Heq).
+      (* rewrite pe1 *)
+      move: (zpexpr_of_zexp_vl_prefix_of Hpe2) => Hpre1o.
+      move: (zpexpr_of_zexp_vl_size_bounded Hpe1 Hsize) => Hsize1.
+      move: (zpexpr_of_zexp_zpexpr_bounded (zpexpr_of_zexp_vl_novl Hpe1) Hnew) => Hzb1.
+      rewrite -(prefix_of_zpeeval Hpre1o Hsize1 Hzb1).
+      rewrite (zpexpr_of_zexp_vl_zpeeval Hpe1 Hnew Hsize Hcon).
+      (* rewrite pe2 *)
+      move: (zpexpr_of_zexp_newer (zpexpr_of_zexp_vl_novl Hpe1) Hnew) => Hnew1.
+      move: (zpexpr_of_zexp_vl_consistent Hpe1 Hnew Hsize Hcon) => Hcon1.
+      rewrite (zpexpr_of_zexp_vl_zpeeval Hpe2 Hnew1 Hsize1 Hcon1).
+      (**)
+      by apply.
+    - move=> e1 e2 e3 ivl ig it ovl og ot ope opm.
+      dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
+      dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
+      dcase (zpexpr_of_zexp_vl st vl2 g2 t2 e3) => [[[[vl3 g3] t3] pe3] Hpe3].
+      case=> ? ? ? ? ? Hnew Hsize Hcon [c Heq]; subst. exists c.
+      rewrite /= in Heq. move: Heq.
+      (* rewrite pe1 *)
+      move: (zpexpr_of_zexp_vl_prefix_of Hpe2) => Hpre12.
+      move: (zpexpr_of_zexp_vl_prefix_of Hpe3) => Hpre2o.
+      move: (prefix_of_trans Hpre12 Hpre2o) => Hpre1o.
+      move: (zpexpr_of_zexp_vl_size_bounded Hpe1 Hsize) => Hsize1.
+      move: (zpexpr_of_zexp_zpexpr_bounded (zpexpr_of_zexp_vl_novl Hpe1) Hnew) => Hzb1.
+      rewrite -(prefix_of_zpeeval Hpre1o Hsize1 Hzb1).
+      rewrite (zpexpr_of_zexp_vl_zpeeval Hpe1 Hnew Hsize Hcon).
+      (* rewrite pe2 *)
+      move: (zpexpr_of_zexp_vl_size_bounded Hpe2 Hsize1) => Hsize2.
+      move: (zpexpr_of_zexp_newer (zpexpr_of_zexp_vl_novl Hpe1) Hnew) => Hnew1.
+      move: (zpexpr_of_zexp_zpexpr_bounded (zpexpr_of_zexp_vl_novl Hpe2) Hnew1) => Hzb2.
+      rewrite -(prefix_of_zpeeval Hpre2o Hsize2 Hzb2).
+      move: (zpexpr_of_zexp_vl_consistent Hpe1 Hnew Hsize Hcon) => Hcon1.
+      rewrite (zpexpr_of_zexp_vl_zpeeval Hpe2 Hnew1 Hsize1 Hcon1).
+      (* rewrite opm *)
+      move: (zpexpr_of_zexp_newer (zpexpr_of_zexp_vl_novl Hpe2) Hnew1) => Hnew2.
+      move: (zpexpr_of_zexp_vl_consistent Hpe2 Hnew1 Hsize1 Hcon1) => Hcon2.
+      rewrite (zpexpr_of_zexp_vl_zpeeval Hpe3 Hnew2 Hsize2 Hcon2).
+      (* *)
+      by apply.
+  Qed.
+
+
+
+  (* Convert store to vl *)
+
+  Definition vl_of_store (st : ZSSAStore.t) (sp : pspec) : list Z :=
+    let '(vl, _, _, _, _, _) := zpexprs_of_pspec_vl st sp in
+    vl.
+
+  Lemma vl_of_store_premises st sp g t ps m q :
+    zpexprs_of_pspec sp = (g, t, ps, m, q) ->
+    (forall e : szbexp, e \in ppremises sp -> eval_szbexp e st) ->
+    zpexpr_all0 (vl_of_store st sp) ps.
+  Proof.
+    case: sp => [pres post] /=. rewrite /vl_of_store.
+    dcase (zpexprs_of_pspec_vl st {| ppremises := pres; pconseq := post |}) =>
+    [[[[[[ovl og] ot] ops] om] oq] Hpe].
+    rewrite (zpexprs_of_pspec_vl_novl Hpe). case=> ? ? ? ? ?; subst.
+    move: Hpe; rewrite /zpexprs_of_pspec_vl /=.
+    dcase (zpexprs_of_premises_vl st init_vl init_pos init_vm pres) =>
+    [[[[vl_p g_p] t_p] ps_p] Hpe_p].
+    dcase (zpexpr_of_conseq_vl st vl_p g_p t_p post) =>
+    [[[[[vl_q g_q] t_q] q_q] m_q] Hpe_q].
+    case=> ? ? ? ? ? ?; subst. move=> Heval.
+    apply: (prefix_of_zpexpr_all0
+              (zpexpr_of_conseq_vl_prefix_of Hpe_q)
+              (zpexprs_of_premises_vl_size_bounded Hpe_p init_vl_size_bounded)
+              (zpexprs_of_premises_zpexprs_bounded (zpexprs_of_premises_vl_novl Hpe_p)
+                                                   init_newer_than_vm)).
+    exact: (zpexprs_of_premises_vl_zpeeval
+              Hpe_p init_newer_than_vm init_vl_size_bounded (init_consistent _)
+              Heval).
+  Qed.
+
+  Lemma vl_of_store_conseq st sp g t ps m q :
+    zpexprs_of_pspec sp = (g, t, ps, m, q) ->
+    (exists c, ZPEeval (vl_of_store st sp) q = (c * ZPEeval (vl_of_store st sp) m)) ->
+    eval_szbexp (pconseq sp) st.
+  Proof.
+    case: sp => [pres post] /=. rewrite /vl_of_store.
+    dcase (zpexprs_of_pspec_vl st {| ppremises := pres; pconseq := post |}) =>
+    [[[[[[ovl og] ot] ops] om] oq] Hpe].
+    rewrite (zpexprs_of_pspec_vl_novl Hpe). case=> ? ? ? ? ?; subst.
+    move: Hpe; rewrite /zpexprs_of_pspec_vl /=.
+    dcase (zpexprs_of_premises_vl st init_vl init_pos init_vm pres) =>
+    [[[[vl_p g_p] t_p] ps_p] Hpe_p].
+    dcase (zpexpr_of_conseq_vl st vl_p g_p t_p post) =>
+    [[[[[vl_q g_q] t_q] q_q] m_q] Hpe_q].
+    case=> ? ? ? ? ? ?; subst. move=> Heval.
+    move: (zpexprs_of_premises_newer (zpexprs_of_premises_vl_novl Hpe_p)
+                                     init_newer_than_vm) => Hnew_p.
+    move: (zpexprs_of_premises_vl_size_bounded Hpe_p init_vl_size_bounded) => Hsize_p.
+    move: (zpexprs_of_premises_vl_consistent
+             Hpe_p init_newer_than_vm init_vl_size_bounded (init_consistent _)) =>
+    Hcon_p.
+    exact: (zpexpr_of_conseq_vl_eval_szbexp Hpe_q Hnew_p Hsize_p Hcon_p Heval).
+  Qed.
+
+End PExpr.
+
+
+
+Section Checker.
 
   (* find cs and c *)
   Variable find_coefficients : seq (PExpr Z) -> PExpr Z -> PExpr Z -> seq Z * Z.
@@ -324,7 +1649,7 @@ Section PExpr.
     | hd::tl => PEadd hd (sum_polys tl)
     end.
 
-  (* Two polynomials are semantically equal *)
+  (* Two polynomials are syntactically equal after normalization *)
   Definition zpexpr_eqb (p1 p2 : PExpr Z) : bool :=
     ZPeq (Znorm_subst p1) (Znorm_subst p2).
 
@@ -364,26 +1689,23 @@ Section PExpr.
         * split; [exact: Hhd | exact: Htl_tl].
   Qed.
 
-  Lemma zimply_eq_valid_pspec g t g' t' s ps q m c :
-    zpexprs_of_premises init_pos init_vm (ppremises s) = (g, t, ps) ->
-    zpexpr_of_conseq g t (pconseq s) = (g', t', q, m) ->
-    zpimply_eq ps q (PEmul (PEc c) m) ->
-    valid_pspec s.
+  Lemma zimply_eq_valid_pspec sp g t ps m q c :
+    zpexprs_of_pspec sp = (g, t, ps, m, q) -> zpimply_eq ps q (PEmul (PEc c) m) ->
+    valid_pspec sp.
   Proof.
-  Admitted.
+    move=> Hpoly Himp st Hzpre. move: (Himp (vl_of_store st sp)) => {Himp} Himp.
+    move: (vl_of_store_premises Hpoly Hzpre) => Hall0.
+    move: (Himp Hall0) => Hqcm. apply: (vl_of_store_conseq Hpoly).
+    exists (ZPEeval (vl_of_store st sp) (PEc c)). exact: Hqcm.
+  Qed.
 
   (* If the coefficients are verified by the checker, the pspec is valid *)
-  Theorem checker_valid_pspec s ps m q cs c :
-    zpexprs_of_pspec s = (ps, m, q) ->
+  Theorem checker_valid_pspec s g t ps m q cs c :
+    zpexprs_of_pspec s = (g, t, ps, m, q) ->
     coefficients_checker ps m q cs c ->
     valid_pspec s.
   Proof.
-    rewrite /zpexprs_of_pspec.
-    dcase (zpexprs_of_premises init_pos init_vm (ppremises s)).
-    move=> [[g_p t_p] ps']. dcase (zpexpr_of_conseq g_p t_p (pconseq s)).
-    move=> [[[g_q t_q] g'] m'] /=. move=> Hconseq Hpremises [] ? ? ?. subst.
-    move=> Hch. move: (checker_imply_eq Hch) => Himply.
-    exact: (zimply_eq_valid_pspec Hpremises Hconseq Himply).
+    move=> Hpoly Hch. exact: (zimply_eq_valid_pspec Hpoly (checker_imply_eq Hch)).
   Qed.
 
-End PExpr.
+End Checker.
