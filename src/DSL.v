@@ -2,7 +2,7 @@
 From Coq Require Import List ZArith.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
-From BitBlasting Require Import Typ TypEnv State.
+From BitBlasting Require Import Typ TypEnv State BBCommon.
 From ssrlib Require Import Var SsrOrder ZAriths FSets FMaps Tactics.
 
 Set Implicit Arguments.
@@ -544,11 +544,11 @@ Module MakeDSL
        (VM : SsrFMap with Module SE := V)
        (TE : TypEnv with Module SE := V)
        (S : BitsStore V TE).
-
   Local Open Scope dsl.
   Local Open Scope bits.
 
   Module VSLemmas := FSetLemmas VS.
+  Module TELemmas := FMapLemmas TE.
 
   (* Variables *)
 
@@ -1384,6 +1384,16 @@ Module MakeDSL
 
   Definition eval_program (te : TE.env) p s t : Prop := eval_instrs te p s t.
 
+  Lemma eval_program_singleton i te1 s1 s2:
+      eval_program te1 ([:: i]) s1 s2 ->
+      eval_instr te1 i s1 s2.
+  Proof.
+    move=> H.
+    inversion H; subst.
+    inversion H5; subst.
+    assumption.
+  Qed.
+
   (* Partial correctness *)
 
   Definition valid_spec (s : spec) : Prop :=
@@ -1417,6 +1427,7 @@ Module MakeDSL
     - exact: (Hr _ _ Hcon Hrpre Hprog).
   Qed.
 
+  (* clash with Ltac notation
   Local Notation "te , s |= f" := (eval_bexp f te s) (at level 74, no associativity).
   Local Notation "f ===> g" := (entails f g) (at level 82, no associativity).
   Local Notation "te |= {{ f }} p {{ g }}" :=
@@ -1434,8 +1445,7 @@ Module MakeDSL
                     rspre := f;
                     rsprog := p;
                     rspost := g |}) (at level 83).
-
-
+  *)
 
   (* Well-typedness *)
 
@@ -1535,7 +1545,6 @@ Module MakeDSL
   Definition vars_env (te : TE.env) := TEKS.key_set te.
 
   (* Note: Use TE.mem v te to determine if v is defined *)
-  (*
   Definition is_defined (v : var) (te : TE.env) : bool :=
     TE.mem v te.
 
@@ -1547,15 +1556,15 @@ Module MakeDSL
   Proof.
     rewrite /is_defined /vars_env. exact: TEKS.mem_key_set.
   Qed.
-   *)
 
   (* Use VS.mem v (vars_env te) to determine if v is defined *)
-
+  (*
   Definition is_defined (v : var) (te : TE.env) :=
     VS.mem v (vars_env te).
 
   Definition are_defined (vs : VS.t) (te : TE.env) :=
     VS.subset vs (vars_env te).
+   *)
 
   Definition well_defined_instr (te : TE.env) (i : instr) : bool :=
     match i with
@@ -1770,91 +1779,542 @@ Module MakeDSL
   (* Probably useful *)
   (* TO BE confirmed: how to modify (VS.subset vs1 vs2) and (VS.Equal vs1 vs2) *)
 
+  Lemma are_defined_compat te:
+    SetoidList.compat_bool VS.SE.eq (fun v => is_defined v te).
+  Proof.
+    move=> x y Heq; rewrite (eqP Heq) // .
+  Qed.
+
+  Lemma are_defined_union te vs1 vs2:
+    are_defined (VS.union vs1 vs2) te ->
+    are_defined vs1 te && are_defined vs2 te.
+  Proof.
+    rewrite /are_defined.
+    move=> H.
+    move: (VS.for_all_2 (are_defined_compat te) H) => {H} H.
+    rewrite (VS.for_all_1 (are_defined_compat te)).
+    rewrite andTb.
+    rewrite (VS.for_all_1 (are_defined_compat te)).
+    done.
+    intros x Hin.
+    move: (VS.union_3 vs1 Hin) => Hin2.
+    exact: (H _ Hin2).
+    intros x Hin.
+    move: (VS.union_2 vs2 Hin) => Hin2.
+    exact: (H _ Hin2).
+  Qed.
+
+  Lemma are_defined_subset te vs:
+    are_defined vs te <->
+    VS.subset vs (vars_env te).
+  Proof.
+    rewrite /are_defined.
+    split.
+    - move=> H.
+      move: (VS.for_all_2 (are_defined_compat te) H) => {H} H.
+      have Hsub: (VS.Subset vs (vars_env te)).
+      {
+        intro.
+        move=> Hin.
+        move: (H _ Hin) => {Hin} Hin.
+        move/idP: Hin => Hin.
+        rewrite /is_defined in Hin.
+        apply/VSLemmas.memP.
+        exact: (TEKS.mem_key_set Hin).
+      }
+      rewrite -> VSLemmas.F.subset_iff in Hsub.
+      exact: Hsub.
+    - move=> Hsub.
+      have Hsub2: (VS.subset vs (vars_env te) = true) by exact: Hsub.
+      rewrite <- VSLemmas.F.subset_iff in Hsub2.
+      rewrite /VS.Subset in Hsub2.
+      rewrite (VS.for_all_1 (are_defined_compat te)).
+      done.
+      intros x Hin.
+      move: (Hsub2 _ Hin) => Hin2.
+      rewrite /is_defined.
+      move/VSLemmas.memP: Hin2 => Hin2.
+      move: (TEKS.key_set_mem Hin2) => Hin3.
+      exact: Hin3.
+  Qed.
+
+  Lemma well_formed_instr_subset_rvs_aux te i :
+    well_formed_instr te i ->
+    VS.for_all (fun v => is_defined v te) (rvs_instr i).
+  Proof.
+    elim: i => /=; intros;
+                (let rec tac :=
+                     match goal with
+                     | H : ?a |- ?a => assumption
+                     | H : ?l \/ ?r |- _ => case: H => H; tac
+                     | |- VS.For_all _ _ => intros x Hin; tac
+                     | H: VS.In ?x (VS.union ?vs1 ?vs2) |- _
+                       => let Hin := fresh "Hin" in move:(VS.union_1 H) => Hin; clear H; tac
+                     | H : is_true(well_formed_instr ?te ?i) |- _  =>
+                       let Hwd := fresh "Hwd" in let Hwt := fresh "Hwt" in
+                                                 move/andP: H => [Hwd Hwt]; tac
+                     | Hwd: is_true (well_defined_instr ?te ?i) |- _ =>
+                       (rewrite /= in Hwd); tac
+                     | H : is_true (_ && _) |- _ =>
+                       let H1 := fresh in let H2 := fresh in move/andP: H => [H1 H2]; tac
+                     | |- is_true (VS.for_all (is_defined^~ ?te) _) =>
+                       apply (VS.for_all_1 (are_defined_compat te)); tac
+                     | Hin: VS.In ?x ?vs,Hwd: is_true (are_defined ?vs ?te)  |- is_defined ?x ?te = true
+                         => exact: ((VS.for_all_2 (are_defined_compat te) Hwd) _ Hin)
+                     | Hin: VS.In ?x VS.empty |- _ =>
+                       (rewrite -> VSLemmas.empty_iff in Hin); inversion Hin
+                     | |- _ => idtac
+                     end
+                 in tac).
+  Qed.
+
   Lemma well_formed_instr_subset_rvs te i :
     well_formed_instr te i ->
     VS.subset (rvs_instr i) (vars_env te).
   Proof.
-    rewrite /well_formed_instr.
-    elim: i => /=; intros;
+    move=> Hwf.
+    move: (well_formed_instr_subset_rvs_aux Hwf) => Hsub_rvs.
+    have H: (VS.Subset (rvs_instr i) (vars_env te)).
+    {
+      intro.
+      move: (VS.for_all_2 (are_defined_compat te) Hsub_rvs) => Hsub_rvs2.
+      move=> Hin.
+      move: (Hsub_rvs2 _ Hin) => Hin2.
+      rewrite /is_defined in Hin2.
+      move/idP: Hin2 => Hin2.
+      apply/VSLemmas.memP.
+      exact: (TEKS.mem_key_set Hin2).
+    }
+    rewrite -> VSLemmas.F.subset_iff in H.
+    exact: H.
+  Qed.
+
+  Lemma is_defined_submap k (te1 te2: TE.env):
+    TELemmas.submap te1 te2 ->
+    is_defined k te1 -> is_defined k te2.
+  Proof.
+    move=> Hsm.
+    intros.
+    move: (TELemmas.mem_find_some H) => Hfind1.
+    destruct Hfind1.
+    move: (Hsm k x H0) => Hfind2.
+    apply TELemmas.find_some_mem with x.
+    exact: Hfind2.
+  Qed.
+
+  Lemma are_defined_submap vs (te1 te2: TE.env):
+    TELemmas.submap te1 te2 ->
+    are_defined vs te1 -> are_defined vs te2.
+  Proof.
+    move=> Hsm Had1.
+    rewrite /TELemmas.submap in Hsm.
+    apply (VS.for_all_1 (are_defined_compat te2)).
+    move=> v Hin.
+    apply (is_defined_submap Hsm).
+    move: (VS.for_all_2 (are_defined_compat te1) Had1) => Hwd2.
+    exact: (Hwd2 v Hin).
+  Qed.
+
+  Lemma well_formed_instr_well_defined te1 te2 i :
+    well_formed_instr te1 i ->
+    TELemmas.submap te1 te2 ->
+    well_defined_instr te2 i.
+  Proof.
+    elim: i te1 te2 => /=; intros;
+                (let rec tac :=
+                     match goal with
+                     | H : ?a |- ?a => assumption
+                     | H : ?l \/ ?r |- _ => case: H => H; tac
+                     | |- ?l /\ ?r => split; tac
+                     | |- is_true (_ && _) => apply /andP; tac
+                     | H : is_true(well_formed_instr ?te ?i) |- _  =>
+                       let Hwd := fresh "Hwd" in let Hwt := fresh "Hwt" in
+                                                 move/andP: H => [Hwd Hwt]; tac
+                     | Hwd: is_true (well_defined_instr ?te ?i) |- _ =>
+                       (rewrite /= in Hwd); tac
+                     | H : is_true (_ && _) |- _ =>
+                       let H1 := fresh in let H2 := fresh in move/andP: H => [H1 H2]; tac
+                     | Hsub: TELemmas.submap ?te1 ?te2, Hwd: is_true (are_defined ?vs ?te1)
+                       |- is_true (are_defined ?vs ?te2) =>
+                       exact: (are_defined_submap Hsub Hwd); tac
+                     | |- _ => idtac
+                     end
+                 in tac).
+  Qed.
+
+  Lemma atyp_submap a te1 te2:
+    TELemmas.submap te1 te2 ->
+    are_defined (vars_atomic a) te1 ->
+    atyp a te1 = atyp a te2.
+  Proof.
+    elim: a te1 te2.
+    - move=> t te1 te2 Hsm Hd.
+      rewrite /= in Hd.
+      rewrite /are_defined in Hd.
+      move: (VS.for_all_2 (are_defined_compat te1) Hd) => Hwd2.
+      move: (VSLemmas.P.Dec.FSetDecideTestCases.test_In_singleton t) => Hin.
+      move: (Hwd2 _ Hin) => Hid.
+      rewrite /TELemmas.submap in Hsm.
+      rewrite /=.
+      rewrite /is_defined in Hid.
+      move: (TELemmas.mem_find_some Hid) => Hfind.
+      destruct Hfind.
+      move: (Hsm _ _ H) => H2.
+      rewrite (TE.find_some_vtyp H) (TE.find_some_vtyp H2).
+      reflexivity.
+    - done.
+  Qed.
+
+  Lemma well_typed_eexp_submap e te1 te2:
+    TELemmas.submap te1 te2 ->
+    are_defined (vars_eexp e) te1 ->
+    well_typed_eexp te1 e ->
+    well_typed_eexp te2 e.
+  Proof.
+    elim: e te1 te2 => //=; intros.
+    rewrite /are_defined in H2.
+    move: (VS.for_all_2 (are_defined_compat te1) H2) => Hwd.
+    rewrite /VS.For_all in Hwd.
+    move/andP: H3 => [Hwte0 Hwte1].
+    apply /andP.
+    split.
+    - apply H with te1.
+      + done.
+      + move/andP: (are_defined_union H2).
+        by inversion 1.
+      + done.
+    - apply H0 with te1.
+      + done.
+      + move/andP: (are_defined_union H2).
+        by inversion 1.
+      + done.
+  Qed.
+
+  Lemma well_typed_ebexp_submap e te1 te2:
+    TELemmas.submap te1 te2 ->
+    are_defined (vars_ebexp e) te1 ->
+    well_typed_ebexp te1 e ->
+    well_typed_ebexp te2 e.
+  Proof.
+    elim: e te1 te2 => //=; intros.
+    - move/andP: H1 => [Hwte Hwte0].
+      apply /andP.
+      split.
+      + apply well_typed_eexp_submap with te1.
+        * done.
+        * move/andP: (are_defined_union H0).
+            by inversion 1.
+        * done.
+      + apply well_typed_eexp_submap with te1.
+        * done.
+        * move/andP: (are_defined_union H0).
+            by inversion 1.
+        * done.
+      +  move/andP: H1 => [/andP [Hwte Hwte0] Hwte1].
+         apply /andP. split.
+         apply /andP. split.
+         * apply well_typed_eexp_submap with te1.
+           -- done.
+           -- move/andP: (are_defined_union H0).
+                by inversion 1.
+           -- done.
+         * apply well_typed_eexp_submap with te1.
+           -- done.
+           -- move/andP: (are_defined_union H0).
+              destruct 1 as [H1 H2].
+              move/andP: (are_defined_union H2).
+              by inversion 1.
+           -- done.
+         * apply well_typed_eexp_submap with te1.
+           -- done.
+           -- move/andP: (are_defined_union H0).
+              destruct 1 as [H1 H2].
+              move/andP: (are_defined_union H2).
+              by inversion 1.
+           -- done.
+    - move/andP: H3 => [Hwte Hwte0].
+      apply /andP.
+      move: (are_defined_union H2) => /andP [Hwd Hwd0].
+      split.
+      + apply H with te1; done.
+      + apply H0 with te1; done.
+  Qed.
+
+  Lemma well_typed_size_of_rexp_submap r te1 te2:
+    TELemmas.submap te1 te2 ->
+    are_defined (vars_rexp r) te1 ->
+    size_of_rexp r te1 == size_of_rexp r te2.
+  Proof.
+    elim: r te1 te2 => //=.
+    move=> x te1 te2 Hsm Hwd.
+    move: (VS.for_all_2 (are_defined_compat te1) Hwd) => Hwd2.
+    move: (VSLemmas.P.Dec.FSetDecideTestCases.test_In_singleton x) => Hin.
+    move: (Hwd2 _ Hin) => Hid.
+    rewrite /TELemmas.submap in Hsm.
+    rewrite /=.
+    rewrite /is_defined in Hid.
+    move: (TELemmas.mem_find_some Hid) => Hfind.
+    destruct Hfind.
+    move: (Hsm _ _ H) => H2.
+    have Htyp: (TE.vtyp x te1 = TE.vtyp x te2).
+    {
+      by rewrite (TE.find_some_vtyp H) (TE.find_some_vtyp H2).
+    }
+    remember (TE.vtyp x te1).
+    symmetry in Heqt, Htyp.
+    by rewrite (TE.vtyp_vsize Heqt) (TE.vtyp_vsize Htyp).
+  Qed.
+
+  Lemma well_typed_rexp_submap e te1 te2:
+    TELemmas.submap te1 te2 ->
+    are_defined (vars_rexp e) te1 ->
+    well_typed_rexp te1 e ->
+    well_typed_rexp te2 e.
+  Proof.
+    elim: e te1 te2 => //=; intros.
+    move/andP: H2 => [Hwte0 Hwte1].
+    apply /andP.
+    split.
+    - apply H with te1.
+      + done.
+      + done.
+      + done.
+    - by rewrite (eqP (well_typed_size_of_rexp_submap H0 H1)) in Hwte1.
+      move: H3 => /andP [/andP [/andP [Hwt0 Hsz0] Hwt1] Hsz1].
+      move: (are_defined_union H2) => /andP [H2_1 H2_2].
+    apply /andP. split.
+    apply /andP. split.
+    apply /andP. split.
+    - apply H with te1.
+      + done.
+      + move/andP: (are_defined_union H2).
+          by inversion 1.
+      + done.
+      + by rewrite (eqP (well_typed_size_of_rexp_submap H1 H2_1)) in Hsz0.
+    - apply H0 with te1.
+      + done.
+      + move/andP: (are_defined_union H2).
+          by inversion 1.
+      + done.
+      + by rewrite (eqP (well_typed_size_of_rexp_submap H1 H2_2)) in Hsz1.
+    - move/andP: H2 => [Hwt Hsz].
+      apply/andP. split.
+      + apply H with te1; auto.
+          by rewrite (eqP (well_typed_size_of_rexp_submap H0 H1)) in Hsz.
+    - move/andP: H2 => [Hwt Hsz].
+      apply/andP. split.
+      + apply H with te1; auto.
+          by rewrite (eqP (well_typed_size_of_rexp_submap H0 H1)) in Hsz.
+  Qed.
+
+  Ltac solve_well_typed_rexp_submap :=
     (let rec tac :=
          match goal with
          | H : ?a |- ?a => assumption
-         | H : is_true (_ && _) |- _ =>
-           let H1 := fresh in let H2 := fresh in move/andP: H => [H1 H2]; tac
-         | |- is_true (VS.subset (VS.add _ _) _) =>
-           apply: VSLemmas.subset_add3; tac
-         | |- is_true (VS.subset (VS.union _ _) _) =>
-           apply: VSLemmas.subset_union3; tac
-         | |- is_true (VS.subset VS.empty _) =>
-           exact: VSLemmas.subset_empty
-         | |- _ => idtac
-         end in
-     tac).
+         | H : ?l \/ ?r |- _ => case: H => H; tac
+         | H: is_true(are_defined (VS.union ?vs1 ?vs2) ?te) |- _ =>
+           let Hr1 := fresh "Hr1" in
+           let Hr2 := fresh "Hr2" in
+           move: (are_defined_union H) => /andP [Hr1 Hr2]; clear H; tac
+         | |- ?l /\ ?r => split; tac
+         | |- is_true (_ && _) => apply /andP; tac
+         | Hsub: TELemmas.submap ?te1 ?te2, Hwd: is_true (are_defined ?vs ?te1)
+           |- is_true (are_defined ?vs ?te2) =>
+           exact: (are_defined_submap Hsub Hwd); tac
+         | Hsub: TELemmas.submap ?te1 ?te2, Hwd: is_true (are_defined ?vs ?te1)
+           |- context [atyp ?a ?te2] =>
+           rewrite -(atyp_submap Hsub Hwd); tac
+         | Hsub: TELemmas.submap ?te1 ?te2
+           |- is_true (well_typed_rexp ?te2 ?r) =>
+           apply well_typed_rexp_submap with te1; tac
+         | Hsub: TELemmas.submap ?te1 ?te2, Hwd: is_true (are_defined (vars_rexp ?r) ?te1),
+                                                 Hsz: is_true (size_of_rexp ?r ?te1 == ?n)
+           |- is_true (size_of_rexp ?r ?te2 == ?n) =>
+             by rewrite (eqP (well_typed_size_of_rexp_submap Hsub Hwd)) in Hsz
+         | |- ?e => progress (auto)
+         | |- ?e => idtac
+         end
+     in tac).
+
+  Lemma well_typed_rbexp_submap r te1 te2:
+    TELemmas.submap te1 te2 ->
+    are_defined (vars_rbexp r) te1 ->
+    well_typed_rbexp te1 r ->
+    well_typed_rbexp te2 r.
+  Proof with solve_well_typed_rexp_submap.
+    elim: r te1 te2 => //=; intros; split_andb_hyps; split_andb_goal...
+    - apply H with te1...
+    - apply H0 with te1...
+    - apply H with te1...
+    - apply H0 with te1...
   Qed.
 
+  Lemma well_typed_bexp_submap b te1 te2:
+    TELemmas.submap te1 te2 ->
+    are_defined (vars_bexp b) te1 ->
+    well_typed_bexp te1 b ->
+    well_typed_bexp te2 b.
+  Proof.
+    elim: b te1 te2 => //=; intros.
+    rewrite /well_typed_bexp /= in H1.
+    rewrite /well_typed_bexp /=.
+    rewrite /vars_bexp /= in H0.
+    rewrite /are_defined in H0.
+    move: (VS.for_all_2 (are_defined_compat te1) H0) => Hwd.
+    rewrite /VS.For_all in Hwd.
+    move/andP: H1 => [Hwte Hwtr].
+    apply /andP.
+    split.
+    - apply well_typed_ebexp_submap with te1.
+      + done.
+      + rewrite /are_defined.
+        rewrite (VS.for_all_1 (are_defined_compat te1)).
+        done.
+        intros x Hin.
+        move: (VS.union_2 (vars_rbexp b) Hin) => Hin2.
+        exact: (Hwd _ Hin2).
+      + done.
+    - apply well_typed_rbexp_submap with te1.
+      + done.
+      + rewrite /are_defined.
+        rewrite (VS.for_all_1 (are_defined_compat te1)).
+        done.
+        intros x Hin.
+        move: (VS.union_3 (vars_ebexp a) Hin) => Hin2.
+        exact: (Hwd _ Hin2).
+      + done.
+  Qed.
+
+  Lemma well_formed_instr_well_typed te1 te2 i :
+    well_formed_instr te1 i ->
+    TELemmas.submap te1 te2 ->
+    well_typed_instr te2 i.
+  Proof.
+    elim: i te1 te2 => //=; intros;
+                (let rec tac :=
+                     match goal with
+                     | H : ?a |- ?a => assumption
+                     | H : ?l \/ ?r |- _ => case: H => H; tac
+                     | |- ?l /\ ?r => split; tac
+                     | |- is_true (_ && _) => apply /andP; tac
+                     | H : is_true(well_formed_instr ?te ?i) |- _  =>
+                       let Hwd := fresh "Hwd" in let Hwt := fresh "Hwt" in
+                                                 move/andP: H => [Hwd Hwt]; tac
+                     | Hwd: is_true (well_defined_instr ?te ?i) |- _ =>
+                       (rewrite /= in Hwd); tac
+                     | H : is_true(well_typed_instr ?te ?i) |- _  =>
+                       (rewrite /= in H); tac
+                     | H : is_true (_ && _) |- _ =>
+                       let H1 := fresh in let H2 := fresh in move/andP: H => [H1 H2]; tac
+                     | Hsub: TELemmas.submap ?te1 ?te2, Hwd: is_true (are_defined ?vs ?te1)
+                       |- is_true (are_defined ?vs ?te2) =>
+                         exact: (are_defined_submap Hsub Hwd); tac
+                     | Hsub: TELemmas.submap ?te1 ?te2, Hwd: is_true (are_defined ?vs ?te1)
+                       |- context [atyp ?a ?te2] =>
+                       rewrite -(atyp_submap Hsub Hwd); tac
+                     | |- _ => idtac
+                     end
+                 in tac).
+    exact: (well_typed_bexp_submap H0 Hwd Hwt).
+  Qed.
+
+  Lemma well_formed_instr_well_formed te1 te2 i :
+    well_formed_instr te1 i ->
+    TELemmas.submap te1 te2 ->
+    well_formed_instr te2 i.
+  Proof.
+    move=> Hwf Hsm.
+    rewrite /well_formed_instr.
+      by rewrite (well_formed_instr_well_defined Hwf Hsm)
+                 (well_formed_instr_well_typed Hwf Hsm).
+  Qed.
+
+  Lemma well_formed_instr_replace te1 te2 i :
+    well_formed_instr te1 i ->
+    TE.Equal te1 te2 ->
+    well_formed_instr te2 i.
+  Proof.
+    move=> Hwell Heq.
+    apply: (well_formed_instr_well_formed Hwell).
+    intros x v Hfind.
+    rewrite /TE.Equal in Heq.
+    by rewrite -(Heq x).
+  Qed.
+
+  Lemma submap_add x v (te1 te2: TE.env) :
+    TELemmas.submap te1 te2 ->
+    TELemmas.submap (TE.add x v te1) (TE.add x v te2).
+  Proof.
+    move=> Hsm.
+    intros k typ.
+    case Heq: (k == x).
+    - move/idP: Heq => Heq.
+        by rewrite 2!(TELemmas.find_add_eq Heq).
+    - move/idP: Heq => Hneq.
+      rewrite 2!(TELemmas.find_add_neq Hneq).
+      exact: Hsm.
+  Qed.
+
+  Local Hint Resolve submap_add.
+
+  Lemma well_formed_instr_succ_typenv_submap i te1 te2:
+    well_formed_instr te1 i ->
+    TELemmas.submap te1 te2 ->
+    TELemmas.submap (instr_succ_typenv i te1) (instr_succ_typenv i te2).
+  Proof.
+    elim: i te1 te2 => //=; intros;
+      (let rec tac :=
+           match goal with
+           | H : ?a |- ?a => assumption
+           | H : ?l \/ ?r |- _ => case: H => H; tac
+           | |- ?l /\ ?r => split; tac
+           | |- is_true (_ && _) => apply /andP; tac
+           | H : is_true(well_formed_instr ?te ?i) |- _  =>
+             let Hwd := fresh "Hwd" in let Hwt := fresh "Hwt" in
+                                       move/andP: H => [Hwd Hwt]; tac
+           | Hwd: is_true (well_defined_instr ?te ?i) |- _ =>
+             (rewrite /= in Hwd); tac
+           | H : is_true(well_typed_instr ?te ?i) |- _  =>
+             (rewrite /= in H); tac
+           | H : is_true (_ && _) |- _ =>
+             let H1 := fresh in let H2 := fresh in move/andP: H => [H1 H2]; tac
+           | Hsub: TELemmas.submap ?te1 ?te2, Hwd: is_true (are_defined ?vs ?te1)
+             |- is_true (are_defined ?vs ?te2) =>
+             exact: (are_defined_submap Hsub Hwd); tac
+           | Hsub: TELemmas.submap ?te1 ?te2, Hwd: is_true (are_defined (vars_atomic ?a) ?te1)
+             |- context [atyp ?a ?te2] =>
+             rewrite -(atyp_submap Hsub Hwd); tac
+           | |- ?e => progress (auto)
+           | |- _ => idtac
+           end
+       in tac).
+  Qed.
+
+  Lemma well_formed_program_well_submap te1 te2 p :
+    well_formed_program te1 p ->
+    TELemmas.submap te1 te2 ->
+    well_formed_program te2 p.
+  Proof.
+    elim: p te1 te2 => //=.
+    move=> hd tl IH te1 te2 /andP [Hhd Htl] Hsub.
+    apply/andP; split.
+    - exact: (well_formed_instr_well_formed Hhd Hsub).
+    - apply: (IH _ _ Htl).
+      exact: (well_formed_instr_succ_typenv_submap Hhd Hsub).
+  Qed.
 
   (*
-  Lemma well_formed_instr_subset vs1 vs2 i :
-    well_formed_instr vs1 i ->
-    VS.subset vs1 vs2 ->
-    well_formed_instr vs2 i.
+  Lemma well_formed_instr_vars te i :
+    well_formed_instr te i ->
+    VS.Equal (VS.union (vars_env te) (vars_instr i)) (VS.union (vars_env te) (lvs_instr i)).
   Proof.
-    elim: i vs1 vs2 => /=; move=> *; hyps_splitb; repeat splitb;
-    (match goal with
-     | H: ?a |- ?a => assumption
-     | |- is_true (VS.subset _ _) => by VSLemmas.dp_subset
-     | |- is_true (VS.mem _ _) => by VSLemmas.dp_mem
-     | |- _ => idtac
-     end).
+    case: i => /=; intros; hyps_splitb; by VSLemmas.dp_Equal.
   Qed.
-
-  Lemma well_formed_instr_replace vs1 vs2 i :
-    well_formed_instr vs1 i ->
-    VS.Equal vs1 vs2 ->
-    well_formed_instr vs2 i.
-  Proof.
-    move=> Hwell Heq.
-    apply: (well_formed_instr_subset Hwell).
-    rewrite Heq.
-    exact: VSLemmas.subset_refl.
-  Qed.
-
-  Lemma well_formed_program_subset vs1 vs2 p :
-    well_formed_program vs1 p ->
-    VS.subset vs1 vs2 ->
-    well_formed_program vs2 p.
-  Proof.
-    elim: p vs1 vs2 => //=.
-    move=> hd tl IH vs1 vs2 /andP [Hhd Htl] Hsub.
-    apply/andP; split.
-    - exact: (well_formed_instr_subset Hhd Hsub).
-    - apply: (IH _ _ Htl).
-      apply: (VSLemmas.union_subsets Hsub).
-      exact: VSLemmas.subset_refl.
-  Qed.
-
-  Lemma well_formed_program_replace vs1 vs2 p :
-    well_formed_program vs1 p ->
-    VS.Equal vs1 vs2 ->
-    well_formed_program vs2 p.
-  Proof.
-    move=> Hwell Heq.
-    apply: (well_formed_program_subset Hwell).
-    rewrite Heq.
-    exact: VSLemmas.subset_refl.
-  Qed.
-
   *)
 
   (* Probably useful in slicing *)
 
   (*
-  Lemma well_formed_instr_vars vs i :
-    well_formed_instr vs i ->
-    VS.Equal (VS.union vs (vars_instr i)) (VS.union vs (lvs_instr i)).
-  Proof.
-    case: i => /=; intros; hyps_splitb; by VSLemmas.dp_Equal.
-  Qed.
 
   Lemma well_formed_program_vars vs p :
     well_formed_program vs p ->
@@ -1874,12 +2334,11 @@ Module MakeDSL
   *)
 
   (* Some Lemmas for vars_env and instr_succ_typenv *)
-  Lemma vars_env_instr_succ_typenv instr te:
-    vars_env (instr_succ_typenv instr te) =
-    VS.union (vars_env te) (lvs_instr instr).
-  Proof. Admitted.
-
-
+  Lemma vars_env_instr_succ_typenv i te:
+    vars_env (instr_succ_typenv i te) =
+    VS.union (vars_env te) (lvs_instr i).
+  Proof.
+  Admitted.
   (* Non-blocking *)
 
   Definition is_assume (i : instr) : bool :=
