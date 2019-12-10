@@ -1337,18 +1337,14 @@ Module MakeDSL
       eval_instr te (Imulj v a1 a2) s t
   | EIsplitU vh vl a n s t :
       is_unsigned (atyp a te) ->
-      S.Upd2 vl (zext ((size (eval_atomic a s)) - n)
-                      (low n (eval_atomic a s)))
-             vh (zext n (high ((size (eval_atomic a s)) - n)
-                              (eval_atomic a s)))
+      S.Upd2 vl (shrB ((size (eval_atomic a s)) - n) (shlB ((size (eval_atomic a s)) - n) (eval_atomic a s)))
+             vh (shrB n (eval_atomic a s))
              s t ->
       eval_instr te (Isplit vh vl a n) s t
   | EIsplitS vh vl a n s t :
       is_signed (atyp a te) ->
-      S.Upd2 vl (zext ((size (eval_atomic a s)) - n)
-                      (low n (eval_atomic a s)))
-             vh (sext n (high ((size (eval_atomic a s)) - n)
-                              (eval_atomic a s)))
+      S.Upd2 vl (shrB ((size (eval_atomic a s)) - n) (shlB ((size (eval_atomic a s)) - n) (eval_atomic a s)))
+             vh (sarB n (eval_atomic a s))
              s t ->
       eval_instr te (Isplit vh vl a n) s t
   | EIand v ty a1 a2 s t :

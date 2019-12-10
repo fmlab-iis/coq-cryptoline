@@ -1,7 +1,7 @@
 
 From Coq Require Import List.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
-From ssrlib Require Import Var.
+From ssrlib Require Import Var Tactics .
 From BitBlasting Require Import State QFBV.
 From Cryptoline Require Import DSL SSA.
 From nbits Require Import NBits. 
@@ -102,194 +102,6 @@ Definition qfbv_conj qb0 qb1 := QFBV.Bconj qb0 qb1 .
 
 Definition qfbv_disj qb0 qb1 := QFBV.Bdisj qb0 qb1 .
 
-Definition bexp_instr (te : TypEnv.SSATE.env) (i : SSA.instr) : QFBV.bexp :=
-  match i with
-  (* Inondet (v, t): v = a nondeterministic value of type t *)
-  | SSA.Inondet _ _
-  (* Inop: do nothing *)
-  | SSA.Inop => QFBV.Btrue
-  (* Imov (v, a): v = a *)
-  | SSA.Imov v a =>
-    qfbv_eq (qfbv_var v) (qfbv_atomic a)
-  (* Icmov (v, c, a1, a2): if c then v = a1 else v = a2 *)
-  | SSA.Icmov v c a1 a2 =>
-    let 'qec := qfbv_eq (qfbv_const 1) (qfbv_atomic c) in
-    let 'qe1 := qfbv_atomic a1 in
-    let 'qe2 := qfbv_atomic a2 in
-    qfbv_eq (qfbv_var v) (QFBV.Eite qec qe1 qe2)
-  (* Iadd (v, a1, a2): v = a1 + a2, overflow is forbidden *)
-  | SSA.Iadd v a1 a2 =>
-    let 'qe1 := qfbv_atomic a1 in
-    let 'qe2 := qfbv_atomic a2 in
-    qfbv_eq (qfbv_var v) (qfbv_add qe1 qe2)
-  (* Iadds (c, v, a1, a2): v = a1 + a2, c = carry flag *)
-  | SSA.Iadds c v a1 a2 =>
-    let 'qe1ext := qfbv_zext 1 (qfbv_atomic a1) in
-    let 'qe2ext := qfbv_zext 1 (qfbv_atomic a2) in
-    let 'qerext := qfbv_add qe1ext qe2ext in
-    qfbv_conj
-      (qfbv_eq (qfbv_var c) (qfbv_high 1 qerext))
-      (qfbv_eq (qfbv_var v) (qfbv_low (SSA.asize a1 te) qerext))
-  (* Iadc (v, a1, a2, y): v = a1 + a2 + y, overflow is forbidden *)
-  | SSA.Iadc v a1 a2 y =>
-    let 'qe1 := qfbv_atomic a1 in
-    let 'qe2 := qfbv_atomic a2 in
-    let 'qeyext := qfbv_zext (SSA.asize a1 te - 1) (qfbv_atomic y) in
-    qfbv_eq (qfbv_var v)
-            (qfbv_add (qfbv_add qe1 qe2) qeyext)
-  (* Iadcs (c, v, a1, a2, y): v = a1 + a2 + y, c = carry flag *)
-  | SSA.Iadcs c v a1 a2 y =>
-    let 'qe1ext := qfbv_zext 1 (qfbv_atomic a1) in
-    let 'qe2ext := qfbv_zext 1 (qfbv_atomic a2) in
-    let 'qeyext := qfbv_zext (SSA.asize a1 te) (qfbv_atomic y) in
-    let 'qerext := qfbv_add (qfbv_add qe1ext qe2ext) qeyext in
-    qfbv_conj (qfbv_eq (qfbv_var c) (qfbv_high 1 qerext))
-              (qfbv_eq (qfbv_var v) (qfbv_low (SSA.asize a1 te) qerext))
-  (* Isub (v, a1, a2): v = a1 - a2, overflow is forbidden *)
-  | SSA.Isub v a1 a2 =>
-    let 'qe1 := qfbv_atomic a1 in
-    let 'qe2 := qfbv_atomic a2 in
-    qfbv_eq (qfbv_var v) (qfbv_sub qe1 qe2)
-  (* Isubb (b, v, a1, a2): v = a1 - a2, b = borrow flag *)
-  | SSA.Isubb b v a1 a2 =>
-    let 'qe1ext := qfbv_zext 1 (qfbv_atomic a1) in
-    let 'qe2ext := qfbv_zext 1 (qfbv_atomic a2) in
-    let 'qerext := qfbv_sub qe1ext qe2ext in
-    qfbv_conj (qfbv_eq (qfbv_var b) (qfbv_high 1 qerext))
-              (qfbv_eq (qfbv_var v)
-                       (qfbv_low (SSA.asize a1 te) qerext))
-  (* Isubc (c, v, a1, a2): v = a1 + not(a2) + 1, c = carry flag *)
-  | SSA.Isubc c v a1 a2 =>
-    let 'qe1ext := qfbv_zext 1 (qfbv_atomic a1) in
-    let 'qe2ext := qfbv_zext 1 (qfbv_atomic a2) in
-    let 'qerext := qfbv_sub qe1ext qe2ext in
-    qfbv_conj (qfbv_eq (qfbv_var c)
-                       (qfbv_sub (qfbv_const 1) (qfbv_high 1 qerext)))
-              (qfbv_eq (qfbv_var v)
-                       (qfbv_low (SSA.asize a1 te) qerext))
-  (* Isbb (v, a1, a2, y): v = a1 - a2 - y *)
-  | SSA.Isbb v a1 a2 y =>
-    let 'qe1 := qfbv_atomic a1 in
-    let 'qe2 := qfbv_atomic a2 in
-    let 'qeyext := qfbv_zext (SSA.asize a1 te - 1) (qfbv_atomic y) in
-    qfbv_eq (qfbv_var v) (qfbv_sub (qfbv_sub qe1 qe2) qeyext)
-  (* Isbbs (b, v, a1, a2, y): v = a1 - a2 - y, b = borrow flag *)
-  | SSA.Isbbs b v a1 a2 y =>
-    let 'qe1ext := qfbv_zext 1 (qfbv_atomic a1) in
-    let 'qe2ext := qfbv_zext 1 (qfbv_atomic a2) in
-    let 'qeyext := qfbv_zext (SSA.asize a1 te) (qfbv_atomic y) in
-    let 'qerext := qfbv_sub (qfbv_sub qe1ext qe2ext) qeyext in
-    qfbv_conj (qfbv_eq (qfbv_var b) (qfbv_high 1 qerext))
-              (qfbv_eq (qfbv_var v) (qfbv_low (SSA.asize a1 te) qerext))
-  (* Isbc (v, a1, a2, y): v = a1 + not(a2) + y *)
-  | SSA.Isbc v a1 a2 y =>
-    let 'qe1 := qfbv_atomic a1 in
-    let 'qe2 := qfbv_atomic a2 in
-    let 'qez := qfbv_sub (qfbv_const 1) (qfbv_atomic y) in
-    qfbv_eq (qfbv_var v) (qfbv_sub (qfbv_sub qe1 qe2)
-                                    (qfbv_zext (SSA.asize a1 te - 1) qez))
-  (* Isbcs (c, v, a1, a2, y): v = a1 + not(a2) + y, c = carry flag *)
-  | SSA.Isbcs c v a1 a2 y =>
-    let 'qe1ext := qfbv_zext 1 (qfbv_atomic a1) in
-    let 'qe2ext := qfbv_zext 1 (qfbv_atomic a2) in
-    let 'qez := qfbv_sub (qfbv_const 1) (qfbv_atomic y) in
-    let 'qerext := qfbv_sub (qfbv_sub qe1ext qe2ext)
-                            (qfbv_zext (SSA.asize a1 te) qez) in
-    qfbv_conj (qfbv_eq (qfbv_var c)
-                       (qfbv_sub (qfbv_const 1) (qfbv_high 1 qerext)))
-              (qfbv_eq (qfbv_var v) (qfbv_low (SSA.asize a1 te) qerext))
-  (* Imul (v, a1, a2): v = a1 * a2, overflow is forbidden *)
-  | SSA.Imul v a1 a2 =>
-    let 'qe1 := qfbv_atomic a1 in
-    let 'qe2 := qfbv_atomic a2 in
-    qfbv_eq (qfbv_var v) (qfbv_mul qe1 qe2)
-  (* Imull (vh, vl, a1, a2): vh and vl are respectively the high part and
-     the low part of the full multiplication a1 * a2 *)
-  | SSA.Imull vh vl a1 a2 =>
-    let 'qe1ext := qfbv_zext (SSA.asize a1 te) (qfbv_atomic a1) in
-    let 'qe2ext := qfbv_zext (SSA.asize a1 te) (qfbv_atomic a2) in
-    let 'qerext := qfbv_mul qe1ext qe2ext in
-    qfbv_conj (qfbv_eq (qfbv_var vh)
-                       (qfbv_high (SSA.asize a1 te) qerext))
-              (qfbv_eq (qfbv_var vl)
-                       (qfbv_low (SSA.asize a1 te) qerext))
-  (* Iumulj (v, a1, a2): v = the full multiplication of a1 * a2, which is equivalent
-     to Iumull (vh, vl, a1, a2); Join (r, vh, vl) *)
-  | SSA.Imulj v a1 a2 =>
-    let 'qe1ext := qfbv_zext (SSA.asize a1 te) (qfbv_atomic a1) in
-    let 'qe2ext := qfbv_zext (SSA.asize a1 te) (qfbv_atomic a2) in
-    let 'qerext := qfbv_mul qe1ext qe2ext in
-    qfbv_eq (qfbv_var v) qerext
-  (* Ishl (v, a, n): v = a * 2^n, overflow is forbidden *)
-  (* need a better size for NBitsDef.from_nat *)
-  | SSA.Ishl v a n =>
-    let 'qea := qfbv_atomic a in
-    let 'qen := qfbv_const n in
-    qfbv_eq (qfbv_var v) (qfbv_shl qea qen)
-  (* Ijoin (v, ah, al): v = ah * 2^w + al where w is the bit-width of al *)
-  | SSA.Ijoin v ah al =>
-    let 'qeh := qfbv_atomic ah in
-    let 'qel := qfbv_atomic al in
-    qfbv_eq (qfbv_var v) (qfbv_concat qeh qel)
-  (* Isplit (vh, vl, a, n): vh is the high (w - n) bits (signed extended to w bits)
-     of a and vl is the low n bits (zero extended to w bits) of a where w is the
-     bit-width of a *)
-  | SSA.Isplit vh vl a n =>
-    let 'qea := qfbv_atomic a in
-    let 'qel := qfbv_low n qea in
-    let 'qeh := qfbv_high (SSA.asize a te - n) qea in
-    qfbv_conj (qfbv_eq (qfbv_var vh)
-                       (qfbv_zext (TypEnv.SSATE.vsize vh te - (SSA.asize a te) + n) qeh))
-              (qfbv_eq (qfbv_var vl)
-                       (qfbv_zext (TypEnv.SSATE.vsize vl te - n) qel))
-  (* Icshl (vh, vl, a1, a2, n) *)
-  | SSA.Icshl vh vl a1 a2 n =>
-    let 'qe1 := qfbv_atomic a1 in
-    let 'qe2 := qfbv_atomic a2 in
-    let 'qer := qfbv_shl (qfbv_concat qe1 qe2) (qfbv_const n) in
-    let 'qel := qfbv_low (TypEnv.SSATE.vsize vl te) qer in
-    let 'qeh := qfbv_extr (TypEnv.SSATE.vsize vl te)
-                          (TypEnv.SSATE.vsize vl te + TypEnv.SSATE.vsize vh te - 1) qer in
-    qfbv_conj (qfbv_eq (qfbv_var vh) qeh)
-              (qfbv_eq (qfbv_var vl) qel)
-  (* Inot (v, t, a): v = not(a), the one's complement of a, v is of type t *)
-  | SSA.Inot v t a =>
-    let 'qea := qfbv_atomic a in
-    qfbv_eq (qfbv_var v) qea
-  (* Iand (v, t, a1, a2): v = the bitwise AND of a1 and a2, v is of type t *)
-  | SSA.Iand v t a1 a2 =>
-    let 'qe1 := qfbv_atomic a1 in
-    let 'qe2 := qfbv_atomic a2 in
-    let 'qer := qfbv_and qe1 qe2 in
-    qfbv_eq (qfbv_var v) qer
-  (* Ior (v, t, a1, a2): v = the bitwise OR of a1 and a2, v is of type t *)
-  | SSA.Ior v t a1 a2 =>
-    let 'qe1 := qfbv_atomic a1 in
-    let 'qe2 := qfbv_atomic a2 in
-    let 'qer := qfbv_or qe1 qe2 in
-    qfbv_eq (qfbv_var v) qer
-  (* Ixor (v, t, a1, a2): v = the bitwise XOR of a1 and a2, v is of type t *)
-  | SSA.Ixor v t a1 a2 =>
-    let 'qe1 := qfbv_atomic a1 in
-    let 'qe2 := qfbv_atomic a2 in
-    let 'qer := qfbv_xor qe1 qe2 in
-    qfbv_eq (qfbv_var v) qer
-  (*
-  (* == Instructions that cannot be translated to polynomials == *)
-  (* == Type conversions == *)
-  (* Icast (v, t, a): v = the value of a represented by the type t of v *)
-  | SSA.Icast v t a
-  (* Ivpc (v, t, a): v = a, value preserved casting to type t *)
-  | SSA.Ivpc v t a
-  (* Specifications *)
-  | SSA.Iassume : bexp -> instr
- *)
-  | _ => QFBV.Bfalse
-  end .
-
-Definition bexp_program te (p : program) : seq QFBV.bexp :=
-  map (bexp_instr te) p.
-
 Fixpoint exp_rexp (e : SSA.rexp) : QFBV.exp :=
   match e with
   | Rvar v => qfbv_var v
@@ -337,16 +149,6 @@ Fixpoint bexp_rbexp (e : SSA.rbexp) : QFBV.bexp :=
   | Ror e1 e2 =>
     qfbv_disj (bexp_rbexp e1) (bexp_rbexp e2)
   end .
-
-Record bexp_spec : Type :=
-  mkQFBVSpec { bpre : QFBV.bexp;
-               bprog : seq QFBV.bexp;
-               bpost : QFBV.bexp } .
-
-Definition bexp_of_rspec te (s : rspec) : bexp_spec :=
-  {| bpre := bexp_rbexp (rspre s);
-     bprog := bexp_program te (rsprog s);
-     bpost := bexp_rbexp (rspost s) |}.
 
 (* properties of conversion *)
 
@@ -423,6 +225,237 @@ Proof.
   move: (eval_bexp_rbexp e s) => [H1 H2]. exact: H2.
 Qed.
 
+Definition bexp_instr (te : TypEnv.SSATE.env) (i : SSA.instr) : QFBV.bexp :=
+  match i with
+  (* Inondet (v, t): v = a nondeterministic value of type t *)
+  | SSA.Inondet _ _
+  (* Inop: do nothing *)
+  | SSA.Inop => QFBV.Btrue
+  (* Imov (v, a): v = a *)
+  | SSA.Imov v a =>
+    qfbv_eq (qfbv_var v) (qfbv_atomic a)
+  (* Icmov (v, c, a1, a2): if c then v = a1 else v = a2 *)
+  | SSA.Icmov v c a1 a2 =>
+    let 'qec := qfbv_eq (qfbv_const 1) (qfbv_atomic c) in
+    let 'qe1 := qfbv_atomic a1 in
+    let 'qe2 := qfbv_atomic a2 in
+    qfbv_eq (qfbv_var v) (QFBV.Eite qec qe1 qe2)
+  (* Iadd (v, a1, a2): v = a1 + a2, overflow is forbidden *)
+  | SSA.Iadd v a1 a2 =>
+    let 'qe1 := qfbv_atomic a1 in
+    let 'qe2 := qfbv_atomic a2 in
+    qfbv_eq (qfbv_var v) (qfbv_add qe1 qe2)
+  (* Iadds (c, v, a1, a2): v = a1 + a2, c = carry flag *)
+  | SSA.Iadds c v a1 a2 =>
+    let 'a_size := asize a1 te in
+    let 'qe1ext := qfbv_sext 1 (qfbv_atomic a1) in
+    let 'qe2ext := qfbv_sext 1 (qfbv_atomic a2) in
+    let 'qerext := qfbv_add qe1ext qe2ext in
+    qfbv_conj
+      (qfbv_eq (qfbv_var c) (qfbv_high 1 qerext))
+      (qfbv_eq (qfbv_var v) (qfbv_low a_size qerext))
+  (* Iadc (v, a1, a2, y): v = a1 + a2 + y, overflow is forbidden *)
+  | SSA.Iadc v a1 a2 y =>
+    let 'a_size := asize a1 te in
+    let 'qe1ext := qfbv_sext 1 (qfbv_atomic a1) in
+    let 'qe2ext := qfbv_sext 1 (qfbv_atomic a2) in
+    let 'qeyext := qfbv_zext a_size (qfbv_atomic y) in
+    qfbv_eq (qfbv_var v)
+            (qfbv_low a_size (qfbv_add (qfbv_add qeyext qe1ext) qe2ext))
+  (* Iadcs (c, v, a1, a2, y): v = a1 + a2 + y, c = carry flag *)
+  | SSA.Iadcs c v a1 a2 y =>
+    let 'a_size := asize a1 te in
+    let 'qe1ext := qfbv_sext 1 (qfbv_atomic a1) in
+    let 'qe2ext := qfbv_sext 1 (qfbv_atomic a2) in
+    let 'qeyext := qfbv_zext a_size (qfbv_atomic y) in
+    let 'qerext := qfbv_add (qfbv_add qeyext qe1ext) qe2ext in
+    qfbv_conj (qfbv_eq (qfbv_var c) (qfbv_high 1 qerext))
+              (qfbv_eq (qfbv_var v) (qfbv_low a_size qerext))
+  (* Isub (v, a1, a2): v = a1 - a2, overflow is forbidden *)
+  | SSA.Isub v a1 a2 =>
+    let 'qe1 := qfbv_atomic a1 in
+    let 'qe2 := qfbv_atomic a2 in
+    qfbv_eq (qfbv_var v) (qfbv_sub qe1 qe2)
+  (* Isubb (b, v, a1, a2): v = a1 - a2, b = borrow flag *)
+  | SSA.Isubb b v a1 a2 =>
+    let 'a_size := asize a1 te in
+    let 'qe1ext := qfbv_sext 1 (qfbv_atomic a1) in
+    let 'qe2ext := qfbv_sext 1 (qfbv_atomic a2) in
+    let 'qerext := qfbv_sub qe1ext qe2ext in
+    qfbv_conj (qfbv_eq (qfbv_var b) (qfbv_high 1 qerext))
+              (qfbv_eq (qfbv_var v)
+                       (qfbv_low a_size qerext))
+  (* Isubc (c, v, a1, a2): v = a1 + not(a2) + 1, c = carry flag *)
+  | SSA.Isubc c v a1 a2 =>
+    let 'a_size := asize a1 te in
+    let 'qe1ext := qfbv_sext 1 (qfbv_atomic a1) in
+    let 'qe2negext := qfbv_sext 1 (qfbv_neg (qfbv_atomic a2)) in
+    let 'qerext := qfbv_add qe1ext qe2negext in
+    qfbv_conj (qfbv_eq (qfbv_var c)
+                       (qfbv_high 1 qerext))
+              (qfbv_eq (qfbv_var v)
+                       (qfbv_low a_size qerext))
+  (* Isbb (v, a1, a2, y): v = a1 - a2 - y *)
+  | SSA.Isbb v a1 a2 y =>
+    let 'a_size := asize a1 te in
+    let 'qe1ext := qfbv_sext 1 (qfbv_atomic a1) in
+    let 'qe2ext := qfbv_sext 1 (qfbv_atomic a2) in
+    let 'qeyext := qfbv_zext a_size (qfbv_atomic y) in
+    qfbv_eq (qfbv_var v)
+            (qfbv_low a_size (qfbv_sub (qfbv_sub qe1ext qe2ext) qeyext))
+  (* Isbbs (b, v, a1, a2, y): v = a1 - a2 - y, b = borrow flag *)
+  | SSA.Isbbs b v a1 a2 y =>
+    let 'a_size := asize a1 te in
+    let 'qe1ext := qfbv_sext 1 (qfbv_atomic a1) in
+    let 'qe2ext := qfbv_sext 1 (qfbv_atomic a2) in
+    let 'qeyext := qfbv_zext a_size (qfbv_atomic y) in
+    let 'qerext := qfbv_sub (qfbv_sub qe1ext qe2ext) qeyext in
+    qfbv_conj (qfbv_eq (qfbv_var b) (qfbv_high 1 qerext))
+              (qfbv_eq (qfbv_var v) (qfbv_low a_size qerext))
+  (* Isbc (v, a1, a2, y): v = a1 + not(a2) + y *)
+  | SSA.Isbc v a1 a2 y =>
+    let 'a_size := asize a1 te in
+    let 'qe1ext := qfbv_sext 1 (qfbv_atomic a1) in
+    let 'qe2notext := qfbv_sext 1 (qfbv_not (qfbv_atomic a2)) in
+    let 'qeyext := qfbv_zext a_size (qfbv_atomic y) in
+    qfbv_eq (qfbv_var v)
+            (qfbv_low a_size (qfbv_add (qfbv_add qeyext qe1ext) qe2notext))
+  (* Isbcs (c, v, a1, a2, y): v = a1 + not(a2) + y, c = carry flag *)
+  | SSA.Isbcs c v a1 a2 y =>
+    let 'a_size := asize a1 te in
+    let 'qe1ext := qfbv_sext 1 (qfbv_atomic a1) in
+    let 'qe2notext := qfbv_sext 1 (qfbv_not (qfbv_atomic a2)) in
+    let 'qeyext := qfbv_zext a_size (qfbv_atomic y) in
+    let 'qerext := qfbv_add (qfbv_add qeyext qe1ext) qe2notext in
+    qfbv_conj (qfbv_eq (qfbv_var c) (qfbv_high 1 qerext))
+              (qfbv_eq (qfbv_var v) (qfbv_low a_size qerext))
+  (* Imul (v, a1, a2): v = a1 * a2, overflow is forbidden *)
+  | SSA.Imul v a1 a2 =>
+    let 'qe1 := qfbv_atomic a1 in
+    let 'qe2 := qfbv_atomic a2 in
+    qfbv_eq (qfbv_var v) (qfbv_mul qe1 qe2)
+  (* Imull (vh, vl, a1, a2): vh and vl are respectively the high part and
+     the low part of the full multiplication a1 * a2 *)
+  | SSA.Imull vh vl a1 a2 =>
+    let 'a1_size := asize a1 te in
+    let 'a2_size := asize a2 te in
+    let 'qe1ext := qfbv_sext a1_size (qfbv_atomic a1) in
+    let 'qe2ext := qfbv_sext a1_size (qfbv_atomic a2) in
+    let 'qerext := qfbv_mul qe1ext qe2ext in
+    qfbv_conj (qfbv_eq (qfbv_var vh)
+                       (qfbv_high a1_size qerext))
+              (qfbv_eq (qfbv_var vl)
+                       (qfbv_low a2_size qerext))
+  (* Iumulj (v, a1, a2): v = the full multiplication of a1 * a2, which is equivalent
+     to Iumull (vh, vl, a1, a2); Join (r, vh, vl) *)
+  | SSA.Imulj v a1 a2 =>
+    let 'a_size := asize a1 te  in
+    let 'qe1ext := qfbv_sext a_size (qfbv_atomic a1) in
+    let 'qe2ext := qfbv_sext a_size (qfbv_atomic a2) in
+    let 'qerext := qfbv_mul qe1ext qe2ext in
+    qfbv_eq (qfbv_var v) qerext
+  (* Ishl (v, a, n): v = a * 2^n, overflow is forbidden *)
+  (* need a better size for NBitsDef.from_nat *)
+  | SSA.Ishl v a n =>
+    let 'qea := qfbv_atomic a in
+    let 'qen := qfbv_const n in
+    qfbv_eq (qfbv_var v) (qfbv_shl qea qen)
+  (* Ijoin (v, ah, al): v = ah * 2^w + al where w is the bit-width of al *)
+  | SSA.Ijoin v ah al =>
+    let 'qeh := qfbv_atomic ah in
+    let 'qel := qfbv_atomic al in
+    qfbv_eq (qfbv_var v) (qfbv_concat qeh qel)
+  (* Isplit (vh, vl, a, n): vh is the high (w - n) bits (signed extended to w bits)
+     of a and vl is the low n bits (zero extended to w bits) of a where w is the
+     bit-width of a *)
+  | SSA.Isplit vh vl a n =>
+    let 'a_size := asize a te in
+    let 'qen := qfbv_const n in
+    let 'qeamn := qfbv_const (a_size - n) in
+    let 'qea := qfbv_atomic a in
+    let 'qel := qfbv_lshr (qfbv_shl qea qeamn) qeamn in
+    if Typ.is_unsigned (atyp a te) then
+      qfbv_conj (qfbv_eq (qfbv_var vh)
+                         (qfbv_lshr qea qen))
+                (qfbv_eq (qfbv_var vl) qel)
+    else
+      qfbv_conj (qfbv_eq (qfbv_var vh)
+                         (qfbv_ashr qea qen))
+                (qfbv_eq (qfbv_var vl) qel)
+  (* Icshl (vh, vl, a1, a2, n) *)
+  | SSA.Icshl vh vl a1 a2 n =>
+    let 'a1_size := asize a1 te in
+    let 'a2_size := asize a2 te in
+    let 'qe1 := qfbv_atomic a1 in
+    let 'qe2 := qfbv_atomic a2 in
+    let 'qer := qfbv_shl (qfbv_concat qe1 qe2) (qfbv_const n) in
+    let 'qel := qfbv_low a2_size qer in
+    let 'qeh := qfbv_extr a2_size (a2_size + a1_size - 1) qer in
+    qfbv_conj (qfbv_eq (qfbv_var vh) qeh)
+              (qfbv_eq (qfbv_var vl) (qfbv_lshr qel (qfbv_const n)))
+  (* Inot (v, t, a): v = not(a), the one's complement of a, v is of type t *)
+  | SSA.Inot v t a =>
+    let 'qea := qfbv_atomic a in
+    qfbv_eq (qfbv_var v) (qfbv_not qea)
+  (* Iand (v, t, a1, a2): v = the bitwise AND of a1 and a2, v is of type t *)
+  | SSA.Iand v t a1 a2 =>
+    let 'qe1 := qfbv_atomic a1 in
+    let 'qe2 := qfbv_atomic a2 in
+    let 'qer := qfbv_and qe1 qe2 in
+    qfbv_eq (qfbv_var v) qer
+  (* Ior (v, t, a1, a2): v = the bitwise OR of a1 and a2, v is of type t *)
+  | SSA.Ior v t a1 a2 =>
+    let 'qe1 := qfbv_atomic a1 in
+    let 'qe2 := qfbv_atomic a2 in
+    let 'qer := qfbv_or qe1 qe2 in
+    qfbv_eq (qfbv_var v) qer
+  (* Ixor (v, t, a1, a2): v = the bitwise XOR of a1 and a2, v is of type t *)
+  | SSA.Ixor v t a1 a2 =>
+    let 'qe1 := qfbv_atomic a1 in
+    let 'qe2 := qfbv_atomic a2 in
+    let 'qer := qfbv_xor qe1 qe2 in
+    qfbv_eq (qfbv_var v) qer
+  (* == Instructions that cannot be translated to polynomials == *)
+  (* == Type conversions == *)
+  (* Icast (v, t, a): v = the value of a represented by the type t of v *)
+  (* Ivpc (v, t, a): v = a, value preserved casting to type t *)
+  | SSA.Icast v t a
+  | SSA.Ivpc v t a =>
+    let 'a_typ := atyp a te in
+    let 'a_size := Typ.sizeof_typ a_typ in
+    let 't_size := Typ.sizeof_typ t in
+    let 'qea := qfbv_atomic a in
+    qfbv_eq (qfbv_var v)
+            (if Typ.is_unsigned a_typ then
+               (if t_size == a_size then qea
+                else if t_size < a_size then qfbv_low t_size qea
+                else qfbv_zext (t_size - a_size) qea)
+             else
+               (if t_size == a_size then qea
+                else if t_size < a_size then qfbv_low t_size qea
+                else qfbv_sext (t_size - a_size) qea))
+  (* Specifications *)
+  | SSA.Iassume (_, rbexp) => bexp_rbexp rbexp
+  end .
+
+Fixpoint bexp_program te (p : program) : seq QFBV.bexp :=
+  match p with
+  | [::] => [::]
+  | hd::tl =>
+    let 'te_succ := instr_succ_typenv hd te in
+    (bexp_instr te_succ hd)::(bexp_program te_succ tl)
+  end .
+
+Record bexp_spec : Type :=
+  mkQFBVSpec { bpre : QFBV.bexp;
+               bprog : seq QFBV.bexp;
+               bpost : QFBV.bexp } .
+
+Definition bexp_of_rspec te (s : rspec) : bexp_spec :=
+  {| bpre := bexp_rbexp (rspre s);
+     bprog := bexp_program te (rsprog s);
+     bpost := bexp_rbexp (rspost s) |}.
+
 Ltac rewrite_eval_exp_atomic :=
   repeat rewrite -> eval_exp_atomic in *.
 
@@ -454,8 +487,1174 @@ Proof .
        (* convert (eval_atomic a s2) to (eval_atomic a s1) *)
        rewrite -(ssa_unchanged_program_eval_atomic H2 H1); tac
      | _ => by assumption
-     end in tac) .
+     end in tac || idtac) .
+  - (* split *)
+    move : H1; case (Typ.is_unsigned (atyp a te)) => /=;
+    move: (ssa_unchanged_program_add1 H) => {H} [H1 H2];
+    move: (ssa_unchanged_program_add1 H2) => {H2} [H2 H3];
+    rewrite -!(acc_unchanged_program H2 H0)
+            -!(acc_unchanged_program H1 H0);
+    rewrite_eval_exp_atomic;
+    rewrite -(ssa_unchanged_program_eval_atomic H3 H0);
+    move => /andP [Hhi Hlo];
+              apply /andP; split; done .
+  - (* cast *)
+    move : H1;
+      case (Typ.is_unsigned (atyp a te)) => /=;
+      case (Typ.sizeof_typ t0 == Typ.sizeof_typ (atyp a te)) => /=;
+      [ idtac
+      | case (Typ.sizeof_typ t0 < Typ.sizeof_typ (atyp a te)) => /=
+      | idtac
+      | case (Typ.sizeof_typ t0 < Typ.sizeof_typ (atyp a te)) => /= ];
+      move: (ssa_unchanged_program_add1 H) => {H} [H H1];
+      rewrite -!(acc_unchanged_program H H0);
+      rewrite_eval_exp_atomic;
+      rewrite -(ssa_unchanged_program_eval_atomic H1 H0) // .
+  - (* vpc *)
+    move : H1;
+      case (Typ.is_unsigned (atyp a te)) => /=;
+      case (Typ.sizeof_typ t0 == Typ.sizeof_typ (atyp a te)) => /=;
+      [ idtac
+      | case (Typ.sizeof_typ t0 < Typ.sizeof_typ (atyp a te)) => /=
+      | idtac
+      | case (Typ.sizeof_typ t0 < Typ.sizeof_typ (atyp a te)) => /= ];
+      move: (ssa_unchanged_program_add1 H) => {H} [H H1];
+      rewrite -!(acc_unchanged_program H H0);
+      rewrite_eval_exp_atomic;
+      rewrite -(ssa_unchanged_program_eval_atomic H1 H0) // .
+  - (* assume *)
+    case : b H H1 => eb rb .
+    rewrite /vars_bexp /= => Hun .
+    move : (ssa_unchanged_program_union1 Hun) => {Hun} Hun .
+    rewrite (eval_bexp_rbexp rb s1) (eval_bexp_rbexp rb s2) => Hs1 .
+    elim Hun => {Hun} _ Hun .
+    elim : (ssa_unchanged_program_eval_rbexp Hun H0) => Hs1s2 _ .
+    by apply : Hs1s2 .
 Qed .
+
+(* auxiliary lemmas *)
+
+Lemma from_nat_simple :
+  forall n, to_nat (from_nat n n) = n .
+Admitted .
+
+Lemma high_extract :
+  forall l bs,
+    high l bs = extract (size bs - l) (size bs - 1) bs .
+Admitted .
+
+Lemma SSAVS_mem_vars_env_SSATE_mem :
+  forall te v, SSAVS.mem v (vars_env te) ->
+               TypEnv.SSATE.mem v te .
+Admitted .  
+
+Lemma conform_size_eval_atomic :
+  forall te s a,
+    SSAVS.subset (vars_atomic a) (vars_env te) ->
+    SSAStore.conform s te ->
+    size (eval_atomic a s) == Typ.sizeof_typ (atyp a te) .
+Proof .
+  move => te s; case .
+  - move => v /= .
+    rewrite SSAVS.S.Lemmas.subset_singleton => Hmem Hcon .
+    case : (Hcon v (SSAVS_mem_vars_env_SSATE_mem Hmem)) => <- .
+    done .
+  - move => t b _ _ .
+    rewrite /atyp /= .
+    (* size of (Aconst t b) = b but
+       Typ.sizeof_typ (atyp (Aconst t b)) = t,
+       why is b = t?
+     *)
+Admitted .
+
+Lemma to_bool_is_true :
+  forall a s,
+    to_bool (eval_atomic a s) ->
+    [:: true] == eval_atomic a s .
+Admitted .
+
+Lemma not_to_bool_is_false :
+  forall a s,
+    ~~ to_bool (eval_atomic a s) ->
+    [:: false] == eval_atomic a s .
+Admitted .  
+
+Lemma adc_sext_add_high b bs0 bs1 :
+  size bs0 = size bs1 ->
+  from_bool 1 (adcB (to_bool b) bs0 bs1).1 ==
+  high 1 ((zext (size bs0) b) +# (sext 1 bs0) +# (sext 1 bs1))%bits .
+Admitted .
+
+Lemma adc_sext_add_low b bs0 bs1 :
+  size bs0 = size bs1 ->
+  (adcB (to_bool b) bs0 bs1).2 ==
+  low (size bs0) ((zext (size bs0) b) +# (sext 1 bs0) +# (sext 1 bs1))%bits .
+Admitted .
+
+  
+Lemma adc_false_sext_add_high bs0 bs1 :
+  size bs0 = size bs1 ->
+  from_bool 1 (adcB false bs0 bs1).1 ==
+  high 1 ((sext 1 bs0) +# (sext 1 bs1))%bits .
+Proof .
+  move => Hsize .
+  move : (adc_sext_add_high [::false] Hsize) .
+  have : (to_bool [:: false] = false) .
+  { rewrite /to_bool // . }
+  move => Hbool .
+  rewrite Hbool => {Hbool} Heq .
+  rewrite (eqP Heq) .
+Admitted .  
+
+Lemma adc_false_sext_add_low bs0 bs1 :
+  size bs0 = size bs1 ->
+  (adcB false bs0 bs1).2 ==
+  low (size bs0) ((sext 1 bs0) +# (sext 1 bs1))%bits .
+Proof .
+  move => Hsize .
+  move : (adc_sext_add_low [::false] Hsize) .
+  have : (to_bool [:: false] = false) .
+  { rewrite /to_bool // . }
+  move => Hbool .
+  rewrite Hbool => {Hbool} Heq .
+  rewrite (eqP Heq) .
+Admitted .  
+
+Lemma sbb_sext_sub_high b bs0 bs1 :
+  size bs0 = size bs1 ->
+  from_bool 1 (sbbB (to_bool b) bs0 bs1).1 ==
+  high 1 ((sext 1 bs0) -# (sext 1 bs1) -# (zext (size bs0) b))%bits .
+Admitted .
+
+Lemma sbb_sext_sub_low b bs0 bs1 :
+  size bs0 = size bs1 ->
+  (sbbB (to_bool b) bs0 bs1).2 ==
+  low (size bs0) ((sext 1 bs0) -# (sext 1 bs1) -# (zext (size bs0) b))%bits .
+Admitted .
+
+Lemma sbb_false_sext_sub_high bs0 bs1 :
+  size bs0 = size bs1 ->
+  from_bool 1 (sbbB false bs0 bs1).1 ==
+  high 1 ((sext 1 bs0) -# (sext 1 bs1))%bits .
+Proof .
+  move => Hsize .
+  move : (sbb_sext_sub_high [::false] Hsize) .
+  have : (to_bool [:: false] = false) .
+  { rewrite /to_bool // . }
+  move => Hbool .
+  rewrite Hbool => {Hbool} Heq .
+  rewrite (eqP Heq) .
+Admitted .
+  
+Lemma sbb_false_sext_sub_low bs0 bs1 :
+  size bs0 = size bs1 ->
+  (sbbB false bs0 bs1).2 ==
+  low (size bs0) ((sext 1 bs0) -# (sext 1 bs1))%bits .
+Proof .
+  move => Hsize .
+  move : (sbb_sext_sub_low [::false] Hsize) .
+  have : (to_bool [:: false] = false) .
+  { rewrite /to_bool // . }
+  move => Hbool .
+  rewrite Hbool => {Hbool} Heq .
+  rewrite (eqP Heq) .
+Admitted .
+
+Lemma mul_sext bs0 bs1 :
+  full_mul bs0 bs1 ==
+  ((sext (size bs0) bs0) *# (sext (size bs0) bs1))%bits .
+Admitted .
+
+Lemma vtyp_var_add_eq te v tv :
+  TypEnv.SSATE.vtyp v (TypEnv.SSATE.add v tv te) = tv .
+Proof .
+  rewrite /asize /= /TypEnv.SSATE.vtyp .
+  rewrite SSAVM.Lemmas.add_eq_o // .
+Qed .
+
+Lemma vtyp_var_add_neq te v u tu :
+  v != u ->
+  TypEnv.SSATE.vtyp v (TypEnv.SSATE.add u tu te) =
+  TypEnv.SSATE.vtyp v te .
+Proof .
+  move => Hneq .
+  rewrite !/asize /= /TypEnv.SSATE.vtyp .
+  rewrite SSAVM.Lemmas.add_neq_o // .
+  rewrite /SSAVM.M.SE.eq eq_sym .
+  apply/negP : Hneq .
+Qed .
+
+Lemma eval_exp_if s b qfbv0 qfbv1 :
+  QFBV.eval_exp (if b then qfbv0 else qfbv1) s =
+  if b then QFBV.eval_exp qfbv0 s else QFBV.eval_exp qfbv1 s .
+Proof .
+  case b => /=; done .
+Qed .
+
+Lemma size_inv_same bs :
+  size bs = size (~~# bs)%bits .
+Proof .
+  elim : bs; first done .
+  move => b bs IH .
+  rewrite /= IH // .
+Qed .  
+  
+Lemma size_neg_same bs :
+  size bs = size (-# bs)%bits .
+Proof .
+  elim : bs; first done .
+  move => b bs IH .
+  rewrite /negB /= .
+  case b; rewrite /= !QFBV.size_succB size_inv_same // .
+Qed .
+
+Lemma size_sbbB b bs0 bs1 : 
+  size (sbbB b bs0 bs1).2 = minn (size bs0) (size bs1) .
+Proof .
+  rewrite /sbbB /adcB /full_adder /= .
+  dcase (full_adder_zip (~~ b) (zip bs0 (~~# bs1)%bits)) => [[c res] Hadder] => /= .
+  have : res = (c, res).2 => // .
+  rewrite -Hadder; case => -> .
+  rewrite QFBV.size_full_adder_zip -size_inv_same // .
+Qed .
+
+Lemma size_ucast bs n :
+  size (ucastB bs n) = n .
+Proof .
+  rewrite /ucastB /= .
+  case Heq : (n == size bs) .
+  - rewrite (eqP Heq) // .
+  - case Hlt : (n < size bs) {Heq} .
+    + rewrite size_low // .
+    + rewrite size_zext addnBA; first auto with * .
+      rewrite leqNgt Hlt // .
+Qed .
+
+Lemma size_scast bs n :
+  size (scastB bs n) = n .
+Proof .
+  rewrite /scastB /= .
+  case Heq : (n == size bs) .
+  - rewrite (eqP Heq) // .
+  - case Hlt : (n < size bs) {Heq} .
+    + rewrite size_low // .
+    + rewrite size_sext addnBA; first auto with * .
+      rewrite leqNgt Hlt // .
+Qed .
+
+Lemma size_tcast bs s t :
+  size (Typ.tcast bs s t) = Typ.sizeof_typ t .
+Proof .
+  rewrite /Typ.tcast; case s => _;
+    [rewrite size_ucast // | rewrite size_scast //] .
+Qed .
+  
+Lemma size_unsigned_same ty :
+  Typ.sizeof_typ (Typ.unsigned_typ ty) = Typ.sizeof_typ ty .
+Proof .
+  case ty; done .
+Qed .
+  
+Lemma size_eval_atomic_asize te a s :
+  SSAVS.subset (vars_atomic a) (vars_env te) ->
+  SSAStore.conform s te ->
+  size (eval_atomic a s) = asize a te .
+Proof .
+  move => Hsub Hcon .
+  rewrite (eqP (conform_size_eval_atomic Hsub Hcon)) /asize // .
+Qed .
+
+Lemma asize_add_same te a v :
+  asize a (TypEnv.SSATE.add v (atyp a te) te) = (asize a te) .
+Proof .
+  case : a .
+  - move => va; case Heq : (va == v) .
+    + rewrite (eqP Heq) /asize /= .
+      rewrite /TypEnv.SSATE.vtyp /= .
+      rewrite SSAVM.Lemmas.find_add_eq // .
+    + rewrite /asize /= .
+      rewrite /TypEnv.SSATE.vtyp /= .
+      rewrite SSAVM.Lemmas.find_add_neq // .
+      rewrite /SSAVM.M.SE.eq Heq // .
+  - move => t b /= .
+    rewrite /asize /atyp // .
+Qed .      
+
+Lemma size_eval_atomic_same te s a0 a1 :
+  SSAStore.conform s te ->
+  SSAVS.subset (vars_atomic a0) (vars_env te) ->
+  SSAVS.subset (vars_atomic a1) (vars_env te) ->
+  atyp a0 te = atyp a1 te ->
+  size (eval_atomic a0 s) = size (eval_atomic a1 s) .
+Proof .
+  move => Hcon Hsub0 Hsub1 Hatypeq .
+  move : (conform_size_eval_atomic Hsub0 Hcon)
+           (conform_size_eval_atomic Hsub1 Hcon) .
+  rewrite Hatypeq eq_sym .
+  case => /eqP -> .
+  case => /eqP -> // .
+Qed .
+
+Lemma mem_subset_singleton x s :
+  SSAVS.mem x s ->
+  SSAVS.subset (SSAVS.singleton x) s .
+Proof .
+  apply SSAVS.Lemmas.subset_singleton2 .
+Qed .
+
+Lemma not_mem_add x y s :
+  ~~ SSAVS.mem x (SSAVS.add y s) ->
+  x != y /\ ~~ SSAVS.mem x s .
+Proof .
+  move => Hnmem; split .
+  - apply /negP => Heq .
+    move : (SSAVS.Lemmas.mem_add2 s Heq) => Hmem .
+    rewrite Hmem in Hnmem .
+    done .
+  - apply /negP => Hmem .
+    move : (SSAVS.Lemmas.mem_add3 y Hmem) => {Hmem} Hmem .
+    rewrite Hmem in Hnmem .
+    done .
+Qed .
+
+Ltac unchanged_instr_subset :=
+  match goal with
+  | Hsub : is_true (SSAVS.subset (SSAVS.singleton ?v) (SSAVS.union ?vs0 ?vs1))
+    |- _ =>
+    move : (SSAVS.Lemmas.subset_singleton1 Hsub) => {Hsub};
+    rewrite VSLemmas.OP.P.Dec.F.union_b;
+    case /orP => Hsub;
+    move : (SSAVS.Lemmas.subset_singleton2 Hsub) => {Hsub} Hsub; unchanged_instr_subset
+  | Hsub0 : is_true (SSAVS.subset ?vs0 ?vs1),
+    Hsub1 : is_true (SSAVS.subset ?vs1 ?vs2)
+    |- _ =>
+    let H := fresh in
+    move : (SSAVS.Lemmas.subset_trans Hsub0 Hsub1) => {Hsub0} H; unchanged_instr_subset
+  | Hsub : is_true (SSAVS.subset (SSAVS.singleton ?v) ?vs),
+    Hun : is_true (ssa_vars_unchanged_instr ?vs ?i)
+    |- _ =>
+    move : (ssa_unchanged_instr_subset Hun Hsub) => {Hun} Hun; unchanged_instr_subset
+  | Hun : is_true (ssa_vars_unchanged_instr (SSAVS.singleton ?v) ?i)
+    |- _ =>
+    let H0 := fresh in
+    move : (ssa_unchanged_instr_singleton1 Hun) => {Hun};
+    rewrite /ssa_var_unchanged_instr /lvs_instr => H0
+  end .
+
+Ltac not_mem_rewrite_vtyp :=
+  match goal with
+  | Hnmem : is_true (~~ SSAVS.mem ?v (SSAVS.singleton ?u))
+    |- _ =>
+    move : (SSAVS.Lemmas.not_mem_singleton1 Hnmem) => {Hnmem} /negP Hnmem;
+    rewrite !vtyp_var_add_neq //
+  | Hnmem : is_true (~~ SSAVS.mem ?v (SSAVS.add ?u (SSAVS.singleton ?w)))
+    |- _ =>
+    let Hneq := fresh in
+    let H := fresh in
+    move : (not_mem_add Hnmem) => {Hnmem} [Hneq H];
+    move : (SSAVS.Lemmas.not_mem_singleton1 H) => {H} /negP H;
+    rewrite !vtyp_var_add_neq //
+  | _ => idtac
+  end .
+
+Lemma atyp_well_defined_unchanged te i a :
+  well_defined_instr te i ->
+  ssa_vars_unchanged_instr (vars_env te) i ->
+  SSAVS.subset (vars_atomic a) (rvs_instr i) ->
+  atyp a (instr_succ_typenv i te) = atyp a te .
+Proof .
+  elim a; last (case i => /=; done) .
+  move => v; case i => /= .
+  - move => u a0 .
+    move => /are_defined_subset Ha0te Hun Hva0 .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u a0 n .
+    move => /are_defined_subset Ha0te Hun Hva0 .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => vh vl a0 a1 n .
+    move => /andP [/andP [_ /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hun Hva0a1 .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - done .
+  - move => u ac a0 a1 .
+    rewrite /are_defined => /andP [/andP [/are_defined_subset Hdefc /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hun Hvaca0a1 .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - done .
+  - move => u t a0 .
+    move => /are_defined_subset Hdef Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u a0 a1 .
+    move => /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u w a0 a1 .
+    move => /andP [/andP [_ /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u a0 a1 ac .
+    move => /andP [/andP [/are_defined_subset Hdefc /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u w a0 a1 ac .
+    move => /andP [/andP [/andP [_ /are_defined_subset Hdef0] /are_defined_subset Hdef1] /are_defined_subset Hdefc] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u a0 a1 .
+    move => /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u w a0 a1 .
+    move => /andP [/andP [_ /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u w a0 a1 .
+    move => /andP [/andP [_ /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u a0 a1 ac .
+    move => /andP [/andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /are_defined_subset Hdefc] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u w a0 a1 ac .
+    move => /andP [/andP [/andP [_ /are_defined_subset Hdef0] /are_defined_subset Hdef1] /are_defined_subset Hdefc] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u a0 a1 ac .
+    move => /andP [/andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /are_defined_subset Hdefc] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u w a0 a1 ac .
+    move => /andP [/andP [/andP [_ /are_defined_subset Hdef0] /are_defined_subset Hdef1] /are_defined_subset Hdefc] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u a0 a1 .
+    move => /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u w a0 a1 .
+    move => /andP [/andP [_ /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u a0 a1 .
+    move => /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u w a0 n .
+    move => /andP [Hneq /are_defined_subset Hdef] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u w a0 a1 .
+    move => /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u t a0 a1 .
+    move => /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u t a0 a1 .
+    move => /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u t a0 .
+    move => /are_defined_subset Hdef Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u t a0 .
+    move => /are_defined_subset Hdef Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - move => u a0 a1.
+    move => /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hun Hsub .
+    unchanged_instr_subset; not_mem_rewrite_vtyp .
+  - done .
+Qed .
+
+  
+Lemma asize_well_defined_unchanged te i a :
+  well_defined_instr te i ->
+  ssa_vars_unchanged_instr (vars_env te) i ->
+  SSAVS.subset (vars_atomic a) (rvs_instr i) ->
+  asize a (instr_succ_typenv i te) = asize a te .
+Proof .
+  elim a; last (case i => /=; done) .
+  move => v Hdef Hun Hsub .
+  rewrite /asize .
+  rewrite atyp_well_defined_unchanged // .
+Qed .    
+
+Ltac well_defined_to_vs_subset :=
+  match goal with
+  | Hdef : is_true (well_defined_instr _ ?i) |- _ =>
+    move : Hdef; rewrite /well_defined_instr;
+    [ let H := fresh in
+      let H0 := fresh in
+      let H1 := fresh in
+      let H2 := fresh in
+      move => /andP [/andP [/andP [H /are_defined_subset H0] /are_defined_subset H1] /are_defined_subset H2]
+   || let H := fresh in
+      let H0 := fresh in
+      let H1 := fresh in
+      move => /andP [/andP [/are_defined_subset H /are_defined_subset H0] /are_defined_subset H1]
+   || let H := fresh in
+      let H0 := fresh in
+      let H1 := fresh in
+      move => /andP [/andP [H /are_defined_subset H0] /are_defined_subset H1]
+   || let H := fresh in
+      move => /andP [/are_defined_subset H /are_defined_subset Hdef]
+   || let H := fresh in
+      move => /andP [H /are_defined_subset Hdef]
+   || move => /are_defined_subset Hdef
+    ]
+  | Hdef : is_true (SSAVS.subset _ _ && SSAVS.subset _ _) |- _ =>
+    let Hsub1 := fresh in
+    let Hsub2 := fresh in
+    move : Hdef => /andP [Hsub1 Hsub2]
+  | Hdef : is_true (_ && SSAVS.subset _ _) |- _ =>
+    let Hprev := fresh in
+    let Hsub := fresh in
+    move : Hdef => /andP [Hprev Hsub]
+(*
+  | Hdef : is_true (_ && SSAVS.subset _ _ && SSAVS.subset _ _) |- _ =>
+    let Hneq := fresh in
+    let Hsub1 := fresh in
+    let Hsub2 := fresh in
+    move : Hdef => /andP [/andP [Hneq Hsub1] Hsub2]
+*)
+  end .
+
+Ltac eval_exp_exp_atomic_to_pred_state :=
+  match goal with
+  | Hsub : is_true (SSAVS.subset (vars_atomic ?a) _),
+    Hun : is_true (ssa_vars_unchanged_instr _ ?i),
+    Hinst : eval_instr _ ?i _ ?s2
+    |-
+    context f [QFBV.eval_exp (qfbv_atomic ?a) ?s2]   =>
+    rewrite eval_exp_atomic
+            -(ssa_unchanged_instr_eval_atomic
+                (ssa_unchanged_instr_subset Hun Hsub)
+                Hinst)
+  end .
+
+Ltac qfbv_store_acc :=
+  match goal with
+  | HUpd : SSAStore.Upd _ _ _ ?s2 |- context f [SSAStore.acc _ ?s2] =>
+    rewrite (SSAStore.acc_Upd_eq _ HUpd) //
+  | Hneq : is_true (?u != ?v),
+    HUpd : SSAStore.Upd2 ?v _ ?u _ _ ?s2 |- context f [SSAStore.acc ?v ?s2] =>
+    move /negP : Hneq; rewrite eq_sym => /negP Hneq;
+    rewrite (SSAStore.acc_Upd2_eq1 _ Hneq HUpd) //
+  | HUpd : SSAStore.Upd2 _ _ ?v _ _ ?s2 |- context f [SSAStore.acc ?v ?s2] =>
+    rewrite (SSAStore.acc_Upd2_eq2 _ HUpd) //
+  end .
+
+
+
+Lemma bexp_instr_eval te i s1 s2 :
+  well_formed_instr te i ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) i ->
+  eval_instr te i s1 s2 ->
+  QFBV.eval_bexp (bexp_instr (instr_succ_typenv i te) i) s2 .
+Proof .
+  case: i => /= .
+  - (* Imov *)
+    move => v a /andP [Hdef _] _ Hun Hinst .
+    well_defined_to_vs_subset .    
+    eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst .
+    qfbv_store_acc .
+  - (* Ishl *)
+    move => v a n /andP [Hdef _] _ Hun Hinst .
+    well_defined_to_vs_subset .
+    eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst .
+    qfbv_store_acc .
+    rewrite from_nat_simple // .
+  - (* Icshl *)
+    move => vh vl ah al n /andP [Hdef Hty] Hcon Hun Hinst .
+    rewrite !(asize_well_defined_unchanged Hdef Hun);
+      [ idtac
+      | rewrite SSAVS.Lemmas.union_subset_1 //
+      | rewrite SSAVS.Lemmas.union_subset_2 // ] .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst .
+    repeat qfbv_store_acc .
+    rewrite from_nat_simple high_extract .
+    rewrite !QFBV.size_shlB !size_cat !addnK .
+    rewrite !(eqP (conform_size_eval_atomic H3 Hcon))
+            !(eqP (conform_size_eval_atomic H Hcon)) /= .
+    apply /andP; split; done .
+  - (* Inondet *)
+    done .
+  - (* Icmov *)
+    move => v c a0 a1 /andP [Hdef Hty ] Hcon Hun Hinst .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    rewrite /joinlsb /= .
+    move : Hty => /andP [ Htyc _ ] .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+    + rewrite (to_bool_is_true H1) // .
+    + move : (not_to_bool_is_false H1) .
+      case => /eqP <- // .
+  - (* Inop *)
+    done .
+  - (* Inot *)
+    move => v t a /andP [Hdef _] _ Hun Hinst .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+  - (* Iadd *)
+    move => v a0 a1 /andP [Hdef _] _ Hun Hinst .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+  - (* Iadds *)
+    move => c v a0 a1 /andP [Hdef Hty] Hcon Hun Hinst .
+    rewrite !(asize_well_defined_unchanged Hdef Hun);
+      [ idtac
+      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+    rewrite /carry_addB .
+    rewrite /well_typed_instr in Hty .
+    move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
+    rewrite (adc_false_sext_add_high Hsize) /= .
+    rewrite {1}/addB .
+    rewrite (eqP (adc_false_sext_add_low Hsize)) .
+    move /negP : H1; rewrite eq_sym; move /negP => H1 .
+    rewrite (size_eval_atomic_asize H3 Hcon) // .
+  - (* Iadc *)
+    move => v a0 a1 c /andP [Hdef Hty] Hcon Hun Hinst .
+    rewrite !(asize_well_defined_unchanged Hdef Hun);
+      [ idtac
+      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+    rewrite /well_typed_instr in Hty .
+    move : Hty => /andP [Hty _] .
+    move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
+    rewrite (eqP (adc_sext_add_low (eval_atomic c s1) Hsize)) .
+    rewrite (size_eval_atomic_asize H3 Hcon) // .
+  - (* Iadcs *)
+    move => c v a0 a1 ac /andP [Hdef Hty] Hcon Hun Hinst .
+    rewrite !(asize_well_defined_unchanged Hdef Hun) ;
+      [ idtac
+      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+    rewrite /well_typed_instr in Hty .
+    move : Hty => /andP [Hty _] .
+    move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => Hsize .
+    rewrite (eqP (adc_sext_add_high (eval_atomic ac s1) Hsize)) .
+    rewrite (eqP (adc_sext_add_low (eval_atomic ac s1) Hsize)) .
+    rewrite (size_eval_atomic_asize _ Hcon) // .
+    apply /andP; split; done .
+  - (* Isub *)
+    move => v a0 a1 /andP [Hdef _] Hcon Hun Hinst .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+  - (* Isubc *)
+    move => c v a0 a1 /andP [Hdef Hty] Hcon Hun Hinst .
+    rewrite !(asize_well_defined_unchanged Hdef Hun) ;
+      [ idtac
+      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+    rewrite /carry_addB .
+    rewrite /well_typed_instr in Hty .
+    move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
+    rewrite (size_neg_same (eval_atomic a1 s1)) in Hsize .
+    rewrite (eqP (adc_false_sext_add_high Hsize)) .
+    rewrite {3}/addB .
+    rewrite (eqP (adc_false_sext_add_low Hsize)) .
+    rewrite (size_eval_atomic_asize H3 Hcon) /= .
+    apply /andP; split; done .
+  - (* Isubb *)
+    move => c v a0 a1 /andP [Hdef Hty] Hcon Hun Hinst .
+    rewrite !(asize_well_defined_unchanged Hdef Hun) ;
+      [ idtac
+      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+    rewrite /borrow_subB .
+    rewrite /well_typed_instr in Hty .
+    move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
+    rewrite (sbb_false_sext_sub_high Hsize) /= .
+    rewrite /subB .
+    rewrite (eqP (sbb_false_sext_sub_low Hsize)) .
+    rewrite (size_eval_atomic_asize _ Hcon) // .
+  - (* Isbc *)
+    move => v a0 a1 ac /andP [Hdef Hty] Hcon Hun Hinst .
+    rewrite !(asize_well_defined_unchanged Hdef Hun);
+      [ idtac
+      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+    move : Hty; rewrite /well_typed_instr => /andP [Hty _] .
+    move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
+    rewrite (size_inv_same (eval_atomic a1 s1)) in Hsize .
+    rewrite (eqP (adc_sext_add_low (eval_atomic ac s1) Hsize)) .
+    rewrite (size_eval_atomic_asize _ Hcon) // .
+  - (* Isbcs *)
+    move => c v a0 a1 ac /andP [Hdef Hty] Hcon Hun Hinst .
+    rewrite !(asize_well_defined_unchanged Hdef Hun);
+      [ idtac
+      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+    move : Hty .
+    rewrite /well_typed_instr => /andP [Hty _] .
+    move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => Hsize .
+    rewrite (size_inv_same (eval_atomic a1 s1)) in Hsize .
+    rewrite (eqP (adc_sext_add_high (eval_atomic ac s1) Hsize)) .
+    rewrite (eqP (adc_sext_add_low (eval_atomic ac s1) Hsize)) .
+    rewrite !(size_eval_atomic_asize H0 Hcon) /= .
+    apply /andP; split; done .
+  - (* Isbb *)
+    move => v a0 a1 ac /andP [Hdef Hty] Hcon Hun Hinst .
+    rewrite !(asize_well_defined_unchanged Hdef Hun);
+      [ idtac
+      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+    move : Hty .
+    rewrite /well_typed_instr => /andP [Hty _] .
+    move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
+    rewrite (eqP (sbb_sext_sub_low (eval_atomic ac s1) Hsize)) .
+    rewrite !(size_eval_atomic_asize H3 Hcon) // .
+  - (* Isbbs *)
+    move => c v a0 a1 ac /andP [Hdef Hty] Hcon Hun Hinst .
+    rewrite !(asize_well_defined_unchanged Hdef Hun);
+      [ idtac
+      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+    move : Hty .
+    rewrite /well_typed_instr => /andP [Hty _] .
+    move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => Hsize .
+    rewrite (eqP (sbb_sext_sub_high (eval_atomic ac s1) Hsize)) .
+    rewrite (eqP (sbb_sext_sub_low (eval_atomic ac s1) Hsize)) .
+    rewrite !(size_eval_atomic_asize H0 Hcon) .
+    apply /andP; split; done .
+  - (* Imul *)
+    move => v a0 a1 /andP [Hdef _] Hcon Hun Hinst .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+  - (* Imull *)
+    move => vh vl a0 a1 /andP [Hdef _] Hcon Hun Hinst .
+    rewrite !(asize_well_defined_unchanged Hdef Hun);
+      [ idtac
+      | rewrite SSAVS.Lemmas.union_subset_2 //
+      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+    rewrite (eqP (mul_sext (eval_atomic a0 s1) (eval_atomic a1 s1))) .
+    rewrite (size_eval_atomic_asize H3 Hcon)
+            (size_eval_atomic_asize H Hcon) /= .
+    apply /andP; split; done .
+  - (* Imulj *)
+    move => v a0 a1 /andP [Hdef _] Hcon Hun Hinst .
+    rewrite !(asize_well_defined_unchanged Hdef Hun);
+      [ idtac
+      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+    rewrite (eqP (mul_sext (eval_atomic a0 s1) (eval_atomic a1 s1))) .
+    rewrite (size_eval_atomic_asize H0 Hcon) // .
+  - (* Isplit *)
+    move => vh vl a n /andP [Hdef _] Hcon Hun Hinst .
+    rewrite !(asize_well_defined_unchanged Hdef Hun);
+      [ idtac
+      | rewrite SSAVS.Lemmas.subset_refl // ] .
+    rewrite !(atyp_well_defined_unchanged Hdef Hun);
+      [ idtac
+      | rewrite SSAVS.Lemmas.subset_refl // ] .
+    repeat well_defined_to_vs_subset .
+    inversion Hinst => {H H0 H2 H3 H4 H5};
+    [ rewrite H6 /= | rewrite -Typ.not_signed_is_unsigned H6 /= ];
+    repeat eval_exp_exp_atomic_to_pred_state;
+    repeat qfbv_store_acc;
+    rewrite !(size_eval_atomic_asize Hdef Hcon)
+            !from_nat_simple;
+    apply /andP; split; done .
+  - (* Iand *)
+    move => v t a0 a1 /andP [Hdef _] Hcon Hun Hinst .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+  - (* Ior *)
+    move => v t a0 a1 /andP [Hdef _] Hcon Hun Hinst .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+  - (* Ixor *)
+    move => v t a0 a1 /andP [Hdef _] Hcon Hun Hinst .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+  - (* Icast *)
+    move => v t a /andP [Hdef _] Hcon Hun Hinst .
+    rewrite !(atyp_well_defined_unchanged Hdef Hun);
+      [ idtac
+      | rewrite SSAVS.Lemmas.subset_refl // ] .
+    repeat well_defined_to_vs_subset .
+    rewrite !eval_exp_if .
+    rewrite /qfbv_low /= .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+    rewrite /Typ.tcast /ucastB /scastB /=
+            !(size_eval_atomic_asize Hdef Hcon) !/asize .
+    case (atyp a te) => // .
+  - (* Ivpc *)
+    move => v t a /andP [Hdef _] Hcon Hun Hinst .
+    rewrite !(atyp_well_defined_unchanged Hdef Hun);
+      [ idtac
+      | rewrite SSAVS.Lemmas.subset_refl // ] .
+    repeat well_defined_to_vs_subset .
+    rewrite !eval_exp_if .
+    rewrite /qfbv_low /= .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+    rewrite /Typ.tcast /ucastB /scastB /=
+            !(size_eval_atomic_asize Hdef Hcon) !/asize .
+    case (atyp a te) => // .
+  - (* Ijoin *)
+    move => v a0 a1 /andP [Hdef _] Hcon Hun Hinst .
+    repeat well_defined_to_vs_subset .
+    repeat eval_exp_exp_atomic_to_pred_state .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+  - (* Iassume *)
+    move => b /andP [Hdef _] Hcon Hun Hinst .
+    repeat well_defined_to_vs_subset .
+    inversion_clear Hinst; repeat qfbv_store_acc .
+    case H; case b => /= ebexp rbexp _ Hrbexp .
+    case (eval_bexp_rbexp rbexp s2) => _ Hqfbv .
+    apply : Hqfbv => // .
+Qed .    
+
+(* Connect premises by conjunction. *)
+
+Fixpoint eval_bexps_conj (es : seq QFBV.bexp) (s : SSAStore.t) : Prop :=
+  match es with
+  | [::] => True
+  | hd::tl => QFBV.eval_bexp hd s /\ eval_bexps_conj tl s
+  end .
+
+Lemma eval_program_cons te hd tl s1 s3 :
+  eval_program te (hd :: tl) s1 s3 ->
+  exists s2, eval_instr te hd s1 s2 /\
+             eval_program (instr_succ_typenv hd te) tl s2 s3 .
+Proof .
+  move => Hev .
+  inversion_clear Hev .
+  exists t => // .
+Qed .
+
+Lemma mem_add_neq elt te x y (ty : elt) :
+  x != y ->
+  TypEnv.SSATE.mem x (TypEnv.SSATE.add y ty te) ->
+  TypEnv.SSATE.mem x te .
+Proof .
+  move => Hneq .
+  rewrite TypEnv.SSATE.Lemmas.mem_add_neq // .
+  move : Hneq => /negP // .
+Qed .
+
+Lemma eqb_false_neqb (T : eqType) (x : T) y :
+  (x == y) = false -> x != y .
+Proof .
+  move => Heqf .
+  apply contraFneq with (x == y); last done .
+  case => -> // .
+Qed .  
+
+Lemma conform_Upd te s1 s2 ty x v :
+  Typ.sizeof_typ ty = size v ->
+  SSAStore.conform s1 te ->
+  SSAStore.Upd x v s1 s2 ->
+  SSAStore.conform s2 (TypEnv.SSATE.add x ty te) .
+Proof .
+  move => Hszeq Hcon HUpd y Hmem .
+  case Heq : (y == x) .
+  - rewrite (TypEnv.SSATE.vsize_add_eq Heq)
+            (SSAStore.acc_Upd_eq Heq HUpd) // .
+  - move : (eqb_false_neqb Heq) => {Heq} Hneq .
+    rewrite TypEnv.SSATE.vsize_add_neq // .
+    move : (mem_add_neq Hneq Hmem) => {Hmem} Hmem .
+    rewrite (SSAStore.acc_Upd_neq Hneq HUpd) .
+    rewrite Hcon // .
+Qed .
+
+Lemma conform_Upd2 te s1 s2 ty1 ty2 x1 x2 v1 v2 :
+  x1 != x2 ->
+  Typ.sizeof_typ ty1 = size v1 ->
+  Typ.sizeof_typ ty2 = size v2 ->
+  SSAStore.conform s1 te ->
+  SSAStore.Upd2 x2 v2 x1 v1 s1 s2 ->
+  SSAStore.conform s2
+    (TypEnv.SSATE.add x1 ty1
+      (TypEnv.SSATE.add x2 ty2 te)) .
+Proof .
+  move => Hneq Hty1 Hty2 Hcon HUpd2 y Hmem .
+  case Heq1 : (y == x1); case Heq2 : (y == x2) .
+  - rewrite -(eqP Heq1) -(eqP Heq2) in Hneq .
+    move : Hneq => /eqP // .
+  - rewrite (SSAStore.acc_Upd2_eq2 Heq1 HUpd2)
+            (TypEnv.SSATE.vsize_add_eq Heq1) // .
+  - move : (eqb_false_neqb Heq1) => {Heq1} Hneq1 .
+    rewrite (SSAStore.acc_Upd2_eq1 Heq2 Hneq1 HUpd2)
+            (TypEnv.SSATE.vsize_add_neq Hneq1)
+            (TypEnv.SSATE.vsize_add_eq Heq2) // .
+  - move : (eqb_false_neqb Heq1) => {Heq1} Hneq1 .
+    move : (eqb_false_neqb Heq2) => {Heq2} Hneq2 .
+    rewrite (SSAStore.acc_Upd2_neq Hneq2 Hneq1 HUpd2)
+            (TypEnv.SSATE.vsize_add_neq Hneq1)
+            (TypEnv.SSATE.vsize_add_neq Hneq2) Hcon // .
+    exact : (mem_add_neq Hneq2 (mem_add_neq Hneq1 Hmem)) .
+Qed .
+    
+Lemma conform_eval_succ_typenv te i s1 s2 :
+  well_formed_instr te i ->
+  SSAStore.conform s1 te ->
+  eval_instr te i s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv i te) .
+Proof .
+  move => /andP [Hdef Hty] Hcon .
+  case : i Hdef Hty => /= .
+  - (* Imov *)
+    move => v a /are_defined_subset Hdef _ Hev .
+    inversion_clear Hev .
+    apply : (conform_Upd _ Hcon H) .
+    rewrite (size_eval_atomic_asize Hdef) // .
+  - (* Ishl *)
+    move => v a n /are_defined_subset Hdef _ Hev .
+    inversion_clear Hev .
+    apply : (conform_Upd _ Hcon H) .
+    rewrite QFBV.size_shlB (size_eval_atomic_asize Hdef) // .
+  - (* Icshl *)
+    move => vh vl a0 a1 n /andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] _ Hev .
+    inversion_clear Hev .
+    apply : (conform_Upd2 Hneq _ _ Hcon H) .
+    + rewrite size_high (size_eval_atomic_asize Hdef0) // .
+    + rewrite QFBV.size_shrB size_low (size_eval_atomic_asize Hdef1) // .
+  - (* Inondet *)
+    move => v t _ _ Hev .
+    inversion_clear Hev .
+    apply : (conform_Upd _ Hcon H0) => // .
+  - (* Icmov *)
+    move => v ac a0 a1 /andP [/andP [/are_defined_subset Hdefc /are_defined_subset Hdef0] /are_defined_subset Hdef1] /andP [_ Hty] Hev .
+    inversion_clear Hev; apply : (conform_Upd _ Hcon H0);
+    [ rewrite (size_eval_atomic_asize Hdef0) //
+    | rewrite (size_eval_atomic_asize Hdef1) //;
+      rewrite (eqP Hty) // ] .
+  - (* Inop *)
+    move => _ _ Hev .
+    inversion Hev .
+    rewrite -H1 // .
+  - (* Inot *)
+    move => v t a /are_defined_subset Hdef Hty Hev .
+    rewrite /Typ.compatible in Hty .
+    inversion_clear Hev .
+    apply : (conform_Upd _ Hcon H) => // .
+    rewrite -size_inv_same (eqP Hty)
+            (size_eval_atomic_asize Hdef) // .
+  - (* Iadd *)
+    move => v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hty Hev .
+    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    rewrite QFBV.size_addB (size_eval_atomic_asize Hdef0) // .
+    rewrite (size_eval_atomic_asize Hdef1) // .
+    rewrite /asize !(eqP Hty) minnE subKn // .
+  - (* Iadds *)
+    move => u v a0 a1 /andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hty Hev .
+    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
+    + done .
+    + rewrite QFBV.size_addB (size_eval_atomic_asize Hdef0) //;
+      rewrite (size_eval_atomic_asize Hdef1) //;
+      rewrite /asize !(eqP Hty) minnE subKn // .
+  - (* Iadc *)
+    move => v a0 a1 ac /andP [/andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /are_defined_subset Hdefc]
+              /andP [Hty Htyc] Hev .
+    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    rewrite /adcB /full_adder QFBV.size_full_adder_zip
+            (size_eval_atomic_asize Hdef0) //
+            (size_eval_atomic_asize Hdef1) //
+            /asize !(eqP Hty) minnE subKn // .
+  - (* Iadcs *)
+    move => u v a0 a1 ac /andP [/andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] /are_defined_subset Hdefc] /andP [Hty Htyc] Hev .    
+    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .      
+    + done .
+    + rewrite /adcB /full_adder QFBV.size_full_adder_zip
+              (size_eval_atomic_asize Hdef0) //
+              (size_eval_atomic_asize Hdef1) //
+              /asize !(eqP Hty) minnE subKn // .
+  - (* Isub *)
+    move => u a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hty Hev .
+    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    rewrite QFBV.size_subB (size_eval_atomic_asize Hdef0) //
+            (size_eval_atomic_asize Hdef1) //
+            /asize !(eqP Hty) minnE subKn // .
+  - (* Isubc *)
+    move => u v a0 a1 /andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hty Hev .
+    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
+    + done .
+    + rewrite QFBV.size_addB -size_neg_same
+              (size_eval_atomic_asize Hdef0) //
+              (size_eval_atomic_asize Hdef1) //
+              /asize !(eqP Hty) minnE subKn // .
+  - (* Isubb *)
+    move => u v a0 a1 /andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hty Hev .
+    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
+    + done .
+    + rewrite QFBV.size_subB
+              (size_eval_atomic_asize Hdef0) //
+              (size_eval_atomic_asize Hdef1) //
+              /asize !(eqP Hty) minnE subKn // .
+  - (* Isbc *)
+    move => v a0 a1 ac /andP [/andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /are_defined_subset Hdefc]
+              /andP [Hty _] Hev .
+    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    rewrite /adcB /full_adder QFBV.size_full_adder_zip
+            -size_inv_same 
+            (size_eval_atomic_asize Hdef0) //
+            (size_eval_atomic_asize Hdef1) //
+            /asize !(eqP Hty) minnE subKn // .
+  - (* Isbcs *)
+    move => u v a0 a1 ac /andP [/andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] /are_defined_subset Hdefc] /andP [Hty _] Hev .
+    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
+    + done .
+    + rewrite /adcB /full_adder QFBV.size_full_adder_zip
+              -size_inv_same
+              (size_eval_atomic_asize Hdef0) //
+              (size_eval_atomic_asize Hdef1) //
+              /asize !(eqP Hty) minnE subKn // .
+  - (* Isbb *)
+    move => v a0 a1 ac /andP [/andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /are_defined_subset Hdefc]
+              /andP [Hty _] Hev .
+    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    rewrite size_sbbB
+            (size_eval_atomic_asize Hdef0) //
+            (size_eval_atomic_asize Hdef1) //
+            /asize !(eqP Hty) minnE subKn // .
+  - (* Isbbs *)
+    move => u v a0 a1 ac /andP [/andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] /are_defined_subset Hdefc]
+              /andP [Hty _] Hev .
+    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H); first done .
+    rewrite size_sbbB
+            (size_eval_atomic_asize Hdef0) //
+            (size_eval_atomic_asize Hdef1) //
+            /asize !(eqP Hty) minnE subKn // .
+  - (* Imul *)
+    move => v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hty Hev .
+    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    rewrite QFBV.size_mulB
+            (size_eval_atomic_asize Hdef0) // .
+  - (* Imull *)
+    move => u v a0 a1 /andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hty Hev .
+    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H);
+    [ rewrite size_high 
+              (size_eval_atomic_asize Hdef0) //
+    | rewrite size_low
+              (size_eval_atomic_asize Hdef1) // ] .
+    rewrite size_unsigned_same // .
+  - (* Imulj *)
+    move => v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hty Hev .
+    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    rewrite QFBV.size_full_mul //
+            (size_eval_atomic_asize Hdef0) //
+            (size_eval_atomic_asize Hdef1) //
+            /asize -(eqP Hty) .
+    rewrite /Typ.double_typ /= .
+    case (atyp a0 te) => /= // n;
+    rewrite mul2n addnn // .
+  - (* Isplit *)
+    move => u v a n /andP [Hneq /are_defined_subset Hdef] _ Hev .
+    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H0);
+    [ rewrite QFBV.size_shrB (size_eval_atomic_asize Hdef) //
+    | rewrite QFBV.size_shrB QFBV.size_shlB size_unsigned_same (size_eval_atomic_asize Hdef) //
+    | rewrite QFBV.size_sarB (size_eval_atomic_asize Hdef) //
+    |  rewrite QFBV.size_shrB QFBV.size_shlB size_unsigned_same (size_eval_atomic_asize Hdef) // ] .
+  - (* Iand *)
+    move => u v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /andP [Htyc Hty] Hev .
+    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    rewrite size_lift
+            (size_eval_atomic_asize Hdef0) //
+            (size_eval_atomic_asize Hdef1) //
+            /asize -(eqP Hty) maxnn (eqP Htyc) // .
+  - (* Ior *)
+    move => u v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /andP [Htyc Hty] Hev .
+    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    rewrite size_lift
+            (size_eval_atomic_asize Hdef0) //
+            (size_eval_atomic_asize Hdef1) //
+            /asize -(eqP Hty) maxnn (eqP Htyc) // .
+  - (* Ixor *)
+    move => u v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /andP [Htyc Hty] Hev .
+    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    rewrite size_lift
+            (size_eval_atomic_asize Hdef0) //
+            (size_eval_atomic_asize Hdef1) //
+            /asize -(eqP Hty) maxnn (eqP Htyc) // .
+  - (* Icast *)
+    move => v t a /are_defined_subset Hdef _ Hev .
+    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    rewrite size_tcast // .
+  - (* Ivpc *)
+    move => u v a /are_defined_subset Hdef _ Hev .
+    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    rewrite size_tcast // .
+  - (* Ijoin *)
+    move => v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /andP [Hun Hty] Hev .
+    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    rewrite size_cat
+            (size_eval_atomic_asize Hdef0) //
+            (size_eval_atomic_asize Hdef1) //
+            /asize -(eqP Hty) /Typ.double_typ .
+    case (atyp a0 te) => /= n;
+    rewrite mul2n addnn // .
+  - move => b Hdef _ Hev .
+    inversion Hev; rewrite -H2 // .
+Qed .
+    
+Lemma bexp_program_eval te p s1 s2 :
+  well_formed_ssa_program te p ->
+  SSAStore.conform s1 te ->
+  eval_program te p s1 s2 ->
+  eval_bexps_conj (bexp_program te p) s2.
+Proof .
+  elim : p te s1 s2 => /= .
+  - done .
+  - move=> hd tl IH te s1 s3 Hwfssa Hcon Hep.
+    move: (Hwfssa) => /andP [/andP [Hwf Huc] Hssa].
+    elim : (eval_program_cons Hep) => s2 [Hehd Hetl] .
+    move : (ssa_unchanged_program_cons1 Huc) => [Huchd Huctl] .
+    split.
+    + move : (well_formed_program_cons1 Hwf) => Hwfhd .
+      move : (bexp_instr_eval Hwfhd Hcon Huchd Hehd) .
+      move : Hetl .
+      move : (well_formed_ssa_vars_unchanged_hd Hwfssa) .
+      apply : eval_bexp_instr .
+    + apply : (IH _ _ _ (well_formed_ssa_tl Hwfssa) _ Hetl) .
+      exact : (conform_eval_succ_typenv
+                 (well_formed_program_cons1 Hwf)
+                 Hcon Hehd) .
+Qed .
+
+Definition valid_bexp_spec_conj (s : bexp_spec) : Prop :=
+  forall st : SSAStore.t,
+    QFBV.eval_bexp (bpre s) st ->
+    eval_bexps_conj (bprog s) st ->
+    QFBV.eval_bexp (bpost s) st .
+
+Lemma bexp_spec_sound_conj (s : spec) :
+  well_formed_ssa_spec (sinputs s) s ->
+  valid_bexp_spec_conj (bexp_of_rspec (sinputs s) (rspec_of_spec s)) -> valid_rspec (rspec_of_spec s).
+Proof.
+  destruct s as [te p g] .
+  rewrite /bexp_of_rspec /valid_bexp_spec_conj /=.
+  move=> Hwfssa Hvalid s1 s2 /= Hcon Hf Hp.
+  apply: eval_bexp_rbexp1.
+  apply: Hvalid.
+  - move: Hwfssa => /andP /= [/andP [Hwf Huc] Hssa]. apply: eval_bexp_rbexp2.
+    apply: (proj1 (ssa_unchanged_program_eval_rbexp _ Hp) Hf).
+    apply: (ssa_unchanged_program_subset Huc).
+    move/andP: Hwf => /= [/andP [H _] _].
+    move : H => /andP [/are_defined_subset H _] .
+    exact: (VSLemmas.subset_union5 H).
+  - exact: (bexp_program_eval (well_formed_ssa_spec_program Hwfssa) Hcon Hp).
+Qed.
 
 
 (* Define the safety condition in terms of a QFBV expression *)
