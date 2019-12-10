@@ -1656,6 +1656,68 @@ Proof.
   - exact: (bexp_program_eval (well_formed_ssa_spec_program Hwfssa) Hcon Hp).
 Qed.
 
+(* Connect premises by implication. *)
+
+Fixpoint eval_bexps_imp (es : seq QFBV.bexp) (s : SSAStore.t) (p : Prop) : Prop :=
+  match es with
+  | [::] => p
+  | hd::tl => QFBV.eval_bexp hd s -> eval_bexps_imp tl s p
+  end.
+
+Definition valid_bexp_spec_imp (s : bexp_spec) : Prop :=
+  forall st : SSAStore.t,
+    QFBV.eval_bexp (bpre s) st ->
+    eval_bexps_imp (bprog s) st (QFBV.eval_bexp (bpost s) st).
+
+Lemma valid_bexp_spec_conj_imp (s : bexp_spec) :
+  valid_bexp_spec_conj s -> valid_bexp_spec_imp s.
+Proof.
+  destruct s as [f p g].
+  move => Hc s /= Hf.
+  move: (Hc s Hf) => /= {Hc Hf f} Hc.
+  elim: p Hc => /=.
+  - by apply.
+  - move=> hd tl IH Hc Hhd.
+    apply: IH => Htl.
+    apply: Hc; split; assumption.
+Qed.
+
+Lemma valid_bexp_spec_imp_conj (s : bexp_spec) :
+  valid_bexp_spec_imp s -> valid_bexp_spec_conj s.
+Proof.
+  destruct s as [f p g].
+  move => Hi s /= Hf.
+  move: (Hi s Hf) => /= {Hi Hf f} Hi.
+  elim: p Hi => /=.
+  - done.
+  - move=> hd tl IH Hi [Hhd Htl].
+    exact: (IH (Hi Hhd) Htl).
+Qed.
+
+Lemma bexp_spec_sound_imp (s : spec) :
+  well_formed_ssa_spec (sinputs s) s ->
+  valid_bexp_spec_imp (bexp_of_rspec (sinputs s) (rspec_of_spec s)) -> valid_rspec (rspec_of_spec s).
+Proof.
+  move=> Hw Hv.
+  apply: (bexp_spec_sound_conj Hw).
+  exact: valid_bexp_spec_imp_conj.
+Qed.
+
+
+
+(* Soundness *)
+
+Definition valid_bexp_spec := valid_bexp_spec_imp.
+
+Theorem bexp_spec_sound (s : spec) :
+  well_formed_ssa_spec (sinputs s) s ->
+  valid_bexp_spec (bexp_of_rspec (sinputs s) (rspec_of_spec s)) -> valid_rspec (rspec_of_spec s).
+Proof.
+  exact: bexp_spec_sound_imp.
+Qed.
+
+
+
 
 (* Define the safety condition in terms of a QFBV expression *)
 (* TODO: see bexp_program_safe in certified_qhasm_vcg/mqhasm/bvSSA2QFBV.v *)
