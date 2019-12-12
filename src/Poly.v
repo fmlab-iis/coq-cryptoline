@@ -290,14 +290,6 @@ Section ZSpec2Spec.
         * exact: Hzp.
   Qed.
 
-  (* TODO: prove this *)
-  Theorem pspecs_of_zspec_complete zs :
-    ZSSA.valid_zspec zs ->
-    forall ps, ps \in pspecs_of_zspec zs -> valid_pspec ps.
-  Proof.
-    move=> Hzs [ppres ppost] Hpin st /= Hppres. move: (Hzs st).
-  Abort.
-
 End ZSpec2Spec.
 
 

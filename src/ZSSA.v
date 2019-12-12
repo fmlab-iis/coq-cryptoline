@@ -262,6 +262,64 @@ Module ZSSA.
     zentails f g.
   Proof. move=> He s Hf. apply: (He s _ Hf). reflexivity. Qed.
 
+  Lemma steq_eval_zexp e {s1 s2} :
+    ZSSAStore.Equal s1 s2 -> eval_zexp e s1 = eval_zexp e s2.
+  Proof.
+    elim: e => //=.
+    - move=> op e IH Heq. rewrite (IH Heq). reflexivity.
+    - move=> op e1 IH1 e2 IH2 Heq. rewrite (IH1 Heq) (IH2 Heq). reflexivity.
+  Qed.
+
+  Lemma steq_eval_zbexp e {s1 s2} :
+    ZSSAStore.Equal s1 s2 -> eval_zbexp e s1 <-> eval_zbexp e s2.
+  Proof.
+    elim: e => //=.
+    - move=> e1 e2 Heq. rewrite (steq_eval_zexp e1 Heq) (steq_eval_zexp e2 Heq).
+      tauto.
+    - move=> e1 e2 e3 Heq. rewrite (steq_eval_zexp e1 Heq) (steq_eval_zexp e2 Heq)
+                                   (steq_eval_zexp e3 Heq). tauto.
+    - move=> e1 IH1 e2 IH2 Heq. move: (IH1 Heq) (IH2 Heq) => {IH1 IH2} IH1 IH2. tauto.
+  Qed.
+
+  Lemma steq_eval_zinstr i {s1 s2} :
+    ZSSAStore.Equal s1 s2 -> ZSSAStore.Equal (eval_zinstr s1 i) (eval_zinstr s2 i).
+  Proof.
+    case: i => /=.
+    - move=> v e Heq. rewrite (steq_eval_zexp e Heq).
+      rewrite (ZSSAStore.Equal_upd_Equal v (eval_zexp e s2) Heq). reflexivity.
+    - move=> vh vl e n Heq. rewrite (steq_eval_zexp e Heq).
+      dcase (Z.div_eucl (eval_zexp e s2) (2 ^ Z.of_nat n)) => [[q r] Hqr].
+      exact: (ZSSAStore.Equal_upd2_Equal _ _ _ _ Heq).
+  Qed.
+
+  Lemma steq_eval_zprogram p {s1 s2} :
+    ZSSAStore.Equal s1 s2 -> ZSSAStore.Equal (eval_zprogram s1 p) (eval_zprogram s2 p).
+  Proof.
+    elim: p s1 s2 => [| hd tl IH] //=. move=> s1 s2 Heq. apply: IH.
+    exact: (steq_eval_zinstr _ Heq).
+  Qed.
+
+  Lemma steq_acc_zinstr x i {s1 s2} :
+    ZSSAStore.Equal s1 s2 ->
+    ZSSAStore.acc x (eval_zinstr s1 i) = ZSSAStore.acc x (eval_zinstr s2 i).
+  Proof.
+    move=> Heq. case: i => /=.
+    - move=> v e. rewrite (steq_eval_zexp _ Heq). exact: ZSSAStore.Equal_upd_Equal.
+    - move=> vh vl e n.
+      dcase (Z.div_eucl (eval_zexp e s1) (2 ^ Z.of_nat n)) => [[q r] Hqr].
+      dcase (Z.div_eucl (eval_zexp e s2) (2 ^ Z.of_nat n)) => [[qq rr] Hqqrr].
+      rewrite (steq_eval_zexp _ Heq) Hqqrr in Hqr. case: Hqr => ? ?; subst.
+      exact: (ZSSAStore.Equal_upd2_Equal _ _ _ _ Heq).
+  Qed.
+
+  Lemma steq_acc_zprogram x p {s1 s2} :
+    ZSSAStore.Equal s1 s2 ->
+    ZSSAStore.acc x (eval_zprogram s1 p) = ZSSAStore.acc x (eval_zprogram s2 p).
+  Proof.
+    elim: p x s1 s2 => //=. move=> hd tl IH x s1 s2 Heq. apply: IH.
+    exact: (steq_eval_zinstr _ Heq).
+  Qed.
+
 
 
   (* Well-formedness *)
@@ -1035,6 +1093,186 @@ Module ZSSA.
   Proof.
     move=> Hunch Hp He. move: (ssa_unchanged_zprogram_eval_bexp Hunch Hp) => [H1 H2].
     exact: (H2 He).
+  Qed.
+
+  Lemma eval_zexp_upd {x v s e} :
+    ~~ SSAVS.mem x (vars_zexp e) ->
+    eval_zexp e (ZSSAStore.upd x v s) = eval_zexp e s.
+  Proof.
+    elim: e x v s => //=.
+    - move=> y x v s Hmem. move: (SSAVS.Lemmas.not_mem_singleton1 Hmem) =>
+                           {Hmem} /negP Hne. rewrite eq_sym in Hne.
+      rewrite (ZSSAStore.acc_upd_neq Hne). reflexivity.
+    - move=> op e IH x v s Hmem. rewrite (IH _ _ _ Hmem). reflexivity.
+    - move=> op e1 IH1 e2 IH2 x v s Hmem. move: (SSAVS.Lemmas.not_mem_union1 Hmem) =>
+      {Hmem} [Hmem1 Hmem2]. rewrite (IH1 _ _ _ Hmem1) (IH2 _ _ _ Hmem2). reflexivity.
+  Qed.
+
+  Lemma eval_zbexp_upd {x v s e} :
+    ~~ SSAVS.mem x (vars_zbexp e) ->
+    eval_zbexp e (ZSSAStore.upd x v s) <-> eval_zbexp e s.
+  Proof.
+    elim: e x v s => //=.
+    - move=> e1 e2 x v s Hmem.
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem) => {Hmem} [Hmem1 Hmem2].
+      rewrite (eval_zexp_upd Hmem1) (eval_zexp_upd Hmem2). done.
+    - move=> e1 e2 m x v s Hmem.
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem) => {Hmem} [Hmem1 Hmem2].
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem2) => {Hmem2} [Hmem2 Hmem3].
+      rewrite (eval_zexp_upd Hmem1) (eval_zexp_upd Hmem2) (eval_zexp_upd Hmem3). done.
+    - move=> e1 IH1 e2 IH2 x v s Hmem.
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem) => {Hmem} [Hmem1 Hmem2].
+      move: (IH1 x v s Hmem1) (IH2 x v s Hmem2) => {IH1 IH2} IH1 IH2. split; tauto.
+  Qed.
+
+  Lemma eval_zexp_upd2 {x1 x2 v1 v2 s e} :
+    ~~ SSAVS.mem x1 (vars_zexp e) ->
+    ~~ SSAVS.mem x2 (vars_zexp e) ->
+    eval_zexp e (ZSSAStore.upd2 x1 v1 x2 v2 s) = eval_zexp e s.
+  Proof.
+    elim: e x1 v1 x2 v2 s => //=.
+    - move=> y x1 v1 x2 v2 s Hmem1 Hmem2.
+      move: (SSAVS.Lemmas.not_mem_singleton1 Hmem1) => {Hmem1} Hmem1.
+      move: (SSAVS.Lemmas.not_mem_singleton1 Hmem2) => {Hmem2} Hmem2.
+      move/negP: Hmem1 => Hne1. move/negP: Hmem2 => Hne2. rewrite eq_sym in Hne1.
+      rewrite eq_sym in Hne2. rewrite (ZSSAStore.acc_upd2_neq Hne1 Hne2). reflexivity.
+    - move=> op e IH x1 v1 x2 v2 s Hmem1 Hmem2. rewrite (IH _ _ _ _ _ Hmem1 Hmem2).
+      reflexivity.
+    - move=> op e1 IH1 e2 IH2 x1 v1 x2 v2 s Hmem1 Hmem2.
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem1) => {Hmem1} [Hmem11 Hmem12].
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem2) => {Hmem2} [Hmem21 Hmem22].
+      rewrite (IH1 _ _ _ _ _ Hmem11 Hmem21) (IH2 _ _ _ _ _ Hmem12 Hmem22). reflexivity.
+  Qed.
+
+  Lemma eval_zbexp_upd2 {x1 v1 x2 v2 s e} :
+    ~~ SSAVS.mem x1 (vars_zbexp e) ->
+    ~~ SSAVS.mem x2 (vars_zbexp e) ->
+    eval_zbexp e (ZSSAStore.upd2 x1 v1 x2 v2 s) <-> eval_zbexp e s.
+  Proof.
+    elim: e x1 v1 x2 v2 s => //=.
+    - move=> e1 e2 x1 v1 x2 v2 s Hmem1 Hmem2.
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem1) => {Hmem1} [Hmem11 Hmem12].
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem2) => {Hmem2} [Hmem21 Hmem22].
+      rewrite (eval_zexp_upd2 Hmem11 Hmem21) (eval_zexp_upd2 Hmem12 Hmem22). done.
+    - move=> e1 e2 m x1 v1 x2 v2 s Hmem1 Hmem2.
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem1) => {Hmem1} [Hmem11 Hmem12].
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem12) => {Hmem12} [Hmem12 Hmem13].
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem2) => {Hmem2} [Hmem21 Hmem22].
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem22) => {Hmem22} [Hmem22 Hmem23].
+      rewrite (eval_zexp_upd2 Hmem11 Hmem21) (eval_zexp_upd2 Hmem12 Hmem22)
+              (eval_zexp_upd2 Hmem13 Hmem23). done.
+    - move=> e1 IH1 e2 IH2 x1 v1 x2 v2 s Hmem1 Hmem2.
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem1) => {Hmem1} [Hmem11 Hmem12].
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem2) => {Hmem2} [Hmem21 Hmem22].
+      move: (IH1 x1 v1 x2 v2 s Hmem11 Hmem21) (IH2 x1 v1 x2 v2 s Hmem12 Hmem22) =>
+      {IH1 IH2} IH1 IH2. split; tauto.
+  Qed.
+
+  Lemma ssa_zinstr_eval_idem vs i s :
+    well_formed_zinstr vs i -> ssa_vars_unchanged_zinstr vs i ->
+    ZSSAStore.Equal (eval_zinstr (eval_zinstr s i) i) (eval_zinstr s i).
+  Proof.
+    case: i => /=.
+    - move=> v e Hwell Hunch. set s' := (ZSSAStore.upd v (eval_zexp e s) s).
+      rewrite -(ssa_unchanged_zinstr_eval_exp
+                  (ssa_unchanged_zinstr_subset Hunch Hwell) (Logic.eq_refl s')).
+      exact: ZSSAStore.upd_idem.
+    - move=> vh vl e n /andP [Hwell1 Hwell2] Hunch.
+      dcase (Z.div_eucl (eval_zexp e s) (2 ^ Z.of_nat n)) => [[q r] Hqr].
+      set s' := ZSSAStore.upd2 vl r vh q s.
+      dcase (Z.div_eucl (eval_zexp e s') (2 ^ Z.of_nat n)) => [[qq rr] Hqqrr].
+      move: (@ssa_unchanged_zinstr_eval_exp
+               e s s' (Zsplit vh vl e n) (ssa_unchanged_zinstr_subset Hunch Hwell2)).
+      rewrite /=. rewrite Hqr. move=> H; move: (H (Logic.eq_refl s')) => {H} H.
+      rewrite -H Hqr in Hqqrr. case: Hqqrr => <- <-. exact: ZSSAStore.upd2_idem.
+  Qed.
+
+  Lemma eval_zinstr_eval_zprogram_idem {vs hd tl s} :
+    well_formed_zinstr vs hd ->
+    ssa_vars_unchanged_zinstr vs hd ->
+    ssa_vars_unchanged_zprogram vs tl ->
+    ssa_vars_unchanged_zprogram (lvs_zinstr hd) tl ->
+    ZSSAStore.Equal
+      (eval_zinstr (eval_zprogram (eval_zinstr s hd) tl) hd)
+      (eval_zprogram (eval_zinstr s hd) tl).
+  Proof.
+    case: hd => /=.
+    - move=> v e Hwell_hd Hunch_hd Hunch_tl Hssa_hd x.
+      rewrite -!/(ZSSAStore.acc x _). case Hxv: (x == v).
+      + rewrite (ZSSAStore.acc_upd_eq Hxv).
+        move: (ssa_unchanged_zprogram_singleton1 Hssa_hd) => {Hssa_hd} Hssa_hd.
+        rewrite (eqP Hxv) -(acc_unchanged_zprogram Hssa_hd (Logic.eq_refl _)).
+        rewrite -(ssa_unchanged_zprogram_eval_exp
+                    (ssa_unchanged_zprogram_subset Hunch_tl Hwell_hd)
+                    (Logic.eq_refl _)). rewrite (ZSSAStore.acc_upd_eq (eqxx v)).
+        rewrite eval_zexp_upd; first by reflexivity. apply/negP => Hmem.
+        move: (SSAVS.Lemmas.mem_subset Hmem Hwell_hd) => {Hmem} Hmem.
+        move: (ssa_unchanged_zinstr_mem Hunch_hd Hmem).
+        rewrite /ssa_var_unchanged_zinstr /=. move/negP=> H; apply: H.
+        apply SSAVS.Lemmas.mem_singleton2. reflexivity.
+      + move/idP/negP: Hxv => Hxv. rewrite (ZSSAStore.acc_upd_neq Hxv). reflexivity.
+    - move=> vh vl e n /andP [Hwell_hd1 Hwell_hd2] Hunch_hd Hunch_tl Hssa_hd x.
+      dcase (Z.div_eucl (eval_zexp e s) (2 ^ Z.of_nat n)) => [[q r] Hqr].
+      set s' := eval_zprogram (ZSSAStore.upd2 vl r vh q s) tl.
+      dcase (Z.div_eucl (eval_zexp e s') (2 ^ Z.of_nat n)) => [[qq rr] Hqqrr].
+      rewrite -!/(ZSSAStore.acc x _).
+      move: (ssa_unchanged_zinstr_subset Hunch_hd Hwell_hd2) => Hunch.
+      rewrite ssa_unchanged_zinstr_disjoint_lvs in Hunch.
+      have Hmem_vl:  ~~ SSAVS.mem vl (vars_zexp e).
+      { apply/negP=> Hmem. move: (SSAVS.Lemmas.mem_disjoint1 Hunch Hmem) => /=.
+        move/negP; apply. apply: SSAVS.Lemmas.mem_add3.
+        apply: SSAVS.Lemmas.mem_singleton2. reflexivity. }
+      have Hmem_vh:  ~~ SSAVS.mem vh (vars_zexp e).
+      { apply/negP=> Hmem. move: (SSAVS.Lemmas.mem_disjoint1 Hunch Hmem) => /=.
+        move/negP; apply. apply: SSAVS.Lemmas.mem_add2. reflexivity. }
+      rewrite -(ssa_unchanged_zprogram_eval_exp
+                  (ssa_unchanged_zprogram_subset Hunch_tl Hwell_hd2)
+                  (Logic.eq_refl s')) in Hqqrr.
+      rewrite (eval_zexp_upd2 Hmem_vl Hmem_vh) Hqr in Hqqrr. case: Hqqrr => ? ?; subst.
+      move: (ssa_unchanged_zprogram_add1 Hssa_hd) => {Hssa_hd} [Hvh H].
+      move: (ssa_unchanged_zprogram_singleton1 H) => {H} Hvl.
+      clear Hunch. case Hxvl: (x == vl).
+      + case Hxvh: (x == vh).
+        * rewrite -(eqP Hxvl) -(eqP Hxvh) eqxx in Hwell_hd1. discriminate.
+        * move/idP/negP: Hxvh => Hxvh. rewrite (ZSSAStore.acc_upd2_eq1 Hxvl Hxvh).
+          rewrite (eqP Hxvl) in Hxvh *.
+          rewrite -(acc_unchanged_zprogram Hvl (Logic.eq_refl _)).
+          rewrite (ZSSAStore.acc_upd2_eq1 (eqxx vl) (Hxvh)). reflexivity.
+      + move/idP/negP: Hxvl => Hxvl. case Hxvh: (x == vh).
+        * rewrite (ZSSAStore.acc_upd2_eq2 Hxvh). rewrite (eqP Hxvh) in Hxvl *.
+          rewrite -(acc_unchanged_zprogram Hvh (Logic.eq_refl _)).
+          rewrite (ZSSAStore.acc_upd2_eq2 (eqxx vh)). reflexivity.
+        * move/idP/negP: Hxvh => Hxvh. rewrite (ZSSAStore.acc_upd2_neq Hxvl Hxvh).
+          reflexivity.
+  Qed.
+
+  Lemma eval_zinstr_eval_zprogram_in_idem i vs p s :
+    ZSSA.well_formed_ssa_zprogram vs p -> In i p ->
+    ZSSAStore.Equal (eval_zinstr (eval_zprogram s p) i) (eval_zprogram s p).
+  Proof.
+    move=> /andP [/andP [Hwell Hunch] Hssa].
+    elim: p vs i s Hwell Hunch Hssa => //=.
+    move=> hd tl IH vs i s /andP [Hwell_hd Hwell_tl] Hunch /andP [Hssa_hd Hssa_tl]
+              Hin.
+    move: (ssa_unchanged_zprogram_cons1 Hunch) => {Hunch} [Hunch_hd Hunch_tl].
+    case: Hin => Hin.
+    - subst. exact: (eval_zinstr_eval_zprogram_idem Hwell_hd Hunch_hd
+                                                    Hunch_tl Hssa_hd).
+    - apply: (IH _ _ _ Hwell_tl _ Hssa_tl Hin).
+      by apply: ssa_unchanged_zprogram_union2.
+  Qed.
+
+  Lemma ssa_zprogram_eval_idem vs p s :
+    well_formed_ssa_zprogram vs p ->
+    ZSSAStore.Equal (eval_zprogram (eval_zprogram s p) p) ((eval_zprogram s p)).
+  Proof.
+    move=> /andP [/andP [Hwell Hunch] Hssa]. elim: p vs s Hwell Hunch Hssa => //=.
+    move=> hd tl IH vs s /andP [Hwell_hd Hwell_tl] Hunch /andP [Hssa_hd Hssa_tl].
+    move: (ssa_unchanged_zprogram_cons1 Hunch) => {Hunch} [Hunch_hd Hunch_tl].
+    move=> x. rewrite -(IH _ (eval_zinstr s hd) Hwell_tl
+                           (ssa_unchanged_zprogram_union2 Hunch_tl Hssa_hd) Hssa_tl x).
+    apply: steq_acc_zprogram.
+    exact: (eval_zinstr_eval_zprogram_idem Hwell_hd Hunch_hd Hunch_tl Hssa_hd).
   Qed.
 
 End ZSSA.
