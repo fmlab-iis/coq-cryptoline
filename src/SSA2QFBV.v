@@ -18,6 +18,10 @@ Definition qfbv_atomic a :=
   | SSA.Aconst ty n => QFBV.Econst n
   end .
 
+Definition qfbv_true := QFBV.Btrue .
+
+Definition qfbv_false := QFBV.Bfalse .
+
 Definition qfbv_var v := QFBV.Evar v .
 
 Definition qfbv_const n := QFBV.Econst (NBitsDef.from_nat n n) .
@@ -1720,7 +1724,482 @@ Qed.
 
 
 (* Define the safety condition in terms of a QFBV expression *)
-(* TODO: see bexp_program_safe in certified_qhasm_vcg/mqhasm/bvSSA2QFBV.v *)
-Definition bexp_program_safe (p : program) : QFBV.bexp := QFBV.Btrue.
+
+(* Convert conditions needed for the conversion from bvSSA to zSSA. *)
+
+Definition bexp_atomic_addB_safe te a1 a2 : QFBV.bexp :=
+  let 'a_typ := atyp a1 te in
+  if Typ.is_unsigned a_typ then
+    qfbv_lneg (qfbv_uaddo (qfbv_atomic a1)
+                          (qfbv_atomic a2))
+  else
+    qfbv_lneg (qfbv_saddo (qfbv_atomic a1)
+                          (qfbv_atomic a2)) .
+
+Definition bexp_atomic_adcB_safe te a1 a2 ac : QFBV.bexp :=
+  let 'a_typ := atyp a1 te in
+  if Typ.is_unsigned a_typ then
+    qfbv_conj
+      (qfbv_lneg
+         (qfbv_uaddo (qfbv_atomic a1)
+                     (qfbv_atomic a2)))
+      (qfbv_lneg
+         (qfbv_uaddo (qfbv_add (qfbv_atomic a1)
+                               (qfbv_atomic a2))
+                     (qfbv_atomic ac)))
+  else
+    qfbv_conj
+      (qfbv_lneg
+         (qfbv_saddo (qfbv_atomic a1)
+                     (qfbv_atomic a2)))
+      (qfbv_lneg
+         (qfbv_saddo (qfbv_add (qfbv_atomic a1)
+                               (qfbv_atomic a2))
+                     (qfbv_atomic ac))) .
+
+Definition bexp_atomic_subB_safe te a1 a2 : QFBV.bexp :=
+  let 'a_typ := atyp a1 te in
+  if Typ.is_unsigned a_typ then
+    qfbv_lneg (qfbv_usubo (qfbv_atomic a1)
+                          (qfbv_atomic a2))
+  else
+    qfbv_lneg (qfbv_ssubo (qfbv_atomic a1)
+                          (qfbv_atomic a2)) .
+
+Definition bexp_atomic_sbbB_safe  te a1 a2 ab : QFBV.bexp :=
+  let 'a_typ := atyp a1 te in
+  if Typ.is_unsigned a_typ then
+    qfbv_conj
+      (qfbv_lneg
+         (qfbv_usubo (qfbv_atomic a1)
+                     (qfbv_atomic a2)))
+      (qfbv_lneg
+         (qfbv_usubo (qfbv_sub (qfbv_atomic a1)
+                               (qfbv_atomic a2))
+                     (qfbv_atomic ab)))
+  else
+    qfbv_conj
+      (qfbv_lneg
+         (qfbv_ssubo (qfbv_atomic a1)
+                     (qfbv_atomic a2)))
+      (qfbv_lneg
+         (qfbv_ssubo (qfbv_sub (qfbv_atomic a1)
+                               (qfbv_atomic a2))
+                     (qfbv_atomic ab))) .
+
+Definition bexp_atomic_sbcB_safe  te a1 a2 ac : QFBV.bexp :=
+  let 'a_typ := atyp a1 te in
+  if Typ.is_unsigned a_typ then
+    qfbv_conj
+      (qfbv_lneg
+         (qfbv_usubo (qfbv_atomic a1)
+                     (qfbv_atomic a2)))
+      (qfbv_lneg
+         (qfbv_usubo (qfbv_sub (qfbv_atomic a1)
+                               (qfbv_atomic a2))
+                     (qfbv_sub (qfbv_one 1)
+                               (qfbv_atomic ac))))
+  else
+    qfbv_conj
+      (qfbv_lneg
+         (qfbv_ssubo (qfbv_atomic a1)
+                     (qfbv_atomic a2)))
+      (qfbv_lneg
+         (qfbv_ssubo (qfbv_sub (qfbv_atomic a1)
+                               (qfbv_atomic a2))
+                     (qfbv_sub (qfbv_one 1)
+                               (qfbv_atomic ac)))) .
+
+Definition bexp_atomic_mulB_safe te a1 a2 : QFBV.bexp :=
+  let 'a_typ := atyp a1 te in
+  if Typ.is_unsigned a_typ then
+    qfbv_lneg (qfbv_umulo (qfbv_atomic a1)
+                          (qfbv_atomic a2))
+  else
+    qfbv_lneg (qfbv_smulo (qfbv_atomic a1)
+                          (qfbv_atomic a2)) .
+
+Definition bexp_atomic_shlBn_safe te a n : QFBV.bexp :=
+  let 'a_size := asize a te in
+  qfbv_ult (qfbv_atomic a)
+           (qfbv_shl (QFBV.Econst (from_nat 1 1))
+                     (QFBV.Econst (from_nat (a_size - n) (a_size - n)))) .
+
+Definition bexp_atomic_concatshl_safe te (a1 : atomic) a2 n  : QFBV.bexp :=
+  let 'a_size := asize a2 te in
+  qfbv_conj
+    (qfbv_ule (qfbv_const n) (qfbv_const a_size))
+    (bexp_atomic_shlBn_safe te a2 n) .
+
+Definition bexp_atomic_vpc_safe te t a : QFBV.bexp :=
+  let 'a_typ := atyp a te in
+  let 'a_size := Typ.sizeof_typ a_typ in
+  let 't_size := Typ.sizeof_typ t in
+  if Typ.is_unsigned a_typ then
+    if Typ.is_unsigned t then
+      qfbv_ule (qfbv_const a_size)
+               (qfbv_const t_size)
+    else
+      qfbv_ult (qfbv_const a_size)
+               (qfbv_const t_size)
+  else
+    if Typ.is_unsigned t then
+      qfbv_conj
+        (qfbv_ule (qfbv_zero 1) (qfbv_atomic a))
+        (qfbv_ule (qfbv_const a_size)
+                  (qfbv_const (t_size + 1)))
+    else
+      qfbv_conj
+        (qfbv_ule (qfbv_zero 1) (qfbv_atomic a))
+        (qfbv_ule (qfbv_const a_size)
+                  (qfbv_const t_size)) .
+    
+Definition bexp_instr_safe te (i : instr) : QFBV.bexp :=
+  match i with
+  | Iadd _ a1 a2 =>
+    bexp_atomic_addB_safe te a1 a2
+  | Iadc _ a1 a2 ac =>
+    bexp_atomic_adcB_safe te a1 a2 ac
+  | Isub _ a1 a2 =>
+    bexp_atomic_subB_safe te a1 a2
+  | Isbc _ a1 a2 ac =>
+    bexp_atomic_sbcB_safe te a1 a2 ac
+  | Isbb _ a1 a2 ab =>
+    bexp_atomic_sbbB_safe te a1 a2 ab
+  | Imul _ a1 a2 =>
+    bexp_atomic_mulB_safe te a1 a2
+  | Ishl v a n =>
+    bexp_atomic_shlBn_safe te a n
+  | Icshl h l a1 a2 n =>
+    bexp_atomic_concatshl_safe te a1 a2 n
+  | Ivpc _ t a =>
+    bexp_atomic_vpc_safe te t a
+  | Inop
+  | Inondet _ _
+  | Imov _ _
+  | Icmov _ _ _ _
+  | Iadds _ _ _ _
+  | Iadcs _ _ _ _ _
+  | Isubc _ _ _ _
+  | Isubb _ _ _ _
+  | Isbcs _ _ _ _ _
+  | Isbbs _ _ _ _ _
+  | Imull _ _ _ _
+  | Imulj _ _ _
+  | Inot _ _ _
+  | Iand _ _ _ _
+  | Ior _ _ _ _
+  | Ixor _ _ _ _
+  | Isplit _ _ _ _ 
+  | Ijoin _ _ _
+  | Icast _ _ _
+  | Iassume _ => qfbv_true
+  end .
+
+Fixpoint bexp_program_safe te (p : program) : QFBV.bexp :=
+  match p with
+  | [::] => qfbv_true
+  | hd::tl => qfbv_conj
+                (bexp_instr_safe te hd)
+                (bexp_program_safe (instr_succ_typenv hd te) tl)
+  end .
+
+Definition bexp_program_safe_at te (p : program) s : Prop :=
+  eval_bexps_imp (bexp_program te p) s
+                 (QFBV.eval_bexp (bexp_program_safe te p) s) .
+
+(* TODO: add to ZSSA.v *)
+
+Definition uaddB_safe bs1 bs2 : bool :=
+  ~~ carry_addB bs1 bs2 .
+
+Definition saddB_safe bs1 bs2 : bool :=
+  ~~ Saddo bs1 bs2 .
+
+Definition addB_safe typ_a bs1 bs2 : bool :=
+  if Typ.is_unsigned typ_a then
+    uaddB_safe bs1 bs2
+  else
+    saddB_safe bs1 bs2 .
+
+Definition uadcB_safe bs1 bs2 c : bool :=
+  ~~ carry_addB bs1 bs2 && ~~ carry_addB (addB bs1 bs2) c .
+
+Definition sadcB_safe bs1 bs2 c : bool :=
+  ~~ Saddo bs1 bs2 &&
+  ~~ Saddo (addB bs1 bs2) c .
+
+Definition adcB_safe typ_a bs1 bs2 bsc : bool :=
+  if Typ.is_unsigned typ_a then
+    uadcB_safe bs1 bs2 bsc
+  else
+    sadcB_safe bs1 bs2 bsc .
+
+Definition usubB_safe bs1 bs2 : bool :=
+  ~~ borrow_subB bs1 bs2 .
+
+Definition ssubB_safe bs1 bs2 : bool :=
+  ~~ Ssubo bs1 bs2 .
+
+Definition subB_safe typ_a bs1 bs2 : bool :=
+  if Typ.is_unsigned typ_a then
+    usubB_safe bs1 bs2
+  else
+    ssubB_safe bs1 bs2 .
+
+Definition usbbB_safe bs1 bs2 c : bool :=
+  ~~ borrow_subB bs1 bs2 &&
+  ~~ borrow_subB (subB bs1 bs2) c .
+
+Definition ssbbB_safe bs1 bs2 c : bool :=
+  ~~ Ssubo bs1 bs2 && ~~ Ssubo (subB bs1 bs2) c .
+
+Definition sbbB_safe typ_a bs1 bs2 bsb : bool :=
+  if Typ.is_unsigned typ_a then
+    usbbB_safe bs1 bs2 bsb
+  else
+    ssbbB_safe bs1 bs2 bsb .
+
+Definition usbcB_safe bs1 bs2 c : bool :=
+  ~~ borrow_subB bs1 bs2 &&
+  ~~ borrow_subB (subB bs1 bs2) (subB (ones 1) c) .
+
+Definition ssbcB_safe bs1 bs2 c : bool :=
+  ~~ Ssubo bs1 bs2 &&
+  ~~ Ssubo (subB bs1 bs2) (subB (ones 1) c) .
+
+Definition sbcB_safe typ_a bs1 bs2 bsc : bool :=
+  if Typ.is_unsigned typ_a then
+    usbcB_safe bs1 bs2 bsc
+  else
+    ssbcB_safe bs1 bs2 bsc .
+
+Definition umulB_safe bs1 bs2 : bool :=
+  ~~ Umulo bs1 bs2 .
+
+Definition smulB_safe bs1 bs2 : bool :=
+  ~~ Smulo bs1 bs2 .
+
+Definition mulB_safe typ_a bs1 bs2 : bool :=
+  if Typ.is_unsigned typ_a then
+    umulB_safe bs1 bs2 
+  else
+    smulB_safe bs1 bs2 .
+
+Definition shlBn_safe bs n : bool :=
+  ltB bs (shlB (size bs - n) (ones 1)) .
+
+Definition concatshl_safe (bs1 : bits) bs2 n : bool :=
+  (n <= size bs2) &&
+  ltB bs2 (shlB (size bs2 - n) (ones 1)) .
+
+Definition vpc_safe t a_typ bs : bool :=
+  let 'a_size := Typ.sizeof_typ a_typ in
+  let 't_size := Typ.sizeof_typ t in
+  if Typ.is_unsigned a_typ then
+    if Typ.is_unsigned t then
+      leB (from_nat a_size a_size) (from_nat t_size t_size)
+    else
+      ltB (from_nat a_size a_size) (from_nat t_size t_size)
+  else
+    if Typ.is_unsigned t then
+      leB (from_nat 1 0) bs &&
+      leB (from_nat a_size a_size)
+          (from_nat (t_size + 1) (t_size + 1))
+    else      
+      leB (from_nat 1 0) bs &&
+      leB (from_nat a_size a_size)
+          (from_nat t_size t_size) .
+
+Definition zssa_instr_safe_at te (i : instr) (s : SSAStore.t) : bool :=
+  match i with
+  | Iadd _ a1 a2 =>
+    addB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s)
+  | Iadc _ a1 a2 ac =>
+    adcB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s) (eval_atomic ac s)
+  | Isub _ a1 a2 =>
+    subB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s)
+  | Isbc _ a1 a2 ac =>
+    sbcB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s) (eval_atomic ac s)
+  | Isbb _ a1 a2 ab =>
+    sbbB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s) (eval_atomic ab s)
+  | Imul _ a1 a2 =>
+    mulB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s)
+  | Ishl _ a n =>
+    shlBn_safe (eval_atomic a s) n
+  | Icshl _ _ a1 a2 n =>
+    concatshl_safe (eval_atomic a1 s) (eval_atomic a2 s) n
+  | Ivpc _ t a =>
+    vpc_safe t (atyp a te) (eval_atomic a s)
+  | Inop
+  | Inondet _ _
+  | Imov _ _
+  | Icmov _ _ _ _
+  | Iadds _ _ _ _
+  | Iadcs _ _ _ _ _
+  | Isubc _ _ _ _
+  | Isubb _ _ _ _
+  | Isbcs _ _ _ _ _
+  | Isbbs _ _ _ _ _
+  | Imull _ _ _ _
+  | Imulj _ _ _
+  | Inot _ _ _
+  | Iand _ _ _ _
+  | Ior _ _ _ _
+  | Ixor _ _ _ _
+  | Isplit _ _ _ _ 
+  | Ijoin _ _ _
+  | Icast _ _ _
+  | Iassume _ => true
+  end .
 
 
+
+(* TODO *)
+(*
+Fixpoint zssa_program_safe_at te p s : bool :=
+  match p with
+  | [::] => true
+  | hd::tl =>
+    zssa_instr_safe_at te hd s &&
+    for_all s', eval_instr te hd s s' ->
+               zssa_program_safe_at (instr_succ_typenv hd te) tl s'
+  end .
+
+Definition bv2z_program_safe p : Prop :=
+  forall s, bv2z_program_safe_at p s.
+*)
+
+Lemma eval_bexp_atomic_addB_safe te a1 a2 s :
+  QFBV.eval_bexp (bexp_atomic_addB_safe te a1 a2) s <->
+  addB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s) .
+Proof .
+  case Ht : (Typ.is_unsigned (atyp a1 te));
+    rewrite /bexp_atomic_addB_safe /addB_safe Ht /= .
+  - rewrite /uaddB_safe /= !eval_exp_atomic // .
+  - rewrite /saddB_safe /= !eval_exp_atomic // .
+Qed .
+
+Lemma eval_bexp_atomic_adcB_safe te a1 a2 ac s :
+  QFBV.eval_bexp (bexp_atomic_adcB_safe te a1 a2 ac) s <->
+  adcB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s) (eval_atomic ac s) .
+Proof .
+  case Ht : (Typ.is_unsigned (atyp a1 te));
+    rewrite /bexp_atomic_adcB_safe /adcB_safe Ht /= .
+  - rewrite /uadcB_safe /= !eval_exp_atomic // .
+  - rewrite /sadcB_safe /= !eval_exp_atomic // .
+Qed .
+
+Lemma eval_bexp_atomic_subB_safe te a1 a2 s :
+  QFBV.eval_bexp (bexp_atomic_subB_safe te a1 a2) s <->
+  subB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s) .
+Proof .
+  case Ht : (Typ.is_unsigned (atyp a1 te));
+    rewrite /bexp_atomic_subB_safe /subB_safe Ht /= .
+  - rewrite /usubB_safe /= !eval_exp_atomic // .
+  - rewrite /ssubB_safe /= !eval_exp_atomic // .
+Qed .
+
+Lemma eval_bexp_atomic_sbbB_safe te a1 a2 ac s :
+  QFBV.eval_bexp (bexp_atomic_sbbB_safe te a1 a2 ac) s <->
+  sbbB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s) (eval_atomic ac s) .
+Proof .
+  case Ht : (Typ.is_unsigned (atyp a1 te));
+    rewrite /bexp_atomic_sbbB_safe /sbbB_safe Ht /= .
+  - rewrite /usbbB_safe /= !eval_exp_atomic // .
+  - rewrite /ssbbB_safe /= !eval_exp_atomic // .
+Qed .
+
+Lemma eval_bexp_atomic_sbcB_safe te a1 a2 ac s :
+  QFBV.eval_bexp (bexp_atomic_sbcB_safe te a1 a2 ac) s <->
+  sbcB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s) (eval_atomic ac s) .
+Proof .
+  case Ht : (Typ.is_unsigned (atyp a1 te));
+    rewrite /bexp_atomic_sbcB_safe /sbcB_safe Ht /= .
+  - rewrite /usbcB_safe /= !eval_exp_atomic // .
+  - rewrite /ssbcB_safe /= !eval_exp_atomic // .
+Qed .
+
+Lemma eval_bexp_atomic_mulB_safe te a1 a2 s :
+  QFBV.eval_bexp (bexp_atomic_mulB_safe te a1 a2) s <->
+  mulB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s) .
+Proof .
+  case Ht : (Typ.is_unsigned (atyp a1 te));
+    rewrite /bexp_atomic_mulB_safe /mulB_safe Ht /= .
+  - rewrite /umulB_safe /= !eval_exp_atomic // .
+  - rewrite /smulB_safe /= !eval_exp_atomic // .
+Qed .
+
+Lemma eval_bexp_atomic_shlBn_safe te a n s :
+  SSAVS.subset (vars_atomic a) (vars_env te) ->
+  SSAStore.conform s te ->
+  QFBV.eval_bexp (bexp_atomic_shlBn_safe te a n) s <->
+  shlBn_safe (eval_atomic a s) n .
+Proof .
+  rewrite /bexp_atomic_shlBn_safe /shlBn_safe /= => Hsub Hcon .
+  rewrite !eval_exp_atomic from_nat_simple // .
+  rewrite (eqP (conform_size_eval_atomic Hsub Hcon)) // .
+Qed .  
+
+Lemma eval_bexp_atomic_concatshl_safe te a1 a2 n s :
+  SSAVS.subset (vars_atomic a2) (vars_env te) ->
+  SSAStore.conform s te ->
+  QFBV.eval_bexp (bexp_atomic_concatshl_safe te a1 a2 n) s <->
+  concatshl_safe (eval_atomic a1 s) (eval_atomic a2 s) n .
+Proof .
+  rewrite /bexp_atomic_concatshl_safe /concatshl_safe /= => Hsub Hcon .
+  rewrite !eval_exp_atomic
+          (eqP (conform_size_eval_atomic Hsub Hcon))
+          leBNlt ltB_to_nat !from_nat_simple
+          -leqNgt // .
+Qed .  
+
+Lemma eval_bexp_atomic_vpc_safe te a t s :
+  QFBV.eval_bexp (bexp_atomic_vpc_safe te t a) s <->
+  vpc_safe t (atyp a te) (eval_atomic a s) .
+Proof .
+  rewrite /bexp_atomic_vpc_safe /vpc_safe  /= .
+  case Ha : (Typ.is_unsigned (atyp a te));
+  case Ht : (Typ.is_unsigned t) => /=;
+  [ done 
+  | done
+  | rewrite !eval_exp_atomic //
+  | rewrite !eval_exp_atomic // ] .
+Qed .
+
+Lemma eval_bexp_instr_safe te i s :
+  well_formed_instr te i ->
+  SSAStore.conform s te ->
+  (QFBV.eval_bexp (bexp_instr_safe te i) s <->
+   zssa_instr_safe_at te i s) .
+Proof .
+  move => /andP [Hdef _] Hcon .
+  move : Hdef; case i => /=; try done .
+  - move => v a n /are_defined_subset Hsub .
+    apply : (eval_bexp_atomic_shlBn_safe _ Hsub Hcon) .
+  - move => h l a1 a2 n /andP [/andP [_ _] /are_defined_subset Hsub] .
+    apply : (eval_bexp_atomic_concatshl_safe _ _ Hsub Hcon) .
+  - move => v a1 a2 _ .
+    apply : eval_bexp_atomic_addB_safe .
+  - move => v a1 a2 ac _ .
+    apply : eval_bexp_atomic_adcB_safe .
+  - move => v a1 a2 _ .
+    apply : eval_bexp_atomic_subB_safe .
+  - move => v a1 a2 ac _ .
+    apply : eval_bexp_atomic_sbcB_safe .
+  - move => v a1 a2 ac _ .
+    apply : eval_bexp_atomic_sbbB_safe .
+  - move => v a1 a2 _ .
+    apply : eval_bexp_atomic_mulB_safe .
+  - move => v t a _ .    
+    apply : eval_bexp_atomic_vpc_safe .
+Qed .
+
+(* TODO 
+Lemma eval_bexp_instr_safe_succ te i s1 s2 :
+  ssa_vars_unchanged_instr (rvs_instr i) i ->
+  eval_instr te i s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te i) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te i) s2 .
+
+*)
