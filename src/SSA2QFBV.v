@@ -3,8 +3,10 @@ From Coq Require Import List.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From ssrlib Require Import Var Tactics .
 From BitBlasting Require Import State QFBV.
-From Cryptoline Require Import DSL SSA.
-From nbits Require Import NBits. 
+From Cryptoline Require Import DSL SSA SSA2ZSSA.
+From nbits Require Import NBits.
+
+(** Conversion from range specifications and safety conditions to QFBV expressions *)
 
 Import SSA.
 
@@ -716,7 +718,7 @@ Proof .
   elim : bs; first done .
   move => b bs IH .
   rewrite /negB /= .
-  case b; rewrite /= !QFBV.size_succB size_inv_same // .
+  case b; rewrite /= !size_succB size_inv_same // .
 Qed .
 
 Lemma size_sbbB b bs0 bs1 : 
@@ -726,7 +728,7 @@ Proof .
   dcase (full_adder_zip (~~ b) (zip bs0 (~~# bs1)%bits)) => [[c res] Hadder] => /= .
   have : res = (c, res).2 => // .
   rewrite -Hadder; case => -> .
-  rewrite QFBV.size_full_adder_zip -size_inv_same // .
+  rewrite size_full_adder_zip -size_inv_same // .
 Qed .
 
 Lemma size_ucast bs n :
@@ -1071,7 +1073,7 @@ Proof .
     inversion_clear Hinst .
     repeat qfbv_store_acc .
     rewrite from_nat_simple high_extract .
-    rewrite !QFBV.size_shlB !size_cat !addnK .
+    rewrite !size_shlB !size_cat !addnK .
     rewrite !(eqP (conform_size_eval_atomic H3 Hcon))
             !(eqP (conform_size_eval_atomic H Hcon)) /= .
     apply /andP; split; done .
@@ -1434,13 +1436,13 @@ Proof .
     move => v a n /are_defined_subset Hdef _ Hev .
     inversion_clear Hev .
     apply : (conform_Upd _ Hcon H) .
-    rewrite QFBV.size_shlB (size_eval_atomic_asize Hdef) // .
+    rewrite size_shlB (size_eval_atomic_asize Hdef) // .
   - (* Icshl *)
     move => vh vl a0 a1 n /andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] _ Hev .
     inversion_clear Hev .
     apply : (conform_Upd2 Hneq _ _ Hcon H) .
     + rewrite size_high (size_eval_atomic_asize Hdef0) // .
-    + rewrite QFBV.size_shrB size_low (size_eval_atomic_asize Hdef1) // .
+    + rewrite size_shrB size_low (size_eval_atomic_asize Hdef1) // .
   - (* Inondet *)
     move => v t _ _ Hev .
     inversion_clear Hev .
@@ -1465,21 +1467,21 @@ Proof .
   - (* Iadd *)
     move => v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hty Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite QFBV.size_addB (size_eval_atomic_asize Hdef0) // .
+    rewrite size_addB (size_eval_atomic_asize Hdef0) // .
     rewrite (size_eval_atomic_asize Hdef1) // .
     rewrite /asize !(eqP Hty) minnE subKn // .
   - (* Iadds *)
     move => u v a0 a1 /andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hty Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
     + done .
-    + rewrite QFBV.size_addB (size_eval_atomic_asize Hdef0) //;
+    + rewrite size_addB (size_eval_atomic_asize Hdef0) //;
       rewrite (size_eval_atomic_asize Hdef1) //;
       rewrite /asize !(eqP Hty) minnE subKn // .
   - (* Iadc *)
     move => v a0 a1 ac /andP [/andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /are_defined_subset Hdefc]
               /andP [Hty Htyc] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite /adcB /full_adder QFBV.size_full_adder_zip
+    rewrite /adcB /full_adder size_full_adder_zip
             (size_eval_atomic_asize Hdef0) //
             (size_eval_atomic_asize Hdef1) //
             /asize !(eqP Hty) minnE subKn // .
@@ -1487,21 +1489,21 @@ Proof .
     move => u v a0 a1 ac /andP [/andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] /are_defined_subset Hdefc] /andP [Hty Htyc] Hev .    
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .      
     + done .
-    + rewrite /adcB /full_adder QFBV.size_full_adder_zip
+    + rewrite /adcB /full_adder size_full_adder_zip
               (size_eval_atomic_asize Hdef0) //
               (size_eval_atomic_asize Hdef1) //
               /asize !(eqP Hty) minnE subKn // .
   - (* Isub *)
     move => u a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hty Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite QFBV.size_subB (size_eval_atomic_asize Hdef0) //
+    rewrite size_subB (size_eval_atomic_asize Hdef0) //
             (size_eval_atomic_asize Hdef1) //
             /asize !(eqP Hty) minnE subKn // .
   - (* Isubc *)
     move => u v a0 a1 /andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hty Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
     + done .
-    + rewrite QFBV.size_addB -size_neg_same
+    + rewrite size_addB -size_neg_same
               (size_eval_atomic_asize Hdef0) //
               (size_eval_atomic_asize Hdef1) //
               /asize !(eqP Hty) minnE subKn // .
@@ -1509,7 +1511,7 @@ Proof .
     move => u v a0 a1 /andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hty Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
     + done .
-    + rewrite QFBV.size_subB
+    + rewrite size_subB
               (size_eval_atomic_asize Hdef0) //
               (size_eval_atomic_asize Hdef1) //
               /asize !(eqP Hty) minnE subKn // .
@@ -1517,7 +1519,7 @@ Proof .
     move => v a0 a1 ac /andP [/andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /are_defined_subset Hdefc]
               /andP [Hty _] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite /adcB /full_adder QFBV.size_full_adder_zip
+    rewrite /adcB /full_adder size_full_adder_zip
             -size_inv_same 
             (size_eval_atomic_asize Hdef0) //
             (size_eval_atomic_asize Hdef1) //
@@ -1526,7 +1528,7 @@ Proof .
     move => u v a0 a1 ac /andP [/andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] /are_defined_subset Hdefc] /andP [Hty _] Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
     + done .
-    + rewrite /adcB /full_adder QFBV.size_full_adder_zip
+    + rewrite /adcB /full_adder size_full_adder_zip
               -size_inv_same
               (size_eval_atomic_asize Hdef0) //
               (size_eval_atomic_asize Hdef1) //
@@ -1550,7 +1552,7 @@ Proof .
   - (* Imul *)
     move => v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hty Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite QFBV.size_mulB
+    rewrite size_mulB
             (size_eval_atomic_asize Hdef0) // .
   - (* Imull *)
     move => u v a0 a1 /andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hty Hev .
@@ -1563,7 +1565,7 @@ Proof .
   - (* Imulj *)
     move => v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hty Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite QFBV.size_full_mul //
+    rewrite size_full_mul //
             (size_eval_atomic_asize Hdef0) //
             (size_eval_atomic_asize Hdef1) //
             /asize -(eqP Hty) .
@@ -1573,10 +1575,10 @@ Proof .
   - (* Isplit *)
     move => u v a n /andP [Hneq /are_defined_subset Hdef] _ Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H0);
-    [ rewrite QFBV.size_shrB (size_eval_atomic_asize Hdef) //
-    | rewrite QFBV.size_shrB QFBV.size_shlB size_unsigned_same (size_eval_atomic_asize Hdef) //
-    | rewrite QFBV.size_sarB (size_eval_atomic_asize Hdef) //
-    |  rewrite QFBV.size_shrB QFBV.size_shlB size_unsigned_same (size_eval_atomic_asize Hdef) // ] .
+    [ rewrite size_shrB (size_eval_atomic_asize Hdef) //
+    | rewrite size_shrB size_shlB size_unsigned_same (size_eval_atomic_asize Hdef) //
+    | rewrite size_sarB (size_eval_atomic_asize Hdef) //
+    |  rewrite size_shrB size_shlB size_unsigned_same (size_eval_atomic_asize Hdef) // ] .
   - (* Iand *)
     move => u v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /andP [Htyc Hty] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
@@ -1915,150 +1917,7 @@ Definition bexp_program_safe_at te (p : program) s : Prop :=
   eval_bexps_imp (bexp_program te p) s
                  (QFBV.eval_bexp (bexp_program_safe te p) s) .
 
-(* TODO: add to ZSSA.v *)
 
-Definition uaddB_safe bs1 bs2 : bool :=
-  ~~ carry_addB bs1 bs2 .
-
-Definition saddB_safe bs1 bs2 : bool :=
-  ~~ Saddo bs1 bs2 .
-
-Definition addB_safe typ_a bs1 bs2 : bool :=
-  if Typ.is_unsigned typ_a then
-    uaddB_safe bs1 bs2
-  else
-    saddB_safe bs1 bs2 .
-
-Definition uadcB_safe bs1 bs2 c : bool :=
-  ~~ carry_addB bs1 bs2 && ~~ carry_addB (addB bs1 bs2) c .
-
-Definition sadcB_safe bs1 bs2 c : bool :=
-  ~~ Saddo bs1 bs2 &&
-  ~~ Saddo (addB bs1 bs2) c .
-
-Definition adcB_safe typ_a bs1 bs2 bsc : bool :=
-  if Typ.is_unsigned typ_a then
-    uadcB_safe bs1 bs2 bsc
-  else
-    sadcB_safe bs1 bs2 bsc .
-
-Definition usubB_safe bs1 bs2 : bool :=
-  ~~ borrow_subB bs1 bs2 .
-
-Definition ssubB_safe bs1 bs2 : bool :=
-  ~~ Ssubo bs1 bs2 .
-
-Definition subB_safe typ_a bs1 bs2 : bool :=
-  if Typ.is_unsigned typ_a then
-    usubB_safe bs1 bs2
-  else
-    ssubB_safe bs1 bs2 .
-
-Definition usbbB_safe bs1 bs2 c : bool :=
-  ~~ borrow_subB bs1 bs2 &&
-  ~~ borrow_subB (subB bs1 bs2) c .
-
-Definition ssbbB_safe bs1 bs2 c : bool :=
-  ~~ Ssubo bs1 bs2 && ~~ Ssubo (subB bs1 bs2) c .
-
-Definition sbbB_safe typ_a bs1 bs2 bsb : bool :=
-  if Typ.is_unsigned typ_a then
-    usbbB_safe bs1 bs2 bsb
-  else
-    ssbbB_safe bs1 bs2 bsb .
-
-Definition usbcB_safe bs1 bs2 c : bool :=
-  ~~ borrow_subB bs1 bs2 &&
-  ~~ borrow_subB (subB bs1 bs2) (subB (ones 1) c) .
-
-Definition ssbcB_safe bs1 bs2 c : bool :=
-  ~~ Ssubo bs1 bs2 &&
-  ~~ Ssubo (subB bs1 bs2) (subB (ones 1) c) .
-
-Definition sbcB_safe typ_a bs1 bs2 bsc : bool :=
-  if Typ.is_unsigned typ_a then
-    usbcB_safe bs1 bs2 bsc
-  else
-    ssbcB_safe bs1 bs2 bsc .
-
-Definition umulB_safe bs1 bs2 : bool :=
-  ~~ Umulo bs1 bs2 .
-
-Definition smulB_safe bs1 bs2 : bool :=
-  ~~ Smulo bs1 bs2 .
-
-Definition mulB_safe typ_a bs1 bs2 : bool :=
-  if Typ.is_unsigned typ_a then
-    umulB_safe bs1 bs2 
-  else
-    smulB_safe bs1 bs2 .
-
-Definition shlBn_safe bs n : bool :=
-  ltB bs (shlB (size bs - n) (ones 1)) .
-
-Definition concatshl_safe (bs1 : bits) bs2 n : bool :=
-  (n <= size bs2) &&
-  ltB bs2 (shlB (size bs2 - n) (ones 1)) .
-
-Definition vpc_safe t a_typ bs : bool :=
-  let 'a_size := Typ.sizeof_typ a_typ in
-  let 't_size := Typ.sizeof_typ t in
-  if Typ.is_unsigned a_typ then
-    if Typ.is_unsigned t then
-      leB (from_nat a_size a_size) (from_nat t_size t_size)
-    else
-      ltB (from_nat a_size a_size) (from_nat t_size t_size)
-  else
-    if Typ.is_unsigned t then
-      leB (from_nat 1 0) bs &&
-      leB (from_nat a_size a_size)
-          (from_nat (t_size + 1) (t_size + 1))
-    else      
-      leB (from_nat 1 0) bs &&
-      leB (from_nat a_size a_size)
-          (from_nat t_size t_size) .
-
-Definition zssa_instr_safe_at te (i : instr) (s : SSAStore.t) : bool :=
-  match i with
-  | Iadd _ a1 a2 =>
-    addB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s)
-  | Iadc _ a1 a2 ac =>
-    adcB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s) (eval_atomic ac s)
-  | Isub _ a1 a2 =>
-    subB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s)
-  | Isbc _ a1 a2 ac =>
-    sbcB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s) (eval_atomic ac s)
-  | Isbb _ a1 a2 ab =>
-    sbbB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s) (eval_atomic ab s)
-  | Imul _ a1 a2 =>
-    mulB_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s)
-  | Ishl _ a n =>
-    shlBn_safe (eval_atomic a s) n
-  | Icshl _ _ a1 a2 n =>
-    concatshl_safe (eval_atomic a1 s) (eval_atomic a2 s) n
-  | Ivpc _ t a =>
-    vpc_safe t (atyp a te) (eval_atomic a s)
-  | Inop
-  | Inondet _ _
-  | Imov _ _
-  | Icmov _ _ _ _
-  | Iadds _ _ _ _
-  | Iadcs _ _ _ _ _
-  | Isubc _ _ _ _
-  | Isubb _ _ _ _
-  | Isbcs _ _ _ _ _
-  | Isbbs _ _ _ _ _
-  | Imull _ _ _ _
-  | Imulj _ _ _
-  | Inot _ _ _
-  | Iand _ _ _ _
-  | Ior _ _ _ _
-  | Ixor _ _ _ _
-  | Isplit _ _ _ _ 
-  | Ijoin _ _ _
-  | Icast _ _ _
-  | Iassume _ => true
-  end .
 
 
 Lemma eval_bexp_atomic_addB_safe te a1 a2 s :
@@ -2125,30 +1984,35 @@ Lemma eval_bexp_atomic_shlBn_safe te a n s :
   SSAVS.subset (vars_atomic a) (vars_env te) ->
   SSAStore.conform s te ->
   QFBV.eval_bexp (bexp_atomic_shlBn_safe te a n) s <->
-  shlBn_safe (eval_atomic a s) n .
+  shlBn_safe (atyp a te) (eval_atomic a s) n .
 Proof .
+  (*
   rewrite /bexp_atomic_shlBn_safe /shlBn_safe /= => Hsub Hcon .
   rewrite !eval_exp_atomic from_nat_simple // .
   rewrite (eqP (conform_size_eval_atomic Hsub Hcon)) // .
-Qed .  
+   *)
+Admitted.
 
 Lemma eval_bexp_atomic_concatshl_safe te a1 a2 n s :
   SSAVS.subset (vars_atomic a2) (vars_env te) ->
   SSAStore.conform s te ->
   QFBV.eval_bexp (bexp_atomic_concatshl_safe te a1 a2 n) s <->
-  concatshl_safe (eval_atomic a1 s) (eval_atomic a2 s) n .
+  cshlBn_safe (atyp a1 te) (eval_atomic a1 s) (eval_atomic a2 s) n .
 Proof .
+  (*
   rewrite /bexp_atomic_concatshl_safe /concatshl_safe /= => Hsub Hcon .
   rewrite !eval_exp_atomic
           (eqP (conform_size_eval_atomic Hsub Hcon))
           leBNlt ltB_to_nat !from_nat_simple
           -leqNgt // .
-Qed .  
+   *)
+Admitted.
 
 Lemma eval_bexp_atomic_vpc_safe te a t s :
   QFBV.eval_bexp (bexp_atomic_vpc_safe te t a) s <->
   vpc_safe t (atyp a te) (eval_atomic a s) .
 Proof .
+  (*
   rewrite /bexp_atomic_vpc_safe /vpc_safe  /= .
   case Ha : (Typ.is_unsigned (atyp a te));
   case Ht : (Typ.is_unsigned t) => /=;
@@ -2156,13 +2020,14 @@ Proof .
   | done
   | rewrite !eval_exp_atomic //
   | rewrite !eval_exp_atomic // ] .
-Qed .
+   *)
+Admitted.
 
 Lemma eval_bexp_instr_safe te i s :
   well_formed_instr te i ->
   SSAStore.conform s te ->
   (QFBV.eval_bexp (bexp_instr_safe te i) s <->
-   zssa_instr_safe_at te i s) .
+   ssa_instr_safe_at te i s) .
 Proof .
   move => /andP [Hdef _] Hcon .
   move : Hdef; case i => /=; try done .
@@ -2225,7 +2090,7 @@ Proof .
     move : (ssa_unchanged_instr_singleton1 Hun) => {Hun} Hun;
     apply : (acc_unchanged_instr Hun Hev) .
 Qed .
-    
+
 Lemma eval_bexp_instr_safe_succ te i s1 s2 :
   ssa_vars_unchanged_instr (rvs_instr i) i ->
   eval_instr te i s1 s2 ->
@@ -2462,19 +2327,6 @@ Proof .
     rewrite (ssa_unchanged_program_eval_atomic Hun Hev) // .
 Qed .
 
-(* TODO: move elsewhere? *)
-Inductive zssa_program_safe_at : TypEnv.SSATE.env -> program -> SSAStore.t -> Prop :=
-| zssa_program_safe_at_nil te s :
-    zssa_program_safe_at te [::] s
-| zssa_program_safe_at_cons te hd tl s s' :
-    zssa_instr_safe_at te hd s ->
-    eval_instr te hd s s' ->
-    zssa_program_safe_at (instr_succ_typenv hd te) tl s' ->
-  zssa_program_safe_at te (hd::tl) s .
-
-Definition zssa_program_safe te p : Prop :=
-  forall s, zssa_program_safe_at te p s .
-
 (*
 
 Lemma eval_bexp_program_safe1 te pre p :
@@ -2504,12 +2356,8 @@ Proof .
  *)
 
 (* TODO: move elsewhere *)
-Definition zssa_spec_safe_qfbv sp : Prop :=
+Definition ssa_spec_safe_qfbv sp : Prop :=
   forall s,
     QFBV.eval_bexp (bexp_rbexp (rng_bexp (spre sp))) s ->
     eval_bexps_conj (bexp_program (sinputs sp) (sprog sp)) s ->
     QFBV.eval_bexp (bexp_program_safe (sinputs sp) (sprog sp)) s .
-
-Definition zssa_spec_safe sp :=
-  forall s, eval_rbexp (rng_bexp (spre sp)) s ->
-            zssa_program_safe_at (sinputs sp) (sprog sp) s .
