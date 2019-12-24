@@ -1547,10 +1547,12 @@ Module MakeDSL
   Definition are_defined (vs : VS.t) (te : TE.env) : bool :=
     VS.for_all (fun v => is_defined v te) vs.
 
-  Lemma is_defined_mem v te :
-    is_defined v te -> VS.mem v (vars_env te).
+  Lemma vars_env_mem v te:
+    TE.mem v te <-> VS.mem v (vars_env te).
   Proof.
-    rewrite /is_defined /vars_env. exact: TEKS.mem_key_set.
+    split.
+    - exact: TEKS.mem_key_set.
+    - exact: TEKS.key_set_mem.
   Qed.
 
   (* Use VS.mem v (vars_env te) to determine if v is defined *)
@@ -1654,6 +1656,18 @@ Module MakeDSL
         | Some ?i => idtac "The program is not well-formed,"
                            "caused by the following instruction."; idtac i
         end.
+
+  Definition well_formed_eexp (te : TE.env) (e : eexp) :=
+    are_defined (vars_eexp e) te && well_typed_eexp te e.
+
+  Definition well_formed_rexp (te : TE.env) (e : rexp) :=
+    are_defined (vars_rexp e) te && well_typed_rexp te e.
+
+  Definition well_formed_ebexp (te : TE.env) (e : ebexp) :=
+    are_defined (vars_ebexp e) te && well_typed_ebexp te e.
+
+  Definition well_formed_rbexp (te : TE.env) (e : rbexp) :=
+    are_defined (vars_rbexp e) te && well_typed_rbexp te e.
 
   Definition well_formed_bexp (te : TE.env) (e : bexp) :=
     are_defined (vars_bexp e) te && well_typed_bexp te e.
@@ -1782,22 +1796,31 @@ Module MakeDSL
   Qed.
 
   Lemma are_defined_union te vs1 vs2:
-    are_defined (VS.union vs1 vs2) te ->
+    are_defined (VS.union vs1 vs2) te <->
     are_defined vs1 te && are_defined vs2 te.
   Proof.
     rewrite /are_defined.
-    move=> H.
-    move: (VS.for_all_2 (are_defined_compat te) H) => {H} H.
-    rewrite (VS.for_all_1 (are_defined_compat te)).
-    rewrite andTb.
-    rewrite (VS.for_all_1 (are_defined_compat te)).
-    done.
-    intros x Hin.
-    move: (VS.union_3 vs1 Hin) => Hin2.
-    exact: (H _ Hin2).
-    intros x Hin.
-    move: (VS.union_2 vs2 Hin) => Hin2.
-    exact: (H _ Hin2).
+    split; move=> H.
+    - move: (VS.for_all_2 (are_defined_compat te) H) => {H} H.
+      rewrite (VS.for_all_1 (are_defined_compat te)).
+      rewrite andTb.
+      rewrite (VS.for_all_1 (are_defined_compat te)).
+      done.
+      intros x Hin.
+      move: (VS.union_3 vs1 Hin) => Hin2.
+      exact: (H _ Hin2).
+      intros x Hin.
+      move: (VS.union_2 vs2 Hin) => Hin2.
+      exact: (H _ Hin2).
+    - rewrite (VS.for_all_1 (are_defined_compat te)); first by done.
+      move=> x Hin.
+      move/andP: H => [H1 H2].
+      move: (VS.union_1 Hin) => {Hin} Hin.
+      move: (VS.for_all_2 (are_defined_compat te) H1) => {H1} H1.
+      move: (VS.for_all_2 (are_defined_compat te) H2) => {H2} H2.
+      elim: Hin => Hin.
+      + exact: (H1 _ Hin).
+      + exact: (H2 _ Hin).
   Qed.
 
   Lemma are_defined_subset te vs:
@@ -1976,12 +1999,12 @@ Module MakeDSL
     split.
     - apply H with te1.
       + done.
-      + move/andP: (are_defined_union H2).
+      + move/are_defined_union/andP: H2.
         by inversion 1.
       + done.
     - apply H0 with te1.
       + done.
-      + move/andP: (are_defined_union H2).
+      + move/are_defined_union/andP: H2.
         by inversion 1.
       + done.
   Qed.
@@ -1998,12 +2021,12 @@ Module MakeDSL
       split.
       + apply well_typed_eexp_submap with te1.
         * done.
-        * move/andP: (are_defined_union H0).
+        * move/are_defined_union/andP: H0.
             by inversion 1.
         * done.
       + apply well_typed_eexp_submap with te1.
         * done.
-        * move/andP: (are_defined_union H0).
+        * move/are_defined_union/andP: H0.
             by inversion 1.
         * done.
       +  move/andP: H1 => [/andP [Hwte Hwte0] Hwte1].
@@ -2011,26 +2034,26 @@ Module MakeDSL
          apply /andP. split.
          * apply well_typed_eexp_submap with te1.
            -- done.
-           -- move/andP: (are_defined_union H0).
+           -- move/are_defined_union/andP: H0.
                 by inversion 1.
            -- done.
          * apply well_typed_eexp_submap with te1.
            -- done.
-           -- move/andP: (are_defined_union H0).
+           -- move/are_defined_union/andP: H0.
               destruct 1 as [H1 H2].
-              move/andP: (are_defined_union H2).
+              move/are_defined_union/andP: H2.
               by inversion 1.
            -- done.
          * apply well_typed_eexp_submap with te1.
            -- done.
-           -- move/andP: (are_defined_union H0).
+           -- move/are_defined_union/andP: H0.
               destruct 1 as [H1 H2].
-              move/andP: (are_defined_union H2).
+              move/are_defined_union/andP: H2.
               by inversion 1.
            -- done.
     - move/andP: H3 => [Hwte Hwte0].
       apply /andP.
-      move: (are_defined_union H2) => /andP [Hwd Hwd0].
+      move/are_defined_union: H2 => /andP [Hwd Hwd0].
       split.
       + apply H with te1; done.
       + apply H0 with te1; done.
@@ -2077,21 +2100,19 @@ Module MakeDSL
       + done.
     - by rewrite (eqP (well_typed_size_of_rexp_submap H0 H1)) in Hwte1.
       move: H3 => /andP [/andP [/andP [Hwt0 Hsz0] Hwt1] Hsz1].
-      move: (are_defined_union H2) => /andP [H2_1 H2_2].
+      move/are_defined_union: H2 => /andP [H2_1 H2_2].
     apply /andP. split.
     apply /andP. split.
     apply /andP. split.
     - apply H with te1.
       + done.
-      + move/andP: (are_defined_union H2).
-          by inversion 1.
       + done.
+      + by rewrite (eqP (well_typed_size_of_rexp_submap H1 H2_1)) in Hsz0.
       + by rewrite (eqP (well_typed_size_of_rexp_submap H1 H2_1)) in Hsz0.
     - apply H0 with te1.
       + done.
-      + move/andP: (are_defined_union H2).
-          by inversion 1.
       + done.
+      + by rewrite (eqP (well_typed_size_of_rexp_submap H1 H2_2)) in Hsz1.
       + by rewrite (eqP (well_typed_size_of_rexp_submap H1 H2_2)) in Hsz1.
     - move/andP: H2 => [Hwt Hsz].
       apply/andP. split.
@@ -2111,7 +2132,7 @@ Module MakeDSL
          | H: is_true(are_defined (VS.union ?vs1 ?vs2) ?te) |- _ =>
            let Hr1 := fresh "Hr1" in
            let Hr2 := fresh "Hr2" in
-           move: (are_defined_union H) => /andP [Hr1 Hr2]; clear H; tac
+           move/are_defined_union: H => /andP [Hr1 Hr2]; clear H; tac
          | |- ?l /\ ?r => split; tac
          | |- is_true (_ && _) => apply /andP; tac
          | Hsub: TELemmas.submap ?te1 ?te2, Hwd: is_true (are_defined ?vs ?te1)
@@ -2286,7 +2307,7 @@ Module MakeDSL
        in tac).
   Qed.
 
-  Lemma well_formed_program_well_submap te1 te2 p :
+  Lemma well_formed_program_submap te1 te2 p :
     well_formed_program te1 p ->
     TELemmas.submap te1 te2 ->
     well_formed_program te2 p.
@@ -2298,6 +2319,19 @@ Module MakeDSL
     - apply: (IH _ _ Htl).
       exact: (well_formed_instr_succ_typenv_submap Hhd Hsub).
   Qed.
+
+  Lemma well_formed_program_replace te1 te2 p :
+    well_formed_program te1 p ->
+    TE.Equal te1 te2 ->
+    well_formed_program te2 p.
+  Proof.
+    move=> Hwell Heq.
+    apply: (well_formed_program_submap Hwell).
+    intros x v Hfind.
+    rewrite /TE.Equal in Heq.
+    by rewrite -(Heq x).
+  Qed.
+
 
   (*
   Lemma well_formed_instr_vars te i :

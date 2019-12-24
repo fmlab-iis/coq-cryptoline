@@ -15,7 +15,7 @@ Module M2 := Map2 VS SSAVS.
 
 Section MakeSSA.
 
-  Local Open Scope N_scope.
+  Open Scope N_scope.
 
   (* A map from a variable to its current index *)
   Definition vmap : Type := VM.t N.
@@ -617,6 +617,38 @@ Section MakeSSA.
     move=> Hmem Hidx.
     rewrite Hidx.
     rewrite ssa_vars_mem1.
+    assumption.
+  Qed.
+
+  Lemma ssa_typenv_vars_env m te:
+    SSA.vars_env (ssa_typenv m te) = (ssa_vars m (DSL.vars_env te)).
+  Proof.
+  Admitted.
+
+  Lemma ssa_vars_mem2_typ m v te :
+    SSATE.mem v (ssa_typenv m te) ->
+    exists x, v = ssa_var m x /\ TE.mem x te.
+  Proof.
+    move=> Hmem.
+    move/SSA.vars_env_mem: Hmem => Hmem.
+    rewrite ssa_typenv_vars_env in Hmem.
+    move: (M2.map2_mem2 Hmem) => [y [/eqP Hy Hmemy]].
+    rewrite Hy.
+    move/DSL.vars_env_mem: Hmemy => Hmemy.
+      by exists y.
+  Qed.
+
+  Lemma ssa_vars_mem3_typ m v i te :
+    TE.mem v te ->
+    i = get_index v m ->
+    SSATE.mem (v, i) (ssa_typenv m te).
+  Proof.
+    move=> Hmem Hidx.
+    apply /SSA.vars_env_mem.
+    rewrite ssa_typenv_vars_env.
+    rewrite Hidx.
+    rewrite ssa_vars_mem1.
+    move/DSL.vars_env_mem : Hmem => Hmem.
     assumption.
   Qed.
 
@@ -1721,6 +1753,161 @@ Section MakeSSA.
     exact: ssa_typenv_equiv.
   Qed.
 
+  Lemma ssa_typenv_mem_empty (m: vmap) (te: TE.env) x:
+    TE.Empty te ->
+    TE.mem x te  = SSATE.mem (ssa_var m x) (ssa_typenv m te).
+  Proof.
+    move=> Hempty.
+    move: m.
+    rewrite /ssa_typenv /=.
+    move=> m.
+    have Heq: (TE.fold (add_to_ste m) te (SSATE.empty typ)) = (SSATE.empty typ).
+    {
+
+      apply (DSL.TEKS.MLemmas.OP.P.fold_Empty _ (add_to_ste m) (SSATE.empty typ) Hempty).
+    }
+    rewrite Heq.
+    move: (DSL.TEKS.MLemmas.Empty_mem x Hempty) => Hnm.
+    have Hsnmem: (~~ SSATE.mem (ssa_var m x) (SSATE.empty typ)) by rewrite SSATE.Lemmas.empty_a.
+    move/negPf: Hnm => ->.
+    move/negPf: Hsnmem => ->.
+    reflexivity.
+  Qed.
+
+  Lemma ssa_typenv_mem m x te:
+    TE.mem x te = SSATE.mem (ssa_var m x) (ssa_typenv m te).
+  Proof.
+    move: te.
+    apply DSL.TEKS.MLemmas.OP.P.map_induction.
+    - intros te.
+      exact: ssa_typenv_mem_empty.
+    - intros te te' IH y e HnIn HAdd.
+      rewrite /ssa_typenv.
+      move: (DSL.TEKS.MLemmas.Add_mem_add x HAdd) => Hmem.
+      move: (DSL.TEKS.MLemmas.Add_in HAdd) => Hin.
+      move: (DSL.TEKS.MLemmas.OP.P.fold_Add
+               (SSA.TEKS.MLemmas.F.Equal_ST typ)
+               (add_to_set_proper m)
+               (add_to_set_transpose_neqkey m)
+               (SSATE.empty typ)
+               HnIn HAdd) => Heq.
+      rewrite /SSATE.Equal in Heq.
+      case Hyx: (x == y).
+    - rewrite Hmem.
+      rewrite (DSL.TELemmas.mem_add_eq Hyx).
+      move: (Heq (ssa_var m x)) => Heq2.
+      move: (SSA.TELemmas.find_eq_mem_eq Heq2) => Heq3.
+      rewrite Heq3.
+      rewrite SSA.TEKS.MLemmas.mem_add_eq.
+      reflexivity.
+        by rewrite (eqP Hyx).
+    - rewrite Hmem.
+      move/negP: Hyx => Hyx.
+      rewrite (DSL.TELemmas.mem_add_neq Hyx).
+      move: (Heq (ssa_var m x)) => Heq2.
+      move: (SSA.TELemmas.find_eq_mem_eq Heq2) => Heq3.
+      rewrite Heq3.
+      rewrite SSA.TEKS.MLemmas.mem_add_neq.
+      exact: IH.
+      move/idP: Hyx => Hyx.
+      rewrite /SSATE.SE.eq.
+      rewrite /ssa_var.
+      apply /negP.
+      exact: (pair_neq1 _ _ Hyx).
+  Qed.
+
+  Lemma ssa_typenv_add_empty (m: vmap) (te: TE.env) x ty:
+    TE.Empty te ->
+    SSATE.Equal (ssa_typenv (upd_index x m) (TE.add x ty te))
+    (SSATE.add (ssa_var (upd_index x m) x) ty (ssa_typenv m te)).
+  Proof.
+    move=> Hempty.
+    move: m.
+    rewrite /ssa_typenv /=.
+    move=> m.
+    have Heq: (TE.fold (add_to_ste m) te (SSATE.empty typ)) = (SSATE.empty typ).
+    {
+      apply (DSL.TEKS.MLemmas.OP.P.fold_Empty _ (add_to_ste m) (SSATE.empty typ) Hempty).
+    }
+    rewrite Heq.
+    move: (DSL.TEKS.MLemmas.Empty_mem x Hempty) => Hnm.
+    have Hsnmem: (~~ SSATE.mem (ssa_var m x) (SSATE.empty typ)) by rewrite SSATE.Lemmas.empty_a.
+    move/DSL.TELemmas.memP: Hnm => HnIn.
+    move: (DSL.TEKS.MLemmas.OP.P.fold_add
+             (SSA.TEKS.MLemmas.F.Equal_ST typ)
+             (add_to_set_proper (upd_index x m))
+             (add_to_set_transpose_neqkey (upd_index x m))
+             ty (SSATE.empty typ)
+             HnIn) => Heq2.
+    rewrite -> Heq2.
+    have Heq3: (TE.fold (add_to_ste (upd_index x m)) te (SSATE.empty typ)) = (SSATE.empty typ).
+    {
+      apply (DSL.TEKS.MLemmas.OP.P.fold_Empty _ (add_to_ste (upd_index x m)) (SSATE.empty typ) Hempty).
+    }
+    rewrite Heq3.
+    reflexivity.
+  Qed.
+
+  Lemma ssa_typenv_add_submap m te x ty:
+    SSA.TELemmas.submap (ssa_typenv (upd_index x m) (TE.add x ty te))
+    (SSATE.add (ssa_var (upd_index x m) x) ty (ssa_typenv m te)).
+  Proof.
+  Admitted.
+
+  Lemma ssa_typenv_add2_submap m te x xty y yty:
+    SSA.TELemmas.submap (ssa_typenv (upd_index y (upd_index x m)) (TE.add y yty (TE.add x xty te)))
+    (SSATE.add (ssa_var (upd_index y (upd_index x m)) y) yty
+              (SSATE.add (ssa_var (upd_index x m) x) xty (ssa_typenv m te))).
+  Proof.
+  Admitted.
+
+  Lemma ssa_atomic_atyp m a te:
+    DSL.atyp a te =
+    SSA.atyp (ssa_atomic m a) (ssa_typenv m te).
+  Proof.
+    elim: a m te; intros; rewrite /=.
+    - exact: ssa_typenv_preserve.
+    - reflexivity.
+  Qed.
+
+  Lemma ssa_instr_succ_typenv_submap m1 m2 i si te:
+    ssa_instr m1 i = (m2, si) ->
+    SSA.TELemmas.submap (ssa_typenv m2 (DSL.instr_succ_typenv i te))
+                (SSA.instr_succ_typenv si (ssa_typenv m1 te)).
+  Proof.
+    elim: i m1 m2 si te => /=; rewrite /=; intros;
+                             (let rec tac :=
+                                  match goal with
+                                  | H : (_, _) = (_, _) |- _ => case: H => <- <- /=; tac
+                                  | H : is_true (_ && _) |- _ =>
+                                    let H1 := fresh in
+                                    let H2 := fresh in
+                                    move/andP: H => [H1 H2]; tac
+                                  | |- is_true (_ && _) => apply/andP; split; tac
+                                  | |- context [SSA.atyp (ssa_atomic ?m ?a) (ssa_typenv ?m ?te)]
+                                    => rewrite -ssa_atomic_atyp; tac
+                                  | |- SSA.TELemmas.submap (ssa_typenv (upd_index ?x ?m) (TE.add ?x ?ty ?te))
+                                       ( SSATE.add (ssa_var (upd_index ?x ?m) ?x) ?ty (ssa_typenv ?m ?te) )
+                                    => exact: ssa_typenv_add_submap
+                                  | |- SSA.TELemmas.submap (ssa_typenv (upd_index ?y (upd_index ?x ?m)) (TE.add ?y ?yty (TE.add ?x ?xty ?te)))
+                                       ((SSATE.add (ssa_var (upd_index ?y (upd_index ?x ?m)) ?y) ?yty )
+                                                 (SSATE.add (ssa_var (upd_index ?x ?m) ?x) ?xty (ssa_typenv ?m ?te)))
+                                    => exact: ssa_typenv_add2_submap
+                                  | |- SSA.TELemmas.submap ?ste ?ste =>
+                                      exact: SSA.TELemmas.submap_refl
+                                  | |- is_true(true) => done
+                                  | |- ?e => progress (auto)
+                                  | |- ?e => idtac
+                                  end in tac).
+  Qed.
+
+  Lemma ssa_typenv_size te v m:
+     TE.vsize v te = SSATE.vsize (ssa_var m v) (ssa_typenv m te).
+  Proof.
+    move: (ssa_typenv_preserve m te v) => H.
+      by rewrite (TE.vtyp_vsize H).
+  Qed.
+
   Lemma ssa_eval_eunop :
     forall (op : eunop) (v : Z),
       SSA.eval_eunop op v = DSL.eval_eunop op v.
@@ -2366,9 +2553,9 @@ Section MakeSSA.
                             ssa_vars_unchanged_program (SSA.vars_env te) p &&
                             ssa_single_assignment p.
 
-  Definition well_formed_ssa_spec (te: SSATE.env) (s : SSA.spec) : bool :=
+  Definition well_formed_ssa_spec (s : SSA.spec) : bool :=
     SSA.well_formed_spec s &&
-                         ssa_vars_unchanged_program (SSA.vars_env te) (SSA.sprog s) &&
+                         ssa_vars_unchanged_program (SSA.vars_env (SSA.sinputs s)) (SSA.sprog s) &&
                          ssa_single_assignment (SSA.sprog s).
 
   Ltac neq_store_upd_acc :=
@@ -3254,7 +3441,7 @@ Section MakeSSA.
   Qed.
 
   Corollary well_formed_ssa_spec_program s :
-    well_formed_ssa_spec (SSA.sinputs s) s ->
+    well_formed_ssa_spec s ->
     well_formed_ssa_program (SSA.sinputs s) (SSA.sprog s).
   Proof.
     move=> /andP [/andP [/andP [/andP [/andP Hpre Hwell] Hprog] Hvs] Hssa].
@@ -3262,7 +3449,7 @@ Section MakeSSA.
   Qed.
 
   Corollary well_formed_ssa_spec_pre_unchanged s :
-    well_formed_ssa_spec (SSA.sinputs s) s ->
+    well_formed_ssa_spec s ->
     ssa_vars_unchanged_program (SSA.vars_bexp (SSA.spre s)) (SSA.sprog s).
   Proof.
     move=> /andP [/andP [/andP [/andP [/andP [Hwd Hwt] Hp] Hg] Hun] Hssa].
@@ -3272,7 +3459,7 @@ Section MakeSSA.
   Qed.
 
   Corollary well_formed_ssa_spec_post_subset s :
-    well_formed_ssa_spec (SSA.sinputs s) s ->
+    well_formed_ssa_spec s ->
     SSAVS.subset (SSA.vars_bexp (SSA.spost s))
                  (SSA.vars_env (SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s))).
   Proof.
@@ -3394,468 +3581,645 @@ Section MakeSSA.
     intro.
     split.
     - move=> Hin.
-      rewrite /ssa_vars.
   Admitted.
 
+  Lemma ssa_vars_are_defined_singleton m te t:
+    DSL.are_defined (VS.singleton t) te <->
+    SSA.are_defined (SSAVS.singleton (ssa_var m t)) (ssa_typenv m te).
+  Proof.
+    rewrite /DSL.are_defined /SSA.are_defined /=; split; move=> H.
+    - rewrite (SSAVS.for_all_1 (SSA.are_defined_compat (ssa_typenv m te))).
+      + done.
+      + move: (VS.for_all_2 (DSL.are_defined_compat te) H) => {H} H.
+        intros x Hin.
+        move: (Hin) => Heq.
+        rewrite -> SSA.VSLemmas.singleton_iff in Heq.
+        rewrite - Heq.
+        move: (DSL.VSLemmas.P.Dec.FSetDecideTestCases.test_In_singleton t) => Hsingle.
+        move: (H t Hsingle) => Ht.
+        move/idP: Ht => Ht.
+        apply/idP.
+        rewrite /SSA.is_defined.
+        rewrite -ssa_typenv_mem.
+        exact: Ht.
+      - rewrite (VS.for_all_1 (DSL.are_defined_compat te)).
+        + done.
+        + move: (SSAVS.for_all_2 (SSA.are_defined_compat (ssa_typenv m te)) H) => {H} H.
+          intros x Hin.
+          move: (Hin) => Heq.
+          rewrite -> DSL.VSLemmas.singleton_iff in Heq.
+          rewrite - Heq.
+          move: (SSA.VSLemmas.P.Dec.FSetDecideTestCases.test_In_singleton (ssa_var m t)) => Hsingle.
+          move: (H _ Hsingle) => Ht.
+          move/idP: Ht => Ht.
+          apply/idP.
+          rewrite /DSL.is_defined.
+          rewrite (ssa_typenv_mem m).
+          exact: Ht.
+  Qed.
+
+  Lemma ssa_vars_are_defined_atomic m a te:
+    DSL.are_defined (DSL.vars_atomic a) te <->
+    SSA.are_defined (SSA.vars_atomic (ssa_atomic m a)) (ssa_typenv m te).
+  Proof.
+    split.
+    - elim: a m te; rewrite /=; intros.
+      + by rewrite -> (ssa_vars_are_defined_singleton m) in H.
+      + done.
+    - elim: a m te; rewrite /=; intros.
+      + by rewrite <- (ssa_vars_are_defined_singleton) in H.
+      + done.
+  Qed.
+
+  Lemma ssa_vars_are_defined_eexp m e te:
+    DSL.are_defined (DSL.vars_eexp e) te <->
+    SSA.are_defined (SSA.vars_eexp (ssa_eexp m e)) (ssa_typenv m te).
+  Proof.
+    split; elim: e m te; intros; rewrite /= in H *.
+    - by rewrite -> (ssa_vars_are_defined_singleton m) in H.
+    - done.
+    - apply H. by rewrite /= in H0.
+    - rewrite /= in H1.
+      move/DSL.are_defined_union/andP: H1 => [H1_1 H1_2].
+      apply/SSA.are_defined_union/andP; split.
+      + exact: (H _ _ H1_1).
+      + exact: (H0 _ _ H1_2).
+    - by rewrite <- (ssa_vars_are_defined_singleton) in H.
+    - done.
+    - apply H with m. by rewrite /= in H0.
+    - rewrite /= in H1.
+      move/SSA.are_defined_union/andP: H1 => [H1_1 H1_2].
+      apply/DSL.are_defined_union/andP; split.
+      + exact: (H _ _ H1_1).
+      + exact: (H0 _ _ H1_2).
+  Qed.
+
+  Lemma ssa_vars_are_defined_rexp m r te:
+    DSL.are_defined (DSL.vars_rexp r) te <->
+    SSA.are_defined (SSA.vars_rexp (ssa_rexp m r)) (ssa_typenv m te).
+  Proof.
+    split; elim: r m te; intros; rewrite /= in H *.
+    - by rewrite -> (ssa_vars_are_defined_singleton m) in H.
+    - done.
+    - apply H. by rewrite /= in H0.
+    - rewrite /= in H1.
+      move/DSL.are_defined_union/andP: H1 => [H1_1 H1_2].
+      apply/SSA.are_defined_union/andP; split.
+      + exact: (H _ _ H1_1).
+      + exact: (H0 _ _ H1_2).
+    - apply H. by rewrite /= in H0.
+    - apply H. by rewrite /= in H0.
+    - by rewrite <- (ssa_vars_are_defined_singleton) in H.
+    - done.
+    - apply H with m. by rewrite /= in H0.
+    - rewrite /= in H1.
+      move/SSA.are_defined_union/andP: H1 => [H1_1 H1_2].
+      apply/DSL.are_defined_union/andP; split.
+      + exact: (H _ _ H1_1).
+      + exact: (H0 _ _ H1_2).
+    - apply H with m. by rewrite /= in H0.
+    - apply H with m. by rewrite /= in H0.
+  Qed.
+
+  Lemma ssa_vars_are_defined_ebexp m e te:
+    DSL.are_defined (DSL.vars_ebexp e) te <->
+    SSA.are_defined (SSA.vars_ebexp (ssa_ebexp m e)) (ssa_typenv m te).
+  Proof.
+    split; elim: e m te; intros; rewrite /= in H *.
+    - done.
+    - move/DSL.are_defined_union/andP: H => [He He0].
+      apply/SSA.are_defined_union/andP; split; by apply ssa_vars_are_defined_eexp.
+    - move/DSL.are_defined_union/andP: H => [He H].
+      move/DSL.are_defined_union/andP: H => [He0 He1].
+      apply/SSA.are_defined_union/andP; split; first by apply ssa_vars_are_defined_eexp.
+      apply/SSA.are_defined_union/andP; split; by apply ssa_vars_are_defined_eexp.
+    - apply/SSA.are_defined_union/andP; rewrite /= in H1;
+        move/DSL.are_defined_union/andP: H1 => [H1_1 H1_2]; split; by [apply H|apply H0].
+    - done.
+    - move/SSA.are_defined_union/andP: H => [He He0].
+      apply/DSL.are_defined_union/andP; split; by apply (ssa_vars_are_defined_eexp m).
+    - move/SSA.are_defined_union/andP: H => [He H].
+      move/SSA.are_defined_union/andP: H => [He0 He1].
+      apply/DSL.are_defined_union/andP; split; first by apply (ssa_vars_are_defined_eexp m).
+      apply/DSL.are_defined_union/andP; split; by apply (ssa_vars_are_defined_eexp m).
+    - apply/DSL.are_defined_union/andP; rewrite /= in H1;
+        move/SSA.are_defined_union/andP: H1 => [H1_1 H1_2]; split; by [apply (H m) |apply (H0 m)].
+  Qed.
+
+  Lemma ssa_vars_are_defined_rbexp m r te:
+    DSL.are_defined (DSL.vars_rbexp r) te <->
+    SSA.are_defined (SSA.vars_rbexp (ssa_rbexp m r)) (ssa_typenv m te).
+  Proof.
+    split; elim: r m te; intros; rewrite /= in H *.
+    - done.
+    - move/DSL.are_defined_union/andP: H => [He He0].
+      apply/SSA.are_defined_union/andP; split; by apply ssa_vars_are_defined_rexp.
+    - move/DSL.are_defined_union/andP: H => [He H].
+      apply/SSA.are_defined_union/andP; split; by apply ssa_vars_are_defined_rexp.
+    - apply H; rewrite /= in H0; done.
+    - apply/SSA.are_defined_union/andP; rewrite /= in H1;
+        move/DSL.are_defined_union/andP: H1 => [H1_1 H1_2]; split; by [apply H|apply H0].
+    - apply/SSA.are_defined_union/andP; rewrite /= in H1;
+        move/DSL.are_defined_union/andP: H1 => [H1_1 H1_2]; split; by [apply H|apply H0].
+    - done.
+    - move/SSA.are_defined_union/andP: H => [He He0].
+      apply/DSL.are_defined_union/andP; split; by apply (ssa_vars_are_defined_rexp m).
+    - move/SSA.are_defined_union/andP: H => [He H].
+      apply/DSL.are_defined_union/andP; split; by apply (ssa_vars_are_defined_rexp m).
+    - apply (H m); rewrite /= in H0; done.
+    - apply/DSL.are_defined_union/andP; rewrite /= in H1;
+        move/SSA.are_defined_union/andP: H1 => [H1_1 H1_2]; split; by [apply (H m)|apply (H0 m)].
+    - apply/DSL.are_defined_union/andP; rewrite /= in H1;
+        move/SSA.are_defined_union/andP: H1 => [H1_1 H1_2]; split; by [apply (H m)|apply (H0 m)].
+  Qed.
+
+  Lemma ssa_vars_are_defined_bexp m b te:
+    DSL.are_defined (DSL.vars_bexp b) te <->
+    SSA.are_defined (SSA.vars_bexp (ssa_bexp m b)) (ssa_typenv m te).
+  Proof.
+    elim: b m te; split; intros.
+    - rewrite /DSL.vars_bexp /= in H.
+      move/DSL.are_defined_union/andP: H => [He Hr].
+      rewrite /SSA.vars_bexp /=.
+      apply/SSA.are_defined_union/andP; split.
+      + by apply ssa_vars_are_defined_ebexp.
+      + by apply ssa_vars_are_defined_rbexp.
+    - rewrite /SSA.vars_bexp /= in H.
+      move/SSA.are_defined_union/andP: H => [He Hr].
+      rewrite /DSL.vars_bexp /=.
+      apply/DSL.are_defined_union/andP; split.
+      + by apply (ssa_vars_are_defined_ebexp m).
+      + by apply (ssa_vars_are_defined_rbexp m).
+  Qed.
+
   Lemma ssa_instr_well_defined te m1 m2 i si :
-    DSL.well_defined_instr te i ->
+    DSL.well_formed_instr te i ->
     ssa_instr m1 i = (m2, si) ->
     SSA.well_defined_instr (ssa_typenv m1 te) si.
   Proof.
+    rewrite /DSL.well_formed_instr.
     rewrite /DSL.well_defined_instr /SSA.well_defined_instr.
-    rewrite /DSL.are_defined /SSA.are_defined.
     case: i => /=; intros;
-                repeat (match goal with
-                        | H : (_, _) = (_, _) |- _ => case: H => _ <- /=
-                        | H : is_true (_ && _) |- _ =>
-                          let H1 := fresh in
-                          let H2 := fresh in
-                          move/andP: H => [H1 H2]
-                        | |- is_true (_ && _) => apply/andP; split
-                        | H : is_true (VS.subset (DSL.vars_atomic ?a) ?vs)
-                          |- is_true (SSAVS.subset
-                                       (SSA.vars_atomic (ssa_atomic ?m ?a))
-                                       (ssa_vars ?m ?vs)) =>
-                          rewrite ssa_vars_atomic_subset; assumption
-                        | H : is_true (?v1 != ?v2)
-                          |- is_true (ssa_var (upd_index ?v1 (upd_index ?v2 ?m)) ?v1 !=
-                                             ssa_var (upd_index ?v2 ?m) ?v2) =>
-                          exact: (pair_neq1 _ _ H)
-                        | H : is_true (VS.mem ?v ?vs) |-
-                          is_true (SSAVS.mem (ssa_var ?m ?v) (ssa_vars ?m ?vs)) =>
-                          rewrite ssa_vars_mem1; exact: H
-                        | |- is_true(true) => done end) .
-    - move: (VS.for_all_2 (DSL.are_defined_compat te) H) => {H} H.
-      rewrite (SSAVS.for_all_1 (SSA.are_defined_compat (ssa_typenv m1 te))).
-      + done.
-      + intros x Hin.
-        rewrite <- ssa_vars_atomic_comm in Hin.
-        Admitted.
-  (*   all: try by rewrite ssa_vars_env_comm -ssa_vars_atomic_comm ssa_vars_subset. *)
-  (*     by rewrite ssa_vars_env_comm -ssa_vars_bexp_comm ssa_vars_subset. *)
-  (* Qed. *)
+                (let rec tac :=
+                     match goal with
+                     | H : (_, _) = (_, _) |- _ => case: H => _ <- /=; tac
+                     | H : is_true (_ && _) |- _ =>
+                       let H1 := fresh in
+                       let H2 := fresh in
+                       move/andP: H => [H1 H2]; tac
+                     | |- is_true (_ && _) => apply/andP; split; tac
+                     | H : is_true (VS.subset (DSL.vars_atomic ?a) ?vs)
+                       |- is_true (SSAVS.subset
+                                    (SSA.vars_atomic (ssa_atomic ?m ?a))
+                                    (ssa_vars ?m ?vs)) =>
+                       rewrite ssa_vars_atomic_subset; assumption
+                     | H : is_true (?v1 != ?v2)
+                       |- is_true (ssa_var (upd_index ?v1 (upd_index ?v2 ?m)) ?v1 !=
+                                          ssa_var (upd_index ?v2 ?m) ?v2) =>
+                       exact: (pair_neq1 _ _ H)
+                     | H : is_true (VS.mem ?v ?vs) |-
+                       is_true (SSAVS.mem (ssa_var ?m ?v) (ssa_vars ?m ?vs)) =>
+                       rewrite ssa_vars_mem1; exact: H
+                     | H: is_true (DSL.are_defined (DSL.vars_atomic ?a) ?te)
+                       |- is_true (SSA.are_defined (SSA.vars_atomic (ssa_atomic ?m ?a))
+                                         (ssa_typenv ?m ?te)) => rewrite -ssa_vars_are_defined_atomic; exact: H
+                     | |- is_true(true) => done
+                     | |- ?e => progress (auto)
+                     | |- ?e => idtac
+                     end in tac) .
+    by apply ssa_vars_are_defined_bexp.
+  Qed.
 
+
+  Lemma ssa_well_typed_eexp m te e:
+    DSL.well_typed_eexp te e <->
+    SSA.well_typed_eexp (ssa_typenv m te) (ssa_eexp m e).
+  Proof.
+    split; elim: e m te; intros; rewrite /=.
+    - done.
+    - done.
+    - apply H. by rewrite /= in H0.
+    - rewrite /= in H1.
+      move/andP: H1 => [H1_1 H1_2].
+      apply/andP; split; by [apply H | apply H0].
+    - done.
+    - done.
+    - apply (H m). by rewrite /= in H0.
+    - rewrite /= in H1.
+      move/andP: H1 => [H1_1 H1_2].
+      apply/andP; split; by [ apply (H m) | apply (H0 m)].
+  Qed.
+
+  Lemma ssa_typenv_size_rexp m te r:
+    DSL.size_of_rexp r te = SSA.size_of_rexp (ssa_rexp m r) (ssa_typenv m te).
+  Proof.
+    elim: r te m; intros; rewrite /=; try reflexivity.
+    exact: ssa_typenv_size.
+  Qed.
+
+  Lemma ssa_well_typed_rexp m te e:
+    DSL.well_typed_rexp te e <->
+    SSA.well_typed_rexp (ssa_typenv m te) (ssa_rexp m e).
+  Proof.
+    split; elim: e m te; intros; rewrite /=.
+    - done.
+    - done.
+    - rewrite /= in H0.
+      move/andP: H0 => [H0_1 H0_2].
+      apply/andP; split.
+      + by apply H.
+      + by rewrite -ssa_typenv_size_rexp.
+    - rewrite /= in H1.
+      split_andb_hyps.
+      split_andb_goal.
+      + by apply H.
+      + by rewrite -ssa_typenv_size_rexp.
+      + by apply H0.
+      + by rewrite -ssa_typenv_size_rexp.
+    - rewrite /= in H0.
+      split_andb_hyps; split_andb_goal.
+      + by apply H.
+      + by rewrite -ssa_typenv_size_rexp.
+    - rewrite /= in H0.
+      split_andb_hyps; split_andb_goal.
+      + by apply H.
+      + by rewrite -ssa_typenv_size_rexp.
+    - done.
+    - done.
+    - rewrite /= in H0.
+      move/andP: H0 => [H0_1 H0_2].
+      apply/andP; split.
+      + by apply (H m).
+      + by rewrite (ssa_typenv_size_rexp m).
+    - rewrite /= in H1.
+      split_andb_hyps.
+      split_andb_goal.
+      + by apply (H m).
+      + by rewrite (ssa_typenv_size_rexp m).
+      + by apply (H0 m).
+      + by rewrite (ssa_typenv_size_rexp m).
+    - rewrite /= in H0.
+      split_andb_hyps; split_andb_goal.
+      + by apply (H m).
+      + by rewrite (ssa_typenv_size_rexp m).
+    - rewrite /= in H0.
+      split_andb_hyps; split_andb_goal.
+      + by apply (H m).
+      + by rewrite (ssa_typenv_size_rexp m).
+  Qed.
+
+  Lemma ssa_well_typed_ebexp m te e:
+    DSL.well_typed_ebexp te e <->
+    SSA.well_typed_ebexp (ssa_typenv m te) (ssa_ebexp m e).
+  Proof.
+    split; elim: e m te; intros; rewrite /=; rewrite /= in H; split_andb_hyps; split_andb_goal.
+    - done.
+    - by apply ssa_well_typed_eexp.
+    - by apply ssa_well_typed_eexp.
+    - by apply ssa_well_typed_eexp.
+    - by apply ssa_well_typed_eexp.
+    - by apply ssa_well_typed_eexp.
+    - rewrite /= in H1; split_andb_hyps; by apply H.
+    - rewrite /= in H1; split_andb_hyps; by apply H0.
+    - done.
+    - by apply (ssa_well_typed_eexp m).
+    - by apply (ssa_well_typed_eexp m).
+    - by apply (ssa_well_typed_eexp m).
+    - by apply (ssa_well_typed_eexp m).
+    - by apply (ssa_well_typed_eexp m).
+    - rewrite /= in H1; split_andb_hyps; by apply (H m).
+    - rewrite /= in H1; split_andb_hyps; by apply (H0 m).
+  Qed.
+
+  Lemma ssa_well_typed_rbexp m te e:
+    DSL.well_typed_rbexp te e <->
+    SSA.well_typed_rbexp (ssa_typenv m te) (ssa_rbexp m e).
+  Proof.
+    split; elim: e m te; intros; rewrite /=; rewrite /= in H; split_andb_hyps; split_andb_goal.
+    - done.
+    - by apply ssa_well_typed_rexp.
+    - by rewrite -ssa_typenv_size_rexp.
+    - by apply ssa_well_typed_rexp.
+    - by rewrite -ssa_typenv_size_rexp.
+    - by apply ssa_well_typed_rexp.
+    - by rewrite -ssa_typenv_size_rexp.
+    - by apply ssa_well_typed_rexp.
+    - by rewrite -ssa_typenv_size_rexp.
+    - rewrite /= in H0; split_andb_hyps; by apply H.
+    - rewrite /= in H1; split_andb_hyps; by apply H.
+    - rewrite /= in H1; split_andb_hyps; by apply H0.
+    - rewrite /= in H1; split_andb_hyps; by apply H.
+    - rewrite /= in H1; split_andb_hyps; by apply H0.
+    - done.
+    - by apply (ssa_well_typed_rexp m).
+    - by rewrite (ssa_typenv_size_rexp m).
+    - by apply (ssa_well_typed_rexp m).
+    - by rewrite (ssa_typenv_size_rexp m).
+    - by apply (ssa_well_typed_rexp m).
+    - by rewrite (ssa_typenv_size_rexp m).
+    - by apply (ssa_well_typed_rexp m).
+    - by rewrite (ssa_typenv_size_rexp m).
+    - rewrite /= in H0; split_andb_hyps; by apply (H m).
+    - rewrite /= in H1; split_andb_hyps; by apply (H m).
+    - rewrite /= in H1; split_andb_hyps; by apply (H0 m).
+    - rewrite /= in H1; split_andb_hyps; by apply (H m).
+    - rewrite /= in H1; split_andb_hyps; by apply (H0 m).
+  Qed.
+
+  Lemma ssa_well_typed_bexp m te b:
+    DSL.well_typed_bexp te b <->
+    SSA.well_typed_bexp (ssa_typenv m te) (ssa_bexp m b).
+  Proof.
+    elim: b m te; split; intros.
+    - rewrite /DSL.well_typed_bexp /= in H.
+      rewrite /SSA.well_typed_bexp /=.
+      split_andb_hyps; split_andb_goal.
+      + by apply ssa_well_typed_ebexp.
+      + by apply ssa_well_typed_rbexp.
+    - rewrite /SSA.well_typed_bexp /= in H.
+      rewrite /DSL.well_typed_bexp /=.
+      split_andb_hyps; split_andb_goal.
+      + by apply (ssa_well_typed_ebexp m).
+      + by apply (ssa_well_typed_rbexp m).
+  Qed.
 
   Lemma ssa_instr_well_typed te m1 m2 i si :
-    DSL.well_typed_instr te i ->
+    DSL.well_formed_instr te i ->
     ssa_instr m1 i = (m2, si) ->
     SSA.well_typed_instr (ssa_typenv m1 te) si.
   Proof.
+    rewrite /DSL.well_formed_instr /DSL.well_defined_instr /DSL.well_typed_instr /SSA.well_typed_instr.
     case: i => /=; intros;
-                repeat (match goal with
-                        | H : (_, _) = (_, _) |- _ => case: H => _ <- /=
-                        | H : is_true (_ && _) |- _ =>
-                          let H1 := fresh in
-                          let H2 := fresh in
-                          move/andP: H => [H1 H2]
-                        | |- is_true (_ && _) => apply/andP; split
-                        | H : is_true (?v1 != ?v2)
-                          |- is_true (ssa_var (upd_index ?v1 (upd_index ?v2 ?m)) ?v1 !=
-                                             ssa_var (upd_index ?v2 ?m) ?v2) =>
-                          exact: (pair_neq1 _ _ H)
-                        | |- is_true(true) => done end) .
-    (* need some lemmas *)
-  Admitted.
-
+                (let rec tac :=
+                     match goal with
+                     | H : (_, _) = (_, _) |- _ => case: H => _ <- /=; tac
+                     | H : is_true (_ && _) |- _ =>
+                       let H1 := fresh in
+                       let H2 := fresh in
+                       move/andP: H => [H1 H2]; tac
+                     | |- is_true (_ && _) => apply/andP; split; tac
+                     | H : is_true (VS.subset (DSL.vars_atomic ?a) ?vs)
+                       |- is_true (SSAVS.subset
+                                    (SSA.vars_atomic (ssa_atomic ?m ?a))
+                                    (ssa_vars ?m ?vs)) =>
+                       rewrite ssa_vars_atomic_subset; assumption
+                     | H : is_true (?v1 != ?v2)
+                       |- is_true (ssa_var (upd_index ?v1 (upd_index ?v2 ?m)) ?v1 !=
+                                          ssa_var (upd_index ?v2 ?m) ?v2) =>
+                       exact: (pair_neq1 _ _ H)
+                     | H : is_true (VS.mem ?v ?vs) |-
+                       is_true (SSAVS.mem (ssa_var ?m ?v) (ssa_vars ?m ?vs)) =>
+                       rewrite ssa_vars_mem1; exact: H
+                     | |- context [SSA.atyp (ssa_atomic ?m ?a) (ssa_typenv ?m ?te)]
+                       => rewrite -ssa_atomic_atyp; tac
+                     | H: is_true (DSL.are_defined (DSL.vars_atomic ?a) ?te)
+                       |- is_true (SSA.are_defined (SSA.vars_atomic (ssa_atomic ?m ?a))
+                                         (ssa_typenv ?m ?te)) => rewrite -ssa_vars_are_defined_atomic; exact: H
+                     | H : is_true (?v1 != ?v2)
+                       |- is_true (ssa_var (upd_index ?v1 (upd_index ?v2 ?m)) ?v1 !=
+                                          ssa_var (upd_index ?v2 ?m) ?v2) =>
+                       exact: (pair_neq1 _ _ H)
+                     | |- is_true(true) => done
+                     | |- ?e => progress (auto)
+                     | |- ?e => idtac
+                     end in tac) .
+    by apply ssa_well_typed_bexp.
+  Qed.
 
   Lemma ssa_instr_well_formed te m1 m2 i si :
     DSL.well_formed_instr te i ->
     ssa_instr m1 i = (m2, si) ->
     SSA.well_formed_instr (ssa_typenv m1 te) si.
   Proof.
-    move=> /andP [Hwd Hwt] Hsi.
+    move=> Hwf Hsi.
     rewrite /SSA.well_formed_instr.
-      by rewrite (ssa_instr_well_defined Hwd Hsi) (ssa_instr_well_typed Hwt Hsi).
+      by rewrite (ssa_instr_well_defined Hwf Hsi) (ssa_instr_well_typed Hwf Hsi).
   Qed.
 
-  (* ite: input typenv, lte: ?? *)
-  Definition dclosed m (ite lte :TE.env) (ste: SSATE.env) : Prop :=
-    (* Indices of unused variables should not be updated. *)
-    (forall v, (~~ TE.mem v ite /\ ~~ TE.mem v lte) -> get_index v m = 0) /\
-    (* The index of a variable in lte should start from 1. *)
-    (forall v, TE.mem v lte -> 0 <? get_index v m) /\
-    (* ste contains all versions of ite and lte. *)
-    (forall v i, SSATE.mem (v, i) ste = (TE.mem v ite) && (i <=? get_index v m) || (TE.mem v lte) && (0 <? i <=? get_index v m)).
 
-  Lemma dclosed_lte_idx_gt0 m ite lte ste v :
-    dclosed m ite lte ste -> TE.mem v lte -> 0 <? get_index v m.
+
+  Theorem ssa_program_well_formed1 te m1 m2 p sp :
+    DSL.well_formed_program te p ->
+    ssa_program m1 p = (m2, sp) ->
+    SSA.well_formed_program (ssa_typenv m1 te) sp.
   Proof.
-    move=> [_ [H _]]. exact: H.
+    elim: p te m1 m2 sp.
+    - move=> te m1 m2 sp.
+      rewrite /=.
+      move=> _.
+      case=> _ <-.
+      done.
+    - move=> hd tl IH te m1 m2 sp.
+      rewrite /=.
+      move=> /andP [Hwf_hd Hwf_tl].
+      case H_hd: (ssa_instr m1 hd) => [sm_hd sp_hd].
+      case H_tl: (ssa_program sm_hd tl) => [sm_tl sp_tl].
+      case=> Hsm <-.
+      rewrite /=.
+      apply/andP; split.
+      + exact: (ssa_instr_well_formed Hwf_hd H_hd).
+      + move: (IH _ _ _ _ Hwf_tl H_tl) => HIH.
+        move: (@ssa_instr_succ_typenv_submap _ _ _ _ te H_hd) => Hsub.
+        exact: (SSA.well_formed_program_submap HIH Hsub).
   Qed.
 
-  Lemma dclosed_not_mem m ite lte ste v :
-    dclosed m ite lte ste ->
-    ~~ TE.mem v ite /\ ~~ TE.mem v lte ->
-    get_index v m = 0.
-  Proof.
-    move=> [Hd _] Hmem.
-    exact: (Hd v Hmem).
-  Qed.
-
-  Lemma dclosed_mem1 m ite lte ste v i :
-    dclosed m ite lte ste ->
-    SSATE.mem (v, i) ste ->
-    (TE.mem v ite) /\ (i <=? get_index v m) \/
-                     (TE.mem v lte) /\ (0 <? i <=? get_index v m).
-  Proof.
-    move=> [_ [_ Hd]] Hmem.
-    rewrite Hd in Hmem.
-    case: (orP Hmem) => {Hmem} /andP H.
-    - left; assumption.
-    - right; assumption.
-  Qed.
-
-  Lemma dclosed_mem2 m ite lte ste (v i: VarOrder.T) :
-    dclosed m ite lte ste ->
-    TE.mem v ite -> i <=? get_index v m ->
-    SSATE.mem (v, i) ste.
-  Proof.
-    move=> [_ [_ Hd]] Hmem Hi.
-    rewrite Hd.
-    apply/orP; left; apply/andP; split; assumption.
-  Qed.
-
-  Lemma dclosed_mem3 m ite lte ste (v i: VarOrder.T) :
-    dclosed m ite lte ste ->
-    TE.mem v lte -> 0 <? i <=? get_index v m ->
-    SSATE.mem (v, i) ste.
-  Proof.
-    move=> [_ [_ Hd]] Hmem Hi.
-    rewrite Hd.
-    apply/orP; right; apply/andP; split; assumption.
-  Qed.
-
-  Lemma dclosed_mem4 m ite lte ste v :
-    dclosed m ite lte ste ->
-    TE.mem v lte -> 0 <? get_index v m.
-  Proof.
-    move=> [_ [Hd _]] Hmem.
-    exact: (Hd _ Hmem).
-  Qed.
-(*
-  Lemma dclosed_mem5 m ite lte ste (v i: VarOrder.T) :
-    dclosed m ite lte ste ->
-    0 <? i <=? get_index v m ->
-    SSATE.mem (v, i) ste.
+  Lemma ssa_typenv_mem_le v i m te:
+    SSAVS.mem (v, i) (SSA.vars_env (ssa_typenv m te)) ->
+    i <=? get_index v m.
   Proof.
   Admitted.
-  (*   move=> Hd Hi. *)
-  (*   case Hmem: (TE.mem v (TE_union ite lte)). *)
-  (*   - case: (VS.Lemmas.mem_union1 Hmem) => {Hmem} Hmem. *)
-  (*     + move/andP: Hi => [Hi1 Hi2]. *)
-  (*       exact: (dclosed_mem2 Hd Hmem Hi2). *)
-  (*     + exact: (dclosed_mem3 Hd Hmem Hi). *)
-  (*   - move/idP/negP: Hmem => Hmem. *)
-  (*     rewrite (dclosed_not_mem Hd Hmem) in Hi. *)
-  (*     move/andP: Hi => [Hi1 Hi2]. *)
-  (*     rewrite Nleqn0 in Hi2. *)
-  (*     rewrite (eqP Hi2) Nltnn in Hi1. *)
-  (*     discriminate. *)
-  (* Qed. *)
 
-  Lemma dclosed_mem6 m ivs lvs svs v :
-    dclosed m ivs lvs svs ->
-    VS.mem v (VS.union ivs lvs) ->
-    SSAVS.mem (ssa_var m v) svs.
+  Theorem ssa_program_well_formed te m1 m2 p sp :
+    DSL.well_formed_program te p ->
+    ssa_program m1 p = (m2, sp) ->
+    well_formed_ssa_program (ssa_typenv m1 te) sp.
   Proof.
-    move=> Hd Hmv. set sv := ssa_var m v. have: sv = ssa_var m v by reflexivity.
-    destruct sv as [x i]. move=> [] -> ->. case: (VS.Lemmas.mem_union1 Hmv) => {Hmv} Hmv.
-    - apply: (dclosed_mem2 Hd Hmv). exact: N.leb_refl.
-    - apply: (dclosed_mem3 Hd Hmv). rewrite (dclosed_lvs_idx_gt0 Hd Hmv) N.leb_refl.
-      done.
+    move=> Hwf Hsp.
+    rewrite /well_formed_ssa_program.
+    apply/andP. split.
+    apply/andP. split.
+    - exact: (ssa_program_well_formed1 Hwf Hsp).
+    - apply: ssa_unchanged_program_global => v Hmem.
+      destruct v as [v i].
+      apply: (ssa_program_le_unchanged _ Hsp).
+      exact: (ssa_typenv_mem_le Hmem).
+    - exact: (ssa_program_single_assignment Hsp).
   Qed.
 
-  Lemma dclosed_empty vs :
-    dclosed empty_vmap vs VS.empty (ssa_vars empty_vmap vs).
+  Lemma ssa_singleton_var_index m t v i :
+    SSAVS.mem (v, i) (SSAVS.singleton (ssa_var m t)) ->
+    get_index v m = i.
   Proof.
-    split; first by reflexivity.
-    split; first by discriminate.
-    move=> v i.
-    case Hmem: (VS.mem v vs && (i <=? get_index v empty_vmap)
-                || [&& VS.mem v VS.empty, 0 <? i & i <=? get_index v empty_vmap]).
-    - case: (orP Hmem) => {Hmem} /andP [Hmem Hidx].
-      + apply: (ssa_vars_mem3 Hmem).
-        rewrite get_index_empty Nleqn0 in Hidx *.
-        exact: (eqP Hidx).
-      + discriminate.
-    - apply/negP => H.
-      move/negP: Hmem; apply.
-      move: (ssa_vars_mem2 H) => [y [[Hy Hidy] Hmemy]].
-      apply/orP; left; apply/andP; split.
-      + rewrite Hy; exact: Hmemy.
-      + rewrite Hidy Hy; exact: Nleqnn.
+    move=> Hmem.
+    move: (SSA.VSLemmas.mem_singleton1 Hmem) => /eqP [] <- <-.
+    reflexivity.
   Qed.
 
-  Lemma dclosed_subset m ivs lvs svs :
-    dclosed m ivs lvs svs ->
-    SSAVS.subset (ssa_vars m (VS.union ivs lvs)) svs.
+  Lemma ssa_atomic_var_index m a v i :
+    SSAVS.mem (v, i) (SSA.vars_atomic (ssa_atomic m a)) ->
+    get_index v m = i.
   Proof.
-    move=> [Hd1 [Hd2 Hd3]].
-    apply: SSAVS.subset_1 => x /SSAVS.Lemmas.memP Hmem.
-    apply/SSAVS.Lemmas.memP.
-    move: Hmem; rewrite ssa_vars_union => Hmem.
-    destruct x as [x i].
-    rewrite Hd3; apply/orP.
-    case: (SSAVS.Lemmas.mem_union1 Hmem) => {Hmem} Hmem.
-    - left.
-      move: (ssa_vars_mem2 Hmem) => [y [[Hxy Hidx] Hmemy]].
-      apply/andP; split.
-      + rewrite Hxy; exact: Hmemy.
-      + rewrite Hidx Hxy; exact: Nleqnn.
-    - right.
-      move: (ssa_vars_mem2 Hmem) => [y [[Hxy Hidx] Hmemy]].
-      apply/andP; split.
-      + rewrite Hxy; exact: Hmemy.
-      + move: (Hd2 _ Hmemy) => H.
-        rewrite Hxy Hidx; apply/andP; split.
-        * assumption.
-        * exact: Nleqnn.
+    case: a => /=.
+    - move=> x. exact: ssa_singleton_var_index.
+    - move=> _ _ H.
+      rewrite SSA.VSLemmas.mem_empty in H.
+      discriminate.
   Qed.
 
-  Ltac dclosed_instr_well_formed_tac :=
-    match goal with
-    | H : (_, _) = (_, _) |- _ =>
-      case: H => _ <- /=; dclosed_instr_well_formed_tac
-    | H : is_true (_ && _) |- _ =>
-      let H1 := fresh in
-      let H2 := fresh in
-      move/andP: H => [H1 H2]; dclosed_instr_well_formed_tac
-    | |- is_true (_ && _) => apply/andP; split; dclosed_instr_well_formed_tac
-    | Hs : is_true (VS.subset (DSL.vars_atomic ?a) (VS.union ?ivs ?lvs)),
-           Hd : dclosed ?m1 ?ivs ?lvs ?svs
-      |- is_true (SSAVS.subset
-                   (SSA.vars_atomic (ssa_atomic ?m1 ?a))
-                   ?svs) =>
-      apply: (SSA.VSLemmas.subset_trans (s2:=ssa_vars m1 (VS.union ivs lvs)));
-      [ rewrite ssa_vars_atomic_subset;
-        assumption
-      | exact: dclosed_subset ]
-    | H : is_true (?v1 != ?v2)
-      |- is_true (ssa_var (upd_index ?v1 (upd_index ?v2 ?m)) ?v1 !=
-                         ssa_var (upd_index ?v2 ?m) ?v2) =>
-      exact: (pair_neq1 _ _ H)
-    | H1 : dclosed ?m ?ivs ?lvs ?svs,
-           H2 : is_true (VS.mem ?v (VS.union ?ivs ?lvs)) |-
-      is_true (SSAVS.mem (ssa_var ?m ?v) ?svs) =>
-      exact: (dclosed_mem6 H1 H2)
-    | |- _ => idtac
-    end.
-
-  Lemma dclosed_instr_well_formed ivs lvs svs m1 m2 i si :
-    DSL.well_formed_instr (TE.union ivs lvs) i ->
-    ssa_instr m1 i = (m2, si) ->
-    dclosed m1 ivs lvs svs ->
-    SSA.well_formed_instr svs si.
+  Lemma ssa_eexp_var_index m (e : DSL.eexp) v i :
+    SSAVS.mem (v, i) (SSA.vars_eexp (ssa_eexp m e)) ->
+    get_index v m = i.
   Proof.
-    case: i => /=; intros; by dclosed_instr_well_formed_tac.
+    elim: e m v i => /=.
+    - move=> a m x i Hmem. exact: (ssa_singleton_var_index Hmem).
+    - move=> c m v i H. rewrite SSA.VSLemmas.mem_empty in H. discriminate.
+    - move=> op e IH m v i Hmem. exact: IH.
+    - move=> op e1 IH1 e2 IH2 m v i Hmem.
+      case: (SSA.VSLemmas.mem_union1 Hmem) => {Hmem} Hmem.
+      + exact: IH1.
+      + exact: IH2.
   Qed.
-*)
+
+  Lemma ssa_rexp_var_index m (e : DSL.rexp) v i :
+    SSAVS.mem (v, i) (SSA.vars_rexp (ssa_rexp m e)) ->
+    get_index v m = i.
+  Proof.
+    elim: e m v i => /=.
+    - move=> a m x i Hmem. exact: (ssa_singleton_var_index Hmem).
+    - move=> w c m v i H. rewrite SSA.VSLemmas.mem_empty in H. discriminate.
+    - move=> w1 op e1 IH1 m v i Hmem. exact: IH1.
+    - move=> w op e1 IH1 e2 IH2 m v i Hmem.
+      case: (SSA.VSLemmas.mem_union1 Hmem) => {Hmem} Hmem.
+      + exact: IH1.
+      + exact: IH2.
+    - move=> w e IH p m v i Hmem. exact: IH.
+    - move=> w e IH p m v i Hmem. exact: IH.
+  Qed.
+
+  Lemma ssa_ebexp_var_index m e v i :
+    SSAVS.mem (v, i) (SSA.vars_ebexp (ssa_ebexp m e)) ->
+    get_index v m = i.
+  Proof.
+    elim: e m v i => /=.
+    - move=> m v i Hmem.
+      discriminate.
+    - move=> e1 e2 m v i Hmem.
+      rewrite SSA.VSLemmas.union_b in Hmem.
+      move/orP: Hmem; case=> Hmem;
+                              apply: (ssa_eexp_var_index Hmem); reflexivity.
+    - move=> e1 e2 p m v i Hmem.
+      rewrite !SSA.VSLemmas.union_b in Hmem.
+      repeat (move/orP: Hmem; case=> Hmem);
+        exact: (ssa_eexp_var_index Hmem).
+    - move=> e1 IH1 e2 IH2 m v i Hmem.
+      rewrite SSA.VSLemmas.union_b in Hmem.
+      move/orP: Hmem; case=> Hmem.
+      + exact: IH1.
+      + exact: IH2.
+  Qed.
+
+  Lemma ssa_rbexp_var_index m e v i :
+    SSAVS.mem (v, i) (SSA.vars_rbexp (ssa_rbexp m e)) ->
+    get_index v m = i.
+  Proof.
+    elim: e m v i => /=.
+    - move=> m v i Hmem.
+      discriminate.
+    - move=> w e1 e2 m v i Hmem.
+      rewrite SSA.VSLemmas.union_b in Hmem.
+      move/orP: Hmem; case=> Hmem;
+                              apply: (ssa_rexp_var_index Hmem); reflexivity.
+    - move=> w op e1 e2 m v i Hmem.
+      rewrite SSA.VSLemmas.union_b in Hmem.
+      move/orP: Hmem; case=> Hmem;
+                              apply: (ssa_rexp_var_index Hmem); reflexivity.
+    - move=> e IH m v i Hmem.
+      exact: IH.
+    - move=> e1 IH1 e2 IH2 m v i Hmem.
+      rewrite SSA.VSLemmas.union_b in Hmem.
+      move/orP: Hmem; case=> Hmem.
+      + exact: IH1.
+      + exact: IH2.
+    - move=> e1 IH1 e2 IH2 m v i Hmem.
+      rewrite SSA.VSLemmas.union_b in Hmem.
+      move/orP: Hmem; case=> Hmem.
+      + exact: IH1.
+      + exact: IH2.
+  Qed.
+
+  Lemma ssa_bexp_var_index m e v i :
+    SSAVS.mem (v, i) (SSA.vars_bexp (ssa_bexp m e)) ->
+    get_index v m = i.
+  Proof.
+    move=> Hmem. case: (SSA.VSLemmas.mem_union1 Hmem) => {Hmem} Hmem.
+    - exact: (ssa_ebexp_var_index Hmem).
+    - exact: (ssa_rbexp_var_index Hmem).
+  Qed.
+
+  Lemma ssa_spec_in_pre_unchanged s v :
+    SSAVS.mem v (SSA.vars_bexp (SSA.spre (ssa_spec s))) ->
+    ssa_var_unchanged_program v (SSA.sprog (ssa_spec s)).
+  Proof.
+    move: (ssa_spec_unfold s) => [m [Hinputs [Hpre [Hprog Hpost]]]].
+    move=> Hmem.
+    rewrite Hpre in Hmem.
+    destruct v as [v i].
+    move: (ssa_bexp_var_index Hmem) => Hidx.
+    apply: (ssa_program_le_unchanged (m1:=empty_vmap)).
+    - rewrite Hidx.
+      exact: Nleqnn.
+    - symmetry; exact: Hprog.
+  Qed.
+
+  Lemma ssa_spec_unchanged_pre s :
+    ssa_vars_unchanged_program (SSA.vars_bexp (SSA.spre (ssa_spec s))) (SSA.sprog (ssa_spec s)).
+  Proof.
+    move: (ssa_spec_unfold s) => [m [Hinput [Hpre [Hprog Hpost]]]].
+    destruct s as [f p g]; rewrite /= in Hpre Hprog Hpost *.
+    apply: ssa_unchanged_program_global => v Hmem.
+    exact: ssa_spec_in_pre_unchanged.
+  Qed.
+
+  Definition well_formed_ssa_spec2 (s : SSA.spec) : bool :=
+    SSA.well_formed_spec s &&
+                         ssa_vars_unchanged_program (SSA.vars_env (SSA.sinputs s)) (SSA.sprog s) &&
+                         ssa_single_assignment (SSA.sprog s).
+
+  Lemma ssa_spec_well_formed_sub1 s:
+    DSL.well_formed_bexp (DSL.sinputs s) (DSL.spre s) ->
+    SSA.well_formed_bexp (SSA.sinputs (ssa_spec s)) (SSA.spre (ssa_spec s)).
+  Proof.
+  Admitted.
+
+  Lemma ssa_spec_well_formed_sub2 s m1 m2 p sp:
+    DSL.well_formed_bexp (DSL.program_succ_typenv (DSL.sprog s) (DSL.sinputs s)) (DSL.spost s) ->
+    ssa_program m1 p = (m2, sp) ->
+    SSA.well_formed_bexp (SSA.program_succ_typenv (SSA.sprog (ssa_spec s))
+                                                  (SSA.sinputs (ssa_spec s)))
+                         (SSA.spost (ssa_spec s)).
+  Proof.
+  Admitted.
+
+  Theorem ssa_spec_well_formed s :
+    DSL.well_formed_spec s ->
+    well_formed_ssa_spec (ssa_spec s).
+  Proof.
+    move=> /andP [/andP [Hsubpre Hwellprog] Hsubpost].
+    move: (ssa_spec_unfold s) => [m [Hinput [Hpre [Hprog Hpost]]]].
+    move: (ssa_program_well_formed Hwellprog (Logic.eq_sym Hprog)) => /andP [/andP [Hwell Hvs] Hsingle].
+    apply/andP; split; [apply/andP; split | idtac].
+    - apply/andP; split; [apply/andP; split | idtac].
+      + exact: (ssa_spec_well_formed_sub1 Hsubpre).
+        (* rewrite /SSA.well_formed_bexp. *)
+        (* rewrite Hpre ssa_vars_bexp_subset. *)
+        (* assumption. *)
+      + rewrite Hinput. exact: Hwell.
+      + exact: (ssa_spec_well_formed_sub2 Hsubpost (Logic.eq_sym Hprog)).
+    - rewrite Hinput. assumption.
+    - exact: (ssa_program_single_assignment (Logic.eq_sym Hprog)).
+  Qed.
+
+
+
+
 End MakeSSA.
-
-  (* TODO: Check if all variables in a program are not indexed. *)
-
-  (*
-  Definition unindexed_var (v : var) : bool :=
-    vidx v == 1.
-
-  Definition unindexed_vars vs := VS.for_all unindexed_var vs.
-
-  Definition unindexed_atomic  (a : atomic) : bool :=
-    match a with
-    | Avar v => unindexed_var v
-    | Aconst ty n => true
-    end.
-
-  Fixpoint unindexed_eexp (e: eexp) :=
-    match e with
-    | Evar v => unindexed_var v
-    | Econst c => true
-    | Eunop op e => unindexed_eexp e
-    | Ebinop op e1 e2 => unindexed_eexp e1 && unindexed_eexp e2
-    end.
-
-  Fixpoint unindexed_rexp (e: rexp) :=
-    match e with
-    | Rvar v => unindexed_var v
-    | Rconst w n => true
-    | Runop w op e => unindexed_rexp e
-    | Rbinop w op e1 e2 => unindexed_rexp e1 && unindexed_rexp e2
-    | Ruext w e i => unindexed_rexp e
-    | Rsext w e i => unindexed_rexp e
-    end.
-
-  Fixpoint unindexed_ebexp (e: ebexp) :=
-    match e with
-    | Etrue => true
-    | Eeq e1 e2 => unindexed_eexp e1 && unindexed_eexp e2
-    | Eeqmod e1 e2 p => unindexed_eexp e1 && unindexed_eexp e2 && unindexed_eexp p
-    | Eand e1 e2 => unindexed_ebexp e1 && unindexed_ebexp e2
-    end.
-
-  Fixpoint unindexed_rbexp (e: rbexp) :=
-    match e with
-    | Rtrue => true
-    | Req w e1 e2 => unindexed_rexp e1 && unindexed_rexp e2
-    | Rcmp w op e1 e2 => unindexed_rexp e1 && unindexed_rexp e2
-    | Rneg e =>  unindexed_rbexp e
-    | Rand e1 e2 => unindexed_rbexp e1 && unindexed_rbexp e2
-    | Ror e1 e2 => unindexed_rbexp e1 && unindexed_rbexp e2
-    end.
-
-  Definition unindexed_bexp e := unindexed_ebexp (eqn_bexp e) && unindexed_rbexp (rng_bexp e).
-
-  Definition unindexed_instr (i: instr) : bool :=
-    match i with
-    | Imov v a
-    | Ishl v a _ =>
-      let v := unindexed_var v in
-      let a := unindexed_atomic a in
-      v && a
-    | Icshl vh vl a1 a2 _ =>
-      let vh := unindexed_var vh in
-      let vl := unindexed_var vl in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      vh && vl && a1 && a2
-    | Inondet v =>
-      let v := unindexed_var v in v
-    | Icmov v c a1 a2 =>
-      let v := unindexed_var v in
-      let c := unindexed_atomic c in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      v && c && a1 && a2
-    | Inop => true
-    | Inot v a =>
-      let v := unindexed_var v in
-      let a := unindexed_atomic a in
-      v && a
-    | Iadd v a1 a2 =>
-      let v := unindexed_var v in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      v && a1 && a2
-    | Iadds c v a1 a2
-    | Iaddr c v a1 a2 =>
-      let c := unindexed_var c in
-      let v := unindexed_var v in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      c && v && a1 && a2
-    | Iadc v a1 a2 y =>
-      let v := unindexed_var v in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      let y := unindexed_atomic y in
-      v && a1 && a2 && y
-    | Iadcs c v a1 a2 y
-    | Iadcr c v a1 a2 y =>
-      let c := unindexed_var c in
-      let v := unindexed_var v in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      let y := unindexed_atomic y in
-      c && v && a1 && a2 && y
-    | Isub v a1 a2 =>
-      let v := unindexed_var v in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      v && a1 && a2
-    | Isubc c v a1 a2
-    | Isubb c v a1 a2
-    | Isubr c v a1 a2 =>
-      let c := unindexed_var c in
-      let v := unindexed_var v in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      c && v && a1 && a2
-    | Isbc v a1 a2 y =>
-      let v := unindexed_var v in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      let y := unindexed_atomic y in
-      v && a1 && a2 && y
-    | Isbcs c v a1 a2 y
-    | Isbcr c v a1 a2 y =>
-      let c := unindexed_var c in
-      let v := unindexed_var v in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      let y := unindexed_atomic y in
-      c && v && a1 && a2 && y
-    | Isbb v a1 a2 y =>
-      let v := unindexed_var v in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      let y := unindexed_atomic y in
-      v && a1 && a2 && y
-    | Isbbs c v a1 a2 y
-    | Isbbr c v a1 a2 y =>
-      let c := unindexed_var c in
-      let v := unindexed_var v in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      let y := unindexed_atomic y in
-      c && v && a1 && a2 && y
-    | Imul v a1 a2 =>
-      let v := unindexed_var v in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      v && a1 && a2
-    | Imuls c v a1 a2
-    | Imulr c v a1 a2 =>
-      let c := unindexed_var c in
-      let v := unindexed_var v in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      c && v && a1 && a2
-    | Imull vh vl a1 a2 =>
-      let vh := unindexed_var vh in
-      let vl := unindexed_var vl in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      vh && vl && a1 && a2
-    | Imulj v a1 a2 =>
-      let v := unindexed_var v in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      v && a1 && a2
-    | Isplit vh vl a n =>
-      let vh := unindexed_var vh in
-      let vl := unindexed_var vl in
-      let a := unindexed_atomic a in
-      vh && vl && a
-    | Iand v a1 a2
-    | Ior v a1 a2
-    | Ixor v a1 a2 =>
-      let v := unindexed_var v in
-      let a1 := unindexed_atomic a1 in
-      let a2 := unindexed_atomic a2 in
-      v && a1 && a2
-    | Icast v a
-    | Ivpc v a =>
-      let v := unindexed_var v in
-      let a := unindexed_atomic a in
-      v && a
-    | Ijoin v ah al =>
-      let v := unindexed_var v in
-      let ah := unindexed_atomic ah in
-      let al := unindexed_atomic al in
-      v && ah && al
-    | Iassert e => unindexed_bexp e
-    | Iassume e => unindexed_bexp e
-    | Iecut e pwss => unindexed_ebexp e
-    | Ircut e pwss => unindexed_rbexp e
-    | Ighost vs e => unindexed_vars vs && unindexed_bexp e
-    end.
-
-  Fixpoint unindexed_program (p : program) : bool :=
-    match p with
-    | [::] => true
-    | hd::tl =>
-      let unidx_instr := unindexed_instr hd in
-      let unidx_tl := unindexed_program tl in
-      unidx_instr && unidx_tl
-    end.
-
-   *)

@@ -1652,7 +1652,7 @@ Definition valid_bexp_spec_conj (s : bexp_spec) : Prop :=
     QFBV.eval_bexp (bpost s) st .
 
 Lemma bexp_spec_sound_conj (s : spec) :
-  well_formed_ssa_spec (sinputs s) s ->
+  well_formed_ssa_spec s ->
   valid_bexp_spec_conj (bexp_of_rspec (sinputs s) (rspec_of_spec s)) -> valid_rspec (rspec_of_spec s).
 Proof.
   destruct s as [te p g] .
@@ -1708,7 +1708,7 @@ Proof.
 Qed.
 
 Lemma bexp_spec_sound_imp (s : spec) :
-  well_formed_ssa_spec (sinputs s) s ->
+  well_formed_ssa_spec s ->
   valid_bexp_spec_imp (bexp_of_rspec (sinputs s) (rspec_of_spec s)) -> valid_rspec (rspec_of_spec s).
 Proof.
   move=> Hw Hv.
@@ -1723,7 +1723,7 @@ Qed.
 Definition valid_bexp_spec := valid_bexp_spec_imp.
 
 Theorem bexp_spec_sound (s : spec) :
-  well_formed_ssa_spec (sinputs s) s ->
+  well_formed_ssa_spec s ->
   valid_bexp_spec (bexp_of_rspec (sinputs s) (rspec_of_spec s)) -> valid_rspec (rspec_of_spec s).
 Proof.
   exact: bexp_spec_sound_imp.
