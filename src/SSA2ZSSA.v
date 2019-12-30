@@ -156,10 +156,10 @@ Section Safety.
   Inductive ssa_program_safe_at : TypEnv.SSATE.env -> program -> SSAStore.t -> Prop :=
   | ssa_program_safe_at_nil te s :
       ssa_program_safe_at te [::] s
-  | ssa_program_safe_at_cons te hd tl s s' :
+  | ssa_program_safe_at_cons te hd tl s :
       ssa_instr_safe_at te hd s ->
-      eval_instr te hd s s' ->
-      ssa_program_safe_at (instr_succ_typenv hd te) tl s' ->
+      (forall s', eval_instr te hd s s' ->
+                  ssa_program_safe_at (instr_succ_typenv hd te) tl s') ->
       ssa_program_safe_at te (hd::tl) s .
 
   Definition ssa_program_safe te p : Prop :=

@@ -1044,6 +1044,34 @@ Module MakeDSL
 
 
 
+  (* Remove algebraic assumptions or range assumptions from programs *)
+
+  Definition eqn_instr (i : instr) : instr :=
+    match i with
+    | Iassume (ee, re) => Iassume (ee, rtrue)
+    | _ => i
+    end.
+
+  Definition rng_instr (i : instr) : instr :=
+    match i with
+    | Iassume (ee, re) => Iassume (etrue, re)
+    | _ => i
+    end.
+
+  Fixpoint eqn_program (p : program) : program :=
+    match p with
+    | [::] => [::]
+    | hd::tl => (eqn_instr hd)::(eqn_program tl)
+    end.
+
+  Fixpoint rng_program (p : program) : program :=
+    match p with
+    | [::] => [::]
+    | hd::tl => (rng_instr hd)::(rng_program tl)
+    end.
+
+
+
   (* Specifications *)
 
   Record spec : Type :=
@@ -1067,13 +1095,13 @@ Module MakeDSL
   Coercion espec_of_spec s :=
     {| esinputs := sinputs s;
        espre := eqn_bexp (spre s);
-       esprog := sprog s;
+       esprog := eqn_program (sprog s);
        espost := eqn_bexp (spost s) |}.
 
   Coercion rspec_of_spec s :=
     {| rsinputs := sinputs s;
        rspre := rng_bexp (spre s);
-       rsprog := sprog s;
+       rsprog := rng_program (sprog s);
        rspost := rng_bexp (spost s) |}.
 
 
@@ -1213,6 +1241,14 @@ Module MakeDSL
     | Ijoin v ah al => TE.add v (double_typ (atyp ah te)) te
     | Iassume e => te
     end.
+
+  Lemma eqn_instr_succ_typenv i te :
+    instr_succ_typenv (eqn_instr i) te = instr_succ_typenv i te.
+  Proof. case: i => //=. move=> [e r] /=. reflexivity. Qed.
+
+  Lemma rng_instr_succ_typenv i te :
+    instr_succ_typenv (rng_instr i) te = instr_succ_typenv i te.
+  Proof. case: i => //=. move=> [e r] /=. reflexivity. Qed.
 
   Local Notation state := S.t.
 
@@ -1380,6 +1416,18 @@ Module MakeDSL
 
   Definition eval_program (te : TE.env) p s t : Prop := eval_instrs te p s t.
 
+  Lemma eqn_program_succ_typenv p te :
+    program_succ_typenv (eqn_program p) te = program_succ_typenv p te.
+  Proof.
+    elim: p te => [| hd tl IH te] //=. rewrite eqn_instr_succ_typenv. exact: (IH _).
+  Qed.
+
+  Lemma rng_program_succ_typenv p te :
+    program_succ_typenv (rng_program p) te = program_succ_typenv p te.
+  Proof.
+    elim: p te => [| hd tl IH te] //=. rewrite rng_instr_succ_typenv. exact: (IH _).
+  Qed.
+
   Lemma eval_program_singleton i te1 s1 s2:
       eval_program te1 ([:: i]) s1 s2 ->
       eval_instr te1 i s1 s2.
@@ -1389,6 +1437,46 @@ Module MakeDSL
     inversion H5; subst.
     assumption.
   Qed.
+
+  Lemma eval_eqn_instr i te s1 s2 :
+    eval_instr te i s1 s2 -> eval_instr te (eqn_instr i) s1 s2.
+  Proof.
+    case: i => //=. move=> [e r] H. inversion_clear H. move: H0 => [/= He Hr].
+    apply: EIassume. split; [assumption | done].
+  Qed.
+
+  Lemma eval_rng_instr i te s1 s2 :
+    eval_instr te i s1 s2 -> eval_instr te (rng_instr i) s1 s2.
+  Proof.
+    case: i => //=. move=> [e r] H. inversion_clear H. move: H0 => [/= He Hr].
+    apply: EIassume. split; [done | assumption].
+  Qed.
+
+  Lemma eval_eqn_rng_instr i te s1 s2 :
+    eval_instr te (eqn_instr i) s1 s2 -> eval_instr te (rng_instr i) s1 s2 ->
+    eval_instr te i s1 s2.
+  Proof.
+    case: i => //=. move=> [e r]. move=> H1 H2. inversion_clear H1; inversion_clear H2.
+    move: H H0 => [/= He _] [/= _ Hr]. by apply: EIassume.
+  Qed.
+
+  Lemma eval_eqn_program p te s1 s2 :
+    eval_program te p s1 s2 -> eval_program te (eqn_program p) s1 s2.
+  Proof.
+    elim: p te s1 s2 => [| hd tl IH] te s1 s2 //=. move=> H. inversion_clear H.
+    apply: (Econs (eval_eqn_instr H0)). apply: IH. rewrite eqn_instr_succ_typenv.
+    assumption.
+  Qed.
+
+  Lemma eval_rng_program p te s1 s2 :
+    eval_program te p s1 s2 -> eval_program te (rng_program p) s1 s2.
+  Proof.
+    elim: p te s1 s2 => [| hd tl IH] te s1 s2 //=. move=> H. inversion_clear H.
+    apply: (Econs (eval_rng_instr H0)). apply: IH. rewrite rng_instr_succ_typenv.
+    assumption.
+  Qed.
+
+
 
   (* Partial correctness *)
 
@@ -1419,8 +1507,9 @@ Module MakeDSL
     valid_spec s.
   Proof.
     move=> He Hr s1 s2 Hcon [Hepre Hrpre] Hprog. split.
-    - exact: (He _ _ Hcon Hepre Hprog).
-    - exact: (Hr _ _ Hcon Hrpre Hprog).
+    - move: (He s1 s2 Hcon Hepre (eval_eqn_program Hprog)) => /=.
+      rewrite eqn_program_succ_typenv. by apply.
+    - exact: (Hr s1 s2 Hcon Hrpre (eval_rng_program Hprog)).
   Qed.
 
   (* clash with Ltac notation
