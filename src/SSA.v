@@ -394,10 +394,6 @@ Section MakeSSA.
       SSA.spre (ssa_spec s) = ssa_bexp empty_vmap (DSL.spre s) /\
       (m, SSA.sprog (ssa_spec s)) = ssa_program empty_vmap (DSL.sprog s) /\
       SSA.spost (ssa_spec s) = ssa_bexp m (DSL.spost s).
-  (*
-      SSA.sepwss (ssa_spec s) = ssa_pwss (DSL.sepwss s) /\
-      SSA.srpwss (ssa_spec s) = ssa_pwss (DSL.srpwss s).
-   *)
   Proof.
     destruct s as [si f p g sep srp] => /=.
     rewrite /ssa_spec /=.
@@ -617,38 +613,6 @@ Section MakeSSA.
     move=> Hmem Hidx.
     rewrite Hidx.
     rewrite ssa_vars_mem1.
-    assumption.
-  Qed.
-
-  Lemma ssa_typenv_vars_env m te:
-    SSA.vars_env (ssa_typenv m te) = (ssa_vars m (DSL.vars_env te)).
-  Proof.
-  Admitted.
-
-  Lemma ssa_vars_mem2_typ m v te :
-    SSATE.mem v (ssa_typenv m te) ->
-    exists x, v = ssa_var m x /\ TE.mem x te.
-  Proof.
-    move=> Hmem.
-    move/SSA.vars_env_mem: Hmem => Hmem.
-    rewrite ssa_typenv_vars_env in Hmem.
-    move: (M2.map2_mem2 Hmem) => [y [/eqP Hy Hmemy]].
-    rewrite Hy.
-    move/DSL.vars_env_mem: Hmemy => Hmemy.
-      by exists y.
-  Qed.
-
-  Lemma ssa_vars_mem3_typ m v i te :
-    TE.mem v te ->
-    i = get_index v m ->
-    SSATE.mem (v, i) (ssa_typenv m te).
-  Proof.
-    move=> Hmem Hidx.
-    apply /SSA.vars_env_mem.
-    rewrite ssa_typenv_vars_env.
-    rewrite Hidx.
-    rewrite ssa_vars_mem1.
-    move/DSL.vars_env_mem : Hmem => Hmem.
     assumption.
   Qed.
 
@@ -1558,9 +1522,6 @@ Section MakeSSA.
 
   (* Type Environment Equivalence *)
 
-  Definition typenv_equiv (m : vmap) (te : TE.env) (ste : SSATE.env) : Prop :=
-    forall x, TE.vtyp x te = SSATE.vtyp (x, get_index x m) ste.
-
   Lemma pair_neq1 :
     forall (T : eqType) (a b c d : T),
       a != c -> (a, b) != (c, d).
@@ -1582,6 +1543,10 @@ Section MakeSSA.
     apply/idP: Hne.
     rewrite Hbd; exact: eqxx.
   Qed.
+
+  Definition typenv_equiv (m : vmap) (te : TE.env) (ste : SSATE.env) : Prop :=
+    forall x, TE.vtyp x te = SSATE.vtyp (x, get_index x m) ste.
+
 
   Lemma ssa_typenv_equiv_add (m: vmap) (te: TE.env) (ste: SSATE.env) x typ:
     typenv_equiv m te ste ->
@@ -1816,6 +1781,86 @@ Section MakeSSA.
       exact: (pair_neq1 _ _ Hyx).
   Qed.
 
+  Lemma ssa_typenv_exist_aux x m te:
+    ~ SSATE.mem x (ssa_typenv m te) \/ exists v, ssa_var m v = x.
+  Proof.
+    move: te.
+    apply DSL.TEKS.MLemmas.OP.P.map_induction_bis.
+    - move=> te te' Heq.
+      move: (DSL.TEKS.MLemmas.F.Equal_sym Heq) => {Heq} Heq.
+      move=> H.
+      case: H => H.
+      + left.
+        rewrite /ssa_typenv in H |- *.
+          by rewrite (DSL.TEKS.MLemmas.fold_Equal
+                        (SSA.TEKS.MLemmas.F.Equal_ST typ)
+                        (SSATE.empty typ)
+                        (add_to_set_proper m)
+                        Heq).
+      + by right.
+    - by left.
+    - move=> y yty te.
+      rewrite /ssa_typenv.
+      move=> Hnin H.
+      case: H => H.
+      + rewrite (DSL.TEKS.MLemmas.OP.P.fold_add
+                   (SSA.TEKS.MLemmas.F.Equal_ST typ)
+                   (add_to_set_proper m)
+                   (add_to_set_transpose_neqkey m)
+                   yty (SSATE.empty typ)
+                   Hnin).
+        rewrite -[add_to_ste m y yty]/(SSATE.add (ssa_var m y) yty).
+        case Heq: (x == ssa_var m y).
+        * right.
+          exists y.
+          by rewrite (eqP Heq).
+        * left.
+          move/negP: Heq => Hneq.
+          rewrite eq_sym in Hneq.
+          rewrite (SSATE.Lemmas.add_neq_b _ _ Hneq).
+          exact: H.
+      + by right.
+  Qed.
+
+  Lemma ssa_typenv_exist x m te:
+    SSATE.mem x (ssa_typenv m te) ->
+    exists v, ssa_var m v = x.
+  Proof.
+    move: (ssa_typenv_exist_aux x m te) => H.
+    move=> H2.
+    elim: H => H.
+    - by rewrite H2 in H.
+    - exact: H.
+  Qed.
+
+  Lemma ssa_vars_env_comm m te :
+    SSAVS.Equal (SSA.vars_env (ssa_typenv m te))
+                (ssa_vars m (DSL.vars_env te)).
+  Proof.
+    move=> x.
+    split.
+    - move=> Hin.
+      move/SSA.VSLemmas.memP: Hin => Hmem.
+      apply/SSA.VSLemmas.memP.
+      move/SSA.vars_env_mem: Hmem => Hmem.
+      move: (ssa_typenv_exist Hmem) => [v] Hsv.
+      rewrite -Hsv.
+      rewrite ssa_vars_mem1.
+      rewrite -Hsv in Hmem.
+      rewrite -ssa_typenv_mem in Hmem.
+      move/DSL.vars_env_mem: Hmem => Hmem.
+      exact: Hmem.
+    - move=> Hin.
+      move/SSA.VSLemmas.memP: Hin => Hmem.
+      apply/SSA.VSLemmas.memP.
+      apply/SSA.vars_env_mem.
+      move: (ssa_vars_mem2 Hmem) => [v [Hsv Hmem2]].
+      rewrite Hsv.
+      rewrite -ssa_typenv_mem.
+      move/DSL.vars_env_mem: Hmem2 => Hmem2.
+      exact: Hmem2.
+  Qed.
+
   Lemma ssa_typenv_add_empty (m: vmap) (te: TE.env) x ty:
     TE.Empty te ->
     SSATE.Equal (ssa_typenv (upd_index x m) (TE.add x ty te))
@@ -1848,10 +1893,325 @@ Section MakeSSA.
     reflexivity.
   Qed.
 
+  Lemma SSATE_add_not_in_sub1 m te x y yty:
+    x != y ->
+    SSATE.Equal (add_to_ste (upd_index x m) y yty te)
+                (add_to_ste m y yty te).
+  Proof.
+    move=> Hneq.
+    rewrite /add_to_ste.
+    rewrite eq_sym in Hneq.
+    rewrite (ssa_var_upd_neq m Hneq).
+    reflexivity.
+  Qed.
+
+  Lemma SSATE_add_not_in_sub2 m x te:
+    TE.In x te \/
+    SSATE.Equal (TE.fold (add_to_ste (upd_index x m)) te (SSATE.empty typ))
+                (TE.fold (add_to_ste m) te (SSATE.empty typ)).
+  Proof.
+    move: te.
+    apply DSL.TEKS.MLemmas.OP.P.map_induction_bis.
+    - move=> t te' Heq.
+      move: (DSL.TEKS.MLemmas.F.Equal_sym Heq) => {Heq} Heq.
+      move=> H.
+      case: H => H.
+      + left.
+        eapply DSL.TELemmas.In_m.
+        exact: eqxx.
+        exact: Heq.
+        exact: H.
+      + right.
+        rewrite (DSL.TEKS.MLemmas.fold_Equal
+                   (SSA.TEKS.MLemmas.F.Equal_ST typ)
+                   (SSATE.empty typ)
+                   (add_to_set_proper (upd_index x m))
+                   Heq).
+        rewrite (DSL.TEKS.MLemmas.fold_Equal
+                   (SSA.TEKS.MLemmas.F.Equal_ST typ)
+                   (SSATE.empty typ)
+                   (add_to_set_proper m)
+                   Heq).
+        exact: H.
+    - right.
+      done.
+    - move=> y yty te'.
+      move=> HnIny IH.
+      elim: IH => H.
+      + left.
+        rewrite DSL.TELemmas.add_in_iff.
+        right. done.
+      + case Hxy: (x == y).
+        * left.
+          apply /DSL.TEKS.MLemmas.memP.
+          exact: (DSL.TEKS.MLemmas.mem_add_eq Hxy).
+        * right.
+          rewrite (DSL.TEKS.MLemmas.OP.P.fold_add
+                     (SSA.TEKS.MLemmas.F.Equal_ST typ)
+                     (add_to_set_proper (upd_index x m))
+                     (add_to_set_transpose_neqkey (upd_index x m))
+                     yty (SSATE.empty typ)
+                     HnIny).
+          rewrite (DSL.TEKS.MLemmas.OP.P.fold_add
+                     (SSA.TEKS.MLemmas.F.Equal_ST typ)
+                     (add_to_set_proper m)
+                     (add_to_set_transpose_neqkey m)
+                     yty (SSATE.empty typ)
+                     HnIny).
+          rewrite H.
+          move/negP/idP: Hxy => Hxy.
+          rewrite (SSATE_add_not_in_sub1 m _ yty Hxy).
+          reflexivity.
+  Qed.
+
+  Lemma SSATE_add_not_in m x te:
+    ~ TE.In x te ->
+    SSATE.Equal (TE.fold (add_to_ste (upd_index x m)) te (SSATE.empty typ))
+                (TE.fold (add_to_ste m) te (SSATE.empty typ)).
+
+  Proof.
+    move=> HnIn.
+    move: (SSATE_add_not_in_sub2 m x te) => Hsub.
+    elim: Hsub => H.
+    - move /DSL.TEKS.MLemmas.memP: HnIn => HnIn.
+      move /DSL.TEKS.MLemmas.memP: H => H.
+      rewrite H in HnIn.
+      discriminate.
+    - exact: H.
+  Qed.
+
+  Lemma ssa_typenv_add_submap_sub1 m x xty yty te:
+    ~ TE.In x te ->
+    SSA.TELemmas.submap
+      (add_to_ste (upd_index x m) x xty (TE.fold (add_to_ste m) te (SSATE.empty typ)))
+      (add_to_ste (upd_index x m) x xty
+                  (add_to_ste m x yty (TE.fold (add_to_ste m) te (SSATE.empty typ)))).
+  Proof.
+    move=> HnIn.
+    move=> z zty.
+    rewrite /add_to_ste.
+    rewrite ssa_var_upd_eq.
+    rewrite get_upd_index_eq.
+    case Heq: ((x, get_index x m + 1) == z).
+    - rewrite (SSA.TELemmas.add_eq_o _ _ Heq).
+      move=> H.
+      rewrite (SSA.TELemmas.add_eq_o _ _ Heq).
+      exact: H.
+    - move/negP: Heq => Hneq.
+      rewrite (SSA.TELemmas.add_neq_o _ _ Hneq).
+      move=> H.
+      rewrite (SSA.TELemmas.add_neq_o _ _ Hneq).
+      rewrite /ssa_var.
+      move: (ssa_typenv_mem m x te) => Hmem.
+      rewrite -[(TE.fold (fun (k : var) (v : typ) => [eta SSATE.add (ssa_var m k) v]) te
+                         (SSATE.empty typ))]/(ssa_typenv m te) in H.
+      move/DSL.TEKS.MLemmas.memP: HnIn => HnIn.
+      rewrite Hmem in HnIn.
+      case Heq: ((x, get_index x m) == z).
+      + rewrite (SSA.TELemmas.add_eq_o _ _ Heq).
+        move/eqP: Heq => Heq.
+        rewrite -[(x, get_index x m)]/(ssa_var m x) in Heq.
+        rewrite -Heq in H.
+        rewrite (SSA.TELemmas.not_mem_find_none HnIn) in H.
+        discriminate.
+      + move/negP: Heq => Hneq2.
+        rewrite (SSA.TELemmas.add_neq_o _ _ Hneq2).
+        exact: H.
+  Qed.
+
+  Lemma TE_add_neq_swap (te: TE.env) x xty y yty:
+    x != y ->
+    TE.Equal (TE.add x xty (TE.add y yty te))
+             (TE.add y yty (TE.add x xty te)).
+  Proof.
+    move=> Hneq.
+    move=> z.
+    case Heq: (x == z).
+    - rewrite (DSL.TELemmas.add_eq_o _ _ Heq).
+      have Hneqyz: (y != z) by rewrite -(eqP Heq) eq_sym.
+      move/negP: Hneqyz => Hneqyz.
+      rewrite (DSL.TELemmas.add_neq_o _ _ Hneqyz).
+      rewrite (DSL.TELemmas.add_eq_o _ _ Heq).
+      reflexivity.
+    - move/negP: Heq => Hneqxz.
+      rewrite (DSL.TELemmas.add_neq_o _ _ Hneqxz).
+      case Heqyz: (y == z).
+      + rewrite (DSL.TELemmas.add_eq_o _ _ Heqyz).
+        rewrite (DSL.TELemmas.add_eq_o _ _ Heqyz).
+        reflexivity.
+      + move/negP: Heqyz => Hneqyz.
+        rewrite (DSL.TELemmas.add_neq_o _ _ Hneqyz).
+        rewrite (DSL.TELemmas.add_neq_o _ _ Hneqyz).
+        rewrite (DSL.TELemmas.add_neq_o _ _ Hneqxz).
+        reflexivity.
+  Qed.
+
+  Lemma add_to_ste_neq_swap m (ste: SSATE.env) x xty y yty:
+    x != y ->
+    SSATE.Equal
+      (add_to_ste (upd_index x m) x xty
+                  (add_to_ste m y yty ste))
+      (add_to_ste (upd_index x m) y yty
+                  (add_to_ste (upd_index x m) x xty ste)).
+  Proof.
+    move=> Hneq.
+    rewrite /add_to_ste.
+    move=> z.
+    case Heq: ((ssa_var (upd_index x m) x) == z).
+    - rewrite (SSA.TELemmas.add_eq_o _ _ Heq).
+      have Hneqyz: ((ssa_var (upd_index x m) y) != z).
+      {
+        rewrite -(eqP Heq).
+        rewrite eq_sym in Hneq.
+        exact: (pair_neq1 _ _ Hneq).
+       }
+      move/negP: Hneqyz => Hneqyz.
+      rewrite (SSA.TELemmas.add_neq_o _ _ Hneqyz).
+      rewrite (SSA.TELemmas.add_eq_o _ _ Heq).
+      reflexivity.
+    - move/negP: Heq => Hneqxz.
+      rewrite (SSA.TELemmas.add_neq_o _ _ Hneqxz).
+      case Heqyz: ((ssa_var m y) == z).
+      + rewrite (SSA.TELemmas.add_eq_o _ _ Heqyz).
+        rewrite eq_sym in Hneq.
+        rewrite (ssa_var_upd_neq _ Hneq).
+        rewrite (SSA.TELemmas.add_eq_o _ _ Heqyz).
+        reflexivity.
+      + move/negP: Heqyz => Hneqyz.
+        rewrite (SSA.TELemmas.add_neq_o _ _ Hneqyz).
+        rewrite eq_sym in Hneq.
+        rewrite (ssa_var_upd_neq _ Hneq).
+        rewrite (SSA.TELemmas.add_neq_o _ _ Hneqyz).
+        rewrite (SSA.TELemmas.add_neq_o _ _ Hneqxz).
+        reflexivity.
+  Qed.
+
   Lemma ssa_typenv_add_submap m te x ty:
     SSA.TELemmas.submap (ssa_typenv (upd_index x m) (TE.add x ty te))
     (SSATE.add (ssa_var (upd_index x m) x) ty (ssa_typenv m te)).
   Proof.
+    move: te.
+    apply DSL.TEKS.MLemmas.OP.P.map_induction.
+    - move=> te Hempty.
+      move=> y yty.
+      rewrite (ssa_typenv_add_empty m x ty Hempty).
+      done.
+    - move=> te te' IH y yty HnIn HAdd.
+      move=> z zty.
+      rewrite /ssa_typenv.
+      move: (DSL.TEKS.MLemmas.OP.P.fold_add
+               (SSA.TEKS.MLemmas.F.Equal_ST typ)
+               (add_to_set_proper m)
+               (add_to_set_transpose_neqkey m)
+               yty (SSATE.empty typ)
+               HnIn) => Heq_add_m.
+      move: (DSL.TEKS.MLemmas.OP.P.fold_add
+               (SSA.TEKS.MLemmas.F.Equal_ST typ)
+               (add_to_set_proper (upd_index x m))
+               (add_to_set_transpose_neqkey (upd_index x m))
+               yty (SSATE.empty typ)
+               HnIn) => Heq_add_m'.
+      move: (DSL.TEKS.MLemmas.OP.P.fold_Add
+               (SSA.TEKS.MLemmas.F.Equal_ST typ)
+               (add_to_set_proper m)
+               (add_to_set_transpose_neqkey m)
+               (SSATE.empty typ)
+               HnIn HAdd) => Heq_Add_m.
+      move: (DSL.TEKS.MLemmas.OP.P.fold_Add
+               (SSA.TEKS.MLemmas.F.Equal_ST typ)
+               (add_to_set_proper (upd_index x m))
+               (add_to_set_transpose_neqkey (upd_index x m))
+               (SSATE.empty typ)
+               HnIn HAdd) => Heq_Add_m'.
+      case Hyx: (x == y).
+    - move: HnIn => HnInx.
+      rewrite -(eqP Hyx) in HnInx.
+      move: (DSL.TEKS.MLemmas.OP.P.fold_add
+               (SSA.TEKS.MLemmas.F.Equal_ST typ)
+               (add_to_set_proper (upd_index x m))
+               (add_to_set_transpose_neqkey (upd_index x m))
+               ty (SSATE.empty typ)
+               HnInx) => Heq5 .
+      have Hte': (TE.Equal te' (TE.add y yty te)) by exact: HAdd.
+      have Hte'2: (TE.Equal (TE.add x ty te') (TE.add x ty te)).
+      {
+        rewrite Hte'.
+        rewrite -(eqP Hyx).
+        move=> a.
+        case Hax: (a == x).
+        + by rewrite !(DSL.TELemmas.find_add_eq Hax).
+        + move/negP: Hax => Hax.
+          rewrite !(DSL.TELemmas.find_add_neq Hax).
+          reflexivity.
+      }
+      rewrite (DSL.TEKS.MLemmas.fold_Equal
+               (SSA.TEKS.MLemmas.F.Equal_ST typ)
+               (SSATE.empty typ)
+               (add_to_set_proper (upd_index x m))
+               Hte'2).
+      rewrite (DSL.TEKS.MLemmas.fold_Equal
+               (SSA.TEKS.MLemmas.F.Equal_ST typ)
+               (SSATE.empty typ)
+               (add_to_set_proper m)
+               Hte').
+      rewrite Heq5.
+      rewrite Heq_add_m.
+      rewrite -(eqP Hyx).
+      rewrite -[SSATE.add (ssa_var (upd_index x m) x) ty]/(add_to_ste (upd_index x m) x ty).
+      rewrite (SSATE_add_not_in _ HnInx).
+      exact: (ssa_typenv_add_submap_sub1 yty HnInx).
+    - rewrite Heq_Add_m.
+      have Hte': (TE.Equal te' (TE.add y yty te)) by exact: HAdd.
+      have Hte'2: (TE.Equal (TE.add x ty te') (TE.add x ty (TE.add y yty te))) by rewrite Hte'.
+      rewrite (DSL.TEKS.MLemmas.fold_Equal
+               (SSA.TEKS.MLemmas.F.Equal_ST typ)
+               (SSATE.empty typ)
+               (add_to_set_proper (upd_index x m))
+               Hte'2).
+      move/negP/idP: Hyx => Hyx.
+      move: (TE_add_neq_swap te ty yty Hyx) => Hswap.
+      rewrite (DSL.TEKS.MLemmas.fold_Equal
+               (SSA.TEKS.MLemmas.F.Equal_ST typ)
+               (SSATE.empty typ)
+               (add_to_set_proper (upd_index x m))
+               Hswap).
+      move: (HnIn) => HnIn2.
+      move/negP: Hyx => Hyx.
+      rewrite <- (DSL.TELemmas.add_neq_in_iff te ty Hyx) in HnIn2.
+      move: (DSL.TEKS.MLemmas.OP.P.fold_add
+               (SSA.TEKS.MLemmas.F.Equal_ST typ)
+               (add_to_set_proper (upd_index x m))
+               (add_to_set_transpose_neqkey (upd_index x m))
+               yty (SSATE.empty typ)
+               HnIn2) => Heq'.
+      rewrite Heq'.
+      rewrite /ssa_typenv in IH.
+      rewrite -[SSATE.add (ssa_var (upd_index x m) x) ty]/(add_to_ste (upd_index x m) x ty).
+      move/negP: Hyx => Hyx.
+      move: z zty.
+      apply SSA.TELemmas.submap_trans with (add_to_ste (upd_index x m) y yty
+       ((SSATE.add (ssa_var (upd_index x m) x) ty (TE.fold (add_to_ste m) te (SSATE.empty typ))))).
+      + move=> z zty.
+        rewrite /add_to_ste.
+        case Htmp: ((ssa_var (upd_index x m) y) == z).
+        * rewrite 2!(SSA.TELemmas.add_eq_o _ _ Htmp).
+          done.
+        * move/negP: Htmp => Htmp.
+          rewrite 2!(SSA.TELemmas.add_neq_o _ _ Htmp).
+          exact: IH.
+      + move=> z zty.
+        rewrite (add_to_ste_neq_swap m _ ty yty Hyx).
+        done.
+  Qed.
+
+  Lemma ssa_typenv_add2_empty (m: vmap) (te: TE.env) x xty y yty:
+    TE.Empty te ->
+    SSA.TELemmas.submap (ssa_typenv (upd_index y (upd_index x m)) (TE.add y yty (TE.add x xty te)))
+    (SSATE.add (ssa_var (upd_index y (upd_index x m)) y) yty
+              (SSATE.add (ssa_var (upd_index x m) x) xty (ssa_typenv m te))).
+  Proof.
+    move=> Hempty.
+    move=> z zty.
   Admitted.
 
   Lemma ssa_typenv_add2_submap m te x xty y yty:
@@ -2188,6 +2548,27 @@ Section MakeSSA.
       exact: typenv_equiv_add.
   Qed.
 
+  Lemma typenv_equiv_mem m te ste v:
+    typenv_equiv m te ste ->
+    TE.mem v te = SSATE.mem (ssa_var m v) ste.
+  Proof.
+    move=> H.
+    move: (H v) => H2.
+    case Hmem: (TE.mem v te).
+    + move: (Store.Lemmas.mem_find_some Hmem) => [ty Hfind].
+      move: (TE.find_some_vtyp Hfind) => Hvtyp.
+      rewrite H2 in Hvtyp.
+  Admitted.
+
+  Lemma typenv_equiv_size m te ste v:
+    typenv_equiv m te ste ->
+    TE.vsize v te = SSATE.vsize (ssa_var m v) ste.
+  Proof.
+    move=> H.
+    move: (H v) => H2.
+      by rewrite (TE.vtyp_vsize H2).
+  Qed.
+
   Hint Resolve typenv_equiv_add typenv_equiv_add2.
 
   Lemma ssa_atyp m a te ste:
@@ -2455,7 +2836,7 @@ Section MakeSSA.
   (* Definition dessa_typenv (m : vmap) (ste : SSATE.env) : TE.env := *)
   (*   fun v => SSATE.vtyp (v, get_index v m) ste. *)
 
-  Definition dessa_typenv (m : vmap) (ste : SSATE.env) : TE.env :=
+  Definition dessa_typenv (m : vmap) (ste : SSATE.env): TE.env:=
     SSATE.fold (fun k v ste =>
                   if sidx k == get_index (svar k) m then
                     TE.add (svar k) v ste
@@ -2478,30 +2859,63 @@ Section MakeSSA.
     exact: ssa_typenv_preserve.
   Qed.
 
+  Lemma ssa_store_conform m s te:
+    Store.conform s te ->
+    SSAStore.conform (ssa_state m s) (ssa_typenv m te).
+  Proof.
+    rewrite /Store.conform /SSAStore.conform /= => Hconform.
+    move=> x Hmem.
+    move: (ssa_typenv_exist Hmem) => [v].
+    move=> Hssa.
+    rewrite -Hssa in Hmem |- *.
+    rewrite -ssa_typenv_mem in Hmem.
+    rewrite -ssa_typenv_size.
+    rewrite (Hconform _ Hmem).
+    move: (ssa_state_equiv m s) => Hstate_equiv.
+    rewrite (Hstate_equiv v).
+    reflexivity.
+  Qed.
+
+  Corollary ssa_store_conform_empty s te:
+    Store.conform s te ->
+    SSAStore.conform (ssa_state empty_vmap s) (ssa_typenv empty_vmap te).
+  Proof.
+    exact: ssa_store_conform.
+  Qed.
+
   (** Soundness and completeness *)
 
   Theorem ssa_spec_sound (s : DSL.spec) :
     SSA.valid_spec (ssa_spec s) -> DSL.valid_spec s.
   Proof.
-    (* destruct s as [input pre pg post]. *)
-    (* rewrite /ssa_spec /=. *)
-    (* set t1 := ssa_typenv empty_vmap input. *)
-    (* have Heq_typ: (t1 = ssa_typenv empty_vmap input) by reflexivity. *)
-    (* set t2 := ssa_program empty_vmap pg. *)
-    (* have: (t2 = ssa_program empty_vmap pg) by reflexivity. *)
-    (* destruct t2 as [m ssa_p]. *)
-    (* move=> Hpg Hspec s1 s2 /= Hf Hepre Hep. *)
-    (* pose ss1 := ssa_state empty_vmap s1. *)
-    (* move: (ssa_state_equiv empty_vmap s1) => Heq1. *)
-    (* move: (ssa_typenv_equiv empty_vmap input) => Heq2. *)
-    (* symmetry in Hpg. *)
-    (* set tsucc := (DSL.program_succ_typenv pg input). *)
-    (* have Htsucc: (tsucc = (DSL.program_succ_typenv pg input)) by reflexivity. *)
-    (* move: (ssa_eval_program_succ Hpg Heq1 Heq2 Hep Htsucc) => [ss2 [ste2 [Hsep [H]]]] *)
-    (* move: (ssa_eval_bexp2 Heq1 Hf) => Hsf. *)
-    (* move: (Hspec ss1 ss2 Hsf Hesp) => /= Hsg. *)
-    (* exact: (ssa_eval_bexp1 Heq2 Hsg). *)
-  Admitted.
+    destruct s as [input pre pg post].
+    rewrite /ssa_spec /=.
+    remember (ssa_typenv empty_vmap input) as sinput.
+    remember (ssa_bexp empty_vmap pre) as spre.
+    remember (ssa_program empty_vmap pg) as tmp.
+    destruct tmp as [m ssa_p].
+    remember (ssa_p) as sprog.
+    remember (ssa_bexp m post) as spost.
+    rewrite /SSA.valid_spec /DSL.valid_spec /=.
+    rewrite Heqsinput Heqspre Heqspost.
+    move=> Hsvalid.
+    move=> s1 s2 Hconform Heval_bexp Heval_prog.
+    move: (ssa_state_equiv empty_vmap s1) => Heq_state.
+    move: (ssa_typenv_equiv empty_vmap input) => Heq_typenv.
+    move: (ssa_store_conform_empty Hconform) => Hsconform.
+    symmetry in Heqtmp.
+    remember (DSL.program_succ_typenv pg input) as tsucc.
+    symmetry in Heqtsucc.
+    move: (ssa_eval_program_succ Heqtmp Heq_state Heq_typenv Heval_prog Heqtsucc) => [ss2 [ste2 [Hsep [H]]]].
+    move: (Hsvalid (ssa_state empty_vmap s1) ss2) => {Hsvalid} Hsvalid.
+    move: (Hsvalid Hsconform) => {Hsvalid} Hsvalid.
+    move: (ssa_eval_bexp2 Heq_state Heq_typenv Heval_bexp) => Hsf.
+    move: (Hsvalid Hsf) => {Hsvalid} Hsvalid.
+    move: (Hsvalid Hsep) => {Hsvalid} Hsvalid.
+    move=> [Heq_state2 Heq_typenv2].
+    rewrite H in Hsvalid.
+    exact: (ssa_eval_bexp1 Heq_state2 Heq_typenv2 Hsvalid).
+  Qed.
 
   Theorem ssa_spec_complete (s : DSL.spec) :
     DSL.valid_spec s -> SSA.valid_spec (ssa_spec s).
@@ -3415,11 +3829,16 @@ Section MakeSSA.
     move: (Hwfssa) => /andP [/andP [Hwf Huc] Hssa].
     apply/andP; split; first (apply/andP; split).
     - exact: (SSA.well_formed_program_cons2 Hwf).
-    - rewrite SSA.vars_env_instr_succ_typenv.
-      apply: ssa_unchanged_program_union2.
-      + exact: (ssa_unchanged_program_tl Huc).
-      + move/andP: Hssa => [H _].
-        exact: H.
+    - rewrite /ssa_vars_unchanged_program.
+      apply (SSAVS.for_all_1 (ssa_unchanged_program_var_compat tl)).
+      move=> x.
+      rewrite SSA.vars_env_instr_succ_typenv.
+      move=> Hin.
+      move: (ssa_unchanged_program_tl Huc) => H1.
+      move/andP: Hssa => [H2 _].
+      move: (ssa_unchanged_program_union2 H1 H2) => H3.
+      move: (SSAVS.for_all_2 (ssa_unchanged_program_var_compat tl) H3) => H4.
+      exact: (H4 _ Hin).
     - move/andP: Hssa => [_ H].
       exact: H.
   Qed.
@@ -3573,15 +3992,6 @@ Section MakeSSA.
       + case: hd Hshd; intros; by ssa_lv_hd_unchanged_tl.
       + exact: (IH _ _ _ Hstl).
   Qed.
-
-  Lemma ssa_vars_env_comm m te :
-    SSAVS.Equal (SSA.vars_env (ssa_typenv m te))
-                (ssa_vars m (DSL.vars_env te)).
-  Proof.
-    intro.
-    split.
-    - move=> Hin.
-  Admitted.
 
   Lemma ssa_vars_are_defined_singleton m te t:
     DSL.are_defined (VS.singleton t) te <->
@@ -3996,8 +4406,6 @@ Section MakeSSA.
       by rewrite (ssa_instr_well_defined Hwf Hsi) (ssa_instr_well_typed Hwf Hsi).
   Qed.
 
-
-
   Theorem ssa_program_well_formed1 te m1 m2 p sp :
     DSL.well_formed_program te p ->
     ssa_program m1 p = (m2, sp) ->
@@ -4023,11 +4431,27 @@ Section MakeSSA.
         exact: (SSA.well_formed_program_submap HIH Hsub).
   Qed.
 
+  Lemma ssa_typenv_mem_index m te v i:
+    SSAVS.mem (v, i) (SSA.vars_env (ssa_typenv m te)) ->
+    i = get_index v m.
+  Proof.
+    rewrite ssa_vars_env_comm.
+    move=> Hmem.
+    move: (ssa_vars_mem2 Hmem) => {Hmem} Hmem.
+    destruct Hmem.
+    inversion H.
+    rewrite /ssa_var /= in H0.
+    by case: H0 => -> ->.
+  Qed.
+
   Lemma ssa_typenv_mem_le v i m te:
     SSAVS.mem (v, i) (SSA.vars_env (ssa_typenv m te)) ->
     i <=? get_index v m.
   Proof.
-  Admitted.
+    move=> Hmem.
+    move: (ssa_typenv_mem_index Hmem) => Hidx.
+    by rewrite Hidx Nleqnn.
+  Qed.
 
   Theorem ssa_program_well_formed te m1 m2 p sp :
     DSL.well_formed_program te p ->
@@ -4180,25 +4604,95 @@ Section MakeSSA.
     exact: ssa_spec_in_pre_unchanged.
   Qed.
 
-  Definition well_formed_ssa_spec2 (s : SSA.spec) : bool :=
-    SSA.well_formed_spec s &&
-                         ssa_vars_unchanged_program (SSA.vars_env (SSA.sinputs s)) (SSA.sprog s) &&
-                         ssa_single_assignment (SSA.sprog s).
-
   Lemma ssa_spec_well_formed_sub1 s:
     DSL.well_formed_bexp (DSL.sinputs s) (DSL.spre s) ->
     SSA.well_formed_bexp (SSA.sinputs (ssa_spec s)) (SSA.spre (ssa_spec s)).
   Proof.
-  Admitted.
+    move: (ssa_spec_unfold s) => [m [Hinput [Hpre [Hprog Hpost]]]].
+    rewrite Hinput Hpre.
+    move=> /andP [Hdwd Hdwt].
+    apply/andP; split.
+    - move/ssa_vars_are_defined_bexp: Hdwd => Hdwd.
+      exact: Hdwd.
+    - move/ssa_well_typed_bexp: Hdwt => Hdwt.
+      exact: Hdwt.
+  Qed.
 
-  Lemma ssa_spec_well_formed_sub2 s m1 m2 p sp:
-    DSL.well_formed_bexp (DSL.program_succ_typenv (DSL.sprog s) (DSL.sinputs s)) (DSL.spost s) ->
+  Lemma ssa_program_well_defined m1 m2 p sp e te:
+    DSL.well_formed_program te p ->
+    DSL.well_formed_bexp (DSL.program_succ_typenv p te) e ->
     ssa_program m1 p = (m2, sp) ->
+    SSA.are_defined (SSA.vars_bexp (ssa_bexp m2 e))
+                    (SSA.program_succ_typenv sp (ssa_typenv m1 te)).
+  Proof.
+    elim: p m1 m2 sp e te.
+    - rewrite /=.
+      move=> m1 m2 sp e te _ /andP [Hwd Hwt] [<- <-].
+      rewrite /=.
+      move/ssa_vars_are_defined_bexp: Hwd => Hwd.
+      exact: Hwd.
+    - move=> hd tl IH m1 m2 sp e te.
+      rewrite /=.
+      case Hsi_hd: (ssa_instr m1 hd) => [sm1 shd].
+      case Hsp_tl: (ssa_program sm1 tl) => [sm2 stl].
+      move=> /andP [Hwf_hd Hwf_tl] Hwf_bexp [<- <-].
+      rewrite /=.
+      move: (IH _ _ _ _ _ Hwf_tl Hwf_bexp Hsp_tl).
+      apply SSA.are_defined_submap.
+      apply SSA.same_program_succ_typenv_submap.
+      move: (ssa_program_well_formed Hwf_tl Hsp_tl) => /andP [/andP [Hwell Hvs] Hsingle].
+      exact: Hwell.
+      exact: ssa_instr_succ_typenv_submap.
+  Qed.
+
+  Lemma ssa_program_well_typed m1 m2 p sp te e:
+    DSL.well_formed_program te p ->
+    DSL.well_formed_bexp (DSL.program_succ_typenv p te) e ->
+    ssa_program m1 p = (m2, sp) ->
+    SSA.well_typed_bexp
+      (SSA.program_succ_typenv sp (ssa_typenv m1 te))
+      (ssa_bexp m2 e).
+  Proof.
+    elim: p m1 m2 sp e te.
+    - rewrite /=.
+      move=> m1 m2 sp e te _ /andP [Hwd Hwt] [<- <-].
+      rewrite /=.
+      move/ssa_well_typed_bexp: Hwt => Hwt.
+      exact: Hwt.
+    - move=> hd tl IH m1 m2 sp e te.
+      rewrite /=.
+      case Hsi_hd: (ssa_instr m1 hd) => [sm1 shd].
+      case Hsp_tl: (ssa_program sm1 tl) => [sm2 stl].
+      move=> /andP [Hwf_hd Hwf_tl] Hwf_bexp [<- <-].
+      rewrite /=.
+      move: (IH _ _ _ _ _ Hwf_tl Hwf_bexp Hsp_tl).
+      apply SSA.well_typed_bexp_submap.
+      apply SSA.same_program_succ_typenv_submap.
+      move: (ssa_program_well_formed Hwf_tl Hsp_tl) => /andP [/andP [Hwell Hvs] Hsingle].
+      exact: Hwell.
+      exact: ssa_instr_succ_typenv_submap.
+      exact: (ssa_program_well_defined Hwf_tl Hwf_bexp Hsp_tl).
+  Qed.
+
+  Lemma ssa_spec_well_formed_sub2 s m' sp:
+    DSL.well_formed_program (DSL.sinputs s) (DSL.sprog s) ->
+    DSL.well_formed_bexp (DSL.program_succ_typenv (DSL.sprog s) (DSL.sinputs s)) (DSL.spost s) ->
+    ssa_program empty_vmap (DSL.sprog s) = (m', sp) ->
     SSA.well_formed_bexp (SSA.program_succ_typenv (SSA.sprog (ssa_spec s))
                                                   (SSA.sinputs (ssa_spec s)))
                          (SSA.spost (ssa_spec s)).
   Proof.
-  Admitted.
+    move=> Hwellprog.
+    move: (ssa_spec_unfold s) => [m [Hinput [Hpre [Hprog Hpost]]]].
+    move: (ssa_program_well_formed Hwellprog (Logic.eq_sym Hprog)) => /andP [/andP [Hwell Hvs] Hsingle].
+    rewrite -Hprog.
+    move=> Hwf.
+    move=> Hsp.
+    rewrite Hinput Hpost.
+    apply/andP; split.
+    - exact: (ssa_program_well_defined Hwellprog Hwf (Logic.eq_sym Hprog)).
+    - exact: (ssa_program_well_typed Hwellprog Hwf (Logic.eq_sym Hprog)).
+  Qed.
 
   Theorem ssa_spec_well_formed s :
     DSL.well_formed_spec s ->
@@ -4210,16 +4704,10 @@ Section MakeSSA.
     apply/andP; split; [apply/andP; split | idtac].
     - apply/andP; split; [apply/andP; split | idtac].
       + exact: (ssa_spec_well_formed_sub1 Hsubpre).
-        (* rewrite /SSA.well_formed_bexp. *)
-        (* rewrite Hpre ssa_vars_bexp_subset. *)
-        (* assumption. *)
       + rewrite Hinput. exact: Hwell.
-      + exact: (ssa_spec_well_formed_sub2 Hsubpost (Logic.eq_sym Hprog)).
+      + exact: (ssa_spec_well_formed_sub2 Hwellprog Hsubpost (Logic.eq_sym Hprog)).
     - rewrite Hinput. assumption.
     - exact: (ssa_program_single_assignment (Logic.eq_sym Hprog)).
   Qed.
-
-
-
 
 End MakeSSA.

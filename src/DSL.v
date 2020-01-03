@@ -2421,6 +2421,19 @@ Module MakeDSL
     by rewrite -(Heq x).
   Qed.
 
+  Lemma same_program_succ_typenv_submap p te1 te2:
+    well_formed_program te1 p ->
+    TELemmas.submap te1 te2 ->
+    TELemmas.submap (program_succ_typenv p te1)
+                        (program_succ_typenv p te2).
+  Proof.
+    elim: p te1 te2.
+    - move=> te1 te2 Hsub //=.
+    - move=> hd tl IH te1 te2 /= /andP [Hwf_hd Hwf_tl] Hsub /=.
+      apply IH.
+      exact: Hwf_tl.
+      exact: well_formed_instr_succ_typenv_submap.
+  Qed.
 
   (*
   Lemma well_formed_instr_vars te i :
@@ -2450,14 +2463,135 @@ Module MakeDSL
       rewrite VSLemmas.OP.P.union_assoc.
       reflexivity.
   Qed.
-  *)
+   *)
 
   (* Some Lemmas for vars_env and instr_succ_typenv *)
-  Lemma vars_env_instr_succ_typenv i te:
-    vars_env (instr_succ_typenv i te) =
-    VS.union (vars_env te) (lvs_instr i).
+
+  Lemma vars_env_add_union te t ty:
+    VS.Equal (vars_env (TE.add t ty te)) (VS.union (vars_env te) (VS.singleton t)).
   Proof.
-  Admitted.
+    move=> x.
+    split.
+    - move=> H.
+      move/VSLemmas.memP: H => H.
+      apply/VSLemmas.memP.
+      move/vars_env_mem: H => H.
+      rewrite VSLemmas.mem_union.
+      apply/orP.
+      rewrite TEKS.MLemmas.add_b in H.
+      move/orP: H => H.
+      elim: H => H.
+      right.
+      move: (TEKS.MLemmas.eqb_eq H) => {H} H.
+      symmetry in H.
+      exact: (VSLemmas.mem_singleton2 H).
+      left.
+        by apply/vars_env_mem.
+    - move=> H.
+      move/VSLemmas.memP: H => H.
+      apply/VSLemmas.memP.
+      rewrite VSLemmas.mem_union in H.
+      apply/vars_env_mem.
+      rewrite TEKS.MLemmas.add_b.
+      move/orP: H => H.
+      elim: H => H.
+      + move/vars_env_mem: H => H.
+        apply/orP.
+          by right.
+      + move: (VSLemmas.mem_singleton1 H) => {H} H.
+        apply/orP.
+        left.
+        rewrite (eqP H).
+        exact: TEKS.MLemmas.eqb_key_refl.
+  Qed.
+
+  Lemma vars_env_add2_union te x xty y yty:
+    VS.Equal (vars_env (TE.add x xty (TE.add y yty te)))
+             (VS.union (vars_env te) (VS.add x (VS.singleton y))).
+  Proof.
+    move=> z.
+    split.
+    - move=> H.
+      move/VSLemmas.memP: H => H.
+      apply/VSLemmas.memP.
+      move/vars_env_mem: H => H.
+      rewrite VSLemmas.mem_union.
+      apply/orP.
+      rewrite TEKS.MLemmas.add_b in H.
+      move/orP: H => H.
+      elim: H => H.
+      + right.
+        move: (TEKS.MLemmas.eqb_eq H) => {H} H.
+        symmetry in H.
+        exact: (VSLemmas.mem_add_eq H).
+      + case Hyz: (z == y).
+        * right.
+          apply VSLemmas.mem_add3.
+          exact: (VSLemmas.mem_singleton2 Hyz).
+        * left.
+          move/negP: Hyz => Hyz.
+          rewrite (TELemmas.mem_add_neq Hyz) in H.
+          by apply/vars_env_mem.
+    - move=> H.
+      move/VSLemmas.memP: H => H.
+      apply/VSLemmas.memP.
+      rewrite VSLemmas.mem_union in H.
+      apply/vars_env_mem.
+      rewrite TEKS.MLemmas.add_b.
+      move/orP: H => H.
+      elim: H => H.
+      + move/vars_env_mem: H => H.
+        apply/orP.
+        right.
+        rewrite TELemmas.OP.P.F.add_b.
+        apply/orP; by right.
+      + apply/orP.
+        case Hyz: (z == y).
+        * right.
+          rewrite TELemmas.OP.P.F.add_b.
+          apply/orP; left.
+          rewrite (eqP Hyz).
+          exact: TEKS.MLemmas.eqb_key_refl.
+        * left.
+          move/negP: Hyz => Hyz.
+          case Hxz: (z == x).
+          -- rewrite (eqP Hxz).
+             exact: TEKS.MLemmas.eqb_key_refl.
+          -- move/negP: Hxz => Hxz.
+             rewrite (VSLemmas.mem_add_neq Hxz) in H.
+             move: (VSLemmas.mem_singleton1 H) => {H} H.
+             rewrite (eqP H) in Hyz.
+             rewrite eqxx in Hyz.
+             move/idP: Hyz => Hyz.
+             discriminate.
+  Qed.
+
+  Lemma vars_env_instr_succ_typenv i te:
+    VS.Equal (vars_env (instr_succ_typenv i te))
+    (VS.union (vars_env te) (lvs_instr i)).
+  Proof.
+    elim: i te => //=; intros;
+      (let rec tac :=
+           match goal with
+           | H : ?a |- ?a => assumption
+           | |- ?l /\ ?r => split; tac
+           | |- is_true (_ && _) => apply /andP; tac
+           | H : is_true (_ && _) |- _ =>
+             let H1 := fresh in let H2 := fresh in move/andP: H => [H1 H2]; tac
+           | |- VS.Equal (vars_env (TE.add ?t ?ty ?te)) (VS.union (vars_env ?te) (VS.singleton ?t))
+             => exact: vars_env_add_union
+           | |-     VS.Equal (vars_env (TE.add ?x ?xty (TE.add ?y ?yty ?te)))
+                             (VS.union (vars_env ?te) (VS.add ?x (VS.singleton ?y)))
+             => exact: vars_env_add2_union
+           | |- VS.Equal (vars_env ?te) (VS.union (vars_env ?te) VS.empty)
+                         => rewrite VSLemmas.union_emptyr; exact: VSLemmas.P.equal_refl
+           | H : ?l \/ ?r |- _ => case: H => H; tac
+           | |- ?e => progress (auto)
+           | |- _ => idtac
+           end
+       in tac).
+  Qed.
+
   (* Non-blocking *)
 
   Definition is_assume (i : instr) : bool :=
