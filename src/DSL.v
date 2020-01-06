@@ -2435,38 +2435,6 @@ Module MakeDSL
       exact: well_formed_instr_succ_typenv_submap.
   Qed.
 
-  (*
-  Lemma well_formed_instr_vars te i :
-    well_formed_instr te i ->
-    VS.Equal (VS.union (vars_env te) (vars_instr i)) (VS.union (vars_env te) (lvs_instr i)).
-  Proof.
-    case: i => /=; intros; hyps_splitb; by VSLemmas.dp_Equal.
-  Qed.
-  *)
-
-  (* Probably useful in slicing *)
-
-  (*
-
-  Lemma well_formed_program_vars vs p :
-    well_formed_program vs p ->
-    VS.Equal (VS.union vs (vars_program p)) (VS.union vs (lvs_program p)).
-  Proof.
-    elim: p vs => /=.
-    - move=> vs _.
-      reflexivity.
-    - move=> hd tl IH vs /andP [Hhd Htl].
-      move: (IH _ Htl) => {IH Htl} => Heq.
-      rewrite -(@VSLemmas.OP.P.union_assoc _ (lvs_instr hd)).
-      rewrite -{}Heq.
-      rewrite -(well_formed_instr_vars Hhd).
-      rewrite VSLemmas.OP.P.union_assoc.
-      reflexivity.
-  Qed.
-   *)
-
-  (* Some Lemmas for vars_env and instr_succ_typenv *)
-
   Lemma vars_env_add_union te t ty:
     VS.Equal (vars_env (TE.add t ty te)) (VS.union (vars_env te) (VS.singleton t)).
   Proof.
