@@ -216,9 +216,11 @@ Section DSLRaw.
     | e::es => foldl (fun res e => emul res e) e es
     end.
 
-  Definition zexpn2 n := Z.pow 2%Z n.
+  Definition z2expn n := Z.pow 2%Z n.
 
-  Definition eexpn2 n := econst (Z.pow 2%Z n).
+  Definition e2expn n := econst (z2expn n).
+
+  Definition emul2p x n := emul x (e2expn n).
 
   Fixpoint eexp_eqn (e1 e2 : eexp) : bool :=
     match e1, e2 with
@@ -271,7 +273,7 @@ Section DSLRaw.
     match es with
     | [::] => econst Z.zero
     | e::[::] => e
-    | e::es => eadd (emul e (eexpn2 (Z.of_nat i * r))) (limbsi (i + 1) r es)
+    | e::es => eadd (emul e (e2expn (Z.of_nat i * r))) (limbsi (i + 1) r es)
     end.
 
   Definition limbs (r : Z) (es : seq eexp) := limbsi 0 r es.
@@ -573,8 +575,9 @@ Module MakeDSL
   Definition eadds (es : seq eexp) : eexp := eadds es.
   Definition emuls (es : seq eexp) : eexp := emuls es.
 
-  Definition zexpn2 n := Z.pow 2%Z n.
-  Definition eexpn2 n := econst (Z.pow 2%Z n).
+  Definition z2expn n := z2expn n.
+  Definition e2expn n := @e2expn V.T n.
+  Definition emul2p x n := @emul2p V.T x n.
 
   Fixpoint vars_eexp (e : eexp) : VS.t :=
     match e with

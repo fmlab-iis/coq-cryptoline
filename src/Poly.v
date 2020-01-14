@@ -113,7 +113,7 @@ Section ZSpec2Spec.
     | ZSSA.Zassign v e => Seq (evar v) e
     | ZSSA.Zsplit vh vl e p => Seq (eadd (evar vl)
                                          (emul (evar vh)
-                                               (SSA.eexpn2 (Z.of_nat p))))
+                                               (SSA.e2expn (Z.of_nat p))))
                                    e
     end.
 

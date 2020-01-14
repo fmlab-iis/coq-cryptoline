@@ -2,7 +2,7 @@
 From Coq Require Import List ZArith.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From ssrlib Require Import Var Types SsrOrder ZAriths Store Tactics.
-From BitBlasting Require Import State.
+From BitBlasting Require Import State Typ TypEnv.
 From Cryptoline Require Import DSL SSA ZSSA.
 From nbits Require Import NBits.
 
@@ -153,7 +153,7 @@ Section Safety.
     | Iassume _ => true
     end .
 
-  Inductive ssa_program_safe_at : TypEnv.SSATE.env -> program -> SSAStore.t -> Prop :=
+  Inductive ssa_program_safe_at : SSATE.env -> program -> SSAStore.t -> Prop :=
   | ssa_program_safe_at_nil te s :
       ssa_program_safe_at te [::] s
   | ssa_program_safe_at_cons te hd tl s :
@@ -177,10 +177,90 @@ End Safety.
 
 Section SSA2ZSSA.
 
-  Import SSA.
+  Import SSA ZSSA.
+
+  Definition bv2z_atomic (a : atomic) : zexp :=
+    match a with
+    | Avar v => evar v
+    | Aconst ty bs =>
+      match ty with
+      | Tuint _ => econst (to_Zpos bs)
+      | Tsint _ => econst (to_Z bs)
+      end
+    end.
+
+  Definition bv2z_assign v e := eeq (evar v) e.
+  Definition bv2z_join e h l p := eeq (eadd l (emul2p h p)) e.
+  Definition bv2z_split vh vl e p := bv2z_join e (evar vh) (evar vl) p.
+  Definition bv2z_is_carry c := eeq (emul (evar c) (esub (evar c) (econst 1)))
+                                    (econst 0).
+  Definition carry_constr b c := if b then [:: bv2z_is_carry c] else [::].
+
+  Definition bv2z_instr (te : SSATE.env) (nvar : N) (g : N) (i : instr) :
+    (N * seq ebexp) :=
+    match i with
+    | Imov v a =>
+      let za := bv2z_atomic a in
+      (g, [:: bv2z_assign v za])
+    | Ishl v a n =>
+      let za := bv2z_atomic a in
+      (g, [:: bv2z_assign v (emul2p za (Z.of_nat n))])
+    | Icshl vh vl a1 a2 n =>
+      let za1 := bv2z_atomic a1 in
+      let za2 := bv2z_atomic a2 in
+      let a2size := asize a2 te in
+      (g, [:: bv2z_split vh vl (eadd (emul2p za1 (Z.of_nat a2size)) za2)
+              (Z.of_nat (a2size - n))])
+    | Inondet v t => (g, [::])
+    | Icmov v c a1 a2 =>
+      (g, [::])
+    | Inop => (g, [::])
+    | Inot v t a => (g, [::])
+    | Iadd v a1 a2 =>
+      let za1 := bv2z_atomic a1 in
+      let za2 := bv2z_atomic a2 in
+      (g, [:: bv2z_assign v (eadd za1 za2)])
+    | Iadds c v a1 a2 =>
+      let za1 := bv2z_atomic a1 in
+      let za2 := bv2z_atomic a2 in
+      let a2size := asize a2 te in
+      (g, [:: bv2z_split c v (eadd za1 za2) (Z.of_nat a2size)])
+    | Iadc v a1 a2 y =>
+      let za1 := bv2z_atomic a1 in
+      let za2 := bv2z_atomic a2 in
+      let zy := bv2z_atomic y in
+      (g, [:: bv2z_assign v (eadd (eadd za1 za2) zy)])
+    | Iadcs c v a1 a2 y =>
+      let za1 := bv2z_atomic a1 in
+      let za2 := bv2z_atomic a2 in
+      let zy := bv2z_atomic y in
+      let a2size := asize a2 te in
+      (g, [::])
+    | Isub v a1 a2 =>
+      let za1 := bv2z_atomic a1 in
+      let za2 := bv2z_atomic a2 in
+      (g, [:: bv2z_assign v (esub za1 za2)])
+    | Isubc c v a1 a2 => (g, [::])
+    | Isubb c v a1 a2 => (g, [::])
+    | Isbc v a1 a2 y => (g, [::])
+    | Isbcs c v a1 a2 y => (g, [::])
+    | Isbb v a1 a2 y => (g, [::])
+    | Isbbs c v a1 a2 y => (g, [::])
+    | Imul v a1 a2 => (g, [::])
+    | Imull vh vl a1 a2 => (g, [::])
+    | Imulj v a1 a2 => (g, [::])
+    | Isplit vh vl a n => (g, [::])
+    | Iand v t a1 a2 => (g, [::])
+    | Ior v t a1 a2 => (g, [::])
+    | Ixor v t a1 a2 => (g, [::])
+    | Icast v t a => (g, [::])
+    | Ivpc v t a => (g, [::])
+    | Ijoin v ah al => (g, [::])
+    | Iassume e => (g, [::])
+    end.
 
   (* TODO: see bv2z_program in certified_qhasm_vcg/mqhasm/bvSSA2zSSA.v *)
-  Definition bv2z_program (tmp : N) (idx : N) (p : program) : N * ZSSA.zprogram :=
-    (tmp, [::]).
+  Definition bv2z_program (nvar : N) (idx : N) (p : program) : N * ZSSA.zprogram :=
+    (nvar, [::]).
 
 End SSA2ZSSA.
