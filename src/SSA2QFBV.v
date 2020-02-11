@@ -710,15 +710,15 @@ Proof .
   elim : bs; first done .
   move => b bs IH .
   rewrite /= IH // .
-Qed .  
-  
+Qed .
+
 Lemma size_neg_same bs :
   size bs = size (-# bs)%bits .
 Proof .
   elim : bs; first done .
   move => b bs IH .
   rewrite /negB /= .
-  case b; rewrite /= !size_succB size_inv_same // .
+  case b; rewrite /= ?size_succB size_inv_same // .
 Qed .
 
 Lemma size_sbbB b bs0 bs1 : 
