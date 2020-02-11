@@ -392,6 +392,12 @@ Section DSLRaw.
 
   Definition eands es := foldl (fun res e => eand res e) Etrue es.
 
+  Fixpoint split_eand (e : ebexp) : seq ebexp :=
+    match e with
+    | Eand e1 e2 => (split_eand e1) ++ (split_eand e2)
+    | _ => [:: e]
+    end.
+
   Fixpoint ebexp_eqn (e1 e2 : ebexp) : bool :=
     match e1, e2 with
     | Etrue, Etrue => true
@@ -655,6 +661,8 @@ Module MakeDSL
   Definition eand (b1 b2 : ebexp) : ebexp := @Eand V.T b1 b2.
 
   Definition eands (es : seq ebexp) : ebexp := @eands V.T es.
+
+  Definition split_eand (e : ebexp) : seq ebexp := @split_eand V.T e.
 
   Fixpoint vars_ebexp (e : ebexp) : VS.t :=
     match e with
@@ -1418,6 +1426,33 @@ Module MakeDSL
     foldl (fun te i => instr_succ_typenv i te) te p.
 
   Definition eval_program (te : TE.env) p s t : Prop := eval_instrs te p s t.
+
+  Lemma eval_ebexp_split e te s :
+    eval_ebexp e te s -> (forall se, se \in split_eand e -> eval_ebexp se te s).
+  Proof.
+    elim: e => /=.
+    - move=> _ se Hin. rewrite mem_seq1 in Hin. rewrite (eqP Hin) /=. done.
+    - move=> e1 e2 H se Hin. rewrite mem_seq1 in Hin. rewrite (eqP Hin) /=.
+      assumption.
+    - move=> e1 e2 m H se Hin. rewrite mem_seq1 in Hin. rewrite (eqP Hin) /=.
+      assumption.
+    - move=> e1 IH1 e2 IH2 [He1 He2] se Hin. rewrite mem_cat in Hin.
+      case/orP: Hin => Hin.
+      + exact: (IH1 He1 se Hin).
+      + exact: (IH2 He2 se Hin).
+  Qed.
+
+  Lemma split_ebexp_eval e te s :
+    (forall se, se \in split_eand e -> eval_ebexp se te s) -> eval_ebexp e te s.
+  Proof.
+    elim: e => /=.
+    - done.
+    - move=> e1 e2 H. apply: (H (Eeq e1 e2)). by rewrite mem_seq1 eqxx.
+    - move=> e1 e2 m H. apply: (H (Eeqmod e1 e2 m)). by rewrite mem_seq1 eqxx.
+    - move=> e1 IH1 e2 IH2 H; split.
+      + apply: IH1 => se Hin. apply: H. by rewrite mem_cat Hin orTb.
+      + apply: IH2 => se Hin. apply: H. by rewrite mem_cat Hin orbT.
+  Qed.
 
   Lemma eqn_program_succ_typenv p te :
     program_succ_typenv (eqn_program p) te = program_succ_typenv p te.
