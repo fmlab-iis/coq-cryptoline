@@ -1540,8 +1540,7 @@ Module MakeDSL
       eval_rbexp (rspost s) s2.
 
   Lemma valid_spec_split (s : spec) :
-    valid_espec (espec_of_spec s) ->
-    valid_rspec (rspec_of_spec s) ->
+    valid_espec (espec_of_spec s) -> valid_rspec (rspec_of_spec s) ->
     valid_spec s.
   Proof.
     move=> He Hr s1 s2 Hcon [Hepre Hrpre] Hprog. split.
@@ -1672,15 +1671,13 @@ Module MakeDSL
     TE.mem v te.
 
   Definition are_defined (vs : VS.t) (te : TE.env) : bool :=
-    VS.for_all (fun v => is_defined v te) vs.
+    VS.for_all (is_defined^~ te) vs.
 
-  Lemma vars_env_mem v te:
-    TE.mem v te <-> VS.mem v (vars_env te).
-  Proof.
-    split.
-    - exact: TEKS.mem_key_set.
-    - exact: TEKS.key_set_mem.
-  Qed.
+  Lemma vars_env_mem v te: TE.mem v te = VS.mem v (vars_env te).
+  Proof. rewrite TEKS.mem_key_set. reflexivity. Qed.
+
+  Lemma mem_vars_env v te: VS.mem v (vars_env te) = TE.mem v te.
+  Proof. exact: TEKS.mem_key_set. Qed.
 
   (* Use VS.mem v (vars_env te) to determine if v is defined *)
   (*
@@ -1916,72 +1913,53 @@ Module MakeDSL
   (* Probably useful *)
   (* TO BE confirmed: how to modify (VS.subset vs1 vs2) and (VS.Equal vs1 vs2) *)
 
-  Lemma are_defined_compat te:
-    SetoidList.compat_bool VS.SE.eq (fun v => is_defined v te).
+  Lemma are_defined_compat te : SetoidList.compat_bool VS.SE.eq (is_defined^~ te).
+  Proof. move=> x y Heq; by rewrite (eqP Heq) //. Qed.
+
+  Lemma are_defined_singleton v te :
+    are_defined (VS.singleton v) te -> is_defined v te.
   Proof.
-    move=> x y Heq; rewrite (eqP Heq) // .
+    move=> Hdef. exact: (VSLemmas.for_all_singleton (are_defined_compat te) Hdef).
   Qed.
 
-  Lemma are_defined_union te vs1 vs2:
-    are_defined (VS.union vs1 vs2) te <->
-    are_defined vs1 te && are_defined vs2 te.
+  Lemma are_defined_union te vs1 vs2 :
+    are_defined (VS.union vs1 vs2) te = are_defined vs1 te && are_defined vs2 te.
   Proof.
-    rewrite /are_defined.
-    split; move=> H.
-    - move: (VS.for_all_2 (are_defined_compat te) H) => {H} H.
-      rewrite (VS.for_all_1 (are_defined_compat te)).
-      rewrite andTb.
-      rewrite (VS.for_all_1 (are_defined_compat te)).
-      done.
-      intros x Hin.
-      move: (VS.union_3 vs1 Hin) => Hin2.
-      exact: (H _ Hin2).
-      intros x Hin.
-      move: (VS.union_2 vs2 Hin) => Hin2.
-      exact: (H _ Hin2).
-    - rewrite (VS.for_all_1 (are_defined_compat te)); first by done.
-      move=> x Hin.
-      move/andP: H => [H1 H2].
-      move: (VS.union_1 Hin) => {Hin} Hin.
-      move: (VS.for_all_2 (are_defined_compat te) H1) => {H1} H1.
-      move: (VS.for_all_2 (are_defined_compat te) H2) => {H2} H2.
-      elim: Hin => Hin.
-      + exact: (H1 _ Hin).
-      + exact: (H2 _ Hin).
+    rewrite /are_defined. exact: (VSLemmas.for_all_union (are_defined_compat te)).
   Qed.
 
-  Lemma are_defined_subset te vs:
-    are_defined vs te <->
-    VS.subset vs (vars_env te).
+  Lemma are_defined_subset te vs1 vs2 :
+    VS.subset vs1 vs2 -> are_defined vs2 te -> are_defined vs1 te.
   Proof.
-    rewrite /are_defined.
-    split.
-    - move=> H.
-      move: (VS.for_all_2 (are_defined_compat te) H) => {H} H.
-      have Hsub: (VS.Subset vs (vars_env te)).
-      {
-        intro.
-        move=> Hin.
-        move: (H _ Hin) => {Hin} Hin.
-        move/idP: Hin => Hin.
-        rewrite /is_defined in Hin.
-        apply/VSLemmas.memP.
-        exact: (TEKS.mem_key_set Hin).
-      }
-      rewrite -> VSLemmas.F.subset_iff in Hsub.
-      exact: Hsub.
-    - move=> Hsub.
-      have Hsub2: (VS.subset vs (vars_env te) = true) by exact: Hsub.
-      rewrite <- VSLemmas.F.subset_iff in Hsub2.
-      rewrite /VS.Subset in Hsub2.
-      rewrite (VS.for_all_1 (are_defined_compat te)).
-      done.
-      intros x Hin.
-      move: (Hsub2 _ Hin) => Hin2.
-      rewrite /is_defined.
-      move/VSLemmas.memP: Hin2 => Hin2.
-      move: (TEKS.key_set_mem Hin2) => Hin3.
-      exact: Hin3.
+    move=> Hsub Hdef2.
+    exact: (VSLemmas.for_all_subset (are_defined_compat te) Hsub Hdef2).
+  Qed.
+
+  Lemma are_defined_subset_env te vs: are_defined vs te = VS.subset vs (vars_env te).
+  Proof.
+    rewrite /are_defined. case Hsub: (VS.subset vs (vars_env te)).
+    - apply: (VS.for_all_1 (are_defined_compat te)). move=> x Hin.
+      rewrite /is_defined. move/VSLemmas.memP: Hin=> Hmem.
+      move: (VSLemmas.mem_subset Hmem Hsub). by rewrite mem_vars_env.
+    - apply/negP=> Hall. move/negP: Hsub; apply.
+      move: (VS.for_all_2 (are_defined_compat te) Hall) => {Hall} Hall.
+      apply: VS.subset_1 => x Hin. move: (Hall x Hin) => Hdef.
+      apply/VSLemmas.memP. rewrite mem_vars_env. exact: Hdef.
+  Qed.
+
+  Lemma are_defined_trans vs te1 te2 :
+    are_defined vs te1 -> are_defined (vars_env te1) te2 -> are_defined vs te2.
+  Proof.
+    move=> Hdef1 Hdef2. rewrite !are_defined_subset_env in Hdef1 Hdef2 *.
+    exact: (VSLemmas.subset_trans Hdef1 Hdef2).
+  Qed.
+
+  Lemma are_defined_env_subset te1 te2 vs:
+    are_defined vs te1 -> VS.subset (vars_env te1) (vars_env te2) ->
+    are_defined vs te2.
+  Proof.
+    move=> Hdef1 Hsub. rewrite -are_defined_subset_env in Hsub.
+    exact: (are_defined_trans Hdef1 Hsub).
   Qed.
 
   Lemma well_formed_instr_subset_rvs_aux te i :
@@ -2018,47 +1996,22 @@ Module MakeDSL
     well_formed_instr te i ->
     VS.subset (rvs_instr i) (vars_env te).
   Proof.
-    move=> Hwf.
-    move: (well_formed_instr_subset_rvs_aux Hwf) => Hsub_rvs.
-    have H: (VS.Subset (rvs_instr i) (vars_env te)).
-    {
-      intro.
-      move: (VS.for_all_2 (are_defined_compat te) Hsub_rvs) => Hsub_rvs2.
-      move=> Hin.
-      move: (Hsub_rvs2 _ Hin) => Hin2.
-      rewrite /is_defined in Hin2.
-      move/idP: Hin2 => Hin2.
-      apply/VSLemmas.memP.
-      exact: (TEKS.mem_key_set Hin2).
-    }
-    rewrite -> VSLemmas.F.subset_iff in H.
-    exact: H.
+    move=> Hwf. move: (well_formed_instr_subset_rvs_aux Hwf) => Hsub_rvs.
+    rewrite -(are_defined_subset_env te (rvs_instr i)). assumption.
   Qed.
 
   Lemma is_defined_submap k (te1 te2: TE.env):
     TELemmas.submap te1 te2 ->
     is_defined k te1 -> is_defined k te2.
-  Proof.
-    move=> Hsm.
-    intros.
-    move: (TELemmas.mem_find_some H) => Hfind1.
-    destruct Hfind1.
-    move: (Hsm k x H0) => Hfind2.
-    apply TELemmas.find_some_mem with x.
-    exact: Hfind2.
-  Qed.
+  Proof. move=> Hsm Hdef1. exact: (TELemmas.submap_mem Hsm Hdef1). Qed.
 
   Lemma are_defined_submap vs (te1 te2: TE.env):
     TELemmas.submap te1 te2 ->
     are_defined vs te1 -> are_defined vs te2.
   Proof.
-    move=> Hsm Had1.
-    rewrite /TELemmas.submap in Hsm.
-    apply (VS.for_all_1 (are_defined_compat te2)).
-    move=> v Hin.
-    apply (is_defined_submap Hsm).
-    move: (VS.for_all_2 (are_defined_compat te1) Had1) => Hwd2.
-    exact: (Hwd2 v Hin).
+    move=> Hsubmap Hdef1. move: (TEKS.submap_key_set Hsubmap) => Hsubset.
+    rewrite -are_defined_subset_env in Hsubset.
+    exact: (are_defined_trans Hdef1 Hsubset).
   Qed.
 
   Lemma well_formed_instr_well_defined te1 te2 i :
@@ -2093,22 +2046,12 @@ Module MakeDSL
     are_defined (vars_atomic a) te1 ->
     atyp a te1 = atyp a te2.
   Proof.
-    elim: a te1 te2.
-    - move=> t te1 te2 Hsm Hd.
-      rewrite /= in Hd.
-      rewrite /are_defined in Hd.
-      move: (VS.for_all_2 (are_defined_compat te1) Hd) => Hwd2.
-      move: (VSLemmas.P.Dec.FSetDecideTestCases.test_In_singleton t) => Hin.
-      move: (Hwd2 _ Hin) => Hid.
-      rewrite /TELemmas.submap in Hsm.
-      rewrite /=.
-      rewrite /is_defined in Hid.
-      move: (TELemmas.mem_find_some Hid) => Hfind.
-      destruct Hfind.
-      move: (Hsm _ _ H) => H2.
-      rewrite (TE.find_some_vtyp H) (TE.find_some_vtyp H2).
-      reflexivity.
-    - done.
+    case: a => //=. move=> v Hsubmap Hdef1.
+    move: (are_defined_singleton Hdef1) => {Hdef1} Hdef1.
+    move: (TELemmas.mem_find_some Hdef1) => [ty1 Hfind1].
+    move: (Hsubmap v ty1 Hfind1) => Hfind2.
+    rewrite (TE.find_some_vtyp Hfind1) (TE.find_some_vtyp Hfind2).
+    reflexivity.
   Qed.
 
   Lemma well_typed_eexp_submap e te1 te2:
@@ -2118,22 +2061,13 @@ Module MakeDSL
     well_typed_eexp te2 e.
   Proof.
     elim: e te1 te2 => //=; intros.
-    rewrite /are_defined in H2.
     move: (VS.for_all_2 (are_defined_compat te1) H2) => Hwd.
-    rewrite /VS.For_all in Hwd.
     move/andP: H3 => [Hwte0 Hwte1].
+    rewrite are_defined_union in H2. move/andP: H2 => [H2 H3].
     apply /andP.
     split.
-    - apply H with te1.
-      + done.
-      + move/are_defined_union/andP: H2.
-        by inversion 1.
-      + done.
-    - apply H0 with te1.
-      + done.
-      + move/are_defined_union/andP: H2.
-        by inversion 1.
-      + done.
+    - exact: (H _ _ H1 H2 Hwte0).
+    - exact: (H0 _ _ H1 H3 Hwte1).
   Qed.
 
   Lemma well_typed_ebexp_submap e te1 te2:
@@ -2143,47 +2077,20 @@ Module MakeDSL
     well_typed_ebexp te2 e.
   Proof.
     elim: e te1 te2 => //=; intros.
-    - move/andP: H1 => [Hwte Hwte0].
-      apply /andP.
-      split.
-      + apply well_typed_eexp_submap with te1.
-        * done.
-        * move/are_defined_union/andP: H0.
-            by inversion 1.
-        * done.
-      + apply well_typed_eexp_submap with te1.
-        * done.
-        * move/are_defined_union/andP: H0.
-            by inversion 1.
-        * done.
-      +  move/andP: H1 => [/andP [Hwte Hwte0] Hwte1].
-         apply /andP. split.
-         apply /andP. split.
-         * apply well_typed_eexp_submap with te1.
-           -- done.
-           -- move/are_defined_union/andP: H0.
-                by inversion 1.
-           -- done.
-         * apply well_typed_eexp_submap with te1.
-           -- done.
-           -- move/are_defined_union/andP: H0.
-              destruct 1 as [H1 H2].
-              move/are_defined_union/andP: H2.
-              by inversion 1.
-           -- done.
-         * apply well_typed_eexp_submap with te1.
-           -- done.
-           -- move/are_defined_union/andP: H0.
-              destruct 1 as [H1 H2].
-              move/are_defined_union/andP: H2.
-              by inversion 1.
-           -- done.
-    - move/andP: H3 => [Hwte Hwte0].
-      apply /andP.
-      move/are_defined_union: H2 => /andP [Hwd Hwd0].
-      split.
-      + apply H with te1; done.
-      + apply H0 with te1; done.
+    - move/andP: H1 => [Hwte Hwte0]. rewrite are_defined_union in H0.
+      move/andP: H0 => [Hdef1 Hdef2]. apply /andP. split.
+      + exact: (well_typed_eexp_submap H Hdef1 Hwte).
+      + exact: (well_typed_eexp_submap H Hdef2 Hwte0).
+      +  move/andP: H1 => [/andP [Hwte Hwte0] Hwte1]. rewrite !are_defined_union in H0.
+         move/andP: H0 => [Hdef1 /andP [Hdef01 Hdef11]].
+         apply/andP; split; [apply/andP; split |].
+         * exact: (well_typed_eexp_submap H Hdef1 Hwte).
+         * exact: (well_typed_eexp_submap H Hdef01 Hwte0).
+         * exact: (well_typed_eexp_submap H Hdef11 Hwte1).
+    - move/andP: H3 => [Hwte Hwte0]. rewrite are_defined_union in H2.
+      move/andP: H2 => [Hdef1 Hdef2]. apply/andP. split.
+      + exact: (H _ _ H1 Hdef1 Hwte).
+      + exact: (H0 _ _ H1 Hdef2 Hwte0).
   Qed.
 
   Lemma well_typed_size_of_rexp_submap r te1 te2:
@@ -2193,22 +2100,10 @@ Module MakeDSL
   Proof.
     elim: r te1 te2 => //=.
     move=> x te1 te2 Hsm Hwd.
-    move: (VS.for_all_2 (are_defined_compat te1) Hwd) => Hwd2.
-    move: (VSLemmas.P.Dec.FSetDecideTestCases.test_In_singleton x) => Hin.
-    move: (Hwd2 _ Hin) => Hid.
-    rewrite /TELemmas.submap in Hsm.
-    rewrite /=.
-    rewrite /is_defined in Hid.
-    move: (TELemmas.mem_find_some Hid) => Hfind.
-    destruct Hfind.
-    move: (Hsm _ _ H) => H2.
-    have Htyp: (TE.vtyp x te1 = TE.vtyp x te2).
-    {
-      by rewrite (TE.find_some_vtyp H) (TE.find_some_vtyp H2).
-    }
-    remember (TE.vtyp x te1).
-    symmetry in Heqt, Htyp.
-    by rewrite (TE.vtyp_vsize Heqt) (TE.vtyp_vsize Htyp).
+    replace (VS.singleton x) with (vars_atomic (Avar x)) in Hwd by reflexivity.
+    move: (atyp_submap Hsm Hwd) => /= Htyp.
+    rewrite (TE.vtyp_vsize Htyp). move: (Logic.eq_sym Htyp) => {Htyp} Htyp.
+    rewrite (TE.vtyp_vsize Htyp). rewrite Htyp. exact: eqxx.
   Qed.
 
   Lemma well_typed_rexp_submap e te1 te2:
@@ -2218,37 +2113,22 @@ Module MakeDSL
     well_typed_rexp te2 e.
   Proof.
     elim: e te1 te2 => //=; intros.
-    move/andP: H2 => [Hwte0 Hwte1].
-    apply /andP.
-    split.
-    - apply H with te1.
-      + done.
-      + done.
-      + done.
-    - by rewrite (eqP (well_typed_size_of_rexp_submap H0 H1)) in Hwte1.
-      move: H3 => /andP [/andP [/andP [Hwt0 Hsz0] Hwt1] Hsz1].
-      move/are_defined_union: H2 => /andP [H2_1 H2_2].
-    apply /andP. split.
-    apply /andP. split.
-    apply /andP. split.
-    - apply H with te1.
-      + done.
-      + done.
+    - move/andP: H2 => [Hwte0 Hwte1]. apply/andP. split.
+      + exact: (H _ _ H0 H1 Hwte0).
+      + by rewrite (eqP (well_typed_size_of_rexp_submap H0 H1)) in Hwte1.
+    - move: H3 => /andP [/andP [/andP [Hwt0 Hsz0] Hwt1] Hsz1].
+      rewrite are_defined_union in H2. move/andP: H2=> [H2_1 H2_2].
+      repeat (apply/andP; split).
+      + exact: (H _ _ H1 H2_1 Hwt0).
       + by rewrite (eqP (well_typed_size_of_rexp_submap H1 H2_1)) in Hsz0.
-      + by rewrite (eqP (well_typed_size_of_rexp_submap H1 H2_1)) in Hsz0.
-    - apply H0 with te1.
-      + done.
-      + done.
+      + exact: (H0 _ _ H1 H2_2 Hwt1).
       + by rewrite (eqP (well_typed_size_of_rexp_submap H1 H2_2)) in Hsz1.
-      + by rewrite (eqP (well_typed_size_of_rexp_submap H1 H2_2)) in Hsz1.
-    - move/andP: H2 => [Hwt Hsz].
-      apply/andP. split.
-      + apply H with te1; auto.
-          by rewrite (eqP (well_typed_size_of_rexp_submap H0 H1)) in Hsz.
-    - move/andP: H2 => [Hwt Hsz].
-      apply/andP. split.
-      + apply H with te1; auto.
-          by rewrite (eqP (well_typed_size_of_rexp_submap H0 H1)) in Hsz.
+    - move/andP: H2 => [Hwt Hsz]. apply/andP. split.
+      + exact: (H _ _ H0 H1 Hwt).
+      + by rewrite (eqP (well_typed_size_of_rexp_submap H0 H1)) in Hsz.
+    - move/andP: H2 => [Hwt Hsz]. apply/andP. split.
+      + exact: (H _ _ H0 H1 Hwt).
+      + by rewrite (eqP (well_typed_size_of_rexp_submap H0 H1)) in Hsz.
   Qed.
 
   Ltac solve_well_typed_rexp_submap :=
@@ -2259,7 +2139,8 @@ Module MakeDSL
          | H: is_true(are_defined (VS.union ?vs1 ?vs2) ?te) |- _ =>
            let Hr1 := fresh "Hr1" in
            let Hr2 := fresh "Hr2" in
-           move/are_defined_union: H => /andP [Hr1 Hr2]; clear H; tac
+           rewrite are_defined_union in H;
+           move/andP: H => [Hr1 Hr2]; tac
          | |- ?l /\ ?r => split; tac
          | |- is_true (_ && _) => apply /andP; tac
          | Hsub: TELemmas.submap ?te1 ?te2, Hwd: is_true (are_defined ?vs ?te1)
@@ -2476,100 +2357,19 @@ Module MakeDSL
   Lemma vars_env_add_union te t ty:
     VS.Equal (vars_env (TE.add t ty te)) (VS.union (vars_env te) (VS.singleton t)).
   Proof.
-    move=> x.
-    split.
-    - move=> H.
-      move/VSLemmas.memP: H => H.
-      apply/VSLemmas.memP.
-      move/vars_env_mem: H => H.
-      rewrite VSLemmas.mem_union.
-      apply/orP.
-      rewrite TEKS.MLemmas.add_b in H.
-      move/orP: H => H.
-      elim: H => H.
-      right.
-      move: (TEKS.MLemmas.eqb_eq H) => {H} H.
-      symmetry in H.
-      exact: (VSLemmas.mem_singleton2 H).
-      left.
-        by apply/vars_env_mem.
-    - move=> H.
-      move/VSLemmas.memP: H => H.
-      apply/VSLemmas.memP.
-      rewrite VSLemmas.mem_union in H.
-      apply/vars_env_mem.
-      rewrite TEKS.MLemmas.add_b.
-      move/orP: H => H.
-      elim: H => H.
-      + move/vars_env_mem: H => H.
-        apply/orP.
-          by right.
-      + move: (VSLemmas.mem_singleton1 H) => {H} H.
-        apply/orP.
-        left.
-        rewrite (eqP H).
-        exact: TEKS.MLemmas.eqb_key_refl.
+    rewrite /vars_env. rewrite TEKS.key_set_add.
+    rewrite -VSLemmas.add_union_singleton2. reflexivity.
   Qed.
 
   Lemma vars_env_add2_union te x xty y yty:
     VS.Equal (vars_env (TE.add x xty (TE.add y yty te)))
              (VS.union (vars_env te) (VS.add x (VS.singleton y))).
   Proof.
-    move=> z.
-    split.
-    - move=> H.
-      move/VSLemmas.memP: H => H.
-      apply/VSLemmas.memP.
-      move/vars_env_mem: H => H.
-      rewrite VSLemmas.mem_union.
-      apply/orP.
-      rewrite TEKS.MLemmas.add_b in H.
-      move/orP: H => H.
-      elim: H => H.
-      + right.
-        move: (TEKS.MLemmas.eqb_eq H) => {H} H.
-        symmetry in H.
-        exact: (VSLemmas.mem_add_eq H).
-      + case Hyz: (z == y).
-        * right.
-          apply VSLemmas.mem_add3.
-          exact: (VSLemmas.mem_singleton2 Hyz).
-        * left.
-          move/negP: Hyz => Hyz.
-          rewrite (TELemmas.mem_add_neq Hyz) in H.
-          by apply/vars_env_mem.
-    - move=> H.
-      move/VSLemmas.memP: H => H.
-      apply/VSLemmas.memP.
-      rewrite VSLemmas.mem_union in H.
-      apply/vars_env_mem.
-      rewrite TEKS.MLemmas.add_b.
-      move/orP: H => H.
-      elim: H => H.
-      + move/vars_env_mem: H => H.
-        apply/orP.
-        right.
-        rewrite TELemmas.OP.P.F.add_b.
-        apply/orP; by right.
-      + apply/orP.
-        case Hyz: (z == y).
-        * right.
-          rewrite TELemmas.OP.P.F.add_b.
-          apply/orP; left.
-          rewrite (eqP Hyz).
-          exact: TEKS.MLemmas.eqb_key_refl.
-        * left.
-          move/negP: Hyz => Hyz.
-          case Hxz: (z == x).
-          -- rewrite (eqP Hxz).
-             exact: TEKS.MLemmas.eqb_key_refl.
-          -- move/negP: Hxz => Hxz.
-             rewrite (VSLemmas.mem_add_neq Hxz) in H.
-             move: (VSLemmas.mem_singleton1 H) => {H} H.
-             rewrite (eqP H) in Hyz.
-             rewrite eqxx in Hyz.
-             move/idP: Hyz => Hyz.
-             discriminate.
+    rewrite /vars_env. rewrite !TEKS.key_set_add.
+    rewrite (VSLemmas.OP.P.union_sym (TEKS.key_set te)).
+    rewrite (VSLemmas.add_union_singleton1 x (VS.singleton y)).
+    rewrite VSLemmas.OP.P.union_assoc.
+    rewrite -!VSLemmas.add_union_singleton1. reflexivity.
   Qed.
 
   Lemma vars_env_instr_succ_typenv i te:

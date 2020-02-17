@@ -879,89 +879,115 @@ Proof .
   elim a; last (case i => /=; done) .
   move => v; case i => /= .
   - move => u a0 .
-    move => /are_defined_subset Ha0te Hun Hva0 .
+    rewrite are_defined_subset_env.
+    move => Ha0te Hun Hva0 .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u a0 n .
-    move => /are_defined_subset Ha0te Hun Hva0 .
+    rewrite are_defined_subset_env.
+    move => Ha0te Hun Hva0 .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => vh vl a0 a1 n .
-    move => /andP [/andP [_ /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hun Hva0a1 .
+    rewrite 2!are_defined_subset_env.
+    move => /andP [/andP [_ Hdef0] Hdef1] Hun Hva0a1 .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - done .
   - move => u ac a0 a1 .
-    rewrite /are_defined => /andP [/andP [/are_defined_subset Hdefc /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hun Hvaca0a1 .
+    rewrite 3!are_defined_subset_env.
+    move => /andP [/andP [Hdefc Hdef0] Hdef1] Hun Hvaca0a1 .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - done .
   - move => u t a0 .
-    move => /are_defined_subset Hdef Hun Hsub .
+    rewrite are_defined_subset_env.
+    move => Hdef Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u a0 a1 .
-    move => /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hun Hsub .
+    rewrite 2!are_defined_subset_env.
+    move => /andP [Hdef0 Hdef1] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u w a0 a1 .
-    move => /andP [/andP [_ /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hun Hsub .
+    rewrite 2!are_defined_subset_env.
+    move => /andP [/andP [_ Hdef0] Hdef1] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u a0 a1 ac .
-    move => /andP [/andP [/are_defined_subset Hdefc /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hun Hsub .
+    rewrite 3!are_defined_subset_env.
+    move => /andP [/andP [Hdefc Hdef0] Hdef1] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u w a0 a1 ac .
-    move => /andP [/andP [/andP [_ /are_defined_subset Hdef0] /are_defined_subset Hdef1] /are_defined_subset Hdefc] Hun Hsub .
+    rewrite 3!are_defined_subset_env.
+    move => /andP [/andP [/andP [_ Hdef0] Hdef1] Hdefc] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u a0 a1 .
-    move => /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hun Hsub .
+    rewrite 2!are_defined_subset_env.
+    move => /andP [Hdef0 Hdef1] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u w a0 a1 .
-    move => /andP [/andP [_ /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hun Hsub .
+    rewrite 2!are_defined_subset_env.
+    move => /andP [/andP [_ Hdef0] Hdef1] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u w a0 a1 .
-    move => /andP [/andP [_ /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hun Hsub .
+    rewrite 2!are_defined_subset_env.
+    move => /andP [/andP [_ Hdef0] Hdef1] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u a0 a1 ac .
-    move => /andP [/andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /are_defined_subset Hdefc] Hun Hsub .
+    rewrite 3!are_defined_subset_env.
+    move => /andP [/andP [Hdef0 Hdef1] Hdefc] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u w a0 a1 ac .
-    move => /andP [/andP [/andP [_ /are_defined_subset Hdef0] /are_defined_subset Hdef1] /are_defined_subset Hdefc] Hun Hsub .
+    rewrite 3!are_defined_subset_env.
+    move => /andP [/andP [/andP [_ Hdef0] Hdef1] Hdefc] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u a0 a1 ac .
-    move => /andP [/andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /are_defined_subset Hdefc] Hun Hsub .
+    rewrite 3!are_defined_subset_env.
+    move => /andP [/andP [Hdef0 Hdef1] Hdefc] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u w a0 a1 ac .
-    move => /andP [/andP [/andP [_ /are_defined_subset Hdef0] /are_defined_subset Hdef1] /are_defined_subset Hdefc] Hun Hsub .
+    rewrite 3!are_defined_subset_env.
+    move => /andP [/andP [/andP [_ Hdef0] Hdef1] Hdefc] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u a0 a1 .
-    move => /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hun Hsub .
+    rewrite 2!are_defined_subset_env.
+    move => /andP [Hdef0 Hdef1] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u w a0 a1 .
-    move => /andP [/andP [_ /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hun Hsub .
+    rewrite 2!are_defined_subset_env.
+    move => /andP [/andP [_ Hdef0] Hdef1] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u a0 a1 .
-    move => /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hun Hsub .
+    rewrite 2!are_defined_subset_env.
+    move => /andP [Hdef0 Hdef1] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u w a0 n .
-    move => /andP [Hneq /are_defined_subset Hdef] Hun Hsub .
+    rewrite are_defined_subset_env.
+    move => /andP [Hneq Hdef] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u w a0 a1 .
-    move => /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hun Hsub .
+    rewrite 2!are_defined_subset_env.
+    move => /andP [Hdef0 Hdef1] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u t a0 a1 .
-    move => /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hun Hsub .
+    rewrite 2!are_defined_subset_env.
+    move => /andP [Hdef0 Hdef1] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u t a0 a1 .
-    move => /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hun Hsub .
+    rewrite 2!are_defined_subset_env.
+    move => /andP [Hdef0 Hdef1] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u t a0 .
-    move => /are_defined_subset Hdef Hun Hsub .
+    rewrite are_defined_subset_env.
+    move => Hdef Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u t a0 .
-    move => /are_defined_subset Hdef Hun Hsub .
+    rewrite are_defined_subset_env.
+    move => Hdef Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - move => u a0 a1.
-    move => /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hun Hsub .
+    rewrite 2!are_defined_subset_env.
+    move => /andP [Hdef0 Hdef1] Hun Hsub .
     unchanged_instr_subset; not_mem_rewrite_vtyp .
   - done .
 Qed .
 
-  
+
 Lemma asize_well_defined_unchanged te i a :
   well_defined_instr te i ->
   ssa_vars_unchanged_instr (vars_env te) i ->
@@ -972,30 +998,31 @@ Proof .
   move => v Hdef Hun Hsub .
   rewrite /asize .
   rewrite atyp_well_defined_unchanged // .
-Qed .    
+Qed .
 
 Ltac well_defined_to_vs_subset :=
   match goal with
   | Hdef : is_true (well_defined_instr _ ?i) |- _ =>
     move : Hdef; rewrite /well_defined_instr;
+    rewrite !are_defined_subset_env;
     [ let H := fresh in
       let H0 := fresh in
       let H1 := fresh in
       let H2 := fresh in
-      move => /andP [/andP [/andP [H /are_defined_subset H0] /are_defined_subset H1] /are_defined_subset H2]
+      move => /andP [/andP [/andP [H H0] H1] H2]
    || let H := fresh in
       let H0 := fresh in
       let H1 := fresh in
-      move => /andP [/andP [/are_defined_subset H /are_defined_subset H0] /are_defined_subset H1]
+      move => /andP [/andP [H H0] H1]
    || let H := fresh in
       let H0 := fresh in
       let H1 := fresh in
-      move => /andP [/andP [H /are_defined_subset H0] /are_defined_subset H1]
+      move => /andP [/andP [H H0] H1]
    || let H := fresh in
-      move => /andP [/are_defined_subset H /are_defined_subset Hdef]
+      move => /andP [H Hdef]
    || let H := fresh in
-      move => /andP [H /are_defined_subset Hdef]
-   || move => /are_defined_subset Hdef
+      move => /andP [H Hdef]
+   || move => Hdef
     ]
   | Hdef : is_true (SSAVS.subset _ _ && SSAVS.subset _ _) |- _ =>
     let Hsub1 := fresh in
@@ -1051,7 +1078,7 @@ Proof .
   case: i => /= .
   - (* Imov *)
     move => v a /andP [Hdef _] _ Hun Hinst .
-    well_defined_to_vs_subset .    
+    well_defined_to_vs_subset .
     eval_exp_exp_atomic_to_pred_state .
     inversion_clear Hinst .
     qfbv_store_acc .
@@ -1074,7 +1101,7 @@ Proof .
     repeat qfbv_store_acc .
     rewrite from_nat_simple high_extract .
     rewrite !size_shlB !size_cat !addnK .
-    rewrite !(eqP (conform_size_eval_atomic H3 Hcon))
+    rewrite !(eqP (conform_size_eval_atomic H0 Hcon))
             !(eqP (conform_size_eval_atomic H Hcon)) /= .
     apply /andP; split; done .
   - (* Inondet *)
@@ -1111,12 +1138,12 @@ Proof .
     inversion_clear Hinst; repeat qfbv_store_acc .
     rewrite /carry_addB .
     rewrite /well_typed_instr in Hty .
-    move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
+    move : (size_eval_atomic_same Hcon H H0 (eqP Hty)) => Hsize .
     rewrite (adc_false_sext_add_high Hsize) /= .
     rewrite {1}/addB .
     rewrite (eqP (adc_false_sext_add_low Hsize)) .
-    move /negP : H1; rewrite eq_sym; move /negP => H1 .
-    rewrite (size_eval_atomic_asize H3 Hcon) // .
+    move /negP : H3; rewrite eq_sym; move /negP => H3 .
+    rewrite (size_eval_atomic_asize H Hcon) // .
   - (* Iadc *)
     move => v a0 a1 c /andP [Hdef Hty] Hcon Hun Hinst .
     rewrite !(asize_well_defined_unchanged Hdef Hun);
@@ -1160,12 +1187,12 @@ Proof .
     inversion_clear Hinst; repeat qfbv_store_acc .
     rewrite /carry_addB .
     rewrite /well_typed_instr in Hty .
-    move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
+    move : (size_eval_atomic_same Hcon H H0 (eqP Hty)) => Hsize .
     rewrite (size_neg_same (eval_atomic a1 s1)) in Hsize .
     rewrite (eqP (adc_false_sext_add_high Hsize)) .
     rewrite {3}/addB .
     rewrite (eqP (adc_false_sext_add_low Hsize)) .
-    rewrite (size_eval_atomic_asize H3 Hcon) /= .
+    rewrite (size_eval_atomic_asize H Hcon) /= .
     apply /andP; split; done .
   - (* Isubb *)
     move => c v a0 a1 /andP [Hdef Hty] Hcon Hun Hinst .
@@ -1177,7 +1204,7 @@ Proof .
     inversion_clear Hinst; repeat qfbv_store_acc .
     rewrite /borrow_subB .
     rewrite /well_typed_instr in Hty .
-    move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
+    move : (size_eval_atomic_same Hcon H H0 (eqP Hty)) => Hsize .
     rewrite (sbb_false_sext_sub_high Hsize) /= .
     rewrite /subB .
     rewrite (eqP (sbb_false_sext_sub_low Hsize)) .
@@ -1254,8 +1281,8 @@ Proof .
     repeat eval_exp_exp_atomic_to_pred_state .
     inversion_clear Hinst; repeat qfbv_store_acc .
     rewrite (eqP (mul_sext (eval_atomic a0 s1) (eval_atomic a1 s1))) .
-    rewrite (size_eval_atomic_asize H3 Hcon)
-            (size_eval_atomic_asize H Hcon) /= .
+    rewrite (size_eval_atomic_asize H Hcon)
+            (size_eval_atomic_asize H0 Hcon) /= .
     apply /andP; split; done .
   - (* Imulj *)
     move => v a0 a1 /andP [Hdef _] Hcon Hun Hinst .
@@ -1271,12 +1298,12 @@ Proof .
     move => vh vl a n /andP [Hdef _] Hcon Hun Hinst .
     rewrite !(asize_well_defined_unchanged Hdef Hun);
       [ idtac
-      | rewrite SSAVS.Lemmas.subset_refl // ] .
+      | by rewrite SSAVS.Lemmas.subset_refl ] .
     rewrite !(atyp_well_defined_unchanged Hdef Hun);
       [ idtac
-      | rewrite SSAVS.Lemmas.subset_refl // ] .
+      | by rewrite SSAVS.Lemmas.subset_refl ] .
     repeat well_defined_to_vs_subset .
-    inversion Hinst => {H H0 H2 H3 H4 H5};
+    inversion Hinst => {H H1 H2 H3 H4 H5};
     [ rewrite H6 /= | rewrite -Typ.not_signed_is_unsigned H6 /= ];
     repeat eval_exp_exp_atomic_to_pred_state;
     repeat qfbv_store_acc;
@@ -1336,7 +1363,7 @@ Proof .
     case H; case b => /= ebexp rbexp _ Hrbexp .
     case (eval_bexp_rbexp rbexp s2) => _ Hqfbv .
     apply : Hqfbv => // .
-Qed .    
+Qed .
 
 (* Connect premises by conjunction. *)
 
@@ -1418,7 +1445,7 @@ Proof .
             (TypEnv.SSATE.vsize_add_neq Hneq2) Hcon // .
     exact : (mem_add_neq Hneq2 (mem_add_neq Hneq1 Hmem)) .
 Qed .
-    
+
 Lemma conform_eval_succ_typenv te i s1 s2 :
   well_formed_instr te i ->
   SSAStore.conform s1 te ->
@@ -1428,17 +1455,18 @@ Proof .
   move => /andP [Hdef Hty] Hcon .
   case : i Hdef Hty => /= .
   - (* Imov *)
-    move => v a /are_defined_subset Hdef _ Hev .
+    move => v a; rewrite are_defined_subset_env => Hdef _ Hev .
     inversion_clear Hev .
     apply : (conform_Upd _ Hcon H) .
     rewrite (size_eval_atomic_asize Hdef) // .
   - (* Ishl *)
-    move => v a n /are_defined_subset Hdef _ Hev .
+    move => v a n; rewrite are_defined_subset_env => Hdef _ Hev .
     inversion_clear Hev .
     apply : (conform_Upd _ Hcon H) .
     rewrite size_shlB (size_eval_atomic_asize Hdef) // .
   - (* Icshl *)
-    move => vh vl a0 a1 n /andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] _ Hev .
+    move => vh vl a0 a1 n; rewrite 2!are_defined_subset_env =>
+    /andP [/andP [Hneq Hdef0] Hdef1] _ Hev .
     inversion_clear Hev .
     apply : (conform_Upd2 Hneq _ _ Hcon H) .
     + rewrite size_high (size_eval_atomic_asize Hdef0) // .
@@ -1448,7 +1476,8 @@ Proof .
     inversion_clear Hev .
     apply : (conform_Upd _ Hcon H0) => // .
   - (* Icmov *)
-    move => v ac a0 a1 /andP [/andP [/are_defined_subset Hdefc /are_defined_subset Hdef0] /are_defined_subset Hdef1] /andP [_ Hty] Hev .
+    move => v ac a0 a1; rewrite 3!are_defined_subset_env =>
+    /andP [/andP [Hdefc Hdef0] Hdef1] /andP [_ Hty] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H0);
     [ rewrite (size_eval_atomic_asize Hdef0) //
     | rewrite (size_eval_atomic_asize Hdef1) //;
@@ -1458,49 +1487,54 @@ Proof .
     inversion Hev .
     rewrite -H1 // .
   - (* Inot *)
-    move => v t a /are_defined_subset Hdef Hty Hev .
+    move => v t a; rewrite are_defined_subset_env => Hdef Hty Hev .
     rewrite /Typ.compatible in Hty .
     inversion_clear Hev .
     apply : (conform_Upd _ Hcon H) => // .
     rewrite -size_inv_same (eqP Hty)
             (size_eval_atomic_asize Hdef) // .
   - (* Iadd *)
-    move => v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hty Hev .
+    move => v a0 a1; rewrite 2!are_defined_subset_env =>
+    /andP [Hdef0 Hdef1] Hty Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite size_addB (size_eval_atomic_asize Hdef0) // .
     rewrite (size_eval_atomic_asize Hdef1) // .
     rewrite /asize !(eqP Hty) minnE subKn // .
   - (* Iadds *)
-    move => u v a0 a1 /andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hty Hev .
+    move => u v a0 a1; rewrite 2!are_defined_subset_env =>
+    /andP [/andP [Hneq Hdef0] Hdef1] Hty Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
     + done .
     + rewrite size_addB (size_eval_atomic_asize Hdef0) //;
       rewrite (size_eval_atomic_asize Hdef1) //;
       rewrite /asize !(eqP Hty) minnE subKn // .
   - (* Iadc *)
-    move => v a0 a1 ac /andP [/andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /are_defined_subset Hdefc]
-              /andP [Hty Htyc] Hev .
+    move => v a0 a1 ac; rewrite 3!are_defined_subset_env =>
+    /andP [/andP [Hdef0 Hdef1] Hdefc] /andP [Hty Htyc] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite /adcB /full_adder size_full_adder_zip
             (size_eval_atomic_asize Hdef0) //
             (size_eval_atomic_asize Hdef1) //
             /asize !(eqP Hty) minnE subKn // .
   - (* Iadcs *)
-    move => u v a0 a1 ac /andP [/andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] /are_defined_subset Hdefc] /andP [Hty Htyc] Hev .    
-    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .      
+    move => u v a0 a1 ac; rewrite 3!are_defined_subset_env =>
+    /andP [/andP [/andP [Hneq Hdef0] Hdef1] Hdefc] /andP [Hty Htyc] Hev .
+    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) . 
     + done .
     + rewrite /adcB /full_adder size_full_adder_zip
               (size_eval_atomic_asize Hdef0) //
               (size_eval_atomic_asize Hdef1) //
               /asize !(eqP Hty) minnE subKn // .
   - (* Isub *)
-    move => u a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hty Hev .
+    move => u a0 a1; rewrite 2!are_defined_subset_env =>
+    /andP [Hdef0 Hdef1] Hty Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite size_subB (size_eval_atomic_asize Hdef0) //
             (size_eval_atomic_asize Hdef1) //
             /asize !(eqP Hty) minnE subKn // .
   - (* Isubc *)
-    move => u v a0 a1 /andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hty Hev .
+    move => u v a0 a1; rewrite 2!are_defined_subset_env =>
+    /andP [/andP [Hneq Hdef0] Hdef1] Hty Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
     + done .
     + rewrite size_addB -size_neg_same
@@ -1508,7 +1542,8 @@ Proof .
               (size_eval_atomic_asize Hdef1) //
               /asize !(eqP Hty) minnE subKn // .
   - (* Isubb *)
-    move => u v a0 a1 /andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hty Hev .
+    move => u v a0 a1; rewrite 2!are_defined_subset_env =>
+    /andP [/andP [Hneq Hdef0] Hdef1] Hty Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
     + done .
     + rewrite size_subB
@@ -1516,16 +1551,17 @@ Proof .
               (size_eval_atomic_asize Hdef1) //
               /asize !(eqP Hty) minnE subKn // .
   - (* Isbc *)
-    move => v a0 a1 ac /andP [/andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /are_defined_subset Hdefc]
-              /andP [Hty _] Hev .
+    move => v a0 a1 ac; rewrite 3!are_defined_subset_env =>
+    /andP [/andP [Hdef0 Hdef1] Hdefc] /andP [Hty _] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite /adcB /full_adder size_full_adder_zip
-            -size_inv_same 
+            -size_inv_same
             (size_eval_atomic_asize Hdef0) //
             (size_eval_atomic_asize Hdef1) //
             /asize !(eqP Hty) minnE subKn // .
   - (* Isbcs *)
-    move => u v a0 a1 ac /andP [/andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] /are_defined_subset Hdefc] /andP [Hty _] Hev .
+    move => u v a0 a1 ac; rewrite 3!are_defined_subset_env =>
+    /andP [/andP [/andP [Hneq Hdef0] Hdef1] Hdefc] /andP [Hty _] Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
     + done .
     + rewrite /adcB /full_adder size_full_adder_zip
@@ -1534,36 +1570,39 @@ Proof .
               (size_eval_atomic_asize Hdef1) //
               /asize !(eqP Hty) minnE subKn // .
   - (* Isbb *)
-    move => v a0 a1 ac /andP [/andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /are_defined_subset Hdefc]
-              /andP [Hty _] Hev .
+    move => v a0 a1 ac; rewrite 3!are_defined_subset_env =>
+    /andP [/andP [Hdef0 Hdef1] Hdefc] /andP [Hty _] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite size_sbbB
             (size_eval_atomic_asize Hdef0) //
             (size_eval_atomic_asize Hdef1) //
             /asize !(eqP Hty) minnE subKn // .
   - (* Isbbs *)
-    move => u v a0 a1 ac /andP [/andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] /are_defined_subset Hdefc]
-              /andP [Hty _] Hev .
+    move => u v a0 a1 ac; rewrite 3!are_defined_subset_env =>
+    /andP [/andP [/andP [Hneq Hdef0] Hdef1] Hdefc] /andP [Hty _] Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H); first done .
     rewrite size_sbbB
             (size_eval_atomic_asize Hdef0) //
             (size_eval_atomic_asize Hdef1) //
             /asize !(eqP Hty) minnE subKn // .
   - (* Imul *)
-    move => v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hty Hev .
+    move => v a0 a1; rewrite 2!are_defined_subset_env =>
+    /andP [Hdef0 Hdef1] Hty Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite size_mulB
             (size_eval_atomic_asize Hdef0) // .
   - (* Imull *)
-    move => u v a0 a1 /andP [/andP [Hneq /are_defined_subset Hdef0] /are_defined_subset Hdef1] Hty Hev .
+    move => u v a0 a1; rewrite 2!are_defined_subset_env =>
+    /andP [/andP [Hneq Hdef0] Hdef1] Hty Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H);
-    [ rewrite size_high 
+    [ rewrite size_high
               (size_eval_atomic_asize Hdef0) //
     | rewrite size_low
               (size_eval_atomic_asize Hdef1) // ] .
     rewrite size_unsigned_same // .
   - (* Imulj *)
-    move => v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] Hty Hev .
+    move => v a0 a1; rewrite 2!are_defined_subset_env =>
+    /andP [Hdef0 Hdef1] Hty Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite size_full_mul //
             (size_eval_atomic_asize Hdef0) //
@@ -1573,43 +1612,48 @@ Proof .
     case (atyp a0 te) => /= // n;
     rewrite mul2n addnn // .
   - (* Isplit *)
-    move => u v a n /andP [Hneq /are_defined_subset Hdef] _ Hev .
+    move => u v a n; rewrite are_defined_subset_env =>
+    /andP [Hneq Hdef] _ Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H0);
     [ rewrite size_shrB (size_eval_atomic_asize Hdef) //
     | rewrite size_shrB size_shlB size_unsigned_same (size_eval_atomic_asize Hdef) //
     | rewrite size_sarB (size_eval_atomic_asize Hdef) //
     |  rewrite size_shrB size_shlB size_unsigned_same (size_eval_atomic_asize Hdef) // ] .
   - (* Iand *)
-    move => u v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /andP [Htyc Hty] Hev .
+    move => u v a0 a1; rewrite 2!are_defined_subset_env =>
+    /andP [Hdef0 Hdef1] /andP [Htyc Hty] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite size_lift
             (size_eval_atomic_asize Hdef0) //
             (size_eval_atomic_asize Hdef1) //
             /asize -(eqP Hty) maxnn (eqP Htyc) // .
   - (* Ior *)
-    move => u v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /andP [Htyc Hty] Hev .
+    move => u v a0 a1; rewrite 2!are_defined_subset_env =>
+    /andP [Hdef0 Hdef1] /andP [Htyc Hty] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite size_lift
             (size_eval_atomic_asize Hdef0) //
             (size_eval_atomic_asize Hdef1) //
             /asize -(eqP Hty) maxnn (eqP Htyc) // .
   - (* Ixor *)
-    move => u v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /andP [Htyc Hty] Hev .
+    move => u v a0 a1; rewrite 2!are_defined_subset_env =>
+    /andP [Hdef0 Hdef1] /andP [Htyc Hty] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite size_lift
             (size_eval_atomic_asize Hdef0) //
             (size_eval_atomic_asize Hdef1) //
             /asize -(eqP Hty) maxnn (eqP Htyc) // .
   - (* Icast *)
-    move => v t a /are_defined_subset Hdef _ Hev .
+    move => v t a; rewrite are_defined_subset_env => Hdef _ Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite size_tcast // .
   - (* Ivpc *)
-    move => u v a /are_defined_subset Hdef _ Hev .
+    move => u v a; rewrite are_defined_subset_env => Hdef _ Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite size_tcast // .
   - (* Ijoin *)
-    move => v a0 a1 /andP [/are_defined_subset Hdef0 /are_defined_subset Hdef1] /andP [Hun Hty] Hev .
+    move => v a0 a1; rewrite 2!are_defined_subset_env =>
+    /andP [Hdef0 Hdef1] /andP [Hun Hty] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite size_cat
             (size_eval_atomic_asize Hdef0) //
@@ -1620,7 +1664,7 @@ Proof .
   - move => b Hdef _ Hev .
     inversion Hev; rewrite -H2 // .
 Qed .
-    
+
 Lemma bexp_program_eval te p s1 s2 :
   well_formed_ssa_program te p ->
   SSAStore.conform s1 te ->
@@ -2034,9 +2078,9 @@ Lemma eval_bexp_instr_safe te i s :
 Proof .
   move => /andP [Hdef _] Hcon .
   move : Hdef; case i => /=; try done .
-  - move => v a n /are_defined_subset Hsub .
+  - move => v a n; rewrite are_defined_subset_env => Hsub .
     apply : (eval_bexp_atomic_shlBn_safe _ Hsub Hcon) .
-  - move => h l a1 a2 n /andP [/andP [_ _] /are_defined_subset Hsub] .
+  - move => h l a1 a2 n; rewrite !are_defined_subset_env => /andP [/andP [_ _] Hsub] .
     apply : (eval_bexp_atomic_concatshl_safe _ _ Hsub Hcon) .
   - move => v a1 a2 _ .
     apply : eval_bexp_atomic_addB_safe .
@@ -2050,7 +2094,7 @@ Proof .
     apply : eval_bexp_atomic_sbbB_safe .
   - move => v a1 a2 _ .
     apply : eval_bexp_atomic_mulB_safe .
-  - move => v t a _ .    
+  - move => v t a _ .
     apply : eval_bexp_atomic_vpc_safe .
 Qed .
 

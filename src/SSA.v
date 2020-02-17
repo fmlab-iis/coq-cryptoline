@@ -1242,22 +1242,22 @@ Section MakeSSA.
     - move=> Hin.
       move/SSA.VSLemmas.memP: Hin => Hmem.
       apply/SSA.VSLemmas.memP.
-      move/SSA.vars_env_mem: Hmem => Hmem.
+      rewrite SSA.mem_vars_env in Hmem.
       move: (ssa_typenv_exist Hmem) => [v] Hsv.
       rewrite -Hsv.
       rewrite ssa_vars_mem1.
       rewrite -Hsv in Hmem.
       rewrite -ssa_typenv_mem in Hmem.
-      move/DSL.vars_env_mem: Hmem => Hmem.
+      rewrite DSL.mem_vars_env.
       exact: Hmem.
     - move=> Hin.
       move/SSA.VSLemmas.memP: Hin => Hmem.
       apply/SSA.VSLemmas.memP.
-      apply/SSA.vars_env_mem.
+      rewrite SSA.mem_vars_env.
       move: (ssa_vars_mem2 Hmem) => [v [Hsv Hmem2]].
       rewrite Hsv.
       rewrite -ssa_typenv_mem.
-      move/DSL.vars_env_mem: Hmem2 => Hmem2.
+      rewrite DSL.mem_vars_env in Hmem2.
       exact: Hmem2.
   Qed.
 
@@ -2546,9 +2546,7 @@ Section MakeSSA.
     ssa_var_unchanged_instr v i ->
     SSA.eval_instr te i s1 s2 ->
     SSAStore.acc v s1 = SSAStore.acc v s2.
-  Proof .
-    elim : i => /=; intros; acc_unchanged_instr_upd .
-  Qed .
+  Proof. elim: i; intros; by acc_unchanged_instr_upd. Qed.
 
   Lemma acc_unchanged_program te v p s1 s2 :
     ssa_unchanged_program_var p v ->
@@ -3403,8 +3401,8 @@ Section MakeSSA.
   Proof.
     move=> /andP [/andP [/andP [/andP [/andP [Hwd Hwt] Hp] Hg] Hun] Hssa].
     eapply ssa_unchanged_program_subset.
-    exact: Hun.
-      by rewrite -SSA.are_defined_subset.
+    - exact: Hun.
+    - by rewrite -SSA.are_defined_subset_env.
   Qed.
 
   Corollary well_formed_ssa_spec_post_subset s :
@@ -3413,7 +3411,7 @@ Section MakeSSA.
                  (SSA.vars_env (SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s))).
   Proof.
     move=> /andP [/andP [/andP [/andP [ /andP [Hwd Hwt] Hp] /andP [Hwd2 Hwt2]] Hun] Hssa].
-      by rewrite -SSA.are_defined_subset.
+      by rewrite -SSA.are_defined_subset_env.
   Qed.
 
   Ltac le_ssa_var_unchanged_instr :=
@@ -3579,17 +3577,17 @@ Section MakeSSA.
     - by rewrite -> (ssa_vars_are_defined_singleton m) in H.
     - done.
     - apply H. by rewrite /= in H0.
-    - rewrite /= in H1.
-      move/DSL.are_defined_union/andP: H1 => [H1_1 H1_2].
-      apply/SSA.are_defined_union/andP; split.
+    - rewrite /= DSL.are_defined_union in H1.
+      move/andP: H1 => [H1_1 H1_2].
+      rewrite SSA.are_defined_union. apply/andP; split.
       + exact: (H _ _ H1_1).
       + exact: (H0 _ _ H1_2).
     - by rewrite <- (ssa_vars_are_defined_singleton) in H.
     - done.
     - apply H with m. by rewrite /= in H0.
-    - rewrite /= in H1.
-      move/SSA.are_defined_union/andP: H1 => [H1_1 H1_2].
-      apply/DSL.are_defined_union/andP; split.
+    - rewrite /= SSA.are_defined_union in H1.
+      move/andP: H1 => [H1_1 H1_2].
+      rewrite DSL.are_defined_union. apply/andP; split.
       + exact: (H _ _ H1_1).
       + exact: (H0 _ _ H1_2).
   Qed.
@@ -3602,9 +3600,9 @@ Section MakeSSA.
     - by rewrite -> (ssa_vars_are_defined_singleton m) in H.
     - done.
     - apply H. by rewrite /= in H0.
-    - rewrite /= in H1.
-      move/DSL.are_defined_union/andP: H1 => [H1_1 H1_2].
-      apply/SSA.are_defined_union/andP; split.
+    - rewrite /= DSL.are_defined_union in H1.
+      move/andP: H1 => [H1_1 H1_2].
+      rewrite SSA.are_defined_union. apply/andP; split.
       + exact: (H _ _ H1_1).
       + exact: (H0 _ _ H1_2).
     - apply H. by rewrite /= in H0.
@@ -3612,9 +3610,9 @@ Section MakeSSA.
     - by rewrite <- (ssa_vars_are_defined_singleton) in H.
     - done.
     - apply H with m. by rewrite /= in H0.
-    - rewrite /= in H1.
-      move/SSA.are_defined_union/andP: H1 => [H1_1 H1_2].
-      apply/DSL.are_defined_union/andP; split.
+    - rewrite /= SSA.are_defined_union in H1.
+      move/andP: H1 => [H1_1 H1_2].
+      rewrite DSL.are_defined_union. apply/andP; split.
       + exact: (H _ _ H1_1).
       + exact: (H0 _ _ H1_2).
     - apply H with m. by rewrite /= in H0.
@@ -3627,23 +3625,23 @@ Section MakeSSA.
   Proof.
     split; elim: e m te; intros; rewrite /= in H *.
     - done.
-    - move/DSL.are_defined_union/andP: H => [He He0].
-      apply/SSA.are_defined_union/andP; split; by apply ssa_vars_are_defined_eexp.
-    - move/DSL.are_defined_union/andP: H => [He H].
-      move/DSL.are_defined_union/andP: H => [He0 He1].
-      apply/SSA.are_defined_union/andP; split; first by apply ssa_vars_are_defined_eexp.
-      apply/SSA.are_defined_union/andP; split; by apply ssa_vars_are_defined_eexp.
-    - apply/SSA.are_defined_union/andP; rewrite /= in H1;
-        move/DSL.are_defined_union/andP: H1 => [H1_1 H1_2]; split; by [apply H|apply H0].
+    - rewrite DSL.are_defined_union in H; move/andP: H => [He He0].
+      rewrite SSA.are_defined_union; apply/andP; split; by apply ssa_vars_are_defined_eexp.
+    - rewrite DSL.are_defined_union in H; move/andP: H => [He H].
+      rewrite DSL.are_defined_union in H; move/andP: H => [He0 He1].
+      rewrite SSA.are_defined_union; apply/andP; split; first by apply ssa_vars_are_defined_eexp.
+      rewrite SSA.are_defined_union; apply/andP; split; by apply ssa_vars_are_defined_eexp.
+    - rewrite SSA.are_defined_union; apply/andP; rewrite /= in H1;
+        rewrite DSL.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply H|apply H0].
     - done.
-    - move/SSA.are_defined_union/andP: H => [He He0].
-      apply/DSL.are_defined_union/andP; split; by apply (ssa_vars_are_defined_eexp m).
-    - move/SSA.are_defined_union/andP: H => [He H].
-      move/SSA.are_defined_union/andP: H => [He0 He1].
-      apply/DSL.are_defined_union/andP; split; first by apply (ssa_vars_are_defined_eexp m).
-      apply/DSL.are_defined_union/andP; split; by apply (ssa_vars_are_defined_eexp m).
-    - apply/DSL.are_defined_union/andP; rewrite /= in H1;
-        move/SSA.are_defined_union/andP: H1 => [H1_1 H1_2]; split; by [apply (H m) |apply (H0 m)].
+    - rewrite SSA.are_defined_union in H; move/andP: H => [He He0].
+      rewrite DSL.are_defined_union; apply/andP; split; by apply (ssa_vars_are_defined_eexp m).
+    - rewrite SSA.are_defined_union in H; move/andP: H => [He H].
+      rewrite SSA.are_defined_union in H; move/andP: H => [He0 He1].
+      rewrite DSL.are_defined_union; apply/andP; split; first by apply (ssa_vars_are_defined_eexp m).
+      rewrite DSL.are_defined_union; apply/andP; split; by apply (ssa_vars_are_defined_eexp m).
+    - rewrite DSL.are_defined_union; apply/andP; rewrite /= in H1;
+        rewrite SSA.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply (H m) |apply (H0 m)].
   Qed.
 
   Lemma ssa_vars_are_defined_rbexp m r te:
@@ -3652,25 +3650,25 @@ Section MakeSSA.
   Proof.
     split; elim: r m te; intros; rewrite /= in H *.
     - done.
-    - move/DSL.are_defined_union/andP: H => [He He0].
-      apply/SSA.are_defined_union/andP; split; by apply ssa_vars_are_defined_rexp.
-    - move/DSL.are_defined_union/andP: H => [He H].
-      apply/SSA.are_defined_union/andP; split; by apply ssa_vars_are_defined_rexp.
+    - rewrite DSL.are_defined_union in H; move/andP: H => [He He0].
+      rewrite SSA.are_defined_union; apply/andP; split; by apply ssa_vars_are_defined_rexp.
+    - rewrite DSL.are_defined_union in H; move/andP: H => [He H].
+      rewrite SSA.are_defined_union; apply/andP; split; by apply ssa_vars_are_defined_rexp.
     - apply H; rewrite /= in H0; done.
-    - apply/SSA.are_defined_union/andP; rewrite /= in H1;
-        move/DSL.are_defined_union/andP: H1 => [H1_1 H1_2]; split; by [apply H|apply H0].
-    - apply/SSA.are_defined_union/andP; rewrite /= in H1;
-        move/DSL.are_defined_union/andP: H1 => [H1_1 H1_2]; split; by [apply H|apply H0].
+    - rewrite SSA.are_defined_union; apply/andP; rewrite /= in H1;
+        rewrite DSL.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply H|apply H0].
+    - rewrite SSA.are_defined_union; apply/andP; rewrite /= in H1;
+        rewrite DSL.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply H|apply H0].
     - done.
-    - move/SSA.are_defined_union/andP: H => [He He0].
-      apply/DSL.are_defined_union/andP; split; by apply (ssa_vars_are_defined_rexp m).
-    - move/SSA.are_defined_union/andP: H => [He H].
-      apply/DSL.are_defined_union/andP; split; by apply (ssa_vars_are_defined_rexp m).
+    - rewrite SSA.are_defined_union in H; move/andP: H => [He He0].
+      rewrite DSL.are_defined_union; apply/andP; split; by apply (ssa_vars_are_defined_rexp m).
+    - rewrite SSA.are_defined_union in H; move/andP: H => [He H].
+      rewrite DSL.are_defined_union; apply/andP; split; by apply (ssa_vars_are_defined_rexp m).
     - apply (H m); rewrite /= in H0; done.
-    - apply/DSL.are_defined_union/andP; rewrite /= in H1;
-        move/SSA.are_defined_union/andP: H1 => [H1_1 H1_2]; split; by [apply (H m)|apply (H0 m)].
-    - apply/DSL.are_defined_union/andP; rewrite /= in H1;
-        move/SSA.are_defined_union/andP: H1 => [H1_1 H1_2]; split; by [apply (H m)|apply (H0 m)].
+    - rewrite DSL.are_defined_union; apply/andP; rewrite /= in H1;
+        rewrite SSA.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply (H m)|apply (H0 m)].
+    - rewrite DSL.are_defined_union; apply/andP; rewrite /= in H1;
+        rewrite SSA.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply (H m)|apply (H0 m)].
   Qed.
 
   Lemma ssa_vars_are_defined_bexp m b te:
@@ -3679,15 +3677,15 @@ Section MakeSSA.
   Proof.
     elim: b m te; split; intros.
     - rewrite /DSL.vars_bexp /= in H.
-      move/DSL.are_defined_union/andP: H => [He Hr].
+      rewrite DSL.are_defined_union in H; move/andP: H => [He Hr].
       rewrite /SSA.vars_bexp /=.
-      apply/SSA.are_defined_union/andP; split.
+      rewrite SSA.are_defined_union; apply/andP; split.
       + by apply ssa_vars_are_defined_ebexp.
       + by apply ssa_vars_are_defined_rbexp.
     - rewrite /SSA.vars_bexp /= in H.
-      move/SSA.are_defined_union/andP: H => [He Hr].
+      rewrite SSA.are_defined_union in H; move/andP: H => [He Hr].
       rewrite /DSL.vars_bexp /=.
-      apply/DSL.are_defined_union/andP; split.
+      rewrite DSL.are_defined_union; apply/andP; split.
       + by apply (ssa_vars_are_defined_ebexp m).
       + by apply (ssa_vars_are_defined_rbexp m).
   Qed.
