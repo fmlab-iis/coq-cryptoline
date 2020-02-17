@@ -80,10 +80,10 @@ Section Safety.
     else sshlBn_safe bs n.
 
   Definition ucshlBn_safe (bs1 bs2 : bits) n : bool :=
-    (n <= size bs2) && ushlBn_safe bs1 n.
+    ushlBn_safe (cat bs1 bs2) n.
 
   Definition scshlBn_safe (bs1 bs2 : bits) n : bool :=
-    (n <= size bs2) && sshlBn_safe bs1 n.
+    sshlBn_safe (cat bs1 bs2) n.
 
   Definition cshlBn_safe typ_a (bs1 bs2 : bits) n : bool :=
     if Typ.is_unsigned typ_a then ucshlBn_safe bs1 bs2 n
