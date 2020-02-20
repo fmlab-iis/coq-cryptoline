@@ -1698,6 +1698,15 @@ Section MakeSSA.
       by case.
   Qed.
 
+  Lemma ssa_acc2z m E SE s ss v :
+    state_equiv m s ss ->
+    typenv_equiv m E SE ->
+    SSA.acc2z SE (ssa_var m v) ss = DSL.acc2z E v s.
+  Proof.
+    move=> Hs Ht. rewrite /DSL.acc2z /DSL.bv2z. rewrite (Hs v).
+    rewrite (Ht v). reflexivity.
+  Qed.
+
   Lemma ssa_eval_atomic m s ss a :
     state_equiv m s ss ->
     SSA.eval_atomic (ssa_atomic m a) ss = DSL.eval_atomic a s.
@@ -1715,9 +1724,7 @@ Section MakeSSA.
     SSA.eval_eexp (ssa_eexp m e) ste ss = DSL.eval_eexp e te s.
   Proof.
     move=> Hseq Hteq; elim: e => /=.
-    - move=> v. rewrite (Hseq v).
-      rewrite Hteq.
-      reflexivity.
+    - move=> v. exact: (ssa_acc2z v Hseq Hteq).
     - reflexivity.
     - move=> op e IH. rewrite IH. reflexivity.
     - move=> op e1 IH1 e2 IH2. rewrite IH1 IH2. reflexivity.
@@ -2493,14 +2500,14 @@ Section MakeSSA.
     end.
 
   Definition well_formed_ssa_program (te: SSATE.env) (p : SSA.program) : bool :=
-    SSA.well_formed_program te p &&
-                            ssa_vars_unchanged_program (SSA.vars_env te) p &&
-                            ssa_single_assignment p.
+    (SSA.well_formed_program te p)
+      && ssa_vars_unchanged_program (SSA.vars_env te) p
+      && ssa_single_assignment p.
 
   Definition well_formed_ssa_spec (s : SSA.spec) : bool :=
-    SSA.well_formed_spec s &&
-                         ssa_vars_unchanged_program (SSA.vars_env (SSA.sinputs s)) (SSA.sprog s) &&
-                         ssa_single_assignment (SSA.sprog s).
+    (SSA.well_formed_spec s)
+      && ssa_vars_unchanged_program (SSA.vars_env (SSA.sinputs s)) (SSA.sprog s)
+      && ssa_single_assignment (SSA.sprog s).
 
   Ltac neq_store_upd_acc :=
     match goal with
@@ -2519,9 +2526,9 @@ Section MakeSSA.
       |- SSAStore.acc ?x ?s1 = SSAStore.acc ?x ?s2 =>
       rewrite /ssa_var_unchanged_instr /SSA.lvs_instr in Hun;
       move : (SSA.VSLemmas.not_mem_singleton1 Hun) => {Hun};
-                                                      rewrite /SSAVS.SE.eq => /negP Hneq;
-                                                                              inversion_clear Heval;
-                                                                              neq_store_upd_acc
+      rewrite /SSAVS.SE.eq => /negP Hneq;
+      inversion_clear Heval;
+      neq_store_upd_acc
     | Hun : is_true (ssa_var_unchanged_instr ?x ?i),
             Heval : SSA.eval_instr _ (?i) ?s1 ?s2
       |- SSAStore.acc ?x ?s1 = SSAStore.acc ?x ?s2 =>
@@ -2530,10 +2537,10 @@ Section MakeSSA.
       let Hneqv := fresh in
       rewrite /ssa_var_unchanged_instr /SSA.lvs_instr in Hun;
       move : (SSA.VSLemmas.not_mem_add1 Hun) => {Hun} [Hneqv Hun1];
-                                                move : (SSA.VSLemmas.not_mem_singleton1 Hun1) Hneqv => {Hun1};
-                                                                                                       rewrite /SSAVS.SE.eq => /negP Hneqw /negP Hneqv;
-                                                                                                                               inversion_clear Heval;
-                                                                                                                               neq_store_upd_acc
+      move : (SSA.VSLemmas.not_mem_singleton1 Hun1) Hneqv => {Hun1};
+      rewrite /SSAVS.SE.eq => /negP Hneqw /negP Hneqv;
+      inversion_clear Heval;
+      neq_store_upd_acc
     | Hun : is_true (ssa_var_unchanged_instr ?x ?i),
             Heval : SSA.eval_instr _ (?i) ?s1 ?s2
       |- SSAStore.acc ?x ?s1 = SSAStore.acc ?x ?s2 =>
@@ -2541,6 +2548,7 @@ Section MakeSSA.
       inversion_clear Heval;
       trivial
     end .
+
 
   Lemma acc_unchanged_instr te v i s1 s2 :
     ssa_var_unchanged_instr v i ->
@@ -2578,6 +2586,16 @@ Section MakeSSA.
     move=> Hhd Htl.
     rewrite /ssa_unchanged_program_var /= -/(ssa_unchanged_program_var tl v) Hhd Htl // .
   Qed .
+
+  Lemma ssa_var_unchanged_program_cons v hd tl :
+    ssa_unchanged_program_var (hd::tl) v =
+    (ssa_var_unchanged_instr v hd) && (ssa_unchanged_program_var tl v).
+  Proof.
+    case H: (ssa_var_unchanged_instr v hd && ssa_var_unchanged_program v tl).
+    - move/andP: H=> [H1 H2]. exact: (ssa_var_unchanged_program_cons2 H1 H2).
+    - apply/negP => Hcons. move/negP: H; apply. apply/andP.
+      exact: (ssa_var_unchanged_program_cons1 Hcons).
+  Qed.
 
   Lemma ssa_var_unchanged_program_concat1 v p1 p2 :
     ssa_unchanged_program_var (p1 ++ p2) v ->
@@ -2746,6 +2764,16 @@ Section MakeSSA.
     apply/andP; split.
     - exact: (ssa_unchanged_instr_local Hhd Hmem).
     - exact: (ssa_unchanged_program_local Htl Hmem).
+  Qed.
+
+  Lemma ssa_unchanged_program_cons vs hd tl :
+    ssa_vars_unchanged_program vs (hd::tl) =
+    (ssa_vars_unchanged_instr vs hd) && (ssa_vars_unchanged_program vs tl).
+  Proof.
+    case H: (ssa_vars_unchanged_instr vs hd && ssa_vars_unchanged_program vs tl).
+    - move/andP: H=> [H1 H2]. exact: (ssa_unchanged_program_cons2 H1 H2).
+    - apply/negP => Hcons. move/negP: H; apply. apply/andP.
+      exact: (ssa_unchanged_program_cons1 Hcons).
   Qed.
 
   Lemma ssa_unchanged_program_concat1 vs p1 p2 :
@@ -2993,6 +3021,66 @@ Section MakeSSA.
     assumption.
   Qed.
 
+
+
+  Lemma ssa_var_unchanged_eqn_instr v i :
+    ssa_var_unchanged_instr v (SSA.eqn_instr i) = ssa_var_unchanged_instr v i.
+  Proof. case: i => //=. by case. Qed.
+
+  Lemma ssa_var_unchanged_rng_instr v i :
+    ssa_var_unchanged_instr v (SSA.rng_instr i) = ssa_var_unchanged_instr v i.
+  Proof. case: i => //=. by case. Qed.
+
+  Lemma ssa_unchanged_eqn_instr_var i v :
+    ssa_unchanged_instr_var (SSA.eqn_instr i) v = ssa_unchanged_instr_var i v.
+  Proof. case: i => //=. by case. Qed.
+
+  Lemma ssa_unchanged_rng_instr_var i v :
+    ssa_unchanged_instr_var (SSA.rng_instr i) v = ssa_unchanged_instr_var i v.
+  Proof. case: i => //=. by case. Qed.
+
+  Lemma ssa_vars_unchanged_eqn_instr vs i :
+    ssa_vars_unchanged_instr vs (SSA.eqn_instr i) = ssa_vars_unchanged_instr vs i.
+  Proof. case: i => //=. by case. Qed.
+
+  Lemma ssa_vars_unchanged_rng_instr vs i :
+    ssa_vars_unchanged_instr vs (SSA.rng_instr i) = ssa_vars_unchanged_instr vs i.
+  Proof. case: i => //=. by case. Qed.
+
+  Lemma ssa_var_unchanged_eqn_program v p :
+    ssa_var_unchanged_program v (SSA.eqn_program p) = ssa_var_unchanged_program v p.
+  Proof. elim: p => [| i p IH] //=. by rewrite ssa_var_unchanged_eqn_instr IH. Qed.
+
+  Lemma ssa_var_unchanged_rng_program v p :
+    ssa_var_unchanged_program v (SSA.rng_program p) = ssa_var_unchanged_program v p.
+  Proof. elim: p => [| i p IH] //=. by rewrite ssa_var_unchanged_rng_instr IH. Qed.
+
+  Lemma ssa_unchanged_eqn_program_var p v :
+    ssa_unchanged_program_var (SSA.eqn_program p) v = ssa_unchanged_program_var p v.
+  Proof. elim: p => [| i p IH] //=. by rewrite ssa_var_unchanged_eqn_instr IH. Qed.
+
+  Lemma ssa_unchanged_rng_program_var p v :
+    ssa_unchanged_program_var (SSA.rng_program p) v = ssa_unchanged_program_var p v.
+  Proof. elim: p => [| i p IH] //=. by rewrite ssa_var_unchanged_rng_instr IH. Qed.
+
+  Lemma ssa_vars_unchanged_eqn_program vs p :
+    ssa_vars_unchanged_program vs (SSA.eqn_program p) =
+    ssa_vars_unchanged_program vs p.
+  Proof.
+    elim: p => [| i p IH] //=.
+      by rewrite !ssa_unchanged_program_cons ssa_vars_unchanged_eqn_instr IH.
+  Qed.
+
+  Lemma ssa_vars_unchanged_rng_program vs p :
+    ssa_vars_unchanged_program vs (SSA.rng_program p) =
+    ssa_vars_unchanged_program vs p.
+  Proof.
+    elim: p => [| i p IH] //=.
+      by rewrite !ssa_unchanged_program_cons ssa_vars_unchanged_rng_instr IH.
+  Qed.
+
+
+
   Lemma ssa_unchanged_instr_eval_singleton v te s1 s2 i :
     ssa_vars_unchanged_instr (SSAVS.singleton v) i ->
     SSA.eval_instr te i s1 s2 ->
@@ -3001,6 +3089,15 @@ Section MakeSSA.
     move=> Hun Hei.
     move: (ssa_unchanged_instr_singleton1 Hun) => {Hun} Hun.
     exact: (acc_unchanged_instr Hun Hei).
+  Qed.
+
+  Lemma ssa_unchanged_instr_acc2z v te s1 s2 i :
+    ssa_vars_unchanged_instr (SSAVS.singleton v) i ->
+    SSA.eval_instr te i s1 s2 ->
+    SSA.acc2z te v s1 = SSA.acc2z te v s2.
+  Proof.
+    move=> Hun Hei. rewrite /SSA.acc2z.
+    rewrite (ssa_unchanged_instr_eval_singleton Hun Hei). reflexivity.
   Qed.
 
   Lemma ssa_unchanged_instr_eval_atomic a te s1 s2 i :
@@ -3019,8 +3116,7 @@ Section MakeSSA.
     SSA.eval_eexp e te s1 = SSA.eval_eexp e te s2.
   Proof.
     elim: e => /=.
-    - move=> a Hun Hei. rewrite (ssa_unchanged_instr_eval_singleton Hun Hei).
-      reflexivity.
+    - move=> a Hun Hei. exact: (ssa_unchanged_instr_acc2z Hun Hei).
     - reflexivity.
     - move=> op e IH Hun Hei. rewrite (IH Hun Hei); reflexivity.
     - move=> op e1 IH1 e2 IH2 Hun Hei.
@@ -3055,6 +3151,15 @@ Section MakeSSA.
     exact: (acc_unchanged_program Hun Hep).
   Qed.
 
+  Lemma ssa_unchanged_program_acc2z v te s1 s2 p :
+    ssa_vars_unchanged_program (SSAVS.singleton v) p ->
+    SSA.eval_program te p s1 s2 ->
+    SSA.acc2z te v s1 = SSA.acc2z te v s2.
+  Proof.
+    move=> Hun Hep. rewrite /SSA.acc2z.
+    rewrite (ssa_unchanged_program_eval_singleton Hun Hep). reflexivity.
+  Qed.
+
   Lemma ssa_unchanged_program_eval_atomic a te s1 s2 p :
     ssa_vars_unchanged_program (SSA.vars_atomic a) p ->
     SSA.eval_program te p s1 s2 ->
@@ -3071,8 +3176,7 @@ Section MakeSSA.
     SSA.eval_eexp e te s1 = SSA.eval_eexp e te s2.
   Proof.
     elim: e => /=.
-    - move=> a Hun Hep. rewrite (ssa_unchanged_program_eval_singleton Hun Hep).
-      reflexivity.
+    - move=> a Hun Hep. exact: (ssa_unchanged_program_acc2z Hun Hep).
     - reflexivity.
     - move=> op e IH Hun Hep. rewrite (IH Hun Hep); reflexivity.
     - move=> op e1 IH1 e2 IH2 Hun Hep.

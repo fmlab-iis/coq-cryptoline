@@ -1117,6 +1117,48 @@ Module MakeDSL
 
 
 
+  (* Conversion from bits to integer *)
+
+  Definition bv2z (t : typ) (bs : bits) : Z :=
+    match t with
+    | Tuint _ => to_Zpos bs
+    | Tsint _ => to_Z bs
+    end.
+
+  Definition acc2z (E : TE.env) (v : V.t) (s : S.t) : Z :=
+    bv2z (TE.vtyp v E) (S.acc v s).
+
+  Lemma acc2z_upd_eq {E x v bs sb} :
+    x == v ->
+    acc2z E x (S.upd v bs sb) = bv2z (TE.vtyp x E) bs.
+  Proof. rewrite /acc2z => Heq. rewrite (S.acc_upd_eq Heq). reflexivity. Qed.
+
+  Lemma acc2z_upd_neq {E x v bs sb} :
+    x != v ->
+    acc2z E x (S.upd v bs sb) = acc2z E x sb.
+  Proof. rewrite /acc2z => Hne. rewrite (S.acc_upd_neq Hne). reflexivity. Qed.
+
+  Lemma acc2z_upd2_eq1 {E x vh bsh vl bsl sb} :
+    x == vh -> x != vl ->
+    acc2z E x (S.upd2 vh bsh vl bsl sb) = bv2z (TE.vtyp x E) bsh.
+  Proof.
+    rewrite /acc2z => Heq Hne. rewrite (S.acc_upd2_eq1 Heq Hne). reflexivity.
+  Qed.
+
+  Lemma acc2z_upd2_eq2 {E x vh bsh vl bsl sb} :
+    x == vl ->
+    acc2z E x (S.upd2 vh bsh vl bsl sb) = bv2z (TE.vtyp x E) bsl.
+  Proof. rewrite /acc2z => Heq. rewrite (S.acc_upd2_eq2 Heq). reflexivity. Qed.
+
+  Lemma acc2z_upd2_neq {E x vh bsh vl bsl sb} :
+    x != vh -> x != vl ->
+    acc2z E x (S.upd2 vh bsh vl bsl sb) = acc2z E x sb.
+  Proof.
+    rewrite /acc2z => Hne1 Hne2. rewrite (S.acc_upd2_neq Hne1 Hne2). reflexivity.
+  Qed.
+
+
+
   (* Semantics *)
 
   Definition eval_eunop (op : eunop) (v : Z) : Z :=
@@ -1164,10 +1206,7 @@ Module MakeDSL
 
   Fixpoint eval_eexp (e : eexp) (te : TE.env) (s : S.t) : Z :=
     match e with
-    | Evar v => match TE.vtyp v te with
-                | Tuint _ => to_Zpos (S.acc v s)
-                | Tsint _ => to_Z (S.acc v s)
-                end
+    | Evar v => acc2z te v s
     | Econst n => n
     | Eunop op e => eval_eunop op (eval_eexp e te s)
     | Ebinop op e1 e2 => eval_ebinop op (eval_eexp e1 te s) (eval_eexp e2 te s)
@@ -2397,6 +2436,43 @@ Module MakeDSL
            end
        in tac).
   Qed.
+
+
+  Lemma well_typed_bexp_split te e :
+    well_typed_bexp te e = (well_typed_ebexp te (eqn_bexp e))
+                             && (well_typed_rbexp te (rng_bexp e)).
+  Proof. reflexivity. Qed.
+
+  Lemma well_formed_bexp_split te e :
+    well_formed_bexp te e = (well_formed_ebexp te (eqn_bexp e))
+                              && (well_formed_rbexp te (rng_bexp e)).
+  Proof.
+    case: e => [e r] /=. rewrite /well_formed_bexp /=.
+    rewrite /vars_bexp /=. rewrite are_defined_union well_typed_bexp_split.
+    rewrite -Bool.andb_assoc. rewrite (Bool.andb_comm (are_defined (vars_rbexp r) te)).
+    rewrite Bool.andb_assoc. rewrite Bool.andb_assoc.
+    rewrite -(Bool.andb_assoc
+                (are_defined (vars_ebexp e) te
+                             && well_typed_ebexp te (eqn_bexp (e, r)))).
+    rewrite (Bool.andb_comm (well_typed_rbexp te (rng_bexp (e, r)))). reflexivity.
+  Qed.
+
+  Lemma well_typed_eqn_bexp te e :
+    well_typed_bexp te e -> well_typed_ebexp te (eqn_bexp e).
+  Proof. rewrite well_typed_bexp_split. by move/andP=> [? ?]. Qed.
+
+  Lemma well_typed_rng_bexp te e :
+    well_typed_bexp te e -> well_typed_rbexp te (rng_bexp e).
+  Proof. rewrite well_typed_bexp_split. by move/andP=> [? ?]. Qed.
+
+  Lemma well_formed_eqn_bexp te e :
+    well_formed_bexp te e -> well_formed_ebexp te (eqn_bexp e).
+  Proof. rewrite well_formed_bexp_split. by move/andP=> [? ?]. Qed.
+
+  Lemma well_formed_rng_bexp te e :
+    well_formed_bexp te e -> well_formed_rbexp te (rng_bexp e).
+  Proof. rewrite well_formed_bexp_split. by move/andP=> [? ?]. Qed.
+
 
   (* Non-blocking *)
 
