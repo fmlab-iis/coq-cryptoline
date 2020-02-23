@@ -2080,6 +2080,17 @@ Module MakeDSL
                  in tac).
   Qed.
 
+  Lemma submap_vtyp E1 E2 v :
+    TELemmas.submap E1 E2 ->
+    is_defined v E1 ->
+    TE.vtyp v E1 = TE.vtyp v E2.
+  Proof.
+    move=> Hsub Hdef. rewrite /is_defined in Hdef.
+    move: (TELemmas.mem_find_some Hdef) => [ty Hfind1].
+    rewrite (TE.find_some_vtyp Hfind1). move: (Hsub v ty Hfind1) => Hfind2.
+    rewrite (TE.find_some_vtyp Hfind2). reflexivity.
+  Qed.
+
   Lemma atyp_submap a te1 te2:
     TELemmas.submap te1 te2 ->
     are_defined (vars_atomic a) te1 ->
@@ -2091,6 +2102,44 @@ Module MakeDSL
     move: (Hsubmap v ty1 Hfind1) => Hfind2.
     rewrite (TE.find_some_vtyp Hfind1) (TE.find_some_vtyp Hfind2).
     reflexivity.
+  Qed.
+
+  Lemma submap_acc2z {E1 E2 v s} :
+    TELemmas.submap E1 E2 ->
+    is_defined v E1 ->
+    acc2z E1 v s = acc2z E2 v s.
+  Proof.
+    move=> Hsub Hdef. rewrite /acc2z. rewrite (submap_vtyp Hsub Hdef). reflexivity.
+  Qed.
+
+  Lemma submap_eval_eexp {E1 E2 e s} :
+    TELemmas.submap E1 E2 ->
+    are_defined (vars_eexp e) E1 ->
+    eval_eexp e E1 s = eval_eexp e E2 s.
+  Proof.
+    move=> Hsub. elim: e => //=.
+    - move=> v Hdef. move: (are_defined_singleton Hdef) => {Hdef} Hdef.
+      exact: (submap_acc2z Hsub Hdef).
+    - move=> op e IH Hdef. rewrite (IH Hdef). reflexivity.
+    - move=> op e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
+      rewrite (IH1 Hdef1) (IH2 Hdef2). reflexivity.
+  Qed.
+
+  Lemma submap_eval_ebexp {E1 E2 e s} :
+    TELemmas.submap E1 E2 ->
+    are_defined (vars_ebexp e) E1 ->
+    eval_ebexp e E1 s <-> eval_ebexp e E2 s.
+  Proof.
+    move=> Hsub. elim: e => //=.
+    - move=> e1 e2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
+      rewrite (submap_eval_eexp Hsub Hdef1) (submap_eval_eexp Hsub Hdef2). done.
+    - move=> e1 e2 em. rewrite !are_defined_union => /andP [Hdef1 /andP [Hdef2 Hdefm]].
+      rewrite (submap_eval_eexp Hsub Hdef1) (submap_eval_eexp Hsub Hdef2)
+              (submap_eval_eexp Hsub Hdefm). done.
+    - move=> e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
+      move: (IH1 Hdef1) (IH2 Hdef2) => [H1 H2] [H3 H4]. split; move => [H5 H6].
+      + exact: (conj (H1 H5) (H3 H6)).
+      + exact: (conj (H2 H5) (H4 H6)).
   Qed.
 
   Lemma well_typed_eexp_submap e te1 te2:

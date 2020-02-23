@@ -9,6 +9,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
+
 Module SSA := MakeDSL SSAVarOrder SSAVS SSAVM SSATE SSAStore.
 
 Module M2 := Map2 VS SSAVS.
@@ -2900,6 +2901,26 @@ Section MakeSSA.
     - exact: (ssa_unchanged_program_mem Hun2 Hmem).
   Qed.
 
+  Lemma ssa_unchanged_instr_union s1 s2 i :
+    ssa_vars_unchanged_instr (SSAVS.union s1 s2) i =
+    (ssa_vars_unchanged_instr s1 i && ssa_vars_unchanged_instr s2 i).
+  Proof.
+    case H: (ssa_vars_unchanged_instr s1 i && ssa_vars_unchanged_instr s2 i).
+    - move/andP: H=> [H1 H2]. exact: (ssa_unchanged_instr_union2 H1 H2).
+    - apply/negP=> Hun. move/negP: H; apply. apply/andP.
+      exact: (ssa_unchanged_instr_union1 Hun).
+  Qed.
+
+  Lemma ssa_unchanged_program_union s1 s2 p :
+    ssa_vars_unchanged_program (SSAVS.union s1 s2) p =
+    (ssa_vars_unchanged_program s1 p && ssa_vars_unchanged_program s2 p).
+  Proof.
+    case H: (ssa_vars_unchanged_program s1 p && ssa_vars_unchanged_program s2 p).
+    - move/andP: H=> [H1 H2]. exact: (ssa_unchanged_program_union2 H1 H2).
+    - apply/negP=> Hun. move/negP: H; apply. apply/andP.
+      exact: (ssa_unchanged_program_union1 Hun).
+  Qed.
+
   Lemma ssa_unchanged_instr_subset vs1 vs2 i :
     ssa_vars_unchanged_instr vs2 i ->
     SSAVS.subset vs1 vs2 ->
@@ -3013,14 +3034,9 @@ Section MakeSSA.
     ssa_vars_unchanged_program vs1 p ->
     ssa_vars_unchanged_program vs2 p.
   Proof.
-    move=> Heq H.
-    move: (ssa_unchanged_program_local H) => {H} H.
-    apply: ssa_unchanged_program_global => v Hv.
-    apply: H.
-    rewrite Heq.
-    assumption.
+    move=> Heq Hunch. apply: (ssa_unchanged_program_subset Hunch).
+    rewrite Heq. exact: SSAVS.Lemmas.subset_refl.
   Qed.
-
 
 
   Lemma ssa_var_unchanged_eqn_instr v i :
@@ -3434,6 +3450,54 @@ Section MakeSSA.
       + apply: (IH Hssa1 Hssa2). apply: (ssa_unchanged_program_subset Hun12).
         apply: SSA.VSLemmas.subset_union2. exact: SSA.VSLemmas.subset_refl.
   Qed.
+
+
+  Lemma ssa_unchanged_instr_succ_typenv_submap E i :
+    ssa_vars_unchanged_instr (SSA.vars_env E) i ->
+    SSA.TELemmas.submap E (SSA.instr_succ_typenv i E).
+  Proof.
+    (case: i => //=; intros);
+      repeat
+        (match goal with
+         | H : is_true (ssa_vars_unchanged_instr _ _) |- _ =>
+           rewrite ssa_unchanged_instr_disjoint_lvs /= in H
+         | H : is_true (SSA.VSLemmas.disjoint _ (SSAVS.singleton _)) |- _ =>
+           rewrite SSA.VSLemmas.disjoint_singleton in H
+         | H : is_true (SSA.VSLemmas.disjoint _ (SSAVS.add _ _)) |- _ =>
+           let H1 := fresh in
+           let H2 := fresh in
+           rewrite SSA.VSLemmas.disjoint_add in H; move/andP: H => [H1 H2]
+         | H : context c [SSAVS.mem _ (SSA.vars_env _)] |- _ =>
+           rewrite -SSA.vars_env_mem in H
+         | H : is_true (~~ SSATE.mem _ _) |- _ =>
+           let H1 := fresh in
+           move: (SSA.TELemmas.not_mem_find_none H) => {H} H1
+         | H : SSATE.find ?v ?E = None |-
+           SSA.TELemmas.submap ?E (SSATE.add ?v _ _) =>
+           apply: (SSA.TELemmas.submap_none_add _ _ H)
+         | |- SSA.TELemmas.submap ?E ?E =>
+           exact: SSA.TELemmas.submap_refl
+         end
+        ).
+  Qed.
+
+  Lemma ssa_unchanged_program_succ_typenv_submap E p :
+    ssa_vars_unchanged_program (SSA.vars_env E) p ->
+    ssa_single_assignment p ->
+    SSA.TELemmas.submap E (SSA.program_succ_typenv p E).
+  Proof.
+    elim: p E => [| i p IH] E Hunch Hssa /=.
+    - exact: SSA.TELemmas.submap_refl.
+    - rewrite ssa_unchanged_program_cons in Hunch. move/andP: Hunch => [Hi Hp].
+      move: (ssa_single_assignment_cons1 Hssa) => [Hssa_i Hssa_p].
+      apply: (@SSA.TELemmas.submap_trans _ E (SSA.instr_succ_typenv i E)).
+      + apply: ssa_unchanged_instr_succ_typenv_submap. exact: Hi.
+      + apply: (IH _ _ Hssa_p). move: (SSA.vars_env_instr_succ_typenv i E) => Heq.
+        move: (SSAVS.Lemmas.P.equal_sym Heq) => {Heq} Heq.
+        apply: (ssa_unchanged_program_replace Heq).
+        rewrite ssa_unchanged_program_union Hp Hssa_i. done.
+  Qed.
+
 
   Lemma well_formed_ssa_vars_unchanged_hd te hd tl :
     well_formed_ssa_program te (hd::tl) ->
