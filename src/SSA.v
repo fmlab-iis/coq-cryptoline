@@ -1590,8 +1590,8 @@ Section MakeSSA.
       rewrite -[SSATE.add (ssa_var (upd_index x m) x) ty]/(add_to_ste (upd_index x m) x ty).
       move/negP: Hyx => Hyx.
       move: z zty.
-      apply SSA.TELemmas.submap_trans with (add_to_ste (upd_index x m) y yty
-                                                       ((SSATE.add (ssa_var (upd_index x m) x) ty (TE.fold (add_to_ste m) te (SSATE.empty typ))))).
+      apply: (@SSA.TELemmas.submap_trans _ (add_to_ste (upd_index x m) y yty
+                                                       ((SSATE.add (ssa_var (upd_index x m) x) ty (TE.fold (add_to_ste m) te (SSATE.empty typ)))))).
       + move=> z zty.
         rewrite /add_to_ste.
         case Htmp: ((ssa_var (upd_index x m) y) == z).
@@ -3490,7 +3490,7 @@ Section MakeSSA.
     - exact: SSA.TELemmas.submap_refl.
     - rewrite ssa_unchanged_program_cons in Hunch. move/andP: Hunch => [Hi Hp].
       move: (ssa_single_assignment_cons1 Hssa) => [Hssa_i Hssa_p].
-      apply: (@SSA.TELemmas.submap_trans _ E (SSA.instr_succ_typenv i E)).
+      apply: (@SSA.TELemmas.submap_trans _ (SSA.instr_succ_typenv i E)).
       + apply: ssa_unchanged_instr_succ_typenv_submap. exact: Hi.
       + apply: (IH _ _ Hssa_p). move: (SSA.vars_env_instr_succ_typenv i E) => Heq.
         move: (SSAVS.Lemmas.P.equal_sym Heq) => {Heq} Heq.

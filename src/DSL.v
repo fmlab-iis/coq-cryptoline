@@ -390,7 +390,7 @@ Section DSLRaw.
   Definition eeqmod e1 e2 m := Eeqmod e1 e2 m.
   Definition eand b1 b2 := Eand b1 b2.
 
-  Definition eands es := foldl (fun res e => eand res e) Etrue es.
+  Definition eands es := foldr (fun res e => eand res e) Etrue es.
 
   Fixpoint split_eand (e : ebexp) : seq ebexp :=
     match e with
@@ -1133,28 +1133,67 @@ Module MakeDSL
     acc2z E x (S.upd v bs sb) = bv2z (TE.vtyp x E) bs.
   Proof. rewrite /acc2z => Heq. rewrite (S.acc_upd_eq Heq). reflexivity. Qed.
 
+  Lemma acc2z_Upd_eq {E x v e s1 s2} :
+    x == v ->
+    S.Upd v e s1 s2 ->
+    acc2z E x s2 = bv2z (TE.vtyp x E) e.
+  Proof. rewrite /acc2z => Heq Hupd. rewrite (S.acc_Upd_eq Heq Hupd). reflexivity. Qed.
+
   Lemma acc2z_upd_neq {E x v bs sb} :
     x != v ->
     acc2z E x (S.upd v bs sb) = acc2z E x sb.
   Proof. rewrite /acc2z => Hne. rewrite (S.acc_upd_neq Hne). reflexivity. Qed.
 
-  Lemma acc2z_upd2_eq1 {E x vh bsh vl bsl sb} :
-    x == vh -> x != vl ->
-    acc2z E x (S.upd2 vh bsh vl bsl sb) = bv2z (TE.vtyp x E) bsh.
+  Lemma acc2z_Upd_neq {E x v e s1 s2} :
+    x != v ->
+    S.Upd v e s1 s2 ->
+    acc2z E x s2 = acc2z E x s1.
+  Proof.
+    rewrite /acc2z => Hne Hupd. rewrite (S.acc_Upd_neq Hne Hupd). reflexivity.
+  Qed.
+
+  Lemma acc2z_upd2_eq1 {E x vl el vh eh s} :
+    x == vl -> x != vh ->
+    acc2z E x (S.upd2 vl el vh eh s) = bv2z (TE.vtyp x E) el.
   Proof.
     rewrite /acc2z => Heq Hne. rewrite (S.acc_upd2_eq1 Heq Hne). reflexivity.
   Qed.
 
-  Lemma acc2z_upd2_eq2 {E x vh bsh vl bsl sb} :
-    x == vl ->
-    acc2z E x (S.upd2 vh bsh vl bsl sb) = bv2z (TE.vtyp x E) bsl.
+  Lemma acc2z_Upd2_eq1 {E x vl el vh eh s1 s2} :
+    x == vl -> x != vh ->
+    S.Upd2 vl el vh eh s1 s2 ->
+    acc2z E x s2 = bv2z (TE.vtyp x E) el.
+  Proof.
+    rewrite /acc2z => Heq Hne Hupd. rewrite (S.acc_Upd2_eq1 Heq Hne Hupd). reflexivity.
+  Qed.
+
+  Lemma acc2z_upd2_eq2 {E x vl el vh eh s} :
+    x == vh ->
+    acc2z E x (S.upd2 vl el vh eh s) = bv2z (TE.vtyp x E) eh.
   Proof. rewrite /acc2z => Heq. rewrite (S.acc_upd2_eq2 Heq). reflexivity. Qed.
 
-  Lemma acc2z_upd2_neq {E x vh bsh vl bsl sb} :
-    x != vh -> x != vl ->
-    acc2z E x (S.upd2 vh bsh vl bsl sb) = acc2z E x sb.
+  Lemma acc2z_Upd2_eq2 {E x vl el vh eh s1 s2} :
+    x == vh ->
+    S.Upd2 vl el vh eh s1 s2 ->
+    acc2z E x s2 = bv2z (TE.vtyp x E) eh.
+  Proof.
+    rewrite /acc2z => Heq Hupd. rewrite (S.acc_Upd2_eq2 Heq Hupd). reflexivity.
+  Qed.
+
+  Lemma acc2z_upd2_neq {E x vl el vh eh s} :
+    x != vl -> x != vh ->
+    acc2z E x (S.upd2 vl el vh eh s) = acc2z E x s.
   Proof.
     rewrite /acc2z => Hne1 Hne2. rewrite (S.acc_upd2_neq Hne1 Hne2). reflexivity.
+  Qed.
+
+  Lemma acc2z_Upd2_neq {E x vl el vh eh s1 s2} :
+    x != vl -> x != vh ->
+    S.Upd2 vl el vh eh s1 s2 ->
+    acc2z E x s2 = acc2z E x s1.
+  Proof.
+    rewrite /acc2z => Hne1 Hne2 Hupd. rewrite (S.acc_Upd2_neq Hne1 Hne2 Hupd).
+    reflexivity.
   Qed.
 
 
@@ -1493,6 +1532,22 @@ Module MakeDSL
       + apply: IH2 => se Hin. apply: H. by rewrite mem_cat Hin orbT.
   Qed.
 
+  Lemma eval_ebexp_eands_cons E e es s :
+    eval_ebexp (eands (e::es)) E s <-> eval_ebexp e E s /\ eval_ebexp (eands es) E s.
+  Proof. done. Qed.
+
+  Lemma eval_ebexp_eands_cat E es1 es2 s :
+    eval_ebexp (eands (es1 ++ es2)) E s <->
+    (eval_ebexp (eands es1) E s) /\ (eval_ebexp (eands es2) E s).
+  Proof.
+    elim: es1 es2 => [| e1 es1 IH] es2 /=.
+    - by tauto.
+    - split.
+      + move=> [He1 H12]. move/IH: H12 => [Hes1 Hes2]. by tauto.
+      + move=> [[He1 Hes1] Hes2]. split; first assumption.
+        apply/IH. done.
+  Qed.
+
   Lemma eqn_program_succ_typenv p te :
     program_succ_typenv (eqn_program p) te = program_succ_typenv p te.
   Proof.
@@ -1717,6 +1772,13 @@ Module MakeDSL
 
   Lemma mem_vars_env v te: VS.mem v (vars_env te) = TE.mem v te.
   Proof. exact: TEKS.mem_key_set. Qed.
+
+  Lemma memenvP : forall v E, reflect (TE.mem v E) (VS.mem v (vars_env E)).
+  Proof.
+    move=> v E. case Hmem: (VS.mem v (vars_env E)).
+    - apply: ReflectT. by rewrite vars_env_mem.
+    - apply: ReflectF. move/negP: Hmem. by rewrite vars_env_mem.
+  Qed.
 
   (* Use VS.mem v (vars_env te) to determine if v is defined *)
   (*
@@ -1949,6 +2011,24 @@ Module MakeDSL
     by move=> H1 H2; rewrite H1 H2.
   Qed.
 
+  Lemma atyp_add_mem a x t E :
+    VS.mem x (vars_atomic a) -> atyp a (TE.add x t E) = t.
+  Proof.
+    case: a => /= [v Hmem | tb bs Hmem].
+    - move: (VSLemmas.mem_singleton1 Hmem) => /idP Heq. rewrite eq_sym in Heq.
+      exact: (TE.vtyp_add_eq Heq).
+    - rewrite VSLemmas.mem_empty in Hmem. discriminate.
+  Qed.
+
+  Lemma atyp_add_not_mem a x t E :
+    ~~ VS.mem x (vars_atomic a) -> atyp a (TE.add x t E) = atyp a E.
+  Proof.
+    case: a => /= [v Hmem | tb bs Hmem].
+    - move: (VSLemmas.not_mem_singleton1 Hmem) => /negP Hne. rewrite eq_sym in Hne.
+      exact: (TE.vtyp_add_neq Hne).
+    - reflexivity.
+  Qed.
+
   (* Probably useful *)
   (* TO BE confirmed: how to modify (VS.subset vs1 vs2) and (VS.Equal vs1 vs2) *)
 
@@ -1958,7 +2038,76 @@ Module MakeDSL
   Lemma are_defined_singleton v te :
     are_defined (VS.singleton v) te -> is_defined v te.
   Proof.
-    move=> Hdef. exact: (VSLemmas.for_all_singleton (are_defined_compat te) Hdef).
+    move=> Hdef. rewrite /are_defined
+                         (VSLemmas.for_all_singleton (are_defined_compat te)) in Hdef.
+    assumption.
+  Qed.
+
+  Lemma are_defined_Empty s E : VS.Empty s -> are_defined s E.
+  Proof.
+    move=> Hemp. rewrite /are_defined. apply: (VS.for_all_1 (are_defined_compat E)).
+    move=> x Hinx. move: (Hemp x) => Houtx. contradiction.
+  Qed.
+
+  Lemma are_defined_empty E : are_defined VS.empty E.
+  Proof. exact: (are_defined_Empty E VS.empty_1). Qed.
+
+  Lemma is_defined_add x y t E :
+    is_defined x (TE.add y t E) = (x == y) || (is_defined x E).
+  Proof.
+    rewrite /is_defined. rewrite TELemmas.add_b /TELemmas.eqb.
+    case: (TE.E.eq_dec y x).
+    - move/eqP => Heq. rewrite Heq eqxx. reflexivity.
+    - move/idP/negPf=> Hne. rewrite eq_sym Hne. reflexivity.
+  Qed.
+
+  Lemma is_defined_add_eq x t E : is_defined x (TE.add x t E).
+  Proof. by rewrite is_defined_add eqxx orTb. Qed.
+
+  Lemma is_defined_add_neq x y t E :
+    x != y -> is_defined x (TE.add y t E) = is_defined x E.
+  Proof. move/idP/negPf=> Hne. rewrite is_defined_add Hne orFb. reflexivity. Qed.
+
+  Lemma are_defined_addl v vs E :
+    are_defined (VS.add v vs) E = (is_defined v E) && (are_defined vs E).
+  Proof.
+    rewrite /are_defined. rewrite (VSLemmas.for_all_add (are_defined_compat E)).
+    reflexivity.
+  Qed.
+
+  Lemma are_defined_Addl v vs1 vs2 E :
+    VSLemmas.P.Add v vs1 vs2 ->
+    are_defined vs2 E = is_defined v E && are_defined vs1 E.
+  Proof.
+    exact: (VSLemmas.for_all_Add (are_defined_compat E)).
+  Qed.
+
+  Lemma are_defined_addr vs x t E : are_defined vs E -> are_defined vs (TE.add x t E).
+  Proof.
+    move/(VS.for_all_2 (are_defined_compat E)) => Hdef.
+    apply/(VS.for_all_1 (are_defined_compat _)) => y Hiny.
+    move: (Hdef y Hiny) => {Hdef} Hdef. by rewrite is_defined_add Hdef orbT.
+  Qed.
+
+  Lemma are_defined_addr_not_mem vs x t E :
+    are_defined vs (TE.add x t E) -> VS.mem x vs = false ->
+    are_defined vs E.
+  Proof.
+    move/(VS.for_all_2 (are_defined_compat _)) => Hdef Hmem.
+    apply/(VS.for_all_1 (are_defined_compat E)) => y Hiny.
+    move: (Hdef y Hiny) => {Hdef} Hdef. rewrite is_defined_add in Hdef. case/orP: Hdef.
+    - move/eqP=> Heq. rewrite Heq in Hiny. move/VSLemmas.memP: Hiny => Hmemx.
+      rewrite Hmemx in Hmem; discriminate.
+    - by apply.
+  Qed.
+
+  Lemma are_defined_add2 vs x t E :
+    are_defined vs E -> are_defined (VS.add x vs) (TE.add x t E).
+  Proof.
+    move/(VS.for_all_2 (are_defined_compat E)) => Hall.
+    rewrite are_defined_addl. rewrite is_defined_add_eq /=.
+    apply: (VS.for_all_1 (are_defined_compat _)) => y Hiny.
+    rewrite is_defined_add (Hall y Hiny) orbT. reflexivity.
   Qed.
 
   Lemma are_defined_union te vs1 vs2 :
@@ -1973,6 +2122,33 @@ Module MakeDSL
     move=> Hsub Hdef2.
     exact: (VSLemmas.for_all_subset (are_defined_compat te) Hsub Hdef2).
   Qed.
+
+  Lemma are_defined_add_env vs x t E :
+    are_defined vs (TE.add x t E) =
+    (VS.mem x vs && are_defined (VS.remove x vs) E) || (are_defined vs E).
+  Proof.
+    case H: (VS.mem x vs && are_defined (VS.remove x vs) E || are_defined vs E).
+    - case/orP: H => H.
+      + move/andP: H=> [Hmem Hdef]. move: (are_defined_add2 x t Hdef) => {Hdef} Hdef.
+        apply: (are_defined_subset _ Hdef). move/VSLemmas.memP: Hmem => Hin.
+          rewrite (VSLemmas.P.add_remove Hin). exact: VSLemmas.subset_refl.
+      + exact: (are_defined_addr _ _ H).
+    - apply/negP=> Hdef. move/negP: H; apply. case H: (are_defined vs E);
+                                                first by rewrite orbT.
+      rewrite orbF. apply/andP; split.
+      + case Hmem: (VS.mem x vs); first by trivial.
+        apply: False_ind; move/negP: H; apply.
+        exact: (are_defined_addr_not_mem Hdef Hmem).
+      + move/(VS.for_all_2 (are_defined_compat _)): Hdef => Hdef.
+        apply/(VS.for_all_1 (are_defined_compat _)) => y /VSLemmas.memP Hmemy.
+        move: (VSLemmas.mem_remove1 Hmemy) => {Hmemy} [Hneq /VSLemmas.memP Hiny].
+        move: (Hdef y Hiny) => Hdefy. move/negP: Hneq => Hneq.
+        rewrite (is_defined_add_neq _ _ Hneq) in Hdefy. assumption.
+  Qed.
+
+  Lemma is_defined_mem_vars_env E v :
+    is_defined v E = VS.mem v (vars_env E).
+  Proof. rewrite /is_defined. rewrite TEKS.mem_key_set. reflexivity. Qed.
 
   Lemma are_defined_subset_env te vs: are_defined vs te = VS.subset vs (vars_env te).
   Proof.
@@ -1999,6 +2175,27 @@ Module MakeDSL
   Proof.
     move=> Hdef1 Hsub. rewrite -are_defined_subset_env in Hsub.
     exact: (are_defined_trans Hdef1 Hsub).
+  Qed.
+
+  Lemma defmemP v E : reflect (is_defined v E) (TE.mem v E).
+  Proof.
+    case Hmem: (TE.mem v E).
+    - apply: ReflectT. exact: Hmem.
+    - apply: ReflectF. move/negP: Hmem. by apply.
+  Qed.
+
+  Lemma memdefP v E : reflect (TE.mem v E) (is_defined v E).
+  Proof.
+    case Hdef: (is_defined v E).
+    - apply: ReflectT. exact: Hdef.
+    - apply: ReflectF. move/negP: Hdef. by apply.
+  Qed.
+
+  Lemma defsubP vs E : reflect (are_defined vs E) (VS.subset vs (vars_env E)).
+  Proof.
+    case Hsub: (VS.subset vs (vars_env E)).
+    - apply: ReflectT. by rewrite are_defined_subset_env Hsub.
+    - apply: ReflectF. move/negP: Hsub. by rewrite are_defined_subset_env.
   Qed.
 
   Lemma well_formed_instr_subset_rvs_aux te i :
@@ -2102,6 +2299,29 @@ Module MakeDSL
     move: (Hsubmap v ty1 Hfind1) => Hfind2.
     rewrite (TE.find_some_vtyp Hfind1) (TE.find_some_vtyp Hfind2).
     reflexivity.
+  Qed.
+
+  Lemma submap_add_vtyp v t E1 E2 :
+    TELemmas.submap (TE.add v t E1) E2 ->
+    TE.vtyp v E2 = t.
+  Proof.
+    move=> Hsub. apply: TE.find_some_vtyp. apply: Hsub.
+    apply: TELemmas.find_add_eq. reflexivity.
+  Qed.
+
+  Lemma submap_add_atyp a v t E1 E2 :
+    TELemmas.submap (TE.add v t E1) E2 ->
+    are_defined (vars_atomic a) E1 ->
+    ~~ VS.mem v (vars_atomic a) ->
+    atyp a E1 = atyp a E2.
+  Proof.
+    case: a => /=.
+    - move=> x Hsub Hdef Hmem. move: (are_defined_singleton Hdef) => {Hdef} Hdef.
+      move: (VSLemmas.not_mem_singleton1 Hmem) => {Hmem} /negP Hne.
+      rewrite eq_sym in Hne. move: (is_defined_add_neq t E1 Hne). rewrite Hdef.
+      move=> Hdefadd. rewrite -(submap_vtyp Hsub Hdefadd).
+      rewrite (TE.vtyp_add_neq Hne). reflexivity.
+    - reflexivity.
   Qed.
 
   Lemma submap_acc2z {E1 E2 v s} :

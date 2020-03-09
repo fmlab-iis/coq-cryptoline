@@ -257,6 +257,22 @@ Module ZSSA.
       + exact: He42.
   Qed.
 
+  Lemma eval_zbexp_eands_cons e es s :
+    eval_zbexp (SSA.eands (e::es)) s <-> eval_zbexp e s /\ eval_zbexp (SSA.eands es) s.
+  Proof. done. Qed.
+
+  Lemma eval_zbexp_eands_cat es1 es2 s :
+    eval_zbexp (SSA.eands (es1 ++ es2)) s <->
+    (eval_zbexp (SSA.eands es1) s) /\ (eval_zbexp (SSA.eands es2) s).
+  Proof.
+    elim: es1 es2 => [| e1 es1 IH] es2 /=.
+    - by tauto.
+    - split.
+      + move=> [He1 H12]. move/IH: H12 => [Hes1 Hes2]. by tauto.
+      + move=> [[He1 Hes1] Hes2]. split; first assumption.
+        apply/IH. done.
+  Qed.
+
   Lemma zspec_empty vs f g :
     valid_zspec {| zsinputs := vs; zspre := f; zsprog := [::]; zspost := g |} ->
     zentails f g.
