@@ -1,6 +1,6 @@
 
 From Coq Require Import List.
-From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
+From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun prime.
 From ssrlib Require Import Var Tactics .
 From BitBlasting Require Import State QFBV.
 From Cryptoline Require Import DSL SSA SSA2ZSSA.
@@ -26,7 +26,8 @@ Definition qfbv_false := QFBV.Bfalse .
 
 Definition qfbv_var v := QFBV.Evar v .
 
-Definition qfbv_const n := QFBV.Econst (NBitsDef.from_nat n n) .
+Definition qfbv_const n :=
+  QFBV.Econst (NBitsDef.from_nat (trunc_log 2 n).+1 n) .
 
 Definition qfbv_zero w := QFBV.Econst (NBitsDef.from_nat w 0) .
 
@@ -396,7 +397,7 @@ Definition bexp_instr (te : TypEnv.SSATE.env) (i : SSA.instr) : QFBV.bexp :=
     let 'qe2 := qfbv_atomic a2 in
     let 'qer := qfbv_shl (qfbv_concat qe1 qe2) (qfbv_const n) in
     let 'qel := qfbv_low a2_size qer in
-    let 'qeh := qfbv_extr a2_size (a2_size + a1_size - 1) qer in
+    let 'qeh := qfbv_high a1_size qer in
     qfbv_conj (qfbv_eq (qfbv_var vh) qeh)
               (qfbv_eq (qfbv_var vl) (qfbv_lshr qel (qfbv_const n)))
   (* Inot (v, t, a): v = not(a), the one's complement of a, v is of type t *)
@@ -465,7 +466,7 @@ Definition bexp_of_rspec te (s : rspec) : bexp_spec :=
 Ltac rewrite_eval_exp_atomic :=
   repeat rewrite -> eval_exp_atomic in *.
 
-Lemma eval_bexp_instr te i p s1 s2 :
+Lemma eval_vars_unchanged_program_bexp_instr te i p s1 s2 :
   SSA.ssa_vars_unchanged_program (SSA.vars_instr i) p ->
   eval_program te p s1 s2 ->
   QFBV.eval_bexp (bexp_instr te i) s1 ->
@@ -547,19 +548,13 @@ Proof .
 Qed .
 
 Lemma from_nat_simple :
-  forall n, to_nat (from_nat n n) = n .
-Admitted .
-
-Lemma high_extract :
-  forall l bs,
-    high l bs = extract (size bs - l) (size bs - 1) bs .
-Admitted .
-
-Lemma SSAVS_mem_vars_env_SSATE_mem :
-  forall te v, SSAVS.mem v (vars_env te) ->
-               TypEnv.SSATE.mem v te .
-Admitted .  
-
+  forall n, to_nat (NBitsDef.from_nat (trunc_log 2 n).+1 n) == n .
+Proof .
+  move => n .
+  rewrite to_nat_from_nat_bounded; first done .
+  by apply : trunc_log_ltn .
+Qed .
+  
 Lemma conform_size_eval_atomic :
   forall te s a,
     SSAVS.subset (vars_atomic a) (vars_env te) ->
@@ -569,7 +564,8 @@ Proof .
   move => te s; case .
   - move => v /= .
     rewrite SSAVS.S.Lemmas.subset_singleton => Hmem Hcon .
-    case : (Hcon v (SSAVS_mem_vars_env_SSATE_mem Hmem)) => <- .
+    move : Hmem; rewrite -vars_env_mem => Hmem .
+    case : (Hcon v Hmem) => <- .
     done .
   - move => t b _ _ .
     rewrite /atyp /= .
@@ -579,103 +575,45 @@ Proof .
      *)
 Admitted .
 
-Lemma to_bool_is_true :
-  forall a s,
-    to_bool (eval_atomic a s) ->
-    [:: true] == eval_atomic a s .
-Admitted .
-
-Lemma not_to_bool_is_false :
-  forall a s,
-    ~~ to_bool (eval_atomic a s) ->
-    [:: false] == eval_atomic a s .
-Admitted .  
-
-Lemma adc_sext_add_high b bs0 bs1 :
-  size bs0 = size bs1 ->
-  from_bool 1 (adcB (to_bool b) bs0 bs1).1 ==
-  high 1 ((zext (size bs0) b) +# (sext 1 bs0) +# (sext 1 bs1))%bits .
-Admitted .
-
-Lemma adc_sext_add_low b bs0 bs1 :
-  size bs0 = size bs1 ->
-  (adcB (to_bool b) bs0 bs1).2 ==
-  low (size bs0) ((zext (size bs0) b) +# (sext 1 bs0) +# (sext 1 bs1))%bits .
-Admitted .
-
-  
-Lemma adc_false_sext_add_high bs0 bs1 :
-  size bs0 = size bs1 ->
-  from_bool 1 (adcB false bs0 bs1).1 ==
-  high 1 ((sext 1 bs0) +# (sext 1 bs1))%bits .
+Lemma size0 (bs : bitseq) :
+  size bs == 0 -> bs == [::] .
 Proof .
-  move => Hsize .
-  move : (adc_sext_add_high [::false] Hsize) .
-  have : (to_bool [:: false] = false) .
-  { rewrite /to_bool // . }
-  move => Hbool .
-  rewrite Hbool => {Hbool} Heq .
-  rewrite (eqP Heq) .
-Admitted .  
+  case : bs; done .
+Qed .
 
-Lemma adc_false_sext_add_low bs0 bs1 :
-  size bs0 = size bs1 ->
-  (adcB false bs0 bs1).2 ==
-  low (size bs0) ((sext 1 bs0) +# (sext 1 bs1))%bits .
+Lemma size1 (bs : bitseq) :
+  size bs == 1 -> ((bs == [:: false]) + (bs == [:: true])) .
 Proof .
-  move => Hsize .
-  move : (adc_sext_add_low [::false] Hsize) .
-  have : (to_bool [:: false] = false) .
-  { rewrite /to_bool // . }
-  move => Hbool .
-  rewrite Hbool => {Hbool} Heq .
-  rewrite (eqP Heq) .
-Admitted .  
-
-Lemma sbb_sext_sub_high b bs0 bs1 :
-  size bs0 = size bs1 ->
-  from_bool 1 (sbbB (to_bool b) bs0 bs1).1 ==
-  high 1 ((sext 1 bs0) -# (sext 1 bs1) -# (zext (size bs0) b))%bits .
-Admitted .
-
-Lemma sbb_sext_sub_low b bs0 bs1 :
-  size bs0 = size bs1 ->
-  (sbbB (to_bool b) bs0 bs1).2 ==
-  low (size bs0) ((sext 1 bs0) -# (sext 1 bs1) -# (zext (size bs0) b))%bits .
-Admitted .
-
-Lemma sbb_false_sext_sub_high bs0 bs1 :
-  size bs0 = size bs1 ->
-  from_bool 1 (sbbB false bs0 bs1).1 ==
-  high 1 ((sext 1 bs0) -# (sext 1 bs1))%bits .
+  case : bs .
+  - done .
+  - move => b bs /= .
+    rewrite eqSS => Hs0 .
+    move : (size0 Hs0) => Hbs .
+    rewrite (eqP Hbs) .
+    case : b; [right | left]; done .
+Qed .
+    
+Lemma to_bool_bit_is_true :
+  forall bs,
+    size bs == 1 ->
+    to_bool bs ->
+    [:: true] == bs .
 Proof .
-  move => Hsize .
-  move : (sbb_sext_sub_high [::false] Hsize) .
-  have : (to_bool [:: false] = false) .
-  { rewrite /to_bool // . }
-  move => Hbool .
-  rewrite Hbool => {Hbool} Heq .
-  rewrite (eqP Heq) .
-Admitted .
-  
-Lemma sbb_false_sext_sub_low bs0 bs1 :
-  size bs0 = size bs1 ->
-  (sbbB false bs0 bs1).2 ==
-  low (size bs0) ((sext 1 bs0) -# (sext 1 bs1))%bits .
-Proof .
-  move => Hsize .
-  move : (sbb_sext_sub_low [::false] Hsize) .
-  have : (to_bool [:: false] = false) .
-  { rewrite /to_bool // . }
-  move => Hbool .
-  rewrite Hbool => {Hbool} Heq .
-  rewrite (eqP Heq) .
-Admitted .
+  move => bs Hs1 .
+  move : (size1 Hs1) .
+  elim => Hbs; rewrite (eqP Hbs); done .
+Qed .    
 
-Lemma mul_sext bs0 bs1 :
-  full_mul bs0 bs1 ==
-  ((sext (size bs0) bs0) *# (sext (size bs0) bs1))%bits .
-Admitted .
+Lemma not_to_bool_bit_is_false :
+  forall bs,
+    size bs == 1 ->
+    ~~ to_bool bs ->
+    [:: false] == bs .
+Proof .
+  move => bs Hs1 .
+  move : (size1 Hs1) .
+  elim => Hbs; rewrite (eqP Hbs); done .
+Qed .    
 
 Lemma vtyp_var_add_eq te v tv :
   TypEnv.SSATE.vtyp v (TypEnv.SSATE.add v tv te) = tv .
@@ -1006,6 +944,16 @@ Proof .
   rewrite atyp_well_defined_unchanged // .
 Qed .
 
+Ltac decompose_ssa_vars_unchanged_instr :=
+  match goal with
+  | Hun : is_true (ssa_vars_unchanged_instr (SSAVS.union _ _) _)
+    |- _ =>
+    let H0 := fresh in
+    let H1 := fresh in
+    move : (ssa_unchanged_instr_union1 Hun) => {Hun} [H0 H1];
+      try decompose_ssa_vars_unchanged_instr
+  end .
+
 Ltac well_defined_to_vs_subset :=
   match goal with
   | Hdef : is_true (well_defined_instr _ ?i) |- _ =>
@@ -1038,13 +986,6 @@ Ltac well_defined_to_vs_subset :=
     let Hprev := fresh in
     let Hsub := fresh in
     move : Hdef => /andP [Hprev Hsub]
-(*
-  | Hdef : is_true (_ && SSAVS.subset _ _ && SSAVS.subset _ _) |- _ =>
-    let Hneq := fresh in
-    let Hsub1 := fresh in
-    let Hsub2 := fresh in
-    move : Hdef => /andP [/andP [Hneq Hsub1] Hsub2]
-*)
   end .
 
 Ltac eval_exp_exp_atomic_to_pred_state :=
@@ -1072,7 +1013,582 @@ Ltac qfbv_store_acc :=
     rewrite (SSAStore.acc_Upd2_eq2 _ HUpd) //
   end .
 
+Lemma bexp_instr_eval_Imov te v a s1 s2 :
+  well_formed_instr te (Imov v a) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Imov v a) ->
+  eval_instr te (Imov v a) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Imov v a) te) (Imov v a)) s2 .
+Proof .
+  move => /andP [Hdef _] _ Hun Hinst /= .
+  well_defined_to_vs_subset .
+  eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst .
+  qfbv_store_acc .
+Qed .
 
+Lemma bexp_instr_eval_Ishl te t a n s1 s2 :
+  well_formed_instr te (Ishl t a n) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Ishl t a n) ->
+  eval_instr te (Ishl t a n) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Ishl t a n) te) (Ishl t a n)) s2 .
+Proof .
+  move => /andP [Hdef _] _ Hun Hinst /= .
+  well_defined_to_vs_subset .
+  eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst .
+  qfbv_store_acc .
+  move : (from_nat_simple n) => /= Hn .
+  rewrite (eqP Hn) // .
+Qed .
+
+Lemma bexp_instr_eval_Icshl te t t0 a a0 n s1 s2 :
+  well_formed_instr te (Icshl t t0 a a0 n) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Icshl t t0 a a0 n) ->
+  eval_instr te (Icshl t t0 a a0 n) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Icshl t t0 a a0 n) te)
+                (Icshl t t0 a a0 n)) s2 .
+Proof .
+  move => /andP [Hdef Hty] Hcon Hun Hinst /= .
+  rewrite !(asize_well_defined_unchanged Hdef Hun);
+    [ idtac
+    | by rewrite SSAVS.Lemmas.union_subset_2
+    | by rewrite SSAVS.Lemmas.union_subset_1 ] .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst .
+  repeat qfbv_store_acc .
+  move : (from_nat_simple n) => /= Hn .
+  rewrite !(eqP Hn) .
+  rewrite !(eqP (conform_size_eval_atomic H0 Hcon))
+          !(eqP (conform_size_eval_atomic H Hcon)) .
+  apply /andP; split; done .
+Qed .
+
+Lemma bexp_instr_eval_Inondet te t t0 s1 s2 :
+  well_formed_instr te (Inondet t t0) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Inondet t t0) ->
+  eval_instr te (Inondet t t0) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Inondet t t0) te)
+                (Inondet t t0)) s2 .
+Proof .
+  done .
+Qed .  
+
+Lemma bexp_instr_eval_Icmov te t a a0 a1 s1 s2 :
+  well_formed_instr te (Icmov t a a0 a1) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Icmov t a a0 a1) ->
+  eval_instr te (Icmov t a a0 a1) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Icmov t a a0 a1) te)
+                (Icmov t a a0 a1)) s2 .
+Proof . 
+  move => /andP [Hdef Hty ] Hcon Hun Hinst /= .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  rewrite /joinlsb /= .
+  move : Hty => /andP [ Htyc _ ] .
+  move : (conform_size_eval_atomic H3 Hcon) .
+  rewrite (eqP Htyc) /= => Hszc .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+  + rewrite (to_bool_bit_is_true Hszc H1) // .
+  + move : (not_to_bool_bit_is_false Hszc H1) .
+    case => /eqP <- // .
+Qed .
+
+Lemma bexp_instr_eval_Inop te s1 s2 :
+  well_formed_instr te Inop ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) Inop ->
+  eval_instr te Inop s1 s2 ->
+  QFBV.eval_bexp (bexp_instr (instr_succ_typenv Inop te) Inop) s2 .
+Proof .
+  done .
+Qed .
+
+Lemma bexp_instr_eval_Inot te t t0 a s1 s2 :
+  well_formed_instr te (Inot t t0 a) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Inot t t0 a) ->
+  eval_instr te (Inot t t0 a) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Inot t t0 a) te) (Inot t t0 a)) s2 .
+Proof .
+  move => /andP [Hdef _] _ Hun Hinst /= .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+Qed .
+
+Lemma bexp_instr_eval_Iadd te t a a0 s1 s2 :
+  well_formed_instr te (Iadd t a a0) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Iadd t a a0) ->
+  eval_instr te (Iadd t a a0) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Iadd t a a0) te)
+                (Iadd t a a0)) s2 .
+Proof .
+  move => /andP [Hdef _] _ Hun Hinst /= .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+Qed .
+
+Lemma bexp_instr_eval_Iadds te t t0 a a0 s1 s2 :
+  well_formed_instr te (Iadds t t0 a a0) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Iadds t t0 a a0) ->
+  eval_instr te (Iadds t t0 a a0) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Iadds t t0 a a0) te)
+                (Iadds t t0 a a0)) s2 .
+Proof .
+  move => /andP [Hdef Hty] Hcon Hun Hinst /= .
+  rewrite !(asize_well_defined_unchanged Hdef Hun);
+    [ idtac
+    | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+  rewrite /carry_addB .
+  rewrite /well_typed_instr in Hty .
+  move : (size_eval_atomic_same Hcon H H0 (eqP Hty)) => Hsize .
+  rewrite (adc_false_sext_add_high Hsize) /= .
+  rewrite {1}/addB .
+  rewrite (eqP (adc_false_sext_add_low Hsize)) .
+  move /negP : H3; rewrite eq_sym; move /negP => H3 .
+  rewrite (size_eval_atomic_asize H Hcon) // .
+Qed .
+
+Lemma bexp_instr_eval_Iadc te t a a0 a1 s1 s2 :
+  well_formed_instr te (Iadc t a a0 a1) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Iadc t a a0 a1) ->
+  eval_instr te (Iadc t a a0 a1) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Iadc t a a0 a1) te)
+                (Iadc t a a0 a1)) s2 .
+Proof .
+  move => /andP [Hdef Hty] Hcon Hun Hinst /= .
+  rewrite !(asize_well_defined_unchanged Hdef Hun);
+    [ idtac
+    | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+  rewrite /well_typed_instr in Hty .
+  move : Hty => /andP [Hty _] .
+  move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
+  rewrite (eqP (adc_sext_add_low (eval_atomic a1 s1) Hsize)) .
+  rewrite (size_eval_atomic_asize H3 Hcon) // .
+Qed .
+
+Lemma bexp_instr_eval_Iadcs te t t0 a a0 a1 s1 s2 :
+  well_formed_instr te (Iadcs t t0 a a0 a1) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Iadcs t t0 a a0 a1) ->
+  eval_instr te (Iadcs t t0 a a0 a1) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Iadcs t t0 a a0 a1) te)
+                (Iadcs t t0 a a0 a1)) s2 .
+Proof .
+  move => /andP [Hdef Hty] Hcon Hun Hinst /= .
+  rewrite !(asize_well_defined_unchanged Hdef Hun) ;
+    [ idtac
+    | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+  rewrite /well_typed_instr in Hty .
+  move : Hty => /andP [Hty _] .
+  move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => Hsize .
+  rewrite (eqP (adc_sext_add_high (eval_atomic a1 s1) Hsize)) .
+  rewrite (eqP (adc_sext_add_low (eval_atomic a1 s1) Hsize)) .
+  rewrite (size_eval_atomic_asize _ Hcon) // .
+  apply /andP; split; done .
+Qed .
+
+Lemma bexp_instr_eval_Isub te t a a0 s1 s2 :
+  well_formed_instr te (Isub t a a0) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Isub t a a0) ->
+  eval_instr te (Isub t a a0) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Isub t a a0) te)
+                (Isub t a a0)) s2 .
+Proof .
+  move => /andP [Hdef _] Hcon Hun Hinst /= .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+Qed .
+
+Lemma bexp_instr_eval_Isubc te t t0 a a0 s1 s2 :
+  well_formed_instr te (Isubc t t0 a a0) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Isubc t t0 a a0) ->
+  eval_instr te (Isubc t t0 a a0) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Isubc t t0 a a0) te)
+                (Isubc t t0 a a0)) s2 .
+Proof .
+  move => /andP [Hdef Hty] Hcon Hun Hinst /= .
+  rewrite !(asize_well_defined_unchanged Hdef Hun) ;
+    [ idtac
+    | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+  rewrite /carry_addB .
+  rewrite /well_typed_instr in Hty .
+  move : (size_eval_atomic_same Hcon H H0 (eqP Hty)) => Hsize .
+  rewrite (size_neg_same (eval_atomic a0 s1)) in Hsize .
+  rewrite (eqP (adc_false_sext_add_high Hsize)) .
+  rewrite {3}/addB .
+  rewrite (eqP (adc_false_sext_add_low Hsize)) .
+  rewrite (size_eval_atomic_asize H Hcon) /= .
+  apply /andP; split; done .
+Qed .
+
+Lemma bexp_instr_eval_Isubb te t t0 a a0 s1 s2 :
+  well_formed_instr te (Isubb t t0 a a0) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Isubb t t0 a a0) ->
+  eval_instr te (Isubb t t0 a a0) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Isubb t t0 a a0) te)
+                (Isubb t t0 a a0)) s2 .
+Proof .
+  move => /andP [Hdef Hty] Hcon Hun Hinst /= .
+  rewrite !(asize_well_defined_unchanged Hdef Hun) ;
+    [ idtac
+    | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+  rewrite /borrow_subB .
+  rewrite /well_typed_instr in Hty .
+  move : (size_eval_atomic_same Hcon H H0 (eqP Hty)) => Hsize .
+  rewrite (sbb_false_sext_sub_high Hsize) /= .
+  rewrite /subB .
+  rewrite (eqP (sbb_false_sext_sub_low Hsize)) .
+  rewrite (size_eval_atomic_asize _ Hcon) // .
+Qed .
+  
+Lemma bexp_instr_eval_Isbc te t a a0 a1 s1 s2 :
+  well_formed_instr te (Isbc t a a0 a1) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Isbc t a a0 a1) ->
+  eval_instr te (Isbc t a a0 a1) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Isbc t a a0 a1) te)
+                (Isbc t a a0 a1)) s2 .
+Proof .
+  move => /andP [Hdef Hty] Hcon Hun Hinst /= .
+  rewrite !(asize_well_defined_unchanged Hdef Hun);
+    [ idtac
+    | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+  move : Hty; rewrite /well_typed_instr => /andP [Hty _] .
+  move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
+  rewrite (size_inv_same (eval_atomic a0 s1)) in Hsize .
+  rewrite (eqP (adc_sext_add_low (eval_atomic a1 s1) Hsize)) .
+  rewrite (size_eval_atomic_asize _ Hcon) // .
+Qed .
+
+Lemma bexp_instr_eval_Isbcs te t t0 a a0 a1 s1 s2 :
+  well_formed_instr te (Isbcs t t0 a a0 a1) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Isbcs t t0 a a0 a1) ->
+  eval_instr te (Isbcs t t0 a a0 a1) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Isbcs t t0 a a0 a1) te)
+                (Isbcs t t0 a a0 a1)) s2 .
+Proof .
+  move => /andP [Hdef Hty] Hcon Hun Hinst /= .
+  rewrite !(asize_well_defined_unchanged Hdef Hun);
+    [ idtac
+    | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+  move : Hty .
+  rewrite /well_typed_instr => /andP [Hty _] .
+  move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => Hsize .
+  rewrite (size_inv_same (eval_atomic a0 s1)) in Hsize .
+  rewrite (eqP (adc_sext_add_high (eval_atomic a1 s1) Hsize)) .
+  rewrite (eqP (adc_sext_add_low (eval_atomic a1 s1) Hsize)) .
+  rewrite !(size_eval_atomic_asize H0 Hcon) /= .
+  apply /andP; split; done .
+Qed .
+
+Lemma bexp_instr_eval_Isbb te t a a0 a1 s1 s2 :
+  well_formed_instr te (Isbb t a a0 a1) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Isbb t a a0 a1) ->
+  eval_instr te (Isbb t a a0 a1) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Isbb t a a0 a1) te)
+                (Isbb t a a0 a1)) s2 .
+Proof .
+  move => /andP [Hdef Hty] Hcon Hun Hinst /= .
+  rewrite !(asize_well_defined_unchanged Hdef Hun);
+    [ idtac
+    | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+  move : Hty .
+  rewrite /well_typed_instr => /andP [Hty _] .
+  move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
+  rewrite (eqP (sbb_sext_sub_low (eval_atomic a1 s1) Hsize)) .
+  rewrite !(size_eval_atomic_asize H3 Hcon) // .
+Qed .
+
+Lemma bexp_instr_eval_Isbbs te t t0 a a0 a1 s1 s2 :
+  well_formed_instr te (Isbbs t t0 a a0 a1) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Isbbs t t0 a a0 a1) ->
+  eval_instr te (Isbbs t t0 a a0 a1) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Isbbs t t0 a a0 a1) te)
+                (Isbbs t t0 a a0 a1)) s2 .
+Proof .
+  move => /andP [Hdef Hty] Hcon Hun Hinst /= .
+  rewrite !(asize_well_defined_unchanged Hdef Hun);
+    [ idtac
+    | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+  move : Hty .
+  rewrite /well_typed_instr => /andP [Hty _] .
+  move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => Hsize .
+  rewrite (eqP (sbb_sext_sub_high (eval_atomic a1 s1) Hsize)) .
+  rewrite (eqP (sbb_sext_sub_low (eval_atomic a1 s1) Hsize)) .
+  rewrite !(size_eval_atomic_asize H0 Hcon) .
+  apply /andP; split; done .
+Qed .
+
+Lemma bexp_instr_eval_Imul te t a a0 s1 s2 :
+  well_formed_instr te (Imul t a a0) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Imul t a a0) ->
+  eval_instr te (Imul t a a0) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Imul t a a0) te)
+                (Imul t a a0)) s2 .
+Proof .
+  move => /andP [Hdef _] Hcon Hun Hinst /= .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+Qed .
+
+Lemma bexp_instr_eval_Imull te t t0 a a0 s1 s2 :
+  well_formed_instr te (Imull t t0 a a0) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Imull t t0 a a0) ->
+  eval_instr te (Imull t t0 a a0) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Imull t t0 a a0) te)
+                (Imull t t0 a a0)) s2 .
+Proof .
+  move => /andP [Hdef _] Hcon Hun Hinst /= .
+  rewrite !(asize_well_defined_unchanged Hdef Hun);
+    [ idtac
+    | rewrite SSAVS.Lemmas.union_subset_2 //
+    | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+  rewrite (eqP (mul_sext (eval_atomic a s1) (eval_atomic a0 s1))) .
+  rewrite (size_eval_atomic_asize H Hcon)
+          (size_eval_atomic_asize H0 Hcon) /= .
+  apply /andP; split; done .
+Qed .
+
+Lemma bexp_instr_eval_Imulj te t a a0 s1 s2 :
+  well_formed_instr te (Imulj t a a0) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Imulj t a a0) ->
+  eval_instr te (Imulj t a a0) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Imulj t a a0) te)
+                (Imulj t a a0)) s2 .
+Proof .
+  move => /andP [Hdef _] Hcon Hun Hinst /= .
+  rewrite !(asize_well_defined_unchanged Hdef Hun);
+    [ idtac
+    | rewrite SSAVS.Lemmas.union_subset_1 // ] .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+  rewrite (eqP (mul_sext (eval_atomic a s1) (eval_atomic a0 s1))) .
+  rewrite (size_eval_atomic_asize H0 Hcon) // .
+Qed .
+
+Lemma bexp_instr_eval_Isplit te t t0 a n s1 s2 :
+  well_formed_instr te (Isplit t t0 a n) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Isplit t t0 a n) ->
+  eval_instr te (Isplit t t0 a n) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Isplit t t0 a n) te)
+                (Isplit t t0 a n)) s2 .
+Proof .
+  move => /andP [Hdef _] Hcon Hun Hinst /= .
+  rewrite !(asize_well_defined_unchanged Hdef Hun);
+    [ idtac
+    | by rewrite SSAVS.Lemmas.subset_refl ] .
+  rewrite !(atyp_well_defined_unchanged Hdef Hun);
+    [ idtac
+    | by rewrite SSAVS.Lemmas.subset_refl ] .
+  repeat well_defined_to_vs_subset .
+  inversion Hinst => {H H1 H2 H3 H4 H5};
+    [ rewrite H6 /= | rewrite -Typ.not_signed_is_unsigned H6 /= ];
+    repeat eval_exp_exp_atomic_to_pred_state;
+    repeat qfbv_store_acc;
+    move : (from_nat_simple n) => /= /eqP Hszlo;
+    move : (from_nat_simple (asize a te - n)) => /= /eqP Hszhi;
+    rewrite !Hszlo !Hszhi;
+    rewrite !(size_eval_atomic_asize Hdef Hcon);
+    apply /andP; split; done .
+Qed .
+  
+Lemma bexp_instr_eval_Iand te t t0 a a0 s1 s2 :
+  well_formed_instr te (Iand t t0 a a0) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Iand t t0 a a0) ->
+  eval_instr te (Iand t t0 a a0) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Iand t t0 a a0) te)
+                (Iand t t0 a a0)) s2 .
+Proof .
+  move => /andP [Hdef _] Hcon Hun Hinst /= .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+Qed .
+
+Lemma bexp_instr_eval_Ior te t t0 a a0 s1 s2 :
+  well_formed_instr te (Ior t t0 a a0) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Ior t t0 a a0) ->
+  eval_instr te (Ior t t0 a a0) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Ior t t0 a a0) te)
+                (Ior t t0 a a0)) s2 .
+Proof .
+  move => /andP [Hdef _] Hcon Hun Hinst /= .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+Qed .
+
+Lemma bexp_instr_eval_Ixor te t t0 a a0 s1 s2 :
+  well_formed_instr te (Ixor t t0 a a0) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Ixor t t0 a a0) ->
+  eval_instr te (Ixor t t0 a a0) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Ixor t t0 a a0) te)
+                (Ixor t t0 a a0)) s2 .
+Proof .
+  move => /andP [Hdef _] Hcon Hun Hinst /= .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+Qed .
+  
+Lemma bexp_instr_eval_Icast te t t0 a s1 s2 :
+  well_formed_instr te (Icast t t0 a) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Icast t t0 a) ->
+  eval_instr te (Icast t t0 a) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Icast t t0 a) te)
+                (Icast t t0 a)) s2 .
+Proof .
+  move => /andP [Hdef _] Hcon Hun Hinst /= .
+  rewrite !(atyp_well_defined_unchanged Hdef Hun);
+    [ idtac
+    | rewrite SSAVS.Lemmas.subset_refl // ] .
+  repeat well_defined_to_vs_subset .
+  rewrite !eval_exp_if .
+  rewrite /qfbv_low /= .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+  rewrite /Typ.tcast /ucastB /scastB /=
+          !(size_eval_atomic_asize Hdef Hcon) !/asize .
+  case (atyp a te) => // .
+Qed .
+
+Lemma bexp_instr_eval_Ivpc te t t0 a s1 s2 :
+  well_formed_instr te (Ivpc t t0 a) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Ivpc t t0 a) ->
+  eval_instr te (Ivpc t t0 a) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Ivpc t t0 a) te)
+                (Ivpc t t0 a)) s2 .
+Proof .
+  move => /andP [Hdef _] Hcon Hun Hinst /= .
+  rewrite !(atyp_well_defined_unchanged Hdef Hun);
+    [ idtac
+    | rewrite SSAVS.Lemmas.subset_refl // ] .
+  repeat well_defined_to_vs_subset .
+  rewrite !eval_exp_if .
+  rewrite /qfbv_low /= .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+  rewrite /Typ.tcast /ucastB /scastB /=
+          !(size_eval_atomic_asize Hdef Hcon) !/asize .
+  case (atyp a te) => // .
+Qed .
+  
+Lemma bexp_instr_eval_Ijoin te t a a0 s1 s2 :
+  well_formed_instr te (Ijoin t a a0) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Ijoin t a a0) ->
+  eval_instr te (Ijoin t a a0) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Ijoin t a a0) te)
+                (Ijoin t a a0)) s2 .
+Proof .
+  move => /andP [Hdef _] Hcon Hun Hinst /= .
+  repeat well_defined_to_vs_subset .
+  repeat eval_exp_exp_atomic_to_pred_state .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+Qed .
+
+Lemma bexp_instr_eval_Iassume te b s1 s2 :
+  well_formed_instr te (Iassume b) ->
+  SSAStore.conform s1 te ->
+  ssa_vars_unchanged_instr (vars_env te) (Iassume b) ->
+  eval_instr te (Iassume b) s1 s2 ->
+  QFBV.eval_bexp
+    (bexp_instr (instr_succ_typenv (Iassume b) te)
+                (Iassume b)) s2 .
+Proof .
+  move => /andP [Hdef _] Hcon Hun Hinst .
+  repeat well_defined_to_vs_subset .
+  inversion_clear Hinst; repeat qfbv_store_acc .
+  case H; case b => /= ebexp rbexp _ Hrbexp .
+  case (eval_bexp_rbexp rbexp s2) => _ Hqfbv .
+  apply : Hqfbv => // .
+Qed .
 
 Lemma bexp_instr_eval te i s1 s2 :
   well_formed_instr te i ->
@@ -1081,294 +1597,36 @@ Lemma bexp_instr_eval te i s1 s2 :
   eval_instr te i s1 s2 ->
   QFBV.eval_bexp (bexp_instr (instr_succ_typenv i te) i) s2 .
 Proof .
-  case: i => /= .
-  - (* Imov *)
-    move => v a /andP [Hdef _] _ Hun Hinst .
-    well_defined_to_vs_subset .
-    eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst .
-    qfbv_store_acc .
-  - (* Ishl *)
-    move => v a n /andP [Hdef _] _ Hun Hinst .
-    well_defined_to_vs_subset .
-    eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst .
-    qfbv_store_acc .
-    rewrite from_nat_simple // .
-  - (* Icshl *)
-    move => vh vl ah al n /andP [Hdef Hty] Hcon Hun Hinst .
-    rewrite !(asize_well_defined_unchanged Hdef Hun);
-      [ idtac
-      | rewrite SSAVS.Lemmas.union_subset_1 //
-      | rewrite SSAVS.Lemmas.union_subset_2 // ] .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst .
-    repeat qfbv_store_acc .
-    rewrite from_nat_simple high_extract .
-    rewrite !size_shlB !size_cat !addnK .
-    rewrite !(eqP (conform_size_eval_atomic H0 Hcon))
-            !(eqP (conform_size_eval_atomic H Hcon)) /= .
-    apply /andP; split; done .
-  - (* Inondet *)
-    done .
-  - (* Icmov *)
-    move => v c a0 a1 /andP [Hdef Hty ] Hcon Hun Hinst .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    rewrite /joinlsb /= .
-    move : Hty => /andP [ Htyc _ ] .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-    + rewrite (to_bool_is_true H1) // .
-    + move : (not_to_bool_is_false H1) .
-      case => /eqP <- // .
-  - (* Inop *)
-    done .
-  - (* Inot *)
-    move => v t a /andP [Hdef _] _ Hun Hinst .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-  - (* Iadd *)
-    move => v a0 a1 /andP [Hdef _] _ Hun Hinst .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-  - (* Iadds *)
-    move => c v a0 a1 /andP [Hdef Hty] Hcon Hun Hinst .
-    rewrite !(asize_well_defined_unchanged Hdef Hun);
-      [ idtac
-      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-    rewrite /carry_addB .
-    rewrite /well_typed_instr in Hty .
-    move : (size_eval_atomic_same Hcon H H0 (eqP Hty)) => Hsize .
-    rewrite (adc_false_sext_add_high Hsize) /= .
-    rewrite {1}/addB .
-    rewrite (eqP (adc_false_sext_add_low Hsize)) .
-    move /negP : H3; rewrite eq_sym; move /negP => H3 .
-    rewrite (size_eval_atomic_asize H Hcon) // .
-  - (* Iadc *)
-    move => v a0 a1 c /andP [Hdef Hty] Hcon Hun Hinst .
-    rewrite !(asize_well_defined_unchanged Hdef Hun);
-      [ idtac
-      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-    rewrite /well_typed_instr in Hty .
-    move : Hty => /andP [Hty _] .
-    move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
-    rewrite (eqP (adc_sext_add_low (eval_atomic c s1) Hsize)) .
-    rewrite (size_eval_atomic_asize H3 Hcon) // .
-  - (* Iadcs *)
-    move => c v a0 a1 ac /andP [Hdef Hty] Hcon Hun Hinst .
-    rewrite !(asize_well_defined_unchanged Hdef Hun) ;
-      [ idtac
-      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-    rewrite /well_typed_instr in Hty .
-    move : Hty => /andP [Hty _] .
-    move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => Hsize .
-    rewrite (eqP (adc_sext_add_high (eval_atomic ac s1) Hsize)) .
-    rewrite (eqP (adc_sext_add_low (eval_atomic ac s1) Hsize)) .
-    rewrite (size_eval_atomic_asize _ Hcon) // .
-    apply /andP; split; done .
-  - (* Isub *)
-    move => v a0 a1 /andP [Hdef _] Hcon Hun Hinst .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-  - (* Isubc *)
-    move => c v a0 a1 /andP [Hdef Hty] Hcon Hun Hinst .
-    rewrite !(asize_well_defined_unchanged Hdef Hun) ;
-      [ idtac
-      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-    rewrite /carry_addB .
-    rewrite /well_typed_instr in Hty .
-    move : (size_eval_atomic_same Hcon H H0 (eqP Hty)) => Hsize .
-    rewrite (size_neg_same (eval_atomic a1 s1)) in Hsize .
-    rewrite (eqP (adc_false_sext_add_high Hsize)) .
-    rewrite {3}/addB .
-    rewrite (eqP (adc_false_sext_add_low Hsize)) .
-    rewrite (size_eval_atomic_asize H Hcon) /= .
-    apply /andP; split; done .
-  - (* Isubb *)
-    move => c v a0 a1 /andP [Hdef Hty] Hcon Hun Hinst .
-    rewrite !(asize_well_defined_unchanged Hdef Hun) ;
-      [ idtac
-      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-    rewrite /borrow_subB .
-    rewrite /well_typed_instr in Hty .
-    move : (size_eval_atomic_same Hcon H H0 (eqP Hty)) => Hsize .
-    rewrite (sbb_false_sext_sub_high Hsize) /= .
-    rewrite /subB .
-    rewrite (eqP (sbb_false_sext_sub_low Hsize)) .
-    rewrite (size_eval_atomic_asize _ Hcon) // .
-  - (* Isbc *)
-    move => v a0 a1 ac /andP [Hdef Hty] Hcon Hun Hinst .
-    rewrite !(asize_well_defined_unchanged Hdef Hun);
-      [ idtac
-      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-    move : Hty; rewrite /well_typed_instr => /andP [Hty _] .
-    move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
-    rewrite (size_inv_same (eval_atomic a1 s1)) in Hsize .
-    rewrite (eqP (adc_sext_add_low (eval_atomic ac s1) Hsize)) .
-    rewrite (size_eval_atomic_asize _ Hcon) // .
-  - (* Isbcs *)
-    move => c v a0 a1 ac /andP [Hdef Hty] Hcon Hun Hinst .
-    rewrite !(asize_well_defined_unchanged Hdef Hun);
-      [ idtac
-      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-    move : Hty .
-    rewrite /well_typed_instr => /andP [Hty _] .
-    move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => Hsize .
-    rewrite (size_inv_same (eval_atomic a1 s1)) in Hsize .
-    rewrite (eqP (adc_sext_add_high (eval_atomic ac s1) Hsize)) .
-    rewrite (eqP (adc_sext_add_low (eval_atomic ac s1) Hsize)) .
-    rewrite !(size_eval_atomic_asize H0 Hcon) /= .
-    apply /andP; split; done .
-  - (* Isbb *)
-    move => v a0 a1 ac /andP [Hdef Hty] Hcon Hun Hinst .
-    rewrite !(asize_well_defined_unchanged Hdef Hun);
-      [ idtac
-      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-    move : Hty .
-    rewrite /well_typed_instr => /andP [Hty _] .
-    move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
-    rewrite (eqP (sbb_sext_sub_low (eval_atomic ac s1) Hsize)) .
-    rewrite !(size_eval_atomic_asize H3 Hcon) // .
-  - (* Isbbs *)
-    move => c v a0 a1 ac /andP [Hdef Hty] Hcon Hun Hinst .
-    rewrite !(asize_well_defined_unchanged Hdef Hun);
-      [ idtac
-      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-    move : Hty .
-    rewrite /well_typed_instr => /andP [Hty _] .
-    move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => Hsize .
-    rewrite (eqP (sbb_sext_sub_high (eval_atomic ac s1) Hsize)) .
-    rewrite (eqP (sbb_sext_sub_low (eval_atomic ac s1) Hsize)) .
-    rewrite !(size_eval_atomic_asize H0 Hcon) .
-    apply /andP; split; done .
-  - (* Imul *)
-    move => v a0 a1 /andP [Hdef _] Hcon Hun Hinst .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-  - (* Imull *)
-    move => vh vl a0 a1 /andP [Hdef _] Hcon Hun Hinst .
-    rewrite !(asize_well_defined_unchanged Hdef Hun);
-      [ idtac
-      | rewrite SSAVS.Lemmas.union_subset_2 //
-      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-    rewrite (eqP (mul_sext (eval_atomic a0 s1) (eval_atomic a1 s1))) .
-    rewrite (size_eval_atomic_asize H Hcon)
-            (size_eval_atomic_asize H0 Hcon) /= .
-    apply /andP; split; done .
-  - (* Imulj *)
-    move => v a0 a1 /andP [Hdef _] Hcon Hun Hinst .
-    rewrite !(asize_well_defined_unchanged Hdef Hun);
-      [ idtac
-      | rewrite SSAVS.Lemmas.union_subset_1 // ] .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-    rewrite (eqP (mul_sext (eval_atomic a0 s1) (eval_atomic a1 s1))) .
-    rewrite (size_eval_atomic_asize H0 Hcon) // .
-  - (* Isplit *)
-    move => vh vl a n /andP [Hdef _] Hcon Hun Hinst .
-    rewrite !(asize_well_defined_unchanged Hdef Hun);
-      [ idtac
-      | by rewrite SSAVS.Lemmas.subset_refl ] .
-    rewrite !(atyp_well_defined_unchanged Hdef Hun);
-      [ idtac
-      | by rewrite SSAVS.Lemmas.subset_refl ] .
-    repeat well_defined_to_vs_subset .
-    inversion Hinst => {H H1 H2 H3 H4 H5};
-    [ rewrite H6 /= | rewrite -Typ.not_signed_is_unsigned H6 /= ];
-    repeat eval_exp_exp_atomic_to_pred_state;
-    repeat qfbv_store_acc;
-    rewrite !(size_eval_atomic_asize Hdef Hcon)
-            !from_nat_simple;
-    apply /andP; split; done .
-  - (* Iand *)
-    move => v t a0 a1 /andP [Hdef _] Hcon Hun Hinst .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-  - (* Ior *)
-    move => v t a0 a1 /andP [Hdef _] Hcon Hun Hinst .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-  - (* Ixor *)
-    move => v t a0 a1 /andP [Hdef _] Hcon Hun Hinst .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-  - (* Icast *)
-    move => v t a /andP [Hdef _] Hcon Hun Hinst .
-    rewrite !(atyp_well_defined_unchanged Hdef Hun);
-      [ idtac
-      | rewrite SSAVS.Lemmas.subset_refl // ] .
-    repeat well_defined_to_vs_subset .
-    rewrite !eval_exp_if .
-    rewrite /qfbv_low /= .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-    rewrite /Typ.tcast /ucastB /scastB /=
-            !(size_eval_atomic_asize Hdef Hcon) !/asize .
-    case (atyp a te) => // .
-  - (* Ivpc *)
-    move => v t a /andP [Hdef _] Hcon Hun Hinst .
-    rewrite !(atyp_well_defined_unchanged Hdef Hun);
-      [ idtac
-      | rewrite SSAVS.Lemmas.subset_refl // ] .
-    repeat well_defined_to_vs_subset .
-    rewrite !eval_exp_if .
-    rewrite /qfbv_low /= .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-    rewrite /Typ.tcast /ucastB /scastB /=
-            !(size_eval_atomic_asize Hdef Hcon) !/asize .
-    case (atyp a te) => // .
-  - (* Ijoin *)
-    move => v a0 a1 /andP [Hdef _] Hcon Hun Hinst .
-    repeat well_defined_to_vs_subset .
-    repeat eval_exp_exp_atomic_to_pred_state .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-  - (* Iassume *)
-    move => b /andP [Hdef _] Hcon Hun Hinst .
-    repeat well_defined_to_vs_subset .
-    inversion_clear Hinst; repeat qfbv_store_acc .
-    case H; case b => /= ebexp rbexp _ Hrbexp .
-    case (eval_bexp_rbexp rbexp s2) => _ Hqfbv .
-    apply : Hqfbv => // .
+  case: i .
+  - move => v a; apply bexp_instr_eval_Imov .
+  - move => v a n; apply bexp_instr_eval_Ishl .
+  - move => u v a0 a1 n; apply bexp_instr_eval_Icshl .
+  - move => v t; apply bexp_instr_eval_Inondet .
+  - move => v ac a0 a1; apply bexp_instr_eval_Icmov .
+  - apply bexp_instr_eval_Inop .
+  - move => v t a; apply bexp_instr_eval_Inot .
+  - move => v a0 a1; apply bexp_instr_eval_Iadd .
+  - move => c v a0 a1; apply bexp_instr_eval_Iadds .
+  - move => v a0 a1 ac; apply bexp_instr_eval_Iadc .
+  - move => c v a0 a1 ac; apply bexp_instr_eval_Iadcs .
+  - move => v a0 a1; apply bexp_instr_eval_Isub .
+  - move => c v a0 a1; apply bexp_instr_eval_Isubc .
+  - move => b v a0 a1; apply bexp_instr_eval_Isubb .
+  - move => v a0 a1 c; apply bexp_instr_eval_Isbc .
+  - move => c v a0 a1 ac; apply bexp_instr_eval_Isbcs .
+  - move => v a0 a1 ab; apply bexp_instr_eval_Isbb .
+  - move => b v a0 a1 ab; apply bexp_instr_eval_Isbbs .
+  - move => v a0 a1; apply bexp_instr_eval_Imul .
+  - move => u v a0 a1; apply bexp_instr_eval_Imull .
+  - move => v a0 a1; apply bexp_instr_eval_Imulj .
+  - move => u v a n; apply bexp_instr_eval_Isplit .
+  - move => v t a0 a1; apply bexp_instr_eval_Iand .
+  - move => v t a0 a1; apply bexp_instr_eval_Ior .
+  - move => v t a0 a1; apply bexp_instr_eval_Ixor .
+  - move => v t a; apply bexp_instr_eval_Icast .
+  - move => v t a; apply bexp_instr_eval_Ivpc .
+  - move => v a0 a1; apply bexp_instr_eval_Ijoin .
+  - move => b; apply bexp_instr_eval_Iassume .
 Qed .
 
 (* Connect premises by conjunction. *)
@@ -1452,6 +1710,450 @@ Proof .
     exact : (mem_add_neq Hneq2 (mem_add_neq Hneq1 Hmem)) .
 Qed .
 
+Lemma conform_eval_succ_typenv_Imov te t a s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Imov t a) ->
+  well_typed_instr te (Imov t a) ->
+  eval_instr te (Imov t a) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Imov t a) te) .
+Proof .
+  move => Hcon /=; rewrite are_defined_subset_env => Hdef _ Hev .
+  inversion_clear Hev .
+  apply : (conform_Upd _ Hcon H) .
+  by rewrite (size_eval_atomic_asize Hdef) .
+Qed .
+
+Lemma conform_eval_succ_typenv_Ishl te t a n s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Ishl t a n) ->
+  well_typed_instr te (Ishl t a n) ->
+  eval_instr te (Ishl t a n) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Ishl t a n) te) .
+Proof .
+  move => Hcon /=; rewrite are_defined_subset_env => Hdef _ Hev .
+  inversion_clear Hev .
+  apply : (conform_Upd _ Hcon H) .
+  by rewrite size_shlB (size_eval_atomic_asize Hdef) .
+Qed .
+
+Lemma conform_eval_succ_typenv_Icshl te t t0 a a0 n s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Icshl t t0 a a0 n) ->
+  well_typed_instr te (Icshl t t0 a a0 n) ->
+  eval_instr te (Icshl t t0 a a0 n) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Icshl t t0 a a0 n) te) .
+Proof .
+  move => Hcon /=; rewrite 2!are_defined_subset_env =>
+  /andP [/andP [Hneq Hdef0] Hdef1] _ Hev .
+  inversion_clear Hev .
+  apply : (conform_Upd2 Hneq _ _ Hcon H) .
+  + by rewrite size_high (size_eval_atomic_asize Hdef0) .
+  + by rewrite size_shrB size_low (size_eval_atomic_asize Hdef1) .
+Qed .
+
+Lemma conform_eval_succ_typenv_Inondet te t t0 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Inondet t t0) ->
+  well_typed_instr te (Inondet t t0) ->
+  eval_instr te (Inondet t t0) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Inondet t t0) te) .
+Proof .
+  move => Hcon _ _ Hev .
+  inversion_clear Hev .
+  by apply : (conform_Upd _ Hcon H0) .
+Qed .
+
+Lemma conform_eval_succ_typenv_Icmov te t a a0 a1 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Icmov t a a0 a1) ->
+  well_typed_instr te (Icmov t a a0 a1) ->
+  eval_instr te (Icmov t a a0 a1) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Icmov t a a0 a1) te) .
+Proof .
+  move => Hcon /=; rewrite 3!are_defined_subset_env =>
+  /andP [/andP [Hdefc Hdef0] Hdef1] /andP [_ Hty] Hev .
+  inversion_clear Hev; apply : (conform_Upd _ Hcon H0);
+    [ by rewrite (size_eval_atomic_asize Hdef0)
+    | rewrite (size_eval_atomic_asize Hdef1) //;
+      by rewrite (eqP Hty) ] .
+Qed .
+
+Lemma conform_eval_succ_typenv_Inop te s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te Inop ->
+  well_typed_instr te Inop ->
+  eval_instr te Inop s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv Inop te) .
+Proof .
+  move => Hcon _ _ Hev .
+  inversion Hev .
+  by rewrite -H1 .
+Qed .
+
+Lemma conform_eval_succ_typenv_Inot te t t0 a s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Inot t t0 a) ->
+  well_typed_instr te (Inot t t0 a) ->
+  eval_instr te (Inot t t0 a) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Inot t t0 a) te) .
+Proof .
+  move => Hcon /=; rewrite are_defined_subset_env => Hdef Hty Hev .
+  rewrite /Typ.compatible in Hty .
+  inversion_clear Hev .
+  apply : (conform_Upd _ Hcon H) => // .
+  by rewrite -size_inv_same (eqP Hty)
+                            (size_eval_atomic_asize Hdef) .
+Qed .  
+
+Lemma conform_eval_succ_typenv_Iadd te t a a0 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Iadd t a a0) ->
+  well_typed_instr te (Iadd t a a0) ->
+  eval_instr te (Iadd t a a0) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Iadd t a a0) te) .
+Proof .
+  move => Hcon /=; rewrite 2!are_defined_subset_env =>
+  /andP [Hdef0 Hdef1] Hty Hev .
+  inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+  rewrite size_addB (size_eval_atomic_asize Hdef0) // .
+  rewrite (size_eval_atomic_asize Hdef1) // .
+  by rewrite /asize !(eqP Hty) minnE subKn .
+Qed .
+  
+Lemma conform_eval_succ_typenv_Iadds te t t0 a a0 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Iadds t t0 a a0) ->
+  well_typed_instr te (Iadds t t0 a a0) ->
+  eval_instr te (Iadds t t0 a a0) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Iadds t t0 a a0) te) .
+Proof .
+  move => Hcon /=; rewrite 2!are_defined_subset_env =>
+  /andP [/andP [Hneq Hdef0] Hdef1] Hty Hev .
+  inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
+  + done .
+  + rewrite size_addB (size_eval_atomic_asize Hdef0) //;
+      rewrite (size_eval_atomic_asize Hdef1) //;
+      by rewrite /asize !(eqP Hty) minnE subKn .
+Qed .
+  
+Lemma conform_eval_succ_typenv_Iadc te t a a0 a1 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Iadc t a a0 a1) ->
+  well_typed_instr te (Iadc t a a0 a1) ->
+  eval_instr te (Iadc t a a0 a1) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Iadc t a a0 a1) te) .
+Proof .
+  move => Hcon /=; rewrite 3!are_defined_subset_env =>
+  /andP [/andP [Hdef0 Hdef1] Hdefc] /andP [Hty Htyc] Hev .
+  inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+  by rewrite /adcB /full_adder size_full_adder_zip
+            (size_eval_atomic_asize Hdef0) //
+            (size_eval_atomic_asize Hdef1) //
+            /asize !(eqP Hty) minnE subKn .
+Qed .
+
+Lemma conform_eval_succ_typenv_Iadcs te t t0 a a0 a1 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Iadcs t t0 a a0 a1) ->
+  well_typed_instr te (Iadcs t t0 a a0 a1) ->
+  eval_instr te (Iadcs t t0 a a0 a1) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Iadcs t t0 a a0 a1) te) .
+Proof .
+  move => Hcon /=; rewrite 3!are_defined_subset_env =>
+  /andP [/andP [/andP [Hneq Hdef0] Hdef1] Hdefc] /andP [Hty Htyc] Hev .
+  inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) . 
+  + done .
+  + by rewrite /adcB /full_adder size_full_adder_zip
+               (size_eval_atomic_asize Hdef0) //
+               (size_eval_atomic_asize Hdef1) //
+               /asize !(eqP Hty) minnE subKn .
+Qed .
+
+Lemma conform_eval_succ_typenv_Isub te t a a0 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Isub t a a0) ->
+  well_typed_instr te (Isub t a a0) ->
+  eval_instr te (Isub t a a0) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Isub t a a0) te) .
+Proof .
+  move => Hcon /=; rewrite 2!are_defined_subset_env =>
+  /andP [Hdef0 Hdef1] Hty Hev .
+  inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+  by rewrite size_subB (size_eval_atomic_asize Hdef0) //
+             (size_eval_atomic_asize Hdef1) //
+             /asize !(eqP Hty) minnE subKn .
+Qed .
+
+Lemma conform_eval_succ_typenv_Isubc te t t0 a a0 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Isubc t t0 a a0) ->
+  well_typed_instr te (Isubc t t0 a a0) ->
+  eval_instr te (Isubc t t0 a a0) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Isubc t t0 a a0) te) .
+Proof .
+  move => Hcon /=; rewrite 2!are_defined_subset_env =>
+  /andP [/andP [Hneq Hdef0] Hdef1] Hty Hev .
+  inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
+  + done .
+  + by rewrite size_addB -size_neg_same
+               (size_eval_atomic_asize Hdef0) //
+               (size_eval_atomic_asize Hdef1) //
+               /asize !(eqP Hty) minnE subKn .
+Qed .
+
+Lemma conform_eval_succ_typenv_Isubb te t t0 a a0 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Isubb t t0 a a0) ->
+  well_typed_instr te (Isubb t t0 a a0) ->
+  eval_instr te (Isubb t t0 a a0) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Isubb t t0 a a0) te) .
+Proof .
+  move => Hcon /=; rewrite 2!are_defined_subset_env =>
+  /andP [/andP [Hneq Hdef0] Hdef1] Hty Hev .
+  inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
+  + done .
+  + by rewrite size_subB
+               (size_eval_atomic_asize Hdef0) //
+               (size_eval_atomic_asize Hdef1) //
+               /asize !(eqP Hty) minnE subKn .
+Qed .
+
+Lemma conform_eval_succ_typenv_Isbc te t a a0 a1 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Isbc t a a0 a1) ->
+  well_typed_instr te (Isbc t a a0 a1) ->
+  eval_instr te (Isbc t a a0 a1) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Isbc t a a0 a1) te) .
+Proof .
+  move => Hcon /=; rewrite 3!are_defined_subset_env =>
+  /andP [/andP [Hdef0 Hdef1] Hdefc] /andP [Hty _] Hev .
+  inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+  by rewrite /adcB /full_adder size_full_adder_zip
+             -size_inv_same
+             (size_eval_atomic_asize Hdef0) //
+             (size_eval_atomic_asize Hdef1) //
+             /asize !(eqP Hty) minnE subKn .
+Qed .
+
+Lemma conform_eval_succ_typenv_Isbcs te t t0 a a0 a1 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Isbcs t t0 a a0 a1) ->
+  well_typed_instr te (Isbcs t t0 a a0 a1) ->
+  eval_instr te (Isbcs t t0 a a0 a1) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Isbcs t t0 a a0 a1) te) .
+Proof .
+  move => Hcon /=; rewrite 3!are_defined_subset_env =>
+  /andP [/andP [/andP [Hneq Hdef0] Hdef1] Hdefc] /andP [Hty _] Hev .
+  inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
+  + done .
+  + by rewrite /adcB /full_adder size_full_adder_zip
+               -size_inv_same
+               (size_eval_atomic_asize Hdef0) //
+               (size_eval_atomic_asize Hdef1) //
+               /asize !(eqP Hty) minnE subKn .
+Qed .
+
+Lemma conform_eval_succ_typenv_Isbb te t a a0 a1 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Isbb t a a0 a1) ->
+  well_typed_instr te (Isbb t a a0 a1) ->
+  eval_instr te (Isbb t a a0 a1) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Isbb t a a0 a1) te) .
+Proof .
+  move => Hcon /=; rewrite 3!are_defined_subset_env =>
+  /andP [/andP [Hdef0 Hdef1] Hdefc] /andP [Hty _] Hev .
+  inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+  by rewrite size_sbbB
+             (size_eval_atomic_asize Hdef0) //
+             (size_eval_atomic_asize Hdef1) //
+             /asize !(eqP Hty) minnE subKn .
+Qed .
+
+Lemma conform_eval_succ_typenv_Isbbs te t t0 a a0 a1 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Isbbs t t0 a a0 a1) ->
+  well_typed_instr te (Isbbs t t0 a a0 a1) ->
+  eval_instr te (Isbbs t t0 a a0 a1) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Isbbs t t0 a a0 a1) te) .
+Proof .
+  move => Hcon /=; rewrite 3!are_defined_subset_env =>
+  /andP [/andP [/andP [Hneq Hdef0] Hdef1] Hdefc] /andP [Hty _] Hev .
+  inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H); first done .
+  by rewrite size_sbbB
+             (size_eval_atomic_asize Hdef0) //
+             (size_eval_atomic_asize Hdef1) //
+             /asize !(eqP Hty) minnE subKn .
+Qed .
+
+Lemma conform_eval_succ_typenv_Imul te t a a0 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Imul t a a0) ->
+  well_typed_instr te (Imul t a a0) ->
+  eval_instr te (Imul t a a0) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Imul t a a0) te) .
+Proof .
+  move => Hcon /=; rewrite 2!are_defined_subset_env =>
+  /andP [Hdef0 Hdef1] Hty Hev .
+  inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+  by rewrite size_mulB
+             (size_eval_atomic_asize Hdef0) .
+Qed .
+
+Lemma conform_eval_succ_typenv_Imull te t t0 a a0 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Imull t t0 a a0) ->
+  well_typed_instr te (Imull t t0 a a0) ->
+  eval_instr te (Imull t t0 a a0) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Imull t t0 a a0) te) .
+Proof .
+  move => Hcon /=; rewrite 2!are_defined_subset_env =>
+  /andP [/andP [Hneq Hdef0] Hdef1] Hty Hev .
+  inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H);
+    [ by rewrite size_high
+                 (size_eval_atomic_asize Hdef0)
+    | rewrite size_low
+              (size_eval_atomic_asize Hdef1) // ] .
+  by rewrite size_unsigned_same .
+Qed .
+
+Lemma conform_eval_succ_typenv_Imulj te t a a0 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Imulj t a a0) ->
+  well_typed_instr te (Imulj t a a0) ->
+  eval_instr te (Imulj t a a0) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Imulj t a a0) te) .
+Proof .
+  move => Hcon /=; rewrite 2!are_defined_subset_env =>
+  /andP [Hdef0 Hdef1] Hty Hev .
+  inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+  rewrite size_full_mul //
+          (size_eval_atomic_asize Hdef0) //
+          (size_eval_atomic_asize Hdef1) //
+          /asize -(eqP Hty) .
+  rewrite /Typ.double_typ /= .
+  by case (atyp a te) => /= // n;
+     rewrite mul2n addnn // .
+Qed .
+
+Lemma conform_eval_succ_typenv_Isplit te t t0 a n s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Isplit t t0 a n) ->
+  well_typed_instr te (Isplit t t0 a n) ->
+  eval_instr te (Isplit t t0 a n) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Isplit t t0 a n) te) .
+Proof .
+  move => Hcon /=; rewrite are_defined_subset_env =>
+  /andP [Hneq Hdef] _ Hev .
+  inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H0);
+    [ by rewrite size_shrB (size_eval_atomic_asize Hdef)
+    | by rewrite size_shrB size_shlB size_unsigned_same
+                 (size_eval_atomic_asize Hdef)
+    | by rewrite size_sarB (size_eval_atomic_asize Hdef)
+    | by rewrite size_shrB size_shlB size_unsigned_same
+                 (size_eval_atomic_asize Hdef) ] .
+Qed .
+
+Lemma conform_eval_succ_typenv_Iand te t t0 a a0 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Iand t t0 a a0) ->
+  well_typed_instr te (Iand t t0 a a0) ->
+  eval_instr te (Iand t t0 a a0) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Iand t t0 a a0) te) .
+Proof .
+  move => Hcon /=; rewrite 2!are_defined_subset_env =>
+  /andP [Hdef0 Hdef1] /andP [Htyc Hty] Hev .
+  inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+  by rewrite size_lift
+             (size_eval_atomic_asize Hdef0) //
+             (size_eval_atomic_asize Hdef1) //
+             /asize -(eqP Hty) maxnn (eqP Htyc) .
+Qed .
+  
+Lemma conform_eval_succ_typenv_Ior te t t0 a a0 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Ior t t0 a a0) ->
+  well_typed_instr te (Ior t t0 a a0) ->
+  eval_instr te (Ior t t0 a a0) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Ior t t0 a a0) te) .
+Proof .
+  move => Hcon /=; rewrite 2!are_defined_subset_env =>
+  /andP [Hdef0 Hdef1] /andP [Htyc Hty] Hev .
+  inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+  by rewrite size_lift
+             (size_eval_atomic_asize Hdef0) //
+             (size_eval_atomic_asize Hdef1) //
+             /asize -(eqP Hty) maxnn (eqP Htyc) .
+Qed .
+
+Lemma conform_eval_succ_typenv_Ixor te t t0 a a0 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Ixor t t0 a a0) ->
+  well_typed_instr te (Ixor t t0 a a0) ->
+  eval_instr te (Ixor t t0 a a0) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Ixor t t0 a a0) te) .
+Proof .
+  move => Hcon /=; rewrite 2!are_defined_subset_env =>
+  /andP [Hdef0 Hdef1] /andP [Htyc Hty] Hev .
+  inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+  by rewrite size_lift
+             (size_eval_atomic_asize Hdef0) //
+             (size_eval_atomic_asize Hdef1) //
+             /asize -(eqP Hty) maxnn (eqP Htyc) .
+Qed .
+
+Lemma conform_eval_succ_typenv_Icast te t t0 a s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Icast t t0 a) ->
+  well_typed_instr te (Icast t t0 a) ->
+  eval_instr te (Icast t t0 a) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Icast t t0 a) te) .
+Proof .
+  move => Hcon /=; rewrite are_defined_subset_env => Hdef _ Hev .
+  inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+  by rewrite size_tcast .
+Qed .
+
+Lemma conform_eval_succ_typenv_Ivpc te t t0 a s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Ivpc t t0 a) ->
+  well_typed_instr te (Ivpc t t0 a) ->
+  eval_instr te (Ivpc t t0 a) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Ivpc t t0 a) te) .
+Proof .
+  move => Hcon /=; rewrite are_defined_subset_env => Hdef _ Hev .
+  inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+  by rewrite size_tcast .
+Qed .
+
+Lemma conform_eval_succ_typenv_Ijoin te t a a0 s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Ijoin t a a0) ->
+  well_typed_instr te (Ijoin t a a0) ->
+  eval_instr te (Ijoin t a a0) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Ijoin t a a0) te) .
+Proof .
+  move => Hcon /=; rewrite 2!are_defined_subset_env =>
+  /andP [Hdef0 Hdef1] /andP [Hun Hty] Hev .
+  inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+  rewrite size_cat
+          (size_eval_atomic_asize Hdef0) //
+          (size_eval_atomic_asize Hdef1) //
+          /asize -(eqP Hty) /Typ.double_typ .
+  by case (atyp a te) => /= n;
+      rewrite mul2n addnn .
+Qed .
+
+Lemma conform_eval_succ_typenv_Iassume te b s1 s2 :
+  SSAStore.conform s1 te ->
+  well_defined_instr te (Iassume b) ->
+  well_typed_instr te (Iassume b) ->
+  eval_instr te (Iassume b) s1 s2 ->
+  SSAStore.conform s2 (instr_succ_typenv (Iassume b) te) .
+Proof .
+  move => Hcon Hdef _ Hev .
+  by inversion Hev; rewrite -H2 // .
+Qed .
+
 Lemma conform_eval_succ_typenv te i s1 s2 :
   well_formed_instr te i ->
   SSAStore.conform s1 te ->
@@ -1459,216 +2161,36 @@ Lemma conform_eval_succ_typenv te i s1 s2 :
   SSAStore.conform s2 (instr_succ_typenv i te) .
 Proof .
   move => /andP [Hdef Hty] Hcon .
-  case : i Hdef Hty => /= .
-  - (* Imov *)
-    move => v a; rewrite are_defined_subset_env => Hdef _ Hev .
-    inversion_clear Hev .
-    apply : (conform_Upd _ Hcon H) .
-    rewrite (size_eval_atomic_asize Hdef) // .
-  - (* Ishl *)
-    move => v a n; rewrite are_defined_subset_env => Hdef _ Hev .
-    inversion_clear Hev .
-    apply : (conform_Upd _ Hcon H) .
-    rewrite size_shlB (size_eval_atomic_asize Hdef) // .
-  - (* Icshl *)
-    move => vh vl a0 a1 n; rewrite 2!are_defined_subset_env =>
-    /andP [/andP [Hneq Hdef0] Hdef1] _ Hev .
-    inversion_clear Hev .
-    apply : (conform_Upd2 Hneq _ _ Hcon H) .
-    + rewrite size_high (size_eval_atomic_asize Hdef0) // .
-    + rewrite size_shrB size_low (size_eval_atomic_asize Hdef1) // .
-  - (* Inondet *)
-    move => v t _ _ Hev .
-    inversion_clear Hev .
-    apply : (conform_Upd _ Hcon H0) => // .
-  - (* Icmov *)
-    move => v ac a0 a1; rewrite 3!are_defined_subset_env =>
-    /andP [/andP [Hdefc Hdef0] Hdef1] /andP [_ Hty] Hev .
-    inversion_clear Hev; apply : (conform_Upd _ Hcon H0);
-    [ rewrite (size_eval_atomic_asize Hdef0) //
-    | rewrite (size_eval_atomic_asize Hdef1) //;
-      rewrite (eqP Hty) // ] .
-  - (* Inop *)
-    move => _ _ Hev .
-    inversion Hev .
-    rewrite -H1 // .
-  - (* Inot *)
-    move => v t a; rewrite are_defined_subset_env => Hdef Hty Hev .
-    rewrite /Typ.compatible in Hty .
-    inversion_clear Hev .
-    apply : (conform_Upd _ Hcon H) => // .
-    rewrite -size_inv_same (eqP Hty)
-            (size_eval_atomic_asize Hdef) // .
-  - (* Iadd *)
-    move => v a0 a1; rewrite 2!are_defined_subset_env =>
-    /andP [Hdef0 Hdef1] Hty Hev .
-    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite size_addB (size_eval_atomic_asize Hdef0) // .
-    rewrite (size_eval_atomic_asize Hdef1) // .
-    rewrite /asize !(eqP Hty) minnE subKn // .
-  - (* Iadds *)
-    move => u v a0 a1; rewrite 2!are_defined_subset_env =>
-    /andP [/andP [Hneq Hdef0] Hdef1] Hty Hev .
-    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
-    + done .
-    + rewrite size_addB (size_eval_atomic_asize Hdef0) //;
-      rewrite (size_eval_atomic_asize Hdef1) //;
-      rewrite /asize !(eqP Hty) minnE subKn // .
-  - (* Iadc *)
-    move => v a0 a1 ac; rewrite 3!are_defined_subset_env =>
-    /andP [/andP [Hdef0 Hdef1] Hdefc] /andP [Hty Htyc] Hev .
-    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite /adcB /full_adder size_full_adder_zip
-            (size_eval_atomic_asize Hdef0) //
-            (size_eval_atomic_asize Hdef1) //
-            /asize !(eqP Hty) minnE subKn // .
-  - (* Iadcs *)
-    move => u v a0 a1 ac; rewrite 3!are_defined_subset_env =>
-    /andP [/andP [/andP [Hneq Hdef0] Hdef1] Hdefc] /andP [Hty Htyc] Hev .
-    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) . 
-    + done .
-    + rewrite /adcB /full_adder size_full_adder_zip
-              (size_eval_atomic_asize Hdef0) //
-              (size_eval_atomic_asize Hdef1) //
-              /asize !(eqP Hty) minnE subKn // .
-  - (* Isub *)
-    move => u a0 a1; rewrite 2!are_defined_subset_env =>
-    /andP [Hdef0 Hdef1] Hty Hev .
-    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite size_subB (size_eval_atomic_asize Hdef0) //
-            (size_eval_atomic_asize Hdef1) //
-            /asize !(eqP Hty) minnE subKn // .
-  - (* Isubc *)
-    move => u v a0 a1; rewrite 2!are_defined_subset_env =>
-    /andP [/andP [Hneq Hdef0] Hdef1] Hty Hev .
-    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
-    + done .
-    + rewrite size_addB -size_neg_same
-              (size_eval_atomic_asize Hdef0) //
-              (size_eval_atomic_asize Hdef1) //
-              /asize !(eqP Hty) minnE subKn // .
-  - (* Isubb *)
-    move => u v a0 a1; rewrite 2!are_defined_subset_env =>
-    /andP [/andP [Hneq Hdef0] Hdef1] Hty Hev .
-    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
-    + done .
-    + rewrite size_subB
-              (size_eval_atomic_asize Hdef0) //
-              (size_eval_atomic_asize Hdef1) //
-              /asize !(eqP Hty) minnE subKn // .
-  - (* Isbc *)
-    move => v a0 a1 ac; rewrite 3!are_defined_subset_env =>
-    /andP [/andP [Hdef0 Hdef1] Hdefc] /andP [Hty _] Hev .
-    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite /adcB /full_adder size_full_adder_zip
-            -size_inv_same
-            (size_eval_atomic_asize Hdef0) //
-            (size_eval_atomic_asize Hdef1) //
-            /asize !(eqP Hty) minnE subKn // .
-  - (* Isbcs *)
-    move => u v a0 a1 ac; rewrite 3!are_defined_subset_env =>
-    /andP [/andP [/andP [Hneq Hdef0] Hdef1] Hdefc] /andP [Hty _] Hev .
-    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H) .
-    + done .
-    + rewrite /adcB /full_adder size_full_adder_zip
-              -size_inv_same
-              (size_eval_atomic_asize Hdef0) //
-              (size_eval_atomic_asize Hdef1) //
-              /asize !(eqP Hty) minnE subKn // .
-  - (* Isbb *)
-    move => v a0 a1 ac; rewrite 3!are_defined_subset_env =>
-    /andP [/andP [Hdef0 Hdef1] Hdefc] /andP [Hty _] Hev .
-    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite size_sbbB
-            (size_eval_atomic_asize Hdef0) //
-            (size_eval_atomic_asize Hdef1) //
-            /asize !(eqP Hty) minnE subKn // .
-  - (* Isbbs *)
-    move => u v a0 a1 ac; rewrite 3!are_defined_subset_env =>
-    /andP [/andP [/andP [Hneq Hdef0] Hdef1] Hdefc] /andP [Hty _] Hev .
-    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H); first done .
-    rewrite size_sbbB
-            (size_eval_atomic_asize Hdef0) //
-            (size_eval_atomic_asize Hdef1) //
-            /asize !(eqP Hty) minnE subKn // .
-  - (* Imul *)
-    move => v a0 a1; rewrite 2!are_defined_subset_env =>
-    /andP [Hdef0 Hdef1] Hty Hev .
-    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite size_mulB
-            (size_eval_atomic_asize Hdef0) // .
-  - (* Imull *)
-    move => u v a0 a1; rewrite 2!are_defined_subset_env =>
-    /andP [/andP [Hneq Hdef0] Hdef1] Hty Hev .
-    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H);
-    [ rewrite size_high
-              (size_eval_atomic_asize Hdef0) //
-    | rewrite size_low
-              (size_eval_atomic_asize Hdef1) // ] .
-    rewrite size_unsigned_same // .
-  - (* Imulj *)
-    move => v a0 a1; rewrite 2!are_defined_subset_env =>
-    /andP [Hdef0 Hdef1] Hty Hev .
-    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite size_full_mul //
-            (size_eval_atomic_asize Hdef0) //
-            (size_eval_atomic_asize Hdef1) //
-            /asize -(eqP Hty) .
-    rewrite /Typ.double_typ /= .
-    case (atyp a0 te) => /= // n;
-    rewrite mul2n addnn // .
-  - (* Isplit *)
-    move => u v a n; rewrite are_defined_subset_env =>
-    /andP [Hneq Hdef] _ Hev .
-    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ Hcon H0);
-    [ rewrite size_shrB (size_eval_atomic_asize Hdef) //
-    | rewrite size_shrB size_shlB size_unsigned_same (size_eval_atomic_asize Hdef) //
-    | rewrite size_sarB (size_eval_atomic_asize Hdef) //
-    |  rewrite size_shrB size_shlB size_unsigned_same (size_eval_atomic_asize Hdef) // ] .
-  - (* Iand *)
-    move => u v a0 a1; rewrite 2!are_defined_subset_env =>
-    /andP [Hdef0 Hdef1] /andP [Htyc Hty] Hev .
-    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite size_lift
-            (size_eval_atomic_asize Hdef0) //
-            (size_eval_atomic_asize Hdef1) //
-            /asize -(eqP Hty) maxnn (eqP Htyc) // .
-  - (* Ior *)
-    move => u v a0 a1; rewrite 2!are_defined_subset_env =>
-    /andP [Hdef0 Hdef1] /andP [Htyc Hty] Hev .
-    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite size_lift
-            (size_eval_atomic_asize Hdef0) //
-            (size_eval_atomic_asize Hdef1) //
-            /asize -(eqP Hty) maxnn (eqP Htyc) // .
-  - (* Ixor *)
-    move => u v a0 a1; rewrite 2!are_defined_subset_env =>
-    /andP [Hdef0 Hdef1] /andP [Htyc Hty] Hev .
-    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite size_lift
-            (size_eval_atomic_asize Hdef0) //
-            (size_eval_atomic_asize Hdef1) //
-            /asize -(eqP Hty) maxnn (eqP Htyc) // .
-  - (* Icast *)
-    move => v t a; rewrite are_defined_subset_env => Hdef _ Hev .
-    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite size_tcast // .
-  - (* Ivpc *)
-    move => u v a; rewrite are_defined_subset_env => Hdef _ Hev .
-    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite size_tcast // .
-  - (* Ijoin *)
-    move => v a0 a1; rewrite 2!are_defined_subset_env =>
-    /andP [Hdef0 Hdef1] /andP [Hun Hty] Hev .
-    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite size_cat
-            (size_eval_atomic_asize Hdef0) //
-            (size_eval_atomic_asize Hdef1) //
-            /asize -(eqP Hty) /Typ.double_typ .
-    case (atyp a0 te) => /= n;
-    rewrite mul2n addnn // .
-  - move => b Hdef _ Hev .
-    inversion Hev; rewrite -H2 // .
+  case : i Hcon Hdef Hty .
+  - move => v a; apply conform_eval_succ_typenv_Imov .
+  - move => v a n; apply conform_eval_succ_typenv_Ishl .
+  - move => u v a0 a1 n; apply conform_eval_succ_typenv_Icshl .
+  - move => v t; apply conform_eval_succ_typenv_Inondet .
+  - move => v ac a0 a1; apply conform_eval_succ_typenv_Icmov .
+  - apply conform_eval_succ_typenv_Inop .
+  - move => v t a; apply conform_eval_succ_typenv_Inot .
+  - move => v a0 a1; apply conform_eval_succ_typenv_Iadd .
+  - move => c v a0 a1; apply conform_eval_succ_typenv_Iadds .
+  - move => v a0 a1 ac; apply conform_eval_succ_typenv_Iadc .
+  - move => c v a0 a1 ac; apply conform_eval_succ_typenv_Iadcs .
+  - move => v a0 a1; apply conform_eval_succ_typenv_Isub .
+  - move => c v a0 a1; apply conform_eval_succ_typenv_Isubc .
+  - move => b v a0 a1; apply conform_eval_succ_typenv_Isubb .
+  - move => v a0 a1 ac; apply conform_eval_succ_typenv_Isbc .
+  - move => c v a0 a1 ac; apply conform_eval_succ_typenv_Isbcs .
+  - move => v a0 a1 ab; apply conform_eval_succ_typenv_Isbb .
+  - move => b v a0 a1 ab; apply conform_eval_succ_typenv_Isbbs .
+  - move => v a0 a1; apply conform_eval_succ_typenv_Imul .
+  - move => u v a0 a1; apply conform_eval_succ_typenv_Imull .
+  - move => v a0 a1; apply conform_eval_succ_typenv_Imulj .
+  - move => u v a0 a1; apply conform_eval_succ_typenv_Isplit .
+  - move => v t a0 a1; apply conform_eval_succ_typenv_Iand .
+  - move => v t a0 a1; apply conform_eval_succ_typenv_Ior .
+  - move => v t a0 a1; apply conform_eval_succ_typenv_Ixor .
+  - move => v t a; apply conform_eval_succ_typenv_Icast .
+  - move => v t a; apply conform_eval_succ_typenv_Ivpc .
+  - move => v a0 a1; apply conform_eval_succ_typenv_Ijoin .
+  - move => b; apply conform_eval_succ_typenv_Iassume .
 Qed .
 
 Lemma bexp_program_eval te p s1 s2 :
@@ -1688,7 +2210,7 @@ Proof .
       move : (bexp_instr_eval Hwfhd Hcon Huchd Hehd) .
       move : Hetl .
       move : (well_formed_ssa_vars_unchanged_hd Hwfssa) .
-      apply : eval_bexp_instr .
+      apply : eval_vars_unchanged_program_bexp_instr .
     + apply : (IH _ _ _ (well_formed_ssa_tl Hwfssa) _ Hetl) .
       exact : (conform_eval_succ_typenv
                  (well_formed_program_cons1 Hwf)
@@ -1701,26 +2223,155 @@ Definition valid_bexp_spec_conj (s : bexp_spec) : Prop :=
     eval_bexps_conj (bprog s) st ->
     QFBV.eval_bexp (bpost s) st .
 
+Lemma ssa_vars_unchanged_program_rng vs p :
+  ssa_vars_unchanged_program vs p ->
+  ssa_vars_unchanged_program vs (rng_program p) .
+Proof .
+  elim : p .
+  - done .
+  - elim; rewrite /rng_program /= -/rng_program;
+    [ move => v a tl IH Hun
+    | move => v a n tl IH Hun
+    | move => u v a0 a1 n tl IH Hun
+    | move => v t tl IH Hun
+    | move => v c a0 a1 tl IH Hun
+    | move => tl IH Hun
+    | move => v t a tl IH Hun
+    | move => v a0 a1 tl IH Hun
+    | move => u v a0 a1 tl IH Hun
+    | move => v c a0 a1 tl IH Hun
+    | move => u v c a0 a1 tl IH Hun
+    | move => v a0 a1 tl IH Hun
+    | move => u v a0 a1 tl IH Hun
+    | move => u v a0 a1 tl IH Hun
+    | move => v c a0 a1 tl IH Hun
+    | move => u v c a0 a1 tl IH Hun
+    | move => v c a0 a1 tl IH Hun
+    | move => u v c a0 a1 tl IH Hun
+    | move => v a0 a1 tl IH Hun
+    | move => u v a0 a1 tl IH Hun
+    | move => v a0 a1 tl IH Hun
+    | move => u v a n tl IH Hun
+    | move => v t a0 a1 tl IH Hun
+    | move => v t a0 a1 tl IH Hun
+    | move => v t a0 a1 tl IH Hun
+    | move => v t a tl IH Hun
+    | move => v t a tl IH Hun
+    | move => v a0 a1 tl IH Hun
+    | move => b tl IH Hun ];
+    try
+      (apply : ssa_unchanged_program_cons2;
+       [ apply : (ssa_unchanged_program_hd Hun)
+       | apply : IH (ssa_unchanged_program_tl Hun) ]) .
+    apply : ssa_unchanged_program_cons2;
+      [     move : (ssa_unchanged_program_hd Hun); case b; done
+      | apply : IH (ssa_unchanged_program_tl Hun) ] .
+Qed .
+
+Lemma well_formed_program_rng te p :
+  well_formed_program te p ->
+  well_formed_program te (rng_program p) .
+Proof .
+  elim : p te; first done .
+  elim; rewrite /rng_program /= -/rng_program;
+  [ move => v a tl IH te /andP [Hwfhd Hwftl]
+  | move => v a n tl IH te /andP [Hwfhd Hwftl]
+  | move => u v a0 a1 n tl IH te /andP [Hwfhd Hwftl]
+  | move => v t tl IH te Hwftl
+  | move => v c a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => tl IH te Hwftl
+  | move => v t a tl IH te /andP [Hwfhd Hwftl]
+  | move => v a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => u v a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => v c a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => u v c a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => v a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => u v a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => u v a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => v c a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => u v c a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => v c a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => u v c a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => v a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => u v a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => v a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => u v a n tl IH te /andP [Hwfhd Hwftl]
+  | move => v t a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => v t a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => v t a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => v t a tl IH te /andP [Hwfhd Hwftl]
+  | move => v t a tl IH te /andP [Hwfhd Hwftl]
+  | move => v a0 a1 tl IH te /andP [Hwfhd Hwftl]
+  | move => b tl IH te /andP [Hwfhd Hwftl] ];
+    try
+      ((rewrite Hwfhd /=; by apply : IH) ||
+        by apply : IH) .
+  apply /andP; split .
+  + move : Hwfhd; case b => e r .
+    rewrite /well_formed_instr /well_defined_instr
+            /well_typed_instr => /andP [Hdef Hwtyp] .
+    apply /andP; split .
+    * move : Hdef; rewrite /vars_bexp /= .
+      apply : are_defined_subset .
+      apply : SSAVS.S.Lemmas.union_subsets;
+        [ apply : SSAVS.S.Lemmas.subset_empty
+        | apply : SSAVS.S.Lemmas.subset_refl] .
+    * move : Hwtyp .
+      by rewrite /well_typed_bexp /= => /andP [_ Hwtypr] .
+    * apply IH .
+      case b => _ r .
+      by rewrite /instr_succ_typenv /= .
+Qed .
+
+Lemma lvs_instr_subset_rng i :
+  SSAVS.subset (lvs_instr (rng_instr i)) (lvs_instr i) .
+Proof .
+  case i => /=; try (intros; apply : SSAVS.S.Lemmas.subset_refl) .
+  case => _ r; done .
+Qed .  
+
+Lemma ssa_single_assignment_rng p :
+  ssa_single_assignment p ->
+  ssa_single_assignment (rng_program p) .
+Proof .
+  elim : p; first done .
+  move => hd tl IH Hssa .
+  rewrite /rng_program /= -/rng_program .
+  move : Hssa;
+    rewrite /ssa_single_assignment /=
+            -/ssa_single_assignment => /andP [Huntl Hssatl] .
+  apply /andP; split .
+  + apply : (ssa_unchanged_program_subset
+               (ssa_vars_unchanged_program_rng Huntl)) .
+    apply : lvs_instr_subset_rng .
+  + by apply IH .
+Qed .
+
 Lemma bexp_spec_sound_conj (s : spec) :
   well_formed_ssa_spec s ->
   valid_bexp_spec_conj (bexp_of_rspec (sinputs s) (rspec_of_spec s)) -> valid_rspec (rspec_of_spec s).
 Proof.
-  (* Prove this with the new rspec_of_spec *)
-  (*
   destruct s as [te p g] .
   rewrite /bexp_of_rspec /valid_bexp_spec_conj /=.
   move=> Hwfssa Hvalid s1 s2 /= Hcon Hf Hp.
   apply: eval_bexp_rbexp1.
+  move: Hwfssa => /andP /= [/andP [Hwf Huc] Hssa] .
+  move : Hwf => /andP [/andP /= [Hwfb Hwfg] _] .
+  move : Hwfb => /= /andP [Hdef _] .
   apply: Hvalid.
-  - move: Hwfssa => /andP /= [/andP [Hwf Huc] Hssa]. apply: eval_bexp_rbexp2.
+  - apply: eval_bexp_rbexp2.
     apply: (proj1 (ssa_unchanged_program_eval_rbexp _ Hp) Hf).
-    apply: (ssa_unchanged_program_subset Huc).
-    move/andP: Hwf => /= [/andP [H _] _].
-    move : H => /andP [/are_defined_subset H _] .
-    exact: (VSLemmas.subset_union5 H).
-  - exact: (bexp_program_eval (well_formed_ssa_spec_program Hwfssa) Hcon Hp).
-  *)
-Admitted.
+    apply : (ssa_unchanged_program_subset
+               (ssa_vars_unchanged_program_rng Huc)) .
+    move : (are_defined_subset (vars_rbexp_subset p) Hdef) .
+    by rewrite are_defined_subset_env .
+  - apply : (bexp_program_eval _ Hcon Hp) .
+    rewrite /well_formed_ssa_program .
+    apply /andP; split; first (apply /andP; split) .
+    + apply : (well_formed_program_rng Hwfg) .
+    + apply : (ssa_vars_unchanged_program_rng Huc) .
+    + apply : (ssa_single_assignment_rng Hssa) .
+Qed .
 
 (* Connect premises by implication. *)
 
@@ -2157,6 +2808,150 @@ Proof .
     apply : (acc_unchanged_instr Hun Hev) .
 Qed .
 
+Lemma eval_bexp_instr_safe_succ_Ishl te t a n s1 s2 :
+  ssa_vars_unchanged_instr (rvs_instr (Ishl t a n)) (Ishl t a n) ->
+  eval_instr te (Ishl t a n) s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Ishl t a n)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Ishl t a n)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite /bexp_atomic_shl_safe .
+  by case : (Typ.is_unsigned (atyp a te)) => /=;
+       rewrite !eval_exp_atomic
+               (ssa_unchanged_instr_eval_atomic Hun Hev) .
+Qed .
+
+
+Lemma eval_bexp_instr_safe_succ_Icshl te t t0 a a0 n s1 s2 :
+  ssa_vars_unchanged_instr (rvs_instr (Icshl t t0 a a0 n))
+                           (Icshl t t0 a a0 n) ->
+  eval_instr te (Icshl t t0 a a0 n) s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Icshl t t0 a a0 n)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Icshl t t0 a a0 n)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite /bexp_atomic_cshl_safe .
+  by case : (Typ.is_unsigned (atyp a te)) => /=;
+     rewrite !eval_exp_atomic;
+     move : (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun0 Hun1];
+     rewrite (ssa_unchanged_instr_eval_atomic Hun0 Hev)
+             (ssa_unchanged_instr_eval_atomic Hun1 Hev) .
+Qed .
+
+Lemma eval_bexp_instr_safe_succ_Iadd te t a a0 s1 s2 :
+  ssa_vars_unchanged_instr (rvs_instr (Iadd t a a0)) (Iadd t a a0) ->
+  eval_instr te (Iadd t a a0) s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Iadd t a a0)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Iadd t a a0)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite /bexp_atomic_addB_safe .
+  rewrite !eval_bexp_if => /= .
+  rewrite !eval_exp_atomic .
+  move : (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun0 Hun1] .
+  by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
+             !(unchanged_instr_eval_instr Hun1 Hev) .
+Qed .
+
+Lemma eval_bexp_instr_safe_succ_Iadc te t a a0 a1 s1 s2 :
+  ssa_vars_unchanged_instr (rvs_instr (Iadc t a a0 a1))
+                           (Iadc t a a0 a1) ->
+  eval_instr te (Iadc t a a0 a1) s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Iadc t a a0 a1)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Iadc t a a0 a1)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite /bexp_atomic_adcB_safe !eval_bexp_if => /= .
+  rewrite !eval_exp_atomic .
+  move : (ssa_unchanged_instr_union1 Hun) =>
+  {Hun} [Hun0 Hun] .
+  move : (ssa_unchanged_instr_union1 Hun) =>
+  {Hun} [Hun1 Hunc] .
+  by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
+            !(unchanged_instr_eval_instr Hun1 Hev)
+            !(unchanged_instr_eval_instr Hunc Hev) .
+Qed .
+
+Lemma eval_bexp_instr_safe_succ_Isub te t a a0 s1 s2 :
+  ssa_vars_unchanged_instr (rvs_instr (Isub t a a0)) (Isub t a a0) ->
+  eval_instr te (Isub t a a0) s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Isub t a a0)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Isub t a a0)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite /bexp_atomic_subB_safe !eval_bexp_if => /= .
+  rewrite !eval_exp_atomic .
+  move : (ssa_unchanged_instr_union1 Hun) =>
+  {Hun} [Hun0 Hun1] .
+  by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
+             !(unchanged_instr_eval_instr Hun1 Hev) .
+Qed .
+
+Lemma eval_bexp_instr_safe_succ_Isbc te t a a0 a1 s1 s2 :
+  ssa_vars_unchanged_instr (rvs_instr (Isbc t a a0 a1))
+                           (Isbc t a a0 a1) ->
+  eval_instr te (Isbc t a a0 a1) s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Isbc t a a0 a1)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Isbc t a a0 a1)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite /bexp_atomic_sbcB_safe !eval_bexp_if => /= .
+  rewrite !eval_exp_atomic .
+  move : (ssa_unchanged_instr_union1 Hun) =>
+  {Hun} [Hun0 Hun] .
+  move : (ssa_unchanged_instr_union1 Hun) =>
+  {Hun} [Hun1 Hunc] .
+  by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
+             !(unchanged_instr_eval_instr Hun1 Hev)
+             !(unchanged_instr_eval_instr Hunc Hev) .
+Qed .
+
+Lemma eval_bexp_instr_safe_succ_Isbb te t a a0 a1 s1 s2 :
+  ssa_vars_unchanged_instr (rvs_instr (Isbb t a a0 a1))
+                           (Isbb t a a0 a1) ->
+  eval_instr te (Isbb t a a0 a1) s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Isbb t a a0 a1)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Isbb t a a0 a1)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite /bexp_atomic_sbbB_safe !eval_bexp_if => /= .
+  rewrite !eval_exp_atomic .
+  move : (ssa_unchanged_instr_union1 Hun) =>
+  {Hun} [Hun0 Hun] .
+  move : (ssa_unchanged_instr_union1 Hun) =>
+  {Hun} [Hun1 Hunc] .
+  by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
+             !(unchanged_instr_eval_instr Hun1 Hev)
+             !(unchanged_instr_eval_instr Hunc Hev) .
+Qed .
+
+Lemma eval_bexp_instr_safe_succ_Imul te t a a0 s1 s2 :
+  ssa_vars_unchanged_instr (rvs_instr (Imul t a a0)) (Imul t a a0) ->
+  eval_instr te (Imul t a a0) s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Imul t a a0)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Imul t a a0)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite /bexp_atomic_mulB_safe !eval_bexp_if => /= .
+  rewrite !eval_exp_atomic .
+  move : (ssa_unchanged_instr_union1 Hun) =>
+  {Hun} [Hun0 Hun1] .
+  by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
+             !(unchanged_instr_eval_instr Hun1 Hev) .
+Qed .
+
+Lemma eval_bexp_instr_safe_succ_Ivpc te t t0 a s1 s2 :
+  ssa_vars_unchanged_instr (rvs_instr (Ivpc t t0 a)) (Ivpc t t0 a) ->
+  eval_instr te (Ivpc t t0 a) s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Ivpc t t0 a)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Ivpc t t0 a)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite /bexp_atomic_vpc_safe !eval_bexp_if => /= .
+  rewrite !eval_exp_atomic .
+  by rewrite !(unchanged_instr_eval_instr Hun Hev) .
+Qed .
+
 Lemma eval_bexp_instr_safe_succ te i s1 s2 :
   ssa_vars_unchanged_instr (rvs_instr i) i ->
   eval_instr te i s1 s2 ->
@@ -2164,73 +2959,138 @@ Lemma eval_bexp_instr_safe_succ te i s1 s2 :
   QFBV.eval_bexp (bexp_instr_safe te i) s2 .
 Proof .
   case i; rewrite /bexp_instr_safe => // .
-  - move => v a n Hun Hev .
-    rewrite /bexp_atomic_shl_safe .
-    by case : (Typ.is_unsigned (atyp a te)) => /=;
-         rewrite !eval_exp_atomic
-                 (ssa_unchanged_instr_eval_atomic Hun Hev) .
-  - move => u v a0 a1 n Hun Hev .
-    rewrite /bexp_atomic_cshl_safe .
-    by case : (Typ.is_unsigned (atyp a0 te)) => /=;
-      rewrite !eval_exp_atomic;
-        move : (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun0 Hun1];
-        rewrite (ssa_unchanged_instr_eval_atomic Hun0 Hev)
-                (ssa_unchanged_instr_eval_atomic Hun1 Hev) .
-  - move => v a0 a1 Hun Hev .
-    rewrite /bexp_atomic_addB_safe .
-    rewrite !eval_bexp_if => /= .
-    rewrite !eval_exp_atomic .
-    move : (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun0 Hun1] .
-    by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
-               !(unchanged_instr_eval_instr Hun1 Hev) .
-  - move => v a0 a1 ac Hun Hev .
-    rewrite /bexp_atomic_adcB_safe !eval_bexp_if => /= .
-    rewrite !eval_exp_atomic .
-    move : (ssa_unchanged_instr_union1 Hun) =>
-    {Hun} [Hun0 Hun] .
-    move : (ssa_unchanged_instr_union1 Hun) =>
-    {Hun} [Hun1 Hunc] .
-    by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
-              !(unchanged_instr_eval_instr Hun1 Hev)
-              !(unchanged_instr_eval_instr Hunc Hev) .
-  - move => v a0 a1 Hun Hev .
-    rewrite /bexp_atomic_subB_safe !eval_bexp_if => /= .
-    rewrite !eval_exp_atomic .
-    move : (ssa_unchanged_instr_union1 Hun) =>
-    {Hun} [Hun0 Hun1] .
-    by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
-               !(unchanged_instr_eval_instr Hun1 Hev) .
-  - move => v a0 a1 ac Hun Hev .
-    rewrite /bexp_atomic_sbcB_safe !eval_bexp_if => /= .
-    rewrite !eval_exp_atomic .
-    move : (ssa_unchanged_instr_union1 Hun) =>
-    {Hun} [Hun0 Hun] .
-    move : (ssa_unchanged_instr_union1 Hun) =>
-    {Hun} [Hun1 Hunc] .
-    by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
-               !(unchanged_instr_eval_instr Hun1 Hev)
-               !(unchanged_instr_eval_instr Hunc Hev) .
-  - move => v a0 a1 ac Hun Hev .
-    rewrite /bexp_atomic_sbbB_safe !eval_bexp_if => /= .
-    rewrite !eval_exp_atomic .
-    move : (ssa_unchanged_instr_union1 Hun) =>
-    {Hun} [Hun0 Hun] .
-    move : (ssa_unchanged_instr_union1 Hun) =>
-    {Hun} [Hun1 Hunc] .
-    by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
-               !(unchanged_instr_eval_instr Hun1 Hev)
-               !(unchanged_instr_eval_instr Hunc Hev) .
-  - move => v a0 a1 Hun Hev .
-    rewrite /bexp_atomic_mulB_safe !eval_bexp_if => /= .
-    rewrite !eval_exp_atomic .
-    move : (ssa_unchanged_instr_union1 Hun) =>
-    {Hun} [Hun0 Hun1] .
-    by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
-               !(unchanged_instr_eval_instr Hun1 Hev) .
-  - move => v t a Hun Hev .
-    rewrite /bexp_atomic_vpc_safe !eval_bexp_if => /= .
-    rewrite !eval_exp_atomic .
-    by rewrite !(unchanged_instr_eval_instr Hun Hev) .
+  - move => v a n; apply eval_bexp_instr_safe_succ_Ishl .
+  - move => u v a0 a1 n; apply eval_bexp_instr_safe_succ_Icshl .
+  - move => v a0 a1; apply eval_bexp_instr_safe_succ_Iadd .
+  - move => v a0 a1 ac; apply eval_bexp_instr_safe_succ_Iadc .
+  - move => v a0 a1; apply eval_bexp_instr_safe_succ_Isub .
+  - move => v a0 a1 ac; apply eval_bexp_instr_safe_succ_Isbc .
+  - move => v a0 a1 ac; apply eval_bexp_instr_safe_succ_Isbb .
+  - move => v a0 a1; apply eval_bexp_instr_safe_succ_Imul .
+  - move => v t a; apply eval_bexp_instr_safe_succ_Ivpc .
+Qed .
+
+Lemma eval_bexp_instr_safe_succs_Ishl te t a n p s1 s2 :
+  ssa_vars_unchanged_program (rvs_instr (Ishl t a n)) p ->
+  eval_program te p s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Ishl t a n)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Ishl t a n)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite /bexp_atomic_shl_safe .
+  by case : (Typ.is_unsigned (atyp a te)) => /=;
+      rewrite !eval_exp_atomic
+              (ssa_unchanged_program_eval_atomic Hun Hev) .
+Qed .
+  
+Lemma eval_bexp_instr_safe_succs_Icshl te t t0 a a0 n p s1 s2 :
+  ssa_vars_unchanged_program (rvs_instr (Icshl t t0 a a0 n)) p ->
+  eval_program te p s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Icshl t t0 a a0 n)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Icshl t t0 a a0 n)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite /bexp_atomic_cshl_safe .
+  by case : (Typ.is_unsigned (atyp a te)) => /=;
+       rewrite !eval_exp_atomic;
+       move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun1];
+       rewrite (ssa_unchanged_program_eval_atomic Hun0 Hev)
+               (ssa_unchanged_program_eval_atomic Hun1 Hev) .
+Qed .
+
+Lemma eval_bexp_instr_safe_succs_Iadd te t a a0 p s1 s2 :
+  ssa_vars_unchanged_program (rvs_instr (Iadd t a a0)) p ->
+  eval_program te p s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Iadd t a a0)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Iadd t a a0)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite !eval_bexp_if /= !eval_exp_atomic .
+  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun1] .
+  by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
+             !(ssa_unchanged_program_eval_atomic Hun1 Hev) .
+Qed .
+
+Lemma eval_bexp_instr_safe_succs_Iadc te t a a0 a1 p s1 s2 :
+  ssa_vars_unchanged_program (rvs_instr (Iadc t a a0 a1)) p ->
+  eval_program te p s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Iadc t a a0 a1)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Iadc t a a0 a1)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite !eval_bexp_if /= !eval_exp_atomic .
+  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun] .
+  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hunc] .
+  by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
+             !(ssa_unchanged_program_eval_atomic Hun1 Hev)
+             !(ssa_unchanged_program_eval_atomic Hunc Hev) .
+Qed .
+
+Lemma eval_bexp_instr_safe_succs_Isub te t a a0 p s1 s2 :
+  ssa_vars_unchanged_program (rvs_instr (Isub t a a0)) p ->
+  eval_program te p s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Isub t a a0)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Isub t a a0)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite !eval_bexp_if /= !eval_exp_atomic .
+  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun1] .
+  by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
+             !(ssa_unchanged_program_eval_atomic Hun1 Hev) .
+Qed .
+
+Lemma eval_bexp_instr_safe_succs_Isbc te t a a0 a1 p s1 s2 :
+  ssa_vars_unchanged_program (rvs_instr (Isbc t a a0 a1)) p ->
+  eval_program te p s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Isbc t a a0 a1)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Isbc t a a0 a1)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite !eval_bexp_if /= !eval_exp_atomic .
+  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun] .
+  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hunc] .
+  by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
+             !(ssa_unchanged_program_eval_atomic Hun1 Hev)
+             !(ssa_unchanged_program_eval_atomic Hunc Hev) .
+Qed .
+
+Lemma eval_bexp_instr_safe_succs_Isbb te t a a0 a1 p s1 s2 :
+  ssa_vars_unchanged_program (rvs_instr (Isbb t a a0 a1)) p ->
+  eval_program te p s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Isbb t a a0 a1)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Isbb t a a0 a1)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite !eval_bexp_if /= !eval_exp_atomic .
+  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun] .
+  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hunc] .
+  by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
+             !(ssa_unchanged_program_eval_atomic Hun1 Hev)
+             !(ssa_unchanged_program_eval_atomic Hunc Hev) .
+Qed .
+
+Lemma eval_bexp_instr_safe_succs_Imul te t a a0 p s1 s2 :
+  ssa_vars_unchanged_program (rvs_instr (Imul t a a0)) p ->
+  eval_program te p s1 s2 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Imul t a a0)) s1 ->
+  QFBV.eval_bexp (bexp_instr_safe te (Imul t a a0)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite !eval_bexp_if /= !eval_exp_atomic .
+  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun1] .
+  by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
+             !(ssa_unchanged_program_eval_atomic Hun1 Hev) .
+Qed .
+
+Lemma eval_bexp_instr_safe_succs_Ivpc te t t0 a p s1 s2 :
+ ssa_vars_unchanged_program (rvs_instr (Ivpc t t0 a)) p ->
+ eval_program te p s1 s2 ->
+ QFBV.eval_bexp (bexp_instr_safe te (Ivpc t t0 a)) s1 ->
+ QFBV.eval_bexp (bexp_instr_safe te (Ivpc t t0 a)) s2 .
+Proof .
+  move => Hun Hev /= .
+  rewrite !eval_bexp_if /= !eval_exp_atomic .
+  by rewrite (ssa_unchanged_program_eval_atomic Hun Hev) .
 Qed .
 
 Lemma eval_bexp_instr_safe_succs te i p s1 s2 :
@@ -2240,57 +3100,15 @@ Lemma eval_bexp_instr_safe_succs te i p s1 s2 :
   QFBV.eval_bexp (bexp_instr_safe te i) s2 .
 Proof .
   case i; rewrite /bexp_instr_safe => // .
-  - move => v a n Hun Hev .
-    rewrite /bexp_atomic_shl_safe .
-    by case : (Typ.is_unsigned (atyp a te)) => /=;
-        rewrite !eval_exp_atomic
-                (ssa_unchanged_program_eval_atomic Hun Hev) .
-  - move => u v a0 a1 n Hun Hev .
-    rewrite /bexp_atomic_cshl_safe .
-    by case : (Typ.is_unsigned (atyp a0 te)) => /=;
-      rewrite !eval_exp_atomic;
-        move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun1];
-        rewrite (ssa_unchanged_program_eval_atomic Hun0 Hev)
-                (ssa_unchanged_program_eval_atomic Hun1 Hev) .
-  - move => v a0 a1 Hun Hev .
-    rewrite !eval_bexp_if /= !eval_exp_atomic .
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun1] .
-    by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-               !(ssa_unchanged_program_eval_atomic Hun1 Hev) .
-  - move => v a0 a1 ac Hun Hev .
-    rewrite !eval_bexp_if /= !eval_exp_atomic .
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun] .
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hunc] .
-    by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-               !(ssa_unchanged_program_eval_atomic Hun1 Hev)
-               !(ssa_unchanged_program_eval_atomic Hunc Hev) .
-  - move => v a0 a1 Hun Hev .
-    rewrite !eval_bexp_if /= !eval_exp_atomic .
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun1] .
-    by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-               !(ssa_unchanged_program_eval_atomic Hun1 Hev) .
-  - move => v a0 a1 ac Hun Hev .
-    rewrite !eval_bexp_if /= !eval_exp_atomic .
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun] .
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hunc] .
-    by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-               !(ssa_unchanged_program_eval_atomic Hun1 Hev)
-               !(ssa_unchanged_program_eval_atomic Hunc Hev) .
-  - move => v a0 a1 ac Hun Hev .
-    rewrite !eval_bexp_if /= !eval_exp_atomic .
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun] .
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hunc] .
-    by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-               !(ssa_unchanged_program_eval_atomic Hun1 Hev)
-               !(ssa_unchanged_program_eval_atomic Hunc Hev) .
-  - move => v a0 a1 Hun Hev .
-    rewrite !eval_bexp_if /= !eval_exp_atomic .
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun1] .
-    by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-               !(ssa_unchanged_program_eval_atomic Hun1 Hev) .
-  - move => v ty a Hun Hev .
-    rewrite !eval_bexp_if /= !eval_exp_atomic .
-    by rewrite (ssa_unchanged_program_eval_atomic Hun Hev) .
+  - move => v a n; apply eval_bexp_instr_safe_succs_Ishl .
+  - move => u v a0 a1 n; apply eval_bexp_instr_safe_succs_Icshl .
+  - move => v a0 a1; apply eval_bexp_instr_safe_succs_Iadd .
+  - move => v a0 a1 ac; apply eval_bexp_instr_safe_succs_Iadc .
+  - move => v a0 a1; apply eval_bexp_instr_safe_succs_Isub .
+  - move => v a0 a1 ac; apply eval_bexp_instr_safe_succs_Isbc .
+  - move => v a0 a1 ac; apply eval_bexp_instr_safe_succs_Isbb .
+  - move => v a0 a1; apply eval_bexp_instr_safe_succs_Imul .
+  - move => v ty a; apply eval_bexp_instr_safe_succs_Ivpc .
 Qed .    
 
 (*
@@ -2422,7 +3240,6 @@ Fixpoint bexp_program_safe_qfbv te pre prefix (p : program) : seq QFBV.bexp :=
   | hd::tl => (bexp_prefix_hd_safe te pre prefix hd)
                 ::(bexp_program_safe_qfbv (instr_succ_typenv hd te) pre (rcons prefix hd) tl)
   end .
-                        
   
 Definition bexp_program_safe_at te (p : program) s : bool :=
   if (bexp_program te p) s then
@@ -2431,6 +3248,34 @@ Definition bexp_program_safe_at te (p : program) s : bool :=
     true .
 *)                                                    
 
+Fixpoint bexp_program_safe_at te p : QFBV.bexp :=
+  match p with
+  | [::] => qfbv_true
+  | hd::tl =>
+    qfbv_conj (bexp_instr_safe te hd)
+              (qfbv_disj
+                 (qfbv_lneg (bexp_instr (instr_succ_typenv hd te) hd))
+                 (bexp_program_safe_at (instr_succ_typenv hd te) tl))
+  end .
+
+Lemma ssa_instr_conform_pred te s i :
+  ssa_vars_unchanged_instr (SSA.vars_env te) i ->
+  SSAStore.conform s (instr_succ_typenv i te) ->
+  SSAStore.conform s te .
+Admitted .
+  
+Lemma eval_bexp_program_safe1 te pre p :
+  ssa_vars_unchanged_program (vars_rbexp pre) p ->
+  well_formed_ssa_program te p ->
+  (forall s, SSAStore.conform s te ->
+             QFBV.eval_bexp (bexp_rbexp pre) s ->
+             QFBV.eval_bexp (bexp_program_safe_at te p) s) ->
+  (forall s, SSAStore.conform s te ->
+             eval_rbexp pre s ->
+             ssa_program_safe_at te p s) .
+Admitted .
+      
+(* Working
 Fixpoint bexp_program_safe_at te p : QFBV.bexp :=
   match p with
   | [::] => qfbv_true
@@ -2469,6 +3314,7 @@ Proof .
         apply (ssa_unchanged_instr_eval_rbexp Hunhd Hev') .
         by exact: Hpre .
 Qed .
+ *)
 
 (*
 Lemma eval_bexp_program_safe2 te pre p :
