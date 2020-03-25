@@ -27,9 +27,9 @@ Module ZSSA.
 
   Definition zprogram : Type := seq zinstr.
 
-  Local Notation vars_zexp := SSA.vars_eexp.
+  Notation vars_zexp := SSA.vars_eexp.
 
-  Local Notation vars_zbexp := SSA.vars_ebexp.
+  Notation vars_zbexp := SSA.vars_ebexp.
 
   Definition vars_zinstr (i : zinstr) : SSAVS.t :=
     match i with

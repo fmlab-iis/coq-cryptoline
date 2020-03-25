@@ -440,6 +440,7 @@ Section DSLRaw.
   Definition ebexp_eqMixin := EqMixin ebexp_eqP.
   Canonical ebexp_eqType := Eval hnf in EqType ebexp ebexp_eqMixin.
 
+
   (* Range Predicates *)
 
   Inductive rbexp : Type :=
@@ -673,6 +674,26 @@ Module MakeDSL
     | Eand e1 e2 => VS.union (vars_ebexp e1) (vars_ebexp e2)
     end.
 
+  Lemma vars_eands_cons e es :
+    VS.Equal (vars_ebexp (eands (e::es)))
+             (VS.union (vars_ebexp e) (vars_ebexp (eands es))).
+  Proof. reflexivity. Qed.
+
+  Lemma vars_eands_cat es1 es2 :
+    VS.Equal (vars_ebexp (eands (es1 ++ es2)))
+             (VS.union (vars_ebexp (eands es1)) (vars_ebexp (eands es2))).
+  Proof.
+    elim: es1 => [| e1 es1 IH1] //=.
+    - by VSLemmas.dp_Equal.
+    - rewrite IH1. by VSLemmas.dp_Equal.
+  Qed.
+
+  Lemma vars_eands_split_eand e :
+    VS.Equal (vars_ebexp (eands (split_eand e))) (vars_ebexp e).
+  Proof.
+    elim: e => /=; try (move=> *; by VSLemmas.dp_Equal).
+    move=> e1 IH1 e2 IH2. rewrite vars_eands_cat IH1 IH2. reflexivity.
+  Qed.
 
 
   (* Range Predicates *)
@@ -2715,6 +2736,14 @@ Module MakeDSL
            | |- _ => idtac
            end
        in tac).
+  Qed.
+
+  Lemma mem_instr_succ_typenv x i E :
+    TE.mem x E -> TE.mem x (instr_succ_typenv i E).
+  Proof.
+    move/memenvP => H. apply/memenvP/VSLemmas.memP.
+    move: (@vars_env_instr_succ_typenv i E x) => [_ Himp]. apply: Himp.
+    apply/VSLemmas.memP. rewrite VSLemmas.mem_union H. reflexivity.    
   Qed.
 
 

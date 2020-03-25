@@ -4407,3 +4407,111 @@ Section MakeSSA.
   Qed.
 
 End MakeSSA.
+
+
+Section SSAStoreEq.
+
+  Import SSA.
+
+  Ltac split_disjoint :=
+    match goal with
+    | H : is_true (VSLemmas.disjoint _ (SSAVS.singleton _)) |- _ =>
+      rewrite VSLemmas.disjoint_singleton in H
+    | H : is_true (VSLemmas.disjoint _ (SSAVS.add _ _)) |- _ =>
+      let H1 := fresh "Hdisj" in let H2 := fresh "Hdisj" in
+      rewrite VSLemmas.disjoint_add in H;
+      move/andP: H => [H1 H2]
+    end.
+
+  Ltac ssa_vars_unchanged_instr_to_mem :=
+    match goal with
+    | H : is_true (ssa_vars_unchanged_instr ?vs ?i) |- _ =>
+      let Hdisj := fresh "Hdisj" in
+      (have: (ssa_vars_unchanged_instr vs i) by assumption);
+      (rewrite ssa_unchanged_instr_disjoint_lvs => /= Hdisj);
+      repeat split_disjoint
+    end.
+
+  Definition bvs_eqi (E : SSATE.env) (s1 s2 : SSAStore.t) :=
+    forall x, SSATE.mem x E -> SSAStore.acc x s1 = SSAStore.acc x s2.
+
+  Lemma bvs_eqi_refl E s : bvs_eqi E s s.
+  Proof. move=> *; reflexivity. Qed.
+
+  Lemma bvs_eqi_sym E s1 s2 : bvs_eqi E s1 s2 -> bvs_eqi E s2 s1.
+  Proof. move=> Heqi x Hx. exact: (Logic.eq_sym (Heqi x Hx)). Qed.
+
+  Lemma bvs_eqi_trans E s1 s2 s3 :
+    bvs_eqi E s1 s2 -> bvs_eqi E s2 s3 -> bvs_eqi E s1 s3.
+  Proof.
+    move=> H12 H23 x Hx. rewrite (H12 x Hx) (H23 x Hx). reflexivity.
+  Qed.
+
+  Lemma bvs_eqi_submap E1 E2 s1 s2 :
+    TELemmas.submap E1 E2 -> bvs_eqi E2 s1 s2 -> bvs_eqi E1 s1 s2.
+  Proof.
+    move=> Hsubm Heqi x Hx. exact: (Heqi x (TELemmas.submap_mem Hsubm Hx)).
+  Qed.
+
+  Ltac intro_neqs :=
+    match goal with
+    | H : is_true (SSATE.mem ?x ?E) |- _ =>
+      move/memenvP: H => H; try intro_neqs
+    | H1 : is_true (~~ SSAVS.mem ?v (vars_env ?E)),
+      H2 : is_true (SSAVS.mem ?x (vars_env ?E)) |- _ =>
+      let H := fresh in dcase (x == v); case;
+      [move/eqP=> H; rewrite -H H2 in H1; discriminate | move/idP/negP=> H; clear H1];
+      try intro_neqs
+    end.
+
+  Ltac invert_eval_instr :=
+    match goal with
+    | H : eval_instr _ _ _ _ |- _ => inversion_clear H
+    end.
+
+  Ltac decide_eqi :=
+    match goal with
+    | |- bvs_eqi ?E ?s ?s => exact: bvs_eqi_refl
+    | Hmem : is_true (~~ SSAVS.mem ?v (vars_env ?E)),
+      Hupd : SSAStore.Upd ?v _ ?s1 ?s2 |-
+      bvs_eqi ?E ?s1 ?s2 =>
+      let Hx := fresh in
+      move=> x Hx; intro_neqs; rewrite (SSAStore.acc_Upd_neq _ Hupd);
+             [ reflexivity | assumption ]
+    | Hmemh : is_true (~~ SSAVS.mem ?vh (vars_env ?E)),
+      Hmeml : is_true (~~ SSAVS.mem ?vl (vars_env ?E)),
+      Hupd : SSAStore.Upd2 ?vl _ ?vh _ ?s1 ?s2 |-
+      bvs_eqi ?E ?s1 ?s2 =>
+      let Hx := fresh in
+      move=> x Hx; intro_neqs; rewrite (SSAStore.acc_Upd2_neq _ _ Hupd);
+             [ reflexivity | assumption | assumption ]
+    end.
+
+  Lemma bvs_eqi_eval_instr E i s1 s2 :
+    ssa_vars_unchanged_instr (vars_env E) i -> eval_instr E i s1 s2 ->
+    bvs_eqi E s1 s2.
+  Proof.
+    (case: i => /=);
+      try (move=> *; ssa_vars_unchanged_instr_to_mem;
+                  invert_eval_instr; by decide_eqi).
+  Qed.
+
+  Lemma bvs_eqi_eval_program E p s1 s2 :
+    ssa_vars_unchanged_program (vars_env E) p ->
+    ssa_single_assignment p -> eval_program E p s1 s2 ->
+    bvs_eqi E s1 s2.
+  Proof.
+    elim: p E s1 s2 => [| i P IH] E s1 s2 /=.
+    - move=>_ _ Hev; inversion_clear Hev; exact: bvs_eqi_refl.
+    - rewrite ssa_unchanged_program_cons => /andP [Hun_i Hun_p] /andP [Hssa_i Hssa_p]
+                                             Hev. inversion_clear Hev.
+      have Hun_succ: (ssa_vars_unchanged_program (vars_env (instr_succ_typenv i E)) P).
+      { apply: (ssa_unchanged_program_replace
+                  (SSAVS.Lemmas.P.equal_sym (vars_env_instr_succ_typenv i E))).
+          by rewrite ssa_unchanged_program_union Hun_p Hssa_i. }
+      move: (IH (instr_succ_typenv i E) t s2 Hun_succ Hssa_p H0) => Heqi_p.
+      move=> x Hx. rewrite -(Heqi_p x (mem_instr_succ_typenv i Hx)).
+      move: (bvs_eqi_eval_instr Hun_i H) => Heqi_i. exact: (Heqi_i x Hx).
+  Qed.
+
+End SSAStoreEq.
