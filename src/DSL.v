@@ -2068,11 +2068,9 @@ Module MakeDSL
   Proof. move=> x y Heq; by rewrite (eqP Heq) //. Qed.
 
   Lemma are_defined_singleton v te :
-    are_defined (VS.singleton v) te -> is_defined v te.
+    are_defined (VS.singleton v) te = is_defined v te.
   Proof.
-    move=> Hdef. rewrite /are_defined
-                         (VSLemmas.for_all_singleton (are_defined_compat te)) in Hdef.
-    assumption.
+      by rewrite /are_defined (VSLemmas.for_all_singleton (are_defined_compat te)).
   Qed.
 
   Lemma are_defined_Empty s E : VS.Empty s -> are_defined s E.
@@ -2325,8 +2323,7 @@ Module MakeDSL
     are_defined (vars_atomic a) te1 ->
     atyp a te1 = atyp a te2.
   Proof.
-    case: a => //=. move=> v Hsubmap Hdef1.
-    move: (are_defined_singleton Hdef1) => {Hdef1} Hdef1.
+    case: a => //=. move=> v. rewrite are_defined_singleton=> Hsubmap Hdef1.
     move: (TELemmas.mem_find_some Hdef1) => [ty1 Hfind1].
     move: (Hsubmap v ty1 Hfind1) => Hfind2.
     rewrite (TE.find_some_vtyp Hfind1) (TE.find_some_vtyp Hfind2).
@@ -2348,7 +2345,7 @@ Module MakeDSL
     atyp a E1 = atyp a E2.
   Proof.
     case: a => /=.
-    - move=> x Hsub Hdef Hmem. move: (are_defined_singleton Hdef) => {Hdef} Hdef.
+    - move=> x. rewrite are_defined_singleton=> Hsub Hdef Hmem.
       move: (VSLemmas.not_mem_singleton1 Hmem) => {Hmem} /negP Hne.
       rewrite eq_sym in Hne. move: (is_defined_add_neq t E1 Hne). rewrite Hdef.
       move=> Hdefadd. rewrite -(submap_vtyp Hsub Hdefadd).
@@ -2370,8 +2367,7 @@ Module MakeDSL
     eval_eexp e E1 s = eval_eexp e E2 s.
   Proof.
     move=> Hsub. elim: e => //=.
-    - move=> v Hdef. move: (are_defined_singleton Hdef) => {Hdef} Hdef.
-      exact: (submap_acc2z Hsub Hdef).
+    - move=> v. rewrite are_defined_singleton=> Hdef. exact: (submap_acc2z Hsub Hdef).
     - move=> op e IH Hdef. rewrite (IH Hdef). reflexivity.
     - move=> op e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
       rewrite (IH1 Hdef1) (IH2 Hdef2). reflexivity.
@@ -2736,6 +2732,15 @@ Module MakeDSL
            | |- _ => idtac
            end
        in tac).
+  Qed.
+
+  Lemma vars_env_program_succ_typenv p E :
+    VS.Equal (vars_env (program_succ_typenv p E))
+             (VS.union (vars_env E) (lvs_program p)).
+  Proof.
+    elim: p E => [| i p IH] E /=.
+    - rewrite VSLemmas.union_emptyr. reflexivity.
+    - rewrite IH. rewrite vars_env_instr_succ_typenv. by VSLemmas.dp_Equal.
   Qed.
 
   Lemma mem_instr_succ_typenv x i E :

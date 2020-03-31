@@ -2123,6 +2123,8 @@ Proof .
   - move => v a1 a2 _ .
     apply : eval_bexp_atomic_addB_safe .
   - move => v a1 a2 ac _ .
+(* TODO: add safety for signed operations: adds, adcs, subc, subb, sbcs, and sbbs *)
+(*
     apply : eval_bexp_atomic_adcB_safe .
   - move => v a1 a2 _ .
     apply : eval_bexp_atomic_subB_safe .
@@ -2134,7 +2136,8 @@ Proof .
     apply : eval_bexp_atomic_mulB_safe .
   - move => v t a _ .
     apply : eval_bexp_atomic_vpc_safe .
-Qed .
+*)
+Admitted .
 
 Lemma unchanged_instr_eval_instr te i a s1 s2 :
   ssa_vars_unchanged_instr (vars_atomic a) i ->

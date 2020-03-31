@@ -1291,4 +1291,47 @@ Module ZSSA.
     exact: (eval_zinstr_eval_zprogram_idem Hwell_hd Hunch_hd Hunch_tl Hssa_hd).
   Qed.
 
+
+
+  (* State equivalence *)
+
+  Definition zs_eqi (E : SSAVS.t) (s1 s2 : ZSSAStore.t) :=
+    forall x, SSAVS.mem x E -> ZSSAStore.acc x s1 = ZSSAStore.acc x s2.
+
+  Lemma zs_eqi_refl E s : zs_eqi E s s.
+  Proof. move=> *; reflexivity. Qed.
+
+  Lemma zs_eqi_sym E s1 s2 : zs_eqi E s1 s2 -> zs_eqi E s2 s1.
+  Proof. move=> Heqi x Hx. exact: (Logic.eq_sym (Heqi x Hx)). Qed.
+
+  Lemma zs_eqi_trans E s1 s2 s3 :
+    zs_eqi E s1 s2 -> zs_eqi E s2 s3 -> zs_eqi E s1 s3.
+  Proof.
+    move=> H12 H23 x Hx. rewrite (H12 x Hx) (H23 x Hx). reflexivity.
+  Qed.
+
+  Lemma zs_eqi_subset E1 E2 s1 s2 :
+    SSAVS.subset E1 E2 -> zs_eqi E2 s1 s2 -> zs_eqi E1 s1 s2.
+  Proof.
+    move=> Hsub Heqi x Hx. exact: (Heqi x (SSAVS.Lemmas.mem_subset Hx Hsub)).
+  Qed.
+
+  Lemma zs_eqi_Upd E s1 s2 s3 x v :
+    ~~ SSAVS.mem x E -> zs_eqi E s1 s2 ->
+    ZSSAStore.Upd x v s2 s3 -> zs_eqi E s1 s3.
+  Proof.
+    move=> Hx Heqi HUpd y Hy. case Hyx: (y == x).
+    - rewrite (eqP Hyx) in Hy. rewrite Hy in Hx. discriminate.
+    - move/idP/negP: Hyx => Hyx. rewrite (ZSSAStore.acc_Upd_neq Hyx HUpd).
+      exact: (Heqi _ Hy).
+  Qed.
+
+  Lemma zs_eqi_upd E s1 s2 x v :
+    ~~ SSAVS.mem x E -> zs_eqi E s1 s2 ->
+    zs_eqi E s1 (ZSSAStore.upd x v s2).
+  Proof.
+    move=> Hx Heqi. move: (ZSSAStore.Upd_upd x v s2) => HUpd.
+    exact: (zs_eqi_Upd Hx Heqi HUpd).
+  Qed.
+
 End ZSSA.
