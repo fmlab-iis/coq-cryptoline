@@ -108,20 +108,8 @@ Section ZSpec2Spec.
     | Eand e1 e2 => split_zbexp e1 ++ split_zbexp e2
     end.
 
-  Definition szbexp_zinstr (i : ZSSA.zinstr) : szbexp :=
-    match i with
-    | ZSSA.Zassign v e => Seq (evar v) e
-    | ZSSA.Zsplit vh vl e p => Seq (eadd (evar vl)
-                                         (emul (evar vh)
-                                               (SSA.e2expn (Z.of_nat p))))
-                                   e
-    end.
-
-  Definition szbexp_zprogram (p : ZSSA.zprogram) : seq szbexp :=
-    map szbexp_zinstr p.
-
   Definition pspecs_of_zspec (s : ZSSA.zspec) : seq pspec :=
-    let premises := split_zbexp (ZSSA.zspre s) ++ szbexp_zprogram (ZSSA.zsprog s) in
+    let premises := split_zbexp (ZSSA.zspre s) in
     let conseqs := split_zbexp (ZSSA.zspost s) in
     map (fun conseq => {| ppremises := premises; pconseq := conseq |}) conseqs.
 
@@ -151,143 +139,25 @@ Section ZSpec2Spec.
       + apply: IH2 => pe Hmem. apply: Hpe. by rewrite mem_cat Hmem orbT.
   Qed.
 
-  Lemma szbexp_zinstr_eval vs i s :
-    ZSSA.well_formed_zinstr vs i -> ZSSA.ssa_vars_unchanged_zinstr vs i ->
-    eval_szbexp (szbexp_zinstr i) (ZSSA.eval_zinstr s i).
-  Proof.
-    case: i => /=.
-    - move=> v e Hwell Hunch. rewrite (ZSSAStore.acc_upd_eq (eqxx v)).
-      move: (ZSSA.ssa_unchanged_zinstr_subset Hunch Hwell) => H.
-      move: (ZSSA.ssa_unchanged_zinstr_eval_exp
-               H
-               (Logic.refl_equal (ZSSA.eval_zinstr s (ZSSA.Zassign v e)))) => /=.
-      by apply.
-    - move=> vh vl e n /andP [Hwell1 Hwell2] Hunch.
-      dcase (Z.div_eucl (ZSSA.eval_zexp e s) (2 ^ Z.of_nat n)) => [[q r] Hdiv_eucl].
-      rewrite eq_sym in Hwell1. rewrite (ZSSAStore.acc_upd_neq Hwell1).
-      rewrite (ZSSAStore.acc_upd_eq (eqxx vl)) (ZSSAStore.acc_upd_eq (eqxx vh)).
-      move: (Z.div_eucl_eq (ZSSA.eval_zexp e s) (2^Z.of_nat n)
-                           (@two_power_of_nat_ne0 n)).
-      rewrite Hdiv_eucl. rewrite Z.add_comm Z.mul_comm. move=> <-.
-      move: (ZSSA.ssa_unchanged_zinstr_subset Hunch Hwell2) => H.
-      move: (ZSSA.ssa_unchanged_zinstr_eval_exp
-               H (Logic.refl_equal
-                    (ZSSA.eval_zinstr s (ZSSA.Zsplit vh vl e n)))) => /=.
-      rewrite Hdiv_eucl. by apply.
-  Qed.
-
-  Lemma szbexp_zinstr_unchanged_by_zinstr vs i i' s :
-    ZSSA.well_formed_zinstr vs i -> ZSSA.ssa_vars_unchanged_zinstr vs i' ->
-    ZSSA.ssa_vars_unchanged_zinstr (ZSSA.lvs_zinstr i) i' ->
-    eval_szbexp (szbexp_zinstr i) s ->
-    eval_szbexp (szbexp_zinstr i) (ZSSA.eval_zinstr s i').
-  Proof.
-    case: i => /=.
-    - move=> v e Hwell Hunch Hssa Heval.
-      move: (ZSSA.ssa_unchanged_zinstr_singleton1 Hssa) => {Hssa} Hssa.
-      rewrite -(ZSSA.acc_unchanged_zinstr
-                  Hssa (Logic.eq_refl (ZSSA.eval_zinstr s i'))).
-      move: (ZSSA.ssa_unchanged_zinstr_subset Hunch Hwell) => {Hunch Hwell} Hunch.
-      rewrite -(ZSSA.ssa_unchanged_zinstr_eval_exp
-                  Hunch (Logic.eq_refl (ZSSA.eval_zinstr s i'))). assumption.
-    - move=> vh vl e n /andP [Hwell1 Hwell2] Hunch Hssa Heval.
-      move: (ZSSA.ssa_unchanged_zinstr_add1 Hssa) => {Hssa} [Hunch_vh Hssa].
-      move: (ZSSA.ssa_unchanged_zinstr_singleton1 Hssa) => {Hssa} [Hunch_vl].
-      rewrite -(ZSSA.acc_unchanged_zinstr
-                  Hunch_vl (Logic.eq_refl (ZSSA.eval_zinstr s i'))).
-      rewrite -(ZSSA.acc_unchanged_zinstr
-                  Hunch_vh (Logic.eq_refl (ZSSA.eval_zinstr s i'))).
-      move: (ZSSA.ssa_unchanged_zinstr_subset Hunch Hwell2) => {Hunch Hwell2} Hunch.
-      rewrite -(ZSSA.ssa_unchanged_zinstr_eval_exp
-                  Hunch (Logic.eq_refl (ZSSA.eval_zinstr s i'))). assumption.
-  Qed.
-
-  Lemma szbexp_zinstr_unchanged_by_zprogram vs hd tl s1 s2 :
-    ZSSA.well_formed_zinstr vs hd -> ZSSA.ssa_vars_unchanged_zprogram vs tl ->
-    ZSSA.ssa_vars_unchanged_zprogram (ZSSA.lvs_zinstr hd) tl ->
-    eval_szbexp (szbexp_zinstr hd) s1 -> ZSSA.eval_zprogram s1 tl = s2 ->
-    eval_szbexp (szbexp_zinstr hd) s2.
-  Proof.
-    elim: tl vs hd s1 s2 => /=.
-    - by move=> ? ? ? ? _ _ _ H <-.
-    - move=> tl_hd tl_tl IH vs hd s1 s2 Hwell Hunchv Hunchi Heval_hd Heval_tl.
-      move: (ZSSA.ssa_unchanged_zprogram_cons1 Hunchv) => {Hunchv} [Hunchv1 Hunchv2].
-      move: (ZSSA.ssa_unchanged_zprogram_cons1 Hunchi) => {Hunchi} [Hunchi1 Hunchi2].
-      apply: (IH _ _ _ _ Hwell Hunchv2 Hunchi2 _ Heval_tl).
-      exact: (szbexp_zinstr_unchanged_by_zinstr Hwell Hunchv1 Hunchi1).
-  Qed.
-
-  Lemma szbexp_zprogram_mem vs zp pe s1 s2 :
-    ZSSA.well_formed_zprogram vs zp -> ZSSA.ssa_vars_unchanged_zprogram vs zp ->
-    ZSSA.ssa_single_assignment zp -> ZSSA.eval_zprogram s1 zp = s2 ->
-    pe \in szbexp_zprogram zp -> eval_szbexp pe s2.
-  Proof.
-    elim: zp vs pe s1 s2 => [| hd tl IH] //=.
-    move=> vs pe s1 s2 /andP [Hwell_hd Hwell_tl] Hunch /andP [Hssa1 Hssa2] Heval Hpe.
-    move: (ZSSA.ssa_unchanged_zprogram_cons1 Hunch) => {Hunch} [Hunch_hd Hunch_tl].
-    rewrite in_cons in Hpe. case/orP: Hpe => Hpe.
-    - rewrite (eqP Hpe) => {Hpe}.
-      apply: (szbexp_zinstr_unchanged_by_zprogram Hwell_hd Hunch_tl Hssa1 _ Heval).
-      exact: (szbexp_zinstr_eval _ Hwell_hd Hunch_hd).
-    - apply: (IH _ _ _ _ Hwell_tl _ Hssa2 Heval Hpe).
-      exact: (ZSSA.ssa_unchanged_zprogram_union2 Hunch_tl Hssa1).
-  Qed.
-
-  Lemma split_zbexp_szbexp_zprogram_mem vs zf zp pe s1 s2 :
-    SSAVS.subset (SSA.vars_ebexp zf) vs ->
-    ZSSA.well_formed_zprogram vs zp ->
-    ZSSA.ssa_vars_unchanged_zprogram vs zp ->
-    ZSSA.ssa_single_assignment zp ->
-    ZSSA.eval_zbexp zf s1 -> ZSSA.eval_zprogram s1 zp = s2 ->
-    pe \in split_zbexp zf ++ szbexp_zprogram zp -> eval_szbexp pe s2.
-  Proof.
-    move=> Hsubf Hwell Hunch Hssa Hzf Hzp Hmem. rewrite mem_cat in Hmem.
-    case/orP: Hmem => Hmem.
-    - apply: (split_zbexp_mem _ Hmem).
-      apply/(ZSSA.ssa_unchanged_zprogram_eval_bexp _ Hzp); last by assumption.
-      exact: (ZSSA.ssa_unchanged_zprogram_subset Hunch Hsubf).
-    - exact: (szbexp_zprogram_mem Hwell Hunch Hssa Hzp Hmem).
-  Qed.
-
   Theorem pspecs_of_zspec_sound zs :
-    ZSSA.well_formed_ssa_zspec zs ->
     (forall ps, ps \in pspecs_of_zspec zs -> valid_pspec ps) ->
     ZSSA.valid_zspec zs.
   Proof.
-    case: zs => vs zf zp zq. elim: zq vs zf zp => //=.
-    - move=> e1 e2 vs zf zp /andP /=
-                [/andP /= [/andP /= [/andP [Hsubf Hwell] Hsubq] Hunch] Hssa]
-                Hps s1 s2 /= Hzf Hzp. rewrite /pspecs_of_zspec /= in Hps.
-      apply: (Hps {| ppremises := split_zbexp zf ++ szbexp_zprogram zp;
-                     pconseq := Seq e1 e2 |}); first by rewrite in_cons eqxx.
-      move=> {Hps} pe /= Hmem.
-      exact: (split_zbexp_szbexp_zprogram_mem Hsubf Hwell Hunch Hssa Hzf Hzp Hmem).
-    - move=> e1 e2 m vs zf zp /andP /=
-                [/andP /= [/andP /= [/andP [Hsubf Hwell] Hsubq] Hunch] Hssa]
-                Hps s1 s2 /= Hzf Hzp. rewrite /pspecs_of_zspec /= in Hps.
-      apply: (Hps {| ppremises := split_zbexp zf ++ szbexp_zprogram zp;
-                     pconseq := Seqmod e1 e2 m |}); first by rewrite in_cons eqxx.
-      move=> {Hps} pe /= Hmem.
-      exact: (split_zbexp_szbexp_zprogram_mem Hsubf Hwell Hunch Hssa Hzf Hzp Hmem).
-    - move=> e1 IH1 e2 IH2 vs zf zp /andP /=
-                [/andP /= [/andP /= [/andP [Hsubf Hwell] Hsubq] Hunch] Hssa]
-                Hps s1 s2 /= Hzf Hzp. rewrite /pspecs_of_zspec /= in Hps.
-      move: (SSAVS.Lemmas.subset_union4 Hsubq) (SSAVS.Lemmas.subset_union5 Hsubq)
-      => {Hsubq} Hsub1 Hsub2. split.
-      + apply: (IH1 vs zf zp _ _) => /=.
-        * rewrite /ZSSA.well_formed_ssa_zspec /=. rewrite Hunch Hssa !andbT.
-          rewrite /ZSSA.well_formed_zspec /=. by rewrite Hsubf Hwell Hsub1.
-        * move=> ps Hin. apply: Hps. rewrite map_cat mem_cat. apply/orP; left.
-          assumption.
-        * exact: Hzf.
-        * exact: Hzp.
-      + apply: (IH2 vs zf zp _ _) => /=.
-        * rewrite /ZSSA.well_formed_ssa_zspec /=. rewrite Hunch Hssa !andbT.
-          rewrite /ZSSA.well_formed_zspec /=. by rewrite Hsubf Hwell Hsub2.
-        * move=> ps Hin. apply: Hps. rewrite map_cat mem_cat. apply/orP; right.
-          assumption.
-        * exact: Hzf.
-        * exact: Hzp.
+    case: zs => zf zq. elim: zq zf => //=.
+    - move=> e1 e2 zf /= Hps s /= Hzf. rewrite /pspecs_of_zspec /= in Hps.
+      apply: (Hps {| ppremises := split_zbexp zf; pconseq := Seq e1 e2 |});
+        first by rewrite in_cons eqxx.
+      move=> {Hps} pe /= Hmem. exact: (split_zbexp_mem Hzf Hmem).
+    - move=> e1 e2 m zf Hps s /= Hzf. rewrite /pspecs_of_zspec /= in Hps.
+      apply: (Hps {| ppremises := split_zbexp zf; pconseq := Seqmod e1 e2 m |});
+        first by rewrite in_cons eqxx.
+      move=> {Hps} pe /= Hmem. exact: (split_zbexp_mem Hzf Hmem).
+    - move=> e1 IH1 e2 IH2 zf Hps s /= Hzf. rewrite /pspecs_of_zspec /= in Hps.
+      split.
+      + apply: (IH1 zf _ s Hzf) => /=. move=> ps Hin. apply: Hps.
+        rewrite map_cat mem_cat. apply/orP; left. assumption.
+      + apply: (IH2 zf _ s Hzf) => /=. move=> ps Hin. apply: Hps.
+        rewrite map_cat mem_cat. apply/orP; right. assumption.
   Qed.
 
 End ZSpec2Spec.
@@ -1786,9 +1656,6 @@ End PExpr.
 
 
 Section Checker.
-
-  (* find cs and c *)
-  Variable find_coefficients : seq (PExpr Z) -> PExpr Z -> PExpr Z -> seq Z * Z.
 
   Definition combine_coefficients (cs : seq Z) (ps : seq (PExpr Z)) : seq (PExpr Z) :=
     map (fun '(c, p) => PEmul (PEc c) p) (zip cs ps).
