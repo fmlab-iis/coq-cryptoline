@@ -565,11 +565,7 @@ Section SSA2Algebra.
   Definition bv2z_espec avn (s : espec) : zspec :=
     let (g, eprogs) := bv2z_program (esinputs s)
                                     avn initial_index (esprog s) in
-    {| zsinputs := SSAVS.union
-                     (aux_vars_lt avn g)
-                     (vars_env (program_succ_typenv (esprog s) (esinputs s)));
-       zspre := eand (espre s) (eands eprogs);
-       zsprog := [::];
+    {| zspre := eand (espre s) (eands eprogs);
        zspost := espost s |}.
 
 
@@ -2565,99 +2561,9 @@ Section SplitSpec.
                   E avn g1 (eqn_program p)
                   (bv2z_store (program_succ_typenv (eqn_program p) E) bs2).
     move=> Hzf Hzprog.
-    move: (Heqn zbs2 zbs2 (conj Hzf Hzprog) (Logic.eq_refl zbs2)) => Hzg.
+    move: (Heqn zbs2 (conj Hzf Hzprog)) => Hzg.
 
     apply/(bv2z_upd_avars_eval_ebexp Hni_eqn_g). exact: Hzg.
-  Qed.
-
-  (* Well-formedness of bv2z_spec *)
-
-  Lemma bv2z_instr_vars_subset E o avn g1 i g2 zes :
-    well_defined_instr E i ->
-    bv2z_instr o E avn g1 i = (g2, zes) ->
-    SSAVS.subset (ZSSA.vars_zbexp (eands zes))
-                 (SSAVS.union (aux_vars_lt avn g2)
-                              (vars_env (instr_succ_typenv i E))).
-  Proof.
-    Ltac mytac ::=
-      repeat
-        match goal with
-        | H : is_true (_ && _) |- _ => hyps_splitb
-        | H : is_true (are_defined _ _) |- _ => move/defsubP: H => H
-        | |- context f [carry_constr ?o] =>
-          rewrite /carry_constr; case: (add_carry_constraints o) => /=
-        | H : bv2z_cast _ _ _ _ _ _ = _ |- _ =>
-          rewrite /bv2z_cast in H; repeat case_pairs; rewrite /=
-        | H : bv2z_vpc _ _ _ _ = _ |- _ =>
-          rewrite /bv2z_vpc in H; repeat case_pairs; rewrite /=
-        | |- context f [vars_env (SSATE.add _ _ _)] =>
-          rewrite vars_env_add_union
-        | |- context f [ZSSA.vars_zexp (bv2z_atomic _)] =>
-          rewrite vars_bv2z_atomic
-        | |- context f [ZSSA.vars_zbexp (eands (split_eand _))] =>
-          rewrite vars_eands_split_eand
-    end.
-    (case: i; rewrite /=; intros; repeat case_pairs; rewrite /=);
-      mytac; try match goal with
-                 | |- context f [aux_vars_lt ?avn (N.succ ?g)] =>
-                   let H := fresh in
-                   move/SSAVS.Lemmas.subset_singleton2:
-                     (aux_vars_lt_mem avn (N.lt_succ_diag_r g)) => H
-                 | |- context f [ZSSA.vars_zbexp (eqn_bexp ?e)] =>
-                   let H := fresh in
-                   move: (vars_ebexp_subset e) => H
-                 end;
-      by (t_auto with SSAVS.Lemmas.dp_subset).
-  Qed.
-
-  Lemma bv2z_program_vars_subset E o avn g1 p g2 eprogs :
-    well_formed_program E p ->
-    bv2z_program o E avn g1 p = (g2, eprogs) ->
-    SSAVS.subset (ZSSA.vars_zbexp (eands eprogs))
-                 (SSAVS.union (aux_vars_lt avn g2)
-                              (vars_env (program_succ_typenv p E))).
-  Proof.
-    elim: p E g1 g2 eprogs => /=.
-    - move=> ? ? ? ? _ [] _ <- /=. exact: SSAVS.Lemmas.subset_empty.
-    - move=> i p IH E g1 g2 eprogs /andP [Hwf_i Hwf_p].
-      dcase (bv2z_instr o E avn g1 i) => [[g_hd zhd] Hhd].
-      dcase (bv2z_program o (instr_succ_typenv i E) avn g_hd p) => [[g_tl ztl] Htl].
-      case=> ? ?; subst. rewrite vars_eands_cat. apply: SSAVS.Lemmas.subset_union3.
-      + rewrite vars_env_program_succ_typenv. move: (bv2z_program_idx_inc Htl) => Hg.
-        move: (aux_vars_lt_subset avn Hg) => Hsub1.
-        move/andP: Hwf_i => [Hdef_i Hwt_i].
-        move: (bv2z_instr_vars_subset Hdef_i Hhd) => Hsub2.
-        rewrite -SSAVS.Lemmas.P.union_assoc. apply: SSAVS.Lemmas.subset_union1.
-        apply: (SSAVS.Lemmas.subset_trans Hsub2). apply: SSAVS.Lemmas.subset_union3.
-        * apply: SSAVS.Lemmas.subset_union1. exact: Hsub1.
-        * apply: SSAVS.Lemmas.subset_union2. exact: SSAVS.Lemmas.subset_refl.
-      + exact: (IH _ _ _ _ Hwf_p Htl).
-  Qed.
-
-  Lemma bv2z_spec_well_formed o s :
-    well_formed_ssa_spec s ->
-    ZSSA.well_formed_zspec (bv2z_espec o (new_svar_spec s) (espec_of_spec s)).
-  Proof.
-    case: s => E f p g.
-    move=> /andP [/= /andP [/= /andP [/= /andP [Hwf_f Hwf_p] Hwf_g] Hun] Hssa].
-    rewrite /bv2z_espec /=.
-    dcase (bv2z_program
-             o E (new_svar_spec {| sinputs := E; spre := f; sprog := p; spost := g |})
-             initial_index (eqn_program p)) => [[g' eprogs] Hbvz].
-    rewrite /ZSSA.well_formed_zspec /=. rewrite andbT eqn_program_succ_typenv.
-    apply/andP; split.
-    - apply: SSAVS.Lemmas.subset_union3.
-      + apply: SSAVS.Lemmas.subset_union2.
-        move/andP: Hwf_f => [Hdef Hwt]. move/defsubP: Hdef => Hsub.
-        apply: (SSAVS.Lemmas.subset_trans (vars_ebexp_subset f)).
-        apply: (SSAVS.Lemmas.subset_trans Hsub).
-        rewrite vars_env_program_succ_typenv.
-        apply: SSAVS.Lemmas.subset_union1. exact: SSAVS.Lemmas.subset_refl.
-      + rewrite bv2z_eqn_program in Hbvz.
-        exact: (bv2z_program_vars_subset Hwf_p Hbvz).
-    - apply: SSAVS.Lemmas.subset_union1. apply: SSAVS.Lemmas.subset_union2.
-      apply: (SSAVS.Lemmas.subset_trans (vars_ebexp_subset g)).
-      move/andP: Hwf_g => [/defsubP H _]. exact: H.
   Qed.
 
 End SplitSpec.
