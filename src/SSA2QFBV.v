@@ -280,10 +280,10 @@ Definition bexp_instr (te : TypEnv.SSATE.env) (i : SSA.instr) : QFBV.bexp :=
   (* Iadcs (c, v, a1, a2, y): v = a1 + a2 + y, c = carry flag *)
   | SSA.Iadcs c v a1 a2 y =>
     let 'a_size := asize a1 te in
-    let 'qe1ext := qfbv_sext 1 (qfbv_atomic a1) in
-    let 'qe2ext := qfbv_sext 1 (qfbv_atomic a2) in
+    let 'qe1ext := qfbv_zext 1 (qfbv_atomic a1) in
+    let 'qe2ext := qfbv_zext 1 (qfbv_atomic a2) in
     let 'qeyext := qfbv_zext a_size (qfbv_atomic y) in
-    let 'qerext := qfbv_add (qfbv_add qeyext qe1ext) qe2ext in
+    let 'qerext := qfbv_add (qfbv_add qe1ext qe2ext) qeyext in
     qfbv_conj (qfbv_eq (qfbv_var c) (qfbv_high 1 qerext))
               (qfbv_eq (qfbv_var v) (qfbv_low a_size qerext))
   (* Isub (v, a1, a2): v = a1 - a2, overflow is forbidden *)
@@ -1172,13 +1172,24 @@ Proof .
   repeat eval_exp_exp_atomic_to_pred_state .
   inversion_clear Hinst; repeat qfbv_store_acc .
   rewrite /well_typed_instr in Hty .
-  move : Hty => /andP [Hty _] .
-  move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => Hsize .
-  
-  rewrite (eqP (adc_sext_add_high (eval_atomic a1 s1) Hsize)) .
-  rewrite (eqP (adc_sext_add_low (eval_atomic a1 s1) Hsize)) .
-  rewrite (size_eval_atomic_asize _ Hcon) // .
-  apply /andP; split; done .
+  move : Hty => /andP [Hty Htyb] .
+  move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => /eqP Hsize .
+  have : size (eval_atomic a1 s1) == 1 .
+  { by rewrite (conform_size_eval_atomic H2 Hcon) (eqP Htyb) . }
+  move => Hsz1 .
+  have : size (eval_atomic a s1) ==
+         size ((adcB false (eval_atomic a s1) (eval_atomic a0 s1)).2) .
+  { by rewrite size_adcB -(eqP Hsize) minnE subKn . }
+  have : size (eval_atomic a s1) ==
+         size ((adcB true (eval_atomic a s1) (eval_atomic a0 s1)).2) .
+  { by rewrite size_adcB -(eqP Hsize) minnE subKn . }
+  move : (size1 Hsz1); case => /eqP ->;
+    rewrite /asize -(conform_size_eval_atomic H0 Hcon);
+    rewrite (eqP (addB_addB_adcB _ Hsize)) /=;
+    [ case => _ /eqP ->
+    | case => /eqP -> _ ];                      
+    by rewrite (eqP (@high1_joinmsb _ _)) from_nat_bool 
+               (eqP (@low_joinmsb _ _)) /to_bool /= .
 Qed .
 
 Lemma bexp_instr_eval_Isub te t a a0 s1 s2 :
