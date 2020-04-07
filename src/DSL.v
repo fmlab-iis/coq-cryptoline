@@ -1689,6 +1689,9 @@ Module MakeDSL
   (* Here we define well-typedness assuming all used variables are defined. *)
   (* Note: we could also check the definedness of variables in well-typedness. *)
 
+  Definition well_sized_atomic (E : TE.env) (a : atomic) : bool :=
+    is_unsigned (atyp a E) || (0 < asize a E).
+
   Fixpoint well_typed_eexp (te : TE.env) (e : eexp) : bool :=
     match e with
     | Evar v => true
@@ -1769,7 +1772,8 @@ Module MakeDSL
     | Icast v t a
     | Ivpc v t a => true
     | Ijoin v ah al =>
-      is_unsigned (atyp al te) && compatible (atyp ah te) (atyp al te)
+      is_unsigned (atyp al te) && compatible (atyp ah te) (atyp al te) &&
+      well_sized_atomic te ah
     | Iassume e => well_typed_bexp te e
     end.
 
@@ -2330,6 +2334,29 @@ Module MakeDSL
     reflexivity.
   Qed.
 
+  Lemma asize_submap a E1 E2 :
+    TELemmas.submap E1 E2 ->
+    are_defined (vars_atomic a) E1 ->
+    asize a E1 = asize a E2.
+  Proof.
+    move=> H1 H2. rewrite /asize (atyp_submap H1 H2). reflexivity.
+  Qed.
+
+  Lemma well_sized_atomic_submap a E1 E2 :
+    TELemmas.submap E1 E2 ->
+    are_defined (vars_atomic a) E1 ->
+    well_sized_atomic E1 a = well_sized_atomic E2 a.
+  Proof.
+    move=> Hsub Hdef. rewrite /well_sized_atomic. rewrite (atyp_submap Hsub Hdef).
+    rewrite (asize_submap Hsub Hdef). reflexivity.
+  Qed.
+
+  Lemma well_sized_atomic_atyp_eq E a1 a2 :
+    atyp a1 E = atyp a2 E -> well_sized_atomic E a1 = well_sized_atomic E a2.
+  Proof.
+    rewrite /well_sized_atomic /asize. by move=> ->.
+  Qed.
+
   Lemma submap_add_vtyp v t E1 E2 :
     TELemmas.submap (TE.add v t E1) E2 ->
     TE.vtyp v E2 = t.
@@ -2551,32 +2578,36 @@ Module MakeDSL
     TELemmas.submap te1 te2 ->
     well_typed_instr te2 i.
   Proof.
-    elim: i te1 te2 => //=; intros;
-                (let rec tac :=
-                     match goal with
-                     | H : ?a |- ?a => assumption
-                     | H : ?l \/ ?r |- _ => case: H => H; tac
-                     | |- ?l /\ ?r => split; tac
-                     | |- is_true (_ && _) => apply /andP; tac
-                     | H : is_true(well_formed_instr ?te ?i) |- _  =>
-                       let Hwd := fresh "Hwd" in let Hwt := fresh "Hwt" in
-                                                 move/andP: H => [Hwd Hwt]; tac
-                     | Hwd: is_true (well_defined_instr ?te ?i) |- _ =>
-                       (rewrite /= in Hwd); tac
-                     | H : is_true(well_typed_instr ?te ?i) |- _  =>
-                       (rewrite /= in H); tac
-                     | H : is_true (_ && _) |- _ =>
-                       let H1 := fresh in let H2 := fresh in move/andP: H => [H1 H2]; tac
-                     | Hsub: TELemmas.submap ?te1 ?te2, Hwd: is_true (are_defined ?vs ?te1)
-                       |- is_true (are_defined ?vs ?te2) =>
-                         exact: (are_defined_submap Hsub Hwd); tac
-                     | Hsub: TELemmas.submap ?te1 ?te2, Hwd: is_true (are_defined ?vs ?te1)
-                       |- context [atyp ?a ?te2] =>
-                       rewrite -(atyp_submap Hsub Hwd); tac
-                     | |- _ => idtac
-                     end
-                 in tac).
-    exact: (well_typed_bexp_submap H0 Hwd Hwt).
+    (elim: i te1 te2 => //=); intros;
+      (let rec tac :=
+           match goal with
+           | H : ?a |- ?a => assumption
+           | H : ?l \/ ?r |- _ => case: H => H; tac
+           | |- ?l /\ ?r => split; tac
+           | |- is_true (_ && _) => apply /andP; tac
+           | H : is_true (well_formed_instr ?te ?i) |- _  =>
+             let Hwd := fresh "Hwd" in let Hwt := fresh "Hwt" in
+                                       move/andP: H => [Hwd Hwt]; tac
+           | Hwd: is_true (well_defined_instr ?te ?i) |- _ =>
+             (rewrite /= in Hwd); tac
+           | H : is_true (well_typed_instr ?te ?i) |- _  =>
+             (rewrite /= in H); tac
+           | H : is_true (_ && _) |- _ =>
+             let H1 := fresh in let H2 := fresh in move/andP: H => [H1 H2]; tac
+           | Hsub : TELemmas.submap ?te1 ?te2, Hwd : is_true (are_defined ?vs ?te1)
+             |- is_true (are_defined ?vs ?te2) =>
+             exact: (are_defined_submap Hsub Hwd); tac
+           | Hsub : TELemmas.submap ?te1 ?te2, Hwd : is_true (are_defined ?vs ?te1)
+             |- context [atyp ?a ?te2] =>
+             rewrite -(atyp_submap Hsub Hwd); tac
+           | Hsub : TELemmas.submap ?E1 ?E2,
+                    Hdef : is_true (are_defined (vars_atomic ?a) ?E1)
+             |- is_true (well_sized_atomic ?E2 ?a) =>
+             rewrite -(well_sized_atomic_submap Hsub Hdef); tac
+           | |- _ => idtac
+           end
+       in tac).
+     exact: (well_typed_bexp_submap H0 Hwd Hwt).
   Qed.
 
   Lemma well_formed_instr_well_formed te1 te2 i :
@@ -3315,7 +3346,7 @@ Module MakeDSL
     S.conform s2 (instr_succ_typenv (Ijoin t a a0) te) .
   Proof .
     move => Hcon /=; rewrite 2!are_defined_subset_env =>
-    /andP [Hdef0 Hdef1] /andP [Hun Hty] Hev .
+    /andP [Hdef0 Hdef1] /andP [/andP [Hun Hty] Hws] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite size_cat
             (size_eval_atomic_asize Hdef0) //

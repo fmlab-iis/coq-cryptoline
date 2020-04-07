@@ -1626,6 +1626,12 @@ Section MakeSSA.
     - reflexivity.
   Qed.
 
+  Lemma ssa_atomic_asize m a E :
+    DSL.asize a E = SSA.asize (ssa_atomic m a) (ssa_typenv m E).
+  Proof.
+    rewrite /DSL.asize /SSA.asize. rewrite -ssa_atomic_atyp. reflexivity.
+  Qed.
+
   Lemma ssa_instr_succ_typenv_submap m1 m2 i si te:
     ssa_instr m1 i = (m2, si) ->
     SSA.TELemmas.submap (ssa_typenv m2 (DSL.instr_succ_typenv i te))
@@ -4049,46 +4055,58 @@ Section MakeSSA.
       + by apply (ssa_well_typed_rbexp m).
   Qed.
 
+  Lemma ssa_well_sized_atomic m E a :
+    DSL.well_sized_atomic E a =
+    SSA.well_sized_atomic (ssa_typenv m E) (ssa_atomic m a).
+  Proof.
+    rewrite /DSL.well_sized_atomic /SSA.well_sized_atomic.
+    rewrite -ssa_atomic_atyp -ssa_atomic_asize. reflexivity.
+  Qed.
+
   Lemma ssa_instr_well_typed te m1 m2 i si :
     DSL.well_formed_instr te i ->
     ssa_instr m1 i = (m2, si) ->
     SSA.well_typed_instr (ssa_typenv m1 te) si.
   Proof.
-    rewrite /DSL.well_formed_instr /DSL.well_defined_instr /DSL.well_typed_instr /SSA.well_typed_instr.
-    case: i => /=; intros;
-                 (let rec tac :=
-                      match goal with
-                      | H : (_, _) = (_, _) |- _ => case: H => _ <- /=; tac
-                      | H : is_true (_ && _) |- _ =>
-                        let H1 := fresh in
-                        let H2 := fresh in
-                        move/andP: H => [H1 H2]; tac
-                      | |- is_true (_ && _) => apply/andP; split; tac
-                      | H : is_true (VS.subset (DSL.vars_atomic ?a) ?vs)
-                        |- is_true (SSAVS.subset
-                                      (SSA.vars_atomic (ssa_atomic ?m ?a))
-                                      (ssa_vars ?m ?vs)) =>
-                        rewrite ssa_vars_atomic_subset; assumption
-                      | H : is_true (?v1 != ?v2)
-                        |- is_true (ssa_var (upd_index ?v1 (upd_index ?v2 ?m)) ?v1 !=
-                                            ssa_var (upd_index ?v2 ?m) ?v2) =>
-                        exact: (pair_neq1 _ _ H)
-                      | H : is_true (VS.mem ?v ?vs) |-
-                        is_true (SSAVS.mem (ssa_var ?m ?v) (ssa_vars ?m ?vs)) =>
-                        rewrite ssa_vars_mem1; exact: H
-                      | |- context [SSA.atyp (ssa_atomic ?m ?a) (ssa_typenv ?m ?te)]
-                        => rewrite -ssa_atomic_atyp; tac
-                      | H: is_true (DSL.are_defined (DSL.vars_atomic ?a) ?te)
-                        |- is_true (SSA.are_defined (SSA.vars_atomic (ssa_atomic ?m ?a))
-                                                    (ssa_typenv ?m ?te)) => rewrite -ssa_vars_are_defined_atomic; exact: H
-                      | H : is_true (?v1 != ?v2)
-                        |- is_true (ssa_var (upd_index ?v1 (upd_index ?v2 ?m)) ?v1 !=
-                                            ssa_var (upd_index ?v2 ?m) ?v2) =>
-                        exact: (pair_neq1 _ _ H)
-                      | |- is_true(true) => done
-                      | |- ?e => progress (auto)
-                      | |- ?e => idtac
-                      end in tac) .
+    rewrite /DSL.well_formed_instr /DSL.well_defined_instr
+            /DSL.well_typed_instr /SSA.well_typed_instr.
+    (case: i => /=; intros);
+      (let rec tac :=
+           match goal with
+           | H : (_, _) = (_, _) |- _ => case: H => _ <- /=; tac
+           | H : is_true (_ && _) |- _ =>
+             let H1 := fresh in
+             let H2 := fresh in
+             move/andP: H => [H1 H2]; tac
+           | |- is_true (_ && _) => apply/andP; split; tac
+           | H : is_true (VS.subset (DSL.vars_atomic ?a) ?vs)
+             |- is_true (SSAVS.subset
+                           (SSA.vars_atomic (ssa_atomic ?m ?a))
+                           (ssa_vars ?m ?vs)) =>
+             rewrite ssa_vars_atomic_subset; assumption
+           | H : is_true (?v1 != ?v2)
+             |- is_true (ssa_var (upd_index ?v1 (upd_index ?v2 ?m)) ?v1 !=
+                                 ssa_var (upd_index ?v2 ?m) ?v2) =>
+             exact: (pair_neq1 _ _ H)
+           | H : is_true (VS.mem ?v ?vs) |-
+             is_true (SSAVS.mem (ssa_var ?m ?v) (ssa_vars ?m ?vs)) =>
+             rewrite ssa_vars_mem1; exact: H
+           | |- context [SSA.atyp (ssa_atomic ?m ?a) (ssa_typenv ?m ?te)]
+             => rewrite -ssa_atomic_atyp; tac
+           | H: is_true (DSL.are_defined (DSL.vars_atomic ?a) ?te)
+             |- is_true (SSA.are_defined (SSA.vars_atomic (ssa_atomic ?m ?a))
+                                         (ssa_typenv ?m ?te)) =>
+             rewrite -ssa_vars_are_defined_atomic; exact: H
+           | H : is_true (?v1 != ?v2)
+             |- is_true (ssa_var (upd_index ?v1 (upd_index ?v2 ?m)) ?v1 !=
+                                 ssa_var (upd_index ?v2 ?m) ?v2) =>
+             exact: (pair_neq1 _ _ H)
+           | |- is_true (SSA.well_sized_atomic _ _) =>
+             rewrite -ssa_well_sized_atomic; tac
+           | |- is_true(true) => done
+           | |- ?e => progress (auto)
+           | |- ?e => idtac
+           end in tac) .
       by apply ssa_well_typed_bexp.
   Qed.
 
