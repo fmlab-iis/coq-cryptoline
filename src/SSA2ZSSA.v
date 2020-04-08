@@ -2161,9 +2161,8 @@ Section SplitSpec.
                  => H.
       + rewrite (eqP H) eqxx leqnn. reflexivity.
       + deduce_compare_cases H. rewrite H0 (eq_sym wv) H1 H.
-        move/eqP=> Heq. exact: sext_low_to_Z_low.
-      + deduce_compare_cases H. rewrite H3 H1 H2. move=> _.
-        exact: to_Z_sext.
+        move/eqP=> Heq. rewrite -{2}Heq. rewrite to_Z_sext. reflexivity.
+      + deduce_compare_cases H. rewrite H3 H1 H2. move=> _. exact: to_Z_sext.
   Qed.
 
   Lemma bv2z_Ijoin th tl bsh bsl :
