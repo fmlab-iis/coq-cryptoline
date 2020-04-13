@@ -1072,12 +1072,7 @@ Qed .
 Lemma high1_joinmsb b bs :
   high 1 (joinmsb bs b) == [:: b] .
 Proof .
-  elim : bs => /= .
-  - by rewrite /high .
-  - move => c cs IH .
-    rewrite -(eqP IH) .
-    rewrite /high /= size_joinmsb .
-    by rewrite -addn1 !addnK addn1 /= !cats0 .
+  apply/eqP. exact: high1_rcons.
 Qed .
 
 Lemma low_joinmsb b bs :
