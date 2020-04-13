@@ -294,8 +294,8 @@ Definition bexp_instr (te : TypEnv.SSATE.env) (i : SSA.instr) : QFBV.bexp :=
   (* Isubb (b, v, a1, a2): v = a1 - a2, b = borrow flag *)
   | SSA.Isubb b v a1 a2 =>
     let 'a_size := asize a1 te in
-    let 'qe1ext := qfbv_sext 1 (qfbv_atomic a1) in
-    let 'qe2ext := qfbv_sext 1 (qfbv_atomic a2) in
+    let 'qe1ext := qfbv_zext 1 (qfbv_atomic a1) in
+    let 'qe2ext := qfbv_zext 1 (qfbv_atomic a2) in
     let 'qerext := qfbv_sub qe1ext qe2ext in
     qfbv_conj (qfbv_eq (qfbv_var b) (qfbv_high 1 qerext))
               (qfbv_eq (qfbv_var v)
@@ -303,8 +303,8 @@ Definition bexp_instr (te : TypEnv.SSATE.env) (i : SSA.instr) : QFBV.bexp :=
   (* Isubc (c, v, a1, a2): v = a1 + not(a2) + 1, c = carry flag *)
   | SSA.Isubc c v a1 a2 =>
     let 'a_size := asize a1 te in
-    let 'qe1ext := qfbv_sext 1 (qfbv_atomic a1) in
-    let 'qe2negext := qfbv_sext 1 (qfbv_neg (qfbv_atomic a2)) in
+    let 'qe1ext := qfbv_zext 1 (qfbv_atomic a1) in
+    let 'qe2negext := qfbv_zext 1 (qfbv_neg (qfbv_atomic a2)) in
     let 'qerext := qfbv_add qe1ext qe2negext in
     qfbv_conj (qfbv_eq (qfbv_var c)
                        (qfbv_high 1 qerext))
@@ -313,16 +313,16 @@ Definition bexp_instr (te : TypEnv.SSATE.env) (i : SSA.instr) : QFBV.bexp :=
   (* Isbb (v, a1, a2, y): v = a1 - a2 - y *)
   | SSA.Isbb v a1 a2 y =>
     let 'a_size := asize a1 te in
-    let 'qe1ext := qfbv_sext 1 (qfbv_atomic a1) in
-    let 'qe2ext := qfbv_sext 1 (qfbv_atomic a2) in
+    let 'qe1ext := qfbv_zext 1 (qfbv_atomic a1) in
+    let 'qe2ext := qfbv_zext 1 (qfbv_atomic a2) in
     let 'qeyext := qfbv_zext a_size (qfbv_atomic y) in
     qfbv_eq (qfbv_var v)
             (qfbv_low a_size (qfbv_sub (qfbv_sub qe1ext qe2ext) qeyext))
   (* Isbbs (b, v, a1, a2, y): v = a1 - a2 - y, b = borrow flag *)
   | SSA.Isbbs b v a1 a2 y =>
     let 'a_size := asize a1 te in
-    let 'qe1ext := qfbv_sext 1 (qfbv_atomic a1) in
-    let 'qe2ext := qfbv_sext 1 (qfbv_atomic a2) in
+    let 'qe1ext := qfbv_zext 1 (qfbv_atomic a1) in
+    let 'qe2ext := qfbv_zext 1 (qfbv_atomic a2) in
     let 'qeyext := qfbv_zext a_size (qfbv_atomic y) in
     let 'qerext := qfbv_sub (qfbv_sub qe1ext qe2ext) qeyext in
     qfbv_conj (qfbv_eq (qfbv_var b) (qfbv_high 1 qerext))
@@ -330,18 +330,18 @@ Definition bexp_instr (te : TypEnv.SSATE.env) (i : SSA.instr) : QFBV.bexp :=
   (* Isbc (v, a1, a2, y): v = a1 + not(a2) + y *)
   | SSA.Isbc v a1 a2 y =>
     let 'a_size := asize a1 te in
-    let 'qe1ext := qfbv_sext 1 (qfbv_atomic a1) in
-    let 'qe2notext := qfbv_sext 1 (qfbv_not (qfbv_atomic a2)) in
+    let 'qe1ext := qfbv_zext 1 (qfbv_atomic a1) in
+    let 'qe2notext := qfbv_zext 1 (qfbv_not (qfbv_atomic a2)) in
     let 'qeyext := qfbv_zext a_size (qfbv_atomic y) in
     qfbv_eq (qfbv_var v)
-            (qfbv_low a_size (qfbv_add (qfbv_add qeyext qe1ext) qe2notext))
+            (qfbv_low a_size (qfbv_add (qfbv_add qe1ext qe2notext) qeyext))
   (* Isbcs (c, v, a1, a2, y): v = a1 + not(a2) + y, c = carry flag *)
   | SSA.Isbcs c v a1 a2 y =>
     let 'a_size := asize a1 te in
-    let 'qe1ext := qfbv_sext 1 (qfbv_atomic a1) in
-    let 'qe2notext := qfbv_sext 1 (qfbv_not (qfbv_atomic a2)) in
+    let 'qe1ext := qfbv_zext 1 (qfbv_atomic a1) in
+    let 'qe2notext := qfbv_zext 1 (qfbv_not (qfbv_atomic a2)) in
     let 'qeyext := qfbv_zext a_size (qfbv_atomic y) in
-    let 'qerext := qfbv_add (qfbv_add qeyext qe1ext) qe2notext in
+    let 'qerext := qfbv_add (qfbv_add qe1ext qe2notext) qeyext in
     qfbv_conj (qfbv_eq (qfbv_var c) (qfbv_high 1 qerext))
               (qfbv_eq (qfbv_var v) (qfbv_low a_size qerext))
   (* Imul (v, a1, a2): v = a1 * a2, overflow is forbidden *)
@@ -1226,12 +1226,20 @@ Proof .
   rewrite /carry_addB .
   rewrite /well_typed_instr in Hty .
   move : (size_eval_atomic_same Hcon H H0 (eqP Hty)) => Hsize .
-  rewrite -(size_negB (eval_atomic a0 s1)) in Hsize .
-  rewrite (eqP (adc_false_sext_add_high Hsize)) .
-  rewrite {3}/addB .
-  rewrite (eqP (adc_false_sext_add_low Hsize)) .
-  rewrite (size_eval_atomic_asize H Hcon) /= .
-  apply /andP; split; done .
+  have : (size (eval_atomic a s1) = size (-# eval_atomic a0 s1)%bits) .
+  { by rewrite size_negB -Hsize . } 
+  move => Hszneg .
+  rewrite (eqP (addB_zext1_catB Hszneg)) /= .
+  rewrite /from_bool high1_rcons .
+  rewrite from_nat_bool /= .
+  rewrite /asize -(conform_size_eval_atomic H Hcon) .
+  have : (size (eval_atomic a s1) =
+          size (adcB false (eval_atomic a s1)
+                           (-# eval_atomic a0 s1)%bits).2) .
+  { by rewrite size_adcB size_negB -Hsize minnE subKn . } 
+  case => -> .
+  rewrite (eqP (@low_joinmsb _ _)) /= .
+  by rewrite /addB /= .
 Qed .
 
 Lemma bexp_instr_eval_Isubb te t t0 a a0 s1 s2 :
@@ -1253,10 +1261,15 @@ Proof .
   rewrite /borrow_subB .
   rewrite /well_typed_instr in Hty .
   move : (size_eval_atomic_same Hcon H H0 (eqP Hty)) => Hsize .
-  rewrite (sbb_false_sext_sub_high Hsize) /= .
-  rewrite /subB .
-  rewrite (eqP (sbb_false_sext_sub_low Hsize)) .
-  rewrite (size_eval_atomic_asize _ Hcon) // .
+  rewrite !(eqP (subB_zext1_catB Hsize)) /= .
+  rewrite /from_bool high1_rcons from_nat_bool /= .
+  rewrite /asize -(conform_size_eval_atomic H Hcon) .
+  have : (size (eval_atomic a s1) =
+          size (sbbB false (eval_atomic a s1) (eval_atomic a0 s1)).2) .
+  { by rewrite size_sbbB -Hsize minnE subKn . }
+  case => -> .
+  rewrite (eqP (@low_joinmsb _ _)) /= .
+  by rewrite /subB .
 Qed .
   
 Lemma bexp_instr_eval_Isbc te t a a0 a1 s1 s2 :
@@ -1275,11 +1288,27 @@ Proof .
   repeat well_defined_to_vs_subset .
   repeat eval_exp_exp_atomic_to_pred_state .
   inversion_clear Hinst; repeat qfbv_store_acc .
-  move : Hty; rewrite /well_typed_instr => /andP [Hty _] .
+  move : Hty; rewrite /well_typed_instr => /andP [Hty Htyb] .
   move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
-  rewrite -(size_invB (eval_atomic a0 s1)) in Hsize .
-  rewrite (eqP (adc_sext_add_low (eval_atomic a1 s1) Hsize)) .
-  rewrite (size_eval_atomic_asize _ Hcon) // .
+  rewrite /asize -(conform_size_eval_atomic H3 Hcon) .
+  have : (size (eval_atomic a1 s1) == 1) .
+  { by rewrite (conform_size_eval_atomic H0 Hcon) (eqP Htyb) . }
+  move => Hsz1 .
+  have : (size (eval_atomic a s1) == size (~~# eval_atomic a0 s1)%bits) .
+  { by rewrite size_invB -Hsize . } 
+  move => Hszinv .
+  case (size1 Hsz1) => /eqP ->;
+    rewrite (eqP (@addB_addB_adcB _ _ _ Hszinv)) .
+  - have : (size (eval_atomic a s1) =
+            size (adcB false (eval_atomic a s1)
+                             (~~# eval_atomic a0 s1)%bits).2) .
+    { by rewrite size_adcB size_invB -Hsize minnE subKn . }
+    case => ->; by rewrite (eqP (@low_joinmsb _ _)) /to_bool .
+  - have : (size (eval_atomic a s1) =
+            size (adcB true (eval_atomic a s1)
+                            (~~# eval_atomic a0 s1)%bits).2) .
+    { by rewrite size_adcB size_invB -Hsize minnE subKn . }
+    case => ->; by rewrite (eqP (@low_joinmsb _ _)) /to_bool .
 Qed .
 
 Lemma bexp_instr_eval_Isbcs te t t0 a a0 a1 s1 s2 :
@@ -1299,13 +1328,29 @@ Proof .
   repeat eval_exp_exp_atomic_to_pred_state .
   inversion_clear Hinst; repeat qfbv_store_acc .
   move : Hty .
-  rewrite /well_typed_instr => /andP [Hty _] .
+  rewrite /well_typed_instr => /andP [Hty Htyb] .
   move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => Hsize .
-  rewrite -(size_invB (eval_atomic a0 s1)) in Hsize .
-  rewrite (eqP (adc_sext_add_high (eval_atomic a1 s1) Hsize)) .
-  rewrite (eqP (adc_sext_add_low (eval_atomic a1 s1) Hsize)) .
-  rewrite !(size_eval_atomic_asize H0 Hcon) /= .
-  apply /andP; split; done .
+  have : (size (eval_atomic a1 s1) == 1) .
+  { by rewrite (conform_size_eval_atomic H2 Hcon) (eqP Htyb) . }
+  move => Hsz1 .
+  have : (size (eval_atomic a s1) == size (~~# eval_atomic a0 s1)%bits) .
+  { by rewrite size_invB -Hsize . } 
+  move => Hszinv .
+  rewrite /asize -(conform_size_eval_atomic H0 Hcon) .
+  case (size1 Hsz1) => /eqP ->;
+    rewrite (eqP (@addB_addB_adcB _ _ _ Hszinv)) .
+  - rewrite high1_rcons from_nat_bool /= .
+    have : (size (eval_atomic a s1) =
+            size (adcB false (eval_atomic a s1)
+                             (~~# eval_atomic a0 s1)%bits).2) .
+    { by rewrite size_adcB size_invB -Hsize minnE subKn . }
+    case => ->; by rewrite (eqP (@low_joinmsb _ _)) /to_bool .
+  - rewrite high1_rcons from_nat_bool /= .
+    have : (size (eval_atomic a s1) =
+            size (adcB true (eval_atomic a s1)
+                            (~~# eval_atomic a0 s1)%bits).2) .
+    { by rewrite size_adcB size_invB -Hsize minnE subKn . }
+    case => ->; by rewrite (eqP (@low_joinmsb _ _)) /to_bool .
 Qed .
 
 Lemma bexp_instr_eval_Isbb te t a a0 a1 s1 s2 :
@@ -1325,10 +1370,24 @@ Proof .
   repeat eval_exp_exp_atomic_to_pred_state .
   inversion_clear Hinst; repeat qfbv_store_acc .
   move : Hty .
-  rewrite /well_typed_instr => /andP [Hty _] .
+  rewrite /well_typed_instr => /andP [Hty Htyb] .
   move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
-  rewrite (eqP (sbb_sext_sub_low (eval_atomic a1 s1) Hsize)) .
-  rewrite !(size_eval_atomic_asize H3 Hcon) // .
+  have : (size (eval_atomic a1 s1) == 1) .
+  { by rewrite (conform_size_eval_atomic H0 Hcon) (eqP Htyb) . }
+  move => Hsz1 .
+  rewrite /asize -(conform_size_eval_atomic H3 Hcon) .
+  case : (size1 Hsz1); case => /eqP ->;
+    rewrite (eqP (subB_subB_sbbB _ Hsize)) .
+  - have : (size (eval_atomic a s1) =
+            size (sbbB false (eval_atomic a s1) (eval_atomic a0 s1)).2) .
+    { by rewrite size_sbbB -Hsize minnE subKn . }
+    case => -> .
+    by rewrite (eqP (@low_joinmsb _ _)) /to_bool .
+  - have : (size (eval_atomic a s1) =
+            size (sbbB true (eval_atomic a s1) (eval_atomic a0 s1)).2) .
+    { by rewrite size_sbbB -Hsize minnE subKn . }
+    case => -> .
+    by rewrite (eqP (@low_joinmsb _ _)) /to_bool .
 Qed .
 
 Lemma bexp_instr_eval_Isbbs te t t0 a a0 a1 s1 s2 :
@@ -1348,12 +1407,25 @@ Proof .
   repeat eval_exp_exp_atomic_to_pred_state .
   inversion_clear Hinst; repeat qfbv_store_acc .
   move : Hty .
-  rewrite /well_typed_instr => /andP [Hty _] .
+  rewrite /well_typed_instr => /andP [Hty Htyb] .
   move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => Hsize .
-  rewrite (eqP (sbb_sext_sub_high (eval_atomic a1 s1) Hsize)) .
-  rewrite (eqP (sbb_sext_sub_low (eval_atomic a1 s1) Hsize)) .
-  rewrite !(size_eval_atomic_asize H0 Hcon) .
-  apply /andP; split; done .
+  have : (size (eval_atomic a1 s1) == 1) .
+  { by rewrite (conform_size_eval_atomic H2 Hcon) (eqP Htyb) . }
+  move => Hsz1 .
+  rewrite /asize -(conform_size_eval_atomic H0 Hcon) .
+  case : (size1 Hsz1); case => /eqP ->;
+    rewrite (eqP (subB_subB_sbbB _ Hsize));
+    rewrite high1_rcons from_nat_bool /= .
+  - have : (size (eval_atomic a s1) =
+            size (sbbB false (eval_atomic a s1) (eval_atomic a0 s1)).2) .
+    { by rewrite size_sbbB -Hsize minnE subKn . }
+    case => -> .
+    by rewrite (eqP (@low_joinmsb _ _)) /to_bool .
+  - have : (size (eval_atomic a s1) =
+            size (sbbB true (eval_atomic a s1) (eval_atomic a0 s1)).2) .
+    { by rewrite size_sbbB -Hsize minnE subKn . }
+    case => -> .
+    by rewrite (eqP (@low_joinmsb _ _)) /to_bool .
 Qed .
 
 Lemma bexp_instr_eval_Imul te t a a0 s1 s2 :
