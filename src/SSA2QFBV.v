@@ -272,11 +272,11 @@ Definition bexp_instr (te : TypEnv.SSATE.env) (i : SSA.instr) : QFBV.bexp :=
   (* Iadc (v, a1, a2, y): v = a1 + a2 + y, overflow is forbidden *)
   | SSA.Iadc v a1 a2 y =>
     let 'a_size := asize a1 te in
-    let 'qe1 := qfbv_atomic a1 in
-    let 'qe2 := qfbv_atomic a2 in
+    let 'qe1ext := qfbv_zext 1 (qfbv_atomic a1) in
+    let 'qe2ext := qfbv_zext 1 (qfbv_atomic a2) in
     let 'qeyext := qfbv_zext a_size (qfbv_atomic y) in
     qfbv_eq (qfbv_var v)
-            (qfbv_add (qfbv_add qeyext qe1) qe2)
+            (qfbv_low a_size (qfbv_add (qfbv_add qe1ext qe2ext) qeyext))
   (* Iadcs (c, v, a1, a2, y): v = a1 + a2 + y, c = carry flag *)
   | SSA.Iadcs c v a1 a2 y =>
     let 'a_size := asize a1 te in
@@ -563,21 +563,9 @@ Proof .
   case : bs; done .
 Qed .
 
-Lemma size1 (bs : bitseq) :
-  size bs == 1 -> ((bs == [:: false]) + (bs == [:: true])) .
-Proof .
-  case : bs .
-  - done .
-  - move => b bs /= .
-    rewrite eqSS => Hs0 .
-    move : (size0 Hs0) => Hbs .
-    rewrite (eqP Hbs) .
-    case : b; [right | left]; done .
-Qed .
-    
 Lemma to_bool_bit_is_true :
   forall bs,
-    size bs == 1 ->
+    size bs = 1 ->
     to_bool bs ->
     [:: true] == bs .
 Proof .
@@ -588,7 +576,7 @@ Qed .
 
 Lemma not_to_bool_bit_is_false :
   forall bs,
-    size bs == 1 ->
+    size bs = 1 ->
     ~~ to_bool bs ->
     [:: false] == bs .
 Proof .
@@ -605,7 +593,7 @@ Proof .
 Qed .  
 
 Lemma to_nat_zext_bool n bs :
-  size bs == 1 -> to_nat (zext n bs) == to_bool bs .
+  size bs = 1 -> to_nat (zext n bs) == to_bool bs .
 Proof .
   move => Hsz1; elim (size1 Hsz1); case => /eqP -> /=;
     by rewrite to_nat_zeros /= .
@@ -629,7 +617,8 @@ Proof .
   rewrite -(addnA n0 n2) (addnC n2) (addnA n0 n1) .
   done .
 Qed .
-  
+
+(*
 Lemma adcB_addB bsc bs0 bs1 :
   size bsc == 1 ->
   size bs0 == size bs1 ->
@@ -647,7 +636,7 @@ Proof .
   rewrite (eqP (to_nat_zext_bool _ Hszc)) .
   apply from_nat_idem .
 Qed .  
-
+*)
 Lemma vtyp_var_add_eq te v tv :
   TypEnv.SSATE.vtyp v (TypEnv.SSATE.add v tv te) = tv.
 Proof. exact: (TypEnv.SSATE.vtyp_add_eq (eqxx v)). Qed.
@@ -1012,7 +1001,7 @@ Proof .
   rewrite /joinlsb /= .
   move : Hty => /andP [ Htyc _ ] .
   move : (conform_size_eval_atomic H3 Hcon) .
-  rewrite (eqP Htyc) /= => /eqP Hszc .
+  rewrite (eqP Htyc) /= => Hszc .
   inversion_clear Hinst; repeat qfbv_store_acc .
   + rewrite (to_bool_bit_is_true Hszc H1) // .
   + move : (not_to_bool_bit_is_false Hszc H1) .
@@ -1142,12 +1131,26 @@ Proof .
   inversion_clear Hinst; repeat qfbv_store_acc .
   move : Hty => /andP [Htyeq Htyb] .
   move : (conform_size_eval_atomic H0 Hcon) .
-  rewrite (eqP Htyb) /= => /eqP Hsz1 .
+  rewrite (eqP Htyb) /= => Hsz1 .
   move : (conform_size_eval_atomic H3 Hcon) .
   rewrite {1}(eqP Htyeq) .
   rewrite -(conform_size_eval_atomic H Hcon) => /eqP Hszeq .
-  rewrite (eqP (adcB_addB Hsz1 Hszeq)) /= .
-  by rewrite asize_add_same (conform_size_eval_atomic H3 Hcon) /= .
+  rewrite asize_add_same /asize -(conform_size_eval_atomic H3 Hcon) .
+  elim : (size1 Hsz1) => /eqP -> .
+  - rewrite (eqP (addB_addB_adcB _ Hszeq)) .
+    have : (size (eval_atomic a s1) =
+            size (adcB false (eval_atomic a s1)
+                             (eval_atomic a0 s1)).2) .
+    { by rewrite size_adcB -(eqP Hszeq) minnE subKn . }
+    case => -> .
+    by rewrite (eqP (@low_joinmsb _ _)) .
+  - rewrite (eqP (addB_addB_adcB _ Hszeq)) .
+    have : (size (eval_atomic a s1) =
+            size (adcB true (eval_atomic a s1)
+                            (eval_atomic a0 s1)).2) .
+    { by rewrite size_adcB -(eqP Hszeq) minnE subKn . }
+    case => -> .
+    by rewrite (eqP (@low_joinmsb _ _)) .
 Qed .
 
 Lemma bexp_instr_eval_Iadcs te t t0 a a0 a1 s1 s2 :
@@ -1169,7 +1172,7 @@ Proof .
   rewrite /well_typed_instr in Hty .
   move : Hty => /andP [Hty Htyb] .
   move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => /eqP Hsize .
-  have : size (eval_atomic a1 s1) == 1 .
+  have : size (eval_atomic a1 s1) = 1 .
   { by rewrite (conform_size_eval_atomic H2 Hcon) (eqP Htyb) . }
   move => Hsz1 .
   have : size (eval_atomic a s1) ==
@@ -1286,7 +1289,7 @@ Proof .
   move : Hty; rewrite /well_typed_instr => /andP [Hty Htyb] .
   move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
   rewrite /asize -(conform_size_eval_atomic H3 Hcon) .
-  have : (size (eval_atomic a1 s1) == 1) .
+  have : (size (eval_atomic a1 s1) = 1) .
   { by rewrite (conform_size_eval_atomic H0 Hcon) (eqP Htyb) . }
   move => Hsz1 .
   have : (size (eval_atomic a s1) == size (~~# eval_atomic a0 s1)%bits) .
@@ -1325,7 +1328,7 @@ Proof .
   move : Hty .
   rewrite /well_typed_instr => /andP [Hty Htyb] .
   move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => Hsize .
-  have : (size (eval_atomic a1 s1) == 1) .
+  have : (size (eval_atomic a1 s1) = 1) .
   { by rewrite (conform_size_eval_atomic H2 Hcon) (eqP Htyb) . }
   move => Hsz1 .
   have : (size (eval_atomic a s1) == size (~~# eval_atomic a0 s1)%bits) .
@@ -1367,7 +1370,7 @@ Proof .
   move : Hty .
   rewrite /well_typed_instr => /andP [Hty Htyb] .
   move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize .
-  have : (size (eval_atomic a1 s1) == 1) .
+  have : (size (eval_atomic a1 s1) = 1) .
   { by rewrite (conform_size_eval_atomic H0 Hcon) (eqP Htyb) . }
   move => Hsz1 .
   rewrite /asize -(conform_size_eval_atomic H3 Hcon) .
@@ -1404,7 +1407,7 @@ Proof .
   move : Hty .
   rewrite /well_typed_instr => /andP [Hty Htyb] .
   move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => Hsize .
-  have : (size (eval_atomic a1 s1) == 1) .
+  have : (size (eval_atomic a1 s1) = 1) .
   { by rewrite (conform_size_eval_atomic H2 Hcon) (eqP Htyb) . }
   move => Hsz1 .
   rewrite /asize -(conform_size_eval_atomic H0 Hcon) .
