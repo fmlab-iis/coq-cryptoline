@@ -2001,6 +2001,18 @@ Module MakeDSL
     by rewrite /= H1 H2.
   Qed.
 
+  Lemma well_formed_program_cons E p i :
+    well_formed_program E (i::p) =
+    (well_formed_instr E i) && (well_formed_program (instr_succ_typenv i E) p).
+  Proof.
+    case H: ((well_formed_instr E i) &&
+             (well_formed_program (instr_succ_typenv i E) p)).
+    - move/andP: H=> [H1 H2]. exact: (well_formed_program_cons3 H1 H2).
+    - apply/negP => Hcons. move/idP/negP: H. rewrite negb_and. case/orP=> H.
+      + rewrite (well_formed_program_cons1 Hcons) in H. discriminate.
+      + rewrite (well_formed_program_cons2 Hcons) in H. discriminate.
+  Qed.
+
   Lemma well_formed_program_rcons te p i :
     well_formed_program te (rcons p i) =
     well_formed_program te p &&
@@ -2573,6 +2585,38 @@ Module MakeDSL
       + done.
   Qed.
 
+  Lemma well_formed_eexp_submap E1 E2 e :
+    TELemmas.submap E1 E2 -> well_formed_eexp E1 e -> well_formed_eexp E2 e.
+  Proof.
+    move=> Hsubm /andP [Hdef1 Hwt1]. rewrite /well_formed_eexp.
+    rewrite (are_defined_submap Hsubm Hdef1)
+            (well_typed_eexp_submap Hsubm Hdef1 Hwt1). done.
+  Qed.
+
+  Lemma well_formed_ebexp_submap E1 E2 e :
+    TELemmas.submap E1 E2 -> well_formed_ebexp E1 e -> well_formed_ebexp E2 e.
+  Proof.
+    move=> Hsubm /andP [Hdef1 Hwt1]. rewrite /well_formed_ebexp.
+    rewrite (are_defined_submap Hsubm Hdef1)
+            (well_typed_ebexp_submap Hsubm Hdef1 Hwt1). done.
+  Qed.
+
+  Lemma well_formed_rexp_submap E1 E2 e :
+    TELemmas.submap E1 E2 -> well_formed_rexp E1 e -> well_formed_rexp E2 e.
+  Proof.
+    move=> Hsubm /andP [Hdef1 Hwt1]. rewrite /well_formed_rexp.
+    rewrite (are_defined_submap Hsubm Hdef1)
+            (well_typed_rexp_submap Hsubm Hdef1 Hwt1). done.
+  Qed.
+
+  Lemma well_formed_rbexp_submap E1 E2 e :
+    TELemmas.submap E1 E2 -> well_formed_rbexp E1 e -> well_formed_rbexp E2 e.
+  Proof.
+    move=> Hsubm /andP [Hdef1 Hwt1]. rewrite /well_formed_rbexp.
+    rewrite (are_defined_submap Hsubm Hdef1)
+            (well_typed_rbexp_submap Hsubm Hdef1 Hwt1). done.
+  Qed.
+
   Lemma well_formed_instr_well_typed te1 te2 i :
     well_formed_instr te1 i ->
     TELemmas.submap te1 te2 ->
@@ -2779,7 +2823,7 @@ Module MakeDSL
   Proof.
     move/memenvP => H. apply/memenvP/VSLemmas.memP.
     move: (@vars_env_instr_succ_typenv i E x) => [_ Himp]. apply: Himp.
-    apply/VSLemmas.memP. rewrite VSLemmas.mem_union H. reflexivity.    
+    apply/VSLemmas.memP. rewrite VSLemmas.mem_union H. reflexivity.
   Qed.
 
 

@@ -14,6 +14,50 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
+
+Lemma bvs_eqi_qfbv_eval_exp E e s1 s2 :
+  are_defined (QFBV.vars_exp e) E -> bvs_eqi E s1 s2 ->
+  QFBV.eval_exp e s1 = QFBV.eval_exp e s2
+with
+bvs_eqi_qfbv_eval_bexp E e s1 s2 :
+  are_defined (QFBV.vars_bexp e) E -> bvs_eqi E s1 s2 ->
+  QFBV.eval_bexp e s1 = QFBV.eval_bexp e s2.
+Proof.
+  (* bvs_eqi_qfbv_eval_eexp *)
+  case: e => //=.
+  - move=> x Hdef Heqi. rewrite are_defined_singleton in Hdef.
+    move/memdefP: Hdef => Hmem. exact: (Heqi x Hmem).
+  - move=> op e Hdef Heqi. rewrite (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef Heqi).
+    reflexivity.
+  - move=> op e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
+    move/andP: Hdef=> [Hdef1 Hdef2].
+    rewrite (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef1 Heqi)
+            (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef2 Heqi). reflexivity.
+  - move=> c e1 e2 Hdef Heqi. rewrite !are_defined_union in Hdef.
+    move/andP: Hdef=> [Hdefc /andP [Hdef1 Hdef2]].
+    rewrite (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef1 Heqi)
+            (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef2 Heqi).
+    rewrite (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdefc Heqi). reflexivity.
+  (* bvs_eqi_qfbv_eval_bexp *)
+  case: e => //=.
+  - move=> op e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
+    move/andP: Hdef=> [Hdef1 Hdef2].
+    rewrite (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef1 Heqi)
+            (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef2 Heqi). reflexivity.
+  - move=> e Hdef Heqi. rewrite (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdef Heqi).
+    reflexivity.
+  - move=> e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
+    move/andP: Hdef=> [Hdef1 Hdef2].
+    rewrite (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdef1 Heqi)
+            (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdef2 Heqi). reflexivity.
+  - move=> e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
+    move/andP: Hdef=> [Hdef1 Hdef2].
+    rewrite (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdef1 Heqi)
+            (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdef2 Heqi). reflexivity.
+Qed.
+
+
+
 Definition qfbv_atomic a :=
   match a with
   | SSA.Avar v => QFBV.Evar v
@@ -151,7 +195,7 @@ Fixpoint bexp_rbexp (e : SSA.rbexp) : QFBV.bexp :=
     | Rsle => qfbv_sle (exp_rexp e1) (exp_rexp e2)
     | Rsgt => qfbv_sgt (exp_rexp e1) (exp_rexp e2)
     | Rsge => qfbv_sge (exp_rexp e1) (exp_rexp e2)
-    end 
+    end
   | Rneg e => qfbv_lneg (bexp_rbexp e)
   | Rand e1 e2 =>
     qfbv_conj (bexp_rbexp e1) (bexp_rbexp e2)
@@ -172,6 +216,10 @@ Lemma eval_exp_atomic a s :
 Proof.
   case: a => /=; reflexivity.
 Qed.
+
+Lemma vars_qfbv_atomic a :
+  QFBV.vars_exp (qfbv_atomic a) = vars_atomic a.
+Proof. by case: a. Qed.
 
 Lemma eval_exp_rexp (e : SSA.rexp) s:
   QFBV.eval_exp (exp_rexp e) s = eval_rexp e s.
@@ -1714,7 +1762,7 @@ Proof .
   move => Heqf .
   apply contraFneq with (x == y); last done .
   case => -> // .
-Qed .  
+Qed .
 
 Lemma bexp_program_eval te p s1 s2 :
   well_formed_ssa_program te p ->
@@ -1895,6 +1943,68 @@ Proof.
     + apply : (ssa_vars_unchanged_program_rng Huc) .
     + apply : (ssa_single_assignment_rng Hssa) .
 Qed .
+
+Lemma vars_exp_rexp e : QFBV.vars_exp (exp_rexp e) = vars_rexp e.
+Proof.
+  elim: e => //=.
+  - move=> _ op e IH. case: op => /=; assumption.
+  - move=> _ op e1 IH1 e2 IH2. case: op => /=; rewrite IH1 IH2; reflexivity.
+Qed.
+
+Lemma vars_bexp_rbexp e : QFBV.vars_bexp (bexp_rbexp e) = vars_rbexp e.
+Proof.
+  elim: e => //=.
+  - move=> _ e1 e2. rewrite !vars_exp_rexp. reflexivity.
+  - move=> _ op e1 e2. case: op => /=; rewrite !vars_exp_rexp; reflexivity.
+  - move=> e1 IH1 e2 IH2. rewrite IH1 IH2. reflexivity.
+  - move=> e1 IH1 e2 IH2. rewrite IH1 IH2. reflexivity.
+Qed.
+
+Ltac are_defined_dec :=
+  match goal with
+  | H : is_true (_ && _) |- _ => caseb H; intros; are_defined_dec
+  | H : is_true (are_defined (SSAVS.singleton _) _) |- _ =>
+    rewrite are_defined_singleton in H; are_defined_dec
+  | H : is_true (are_defined (SSAVS.union _ _) _) |- _ =>
+    let H1 := fresh in
+    let H2 := fresh in
+    rewrite are_defined_union in H; move/andP: H => [H1 H2]; are_defined_dec
+  | |- is_true (are_defined (SSAVS.singleton _) _) =>
+    rewrite are_defined_singleton; are_defined_dec
+  | |- is_true (are_defined (SSAVS.union _ _) _) =>
+    rewrite are_defined_union; apply/andP; split; are_defined_dec
+  | |- context f [QFBV.vars_exp (qfbv_atomic _)] =>
+    rewrite vars_qfbv_atomic; are_defined_dec
+  | H : is_true (?x != ?y) |- is_true (is_defined ?y (TypEnv.SSATE.add ?x _ _)) =>
+    rewrite eq_sym in H; rewrite (is_defined_add_neq _ _ H); are_defined_dec
+  | |- context f [if ?b then _ else _] => case: b; simpl; are_defined_dec
+  | |- is_true (is_defined ?v (TypEnv.SSATE.add ?v _ _)) =>
+    exact: is_defined_add_eq
+  | |- is_true (are_defined SSAVS.empty _) => exact: are_defined_empty
+  | H : is_true (are_defined ?vs ?E) |-
+    is_true (are_defined ?vs (TypEnv.SSATE.add _ _ ?E)) =>
+    apply: are_defined_addr; assumption
+  | H : is_true (are_defined ?vs ?E) |-
+    is_true (are_defined ?vs (TypEnv.SSATE.add _ _ (TypEnv.SSATE.add _ _  ?E))) =>
+    apply: are_defined_addr; apply: are_defined_addr; assumption
+  | |- _ => idtac
+  end.
+
+Lemma bexp_instr_are_defined E i :
+  well_defined_instr E i ->
+  are_defined (QFBV.vars_bexp (bexp_instr (instr_succ_typenv i E) i))
+              (instr_succ_typenv i E).
+Proof.
+  case: i => //=; try (move=> *; are_defined_dec).
+  match goal with
+  | b : bexp, H : is_true (are_defined (vars_bexp ?b) _)
+    |- context f [let (_, _) := ?b in _] =>
+    case: b H => eb rb H
+  end.
+  rewrite vars_bexp_rbexp. move: (vars_rbexp_subset (eb, rb)) => /= Hsub.
+  apply: (are_defined_subset Hsub). assumption.
+Qed.
+
 
 (* Connect premises by implication. *)
 
@@ -2116,7 +2226,7 @@ Definition bexp_atomic_vpc_safe te t a : QFBV.bexp :=
           (qfbv_sext (Typ.sizeof_typ a_typ - Typ.sizeof_typ t)
                      (qfbv_low (Typ.sizeof_typ t) (qfbv_atomic a)))
           (qfbv_atomic a) .
-    
+
 Definition bexp_instr_safe te (i : instr) : QFBV.bexp :=
   match i with
   | Iadd _ a1 a2 =>
@@ -2153,7 +2263,7 @@ Definition bexp_instr_safe te (i : instr) : QFBV.bexp :=
   | Iand _ _ _ _
   | Ior _ _ _ _
   | Ixor _ _ _ _
-  | Isplit _ _ _ _ 
+  | Isplit _ _ _ _
   | Ijoin _ _ _
   | Icast _ _ _
   | Iassume _ => qfbv_true
@@ -2508,7 +2618,7 @@ Proof .
       rewrite !eval_exp_atomic
               (ssa_unchanged_program_eval_atomic Hun Hev) .
 Qed .
-  
+
 Lemma eval_bexp_instr_safe_succs_Icshl te t t0 a a0 n p s1 s2 :
   ssa_vars_unchanged_program (rvs_instr (Icshl t t0 a a0 n)) p ->
   eval_program te p s1 s2 ->
@@ -2635,7 +2745,7 @@ Proof .
   - move => v a0 a1 ac; apply eval_bexp_instr_safe_succs_Isbb .
   - move => v a0 a1; apply eval_bexp_instr_safe_succs_Imul .
   - move => v ty a; apply eval_bexp_instr_safe_succs_Ivpc .
-Qed .    
+Qed .
 
 (*
 Lemma eval_bexp_instr_safe_pred te i s1 s2 :
@@ -2766,13 +2876,13 @@ Fixpoint bexp_program_safe_qfbv te pre prefix (p : program) : seq QFBV.bexp :=
   | hd::tl => (bexp_prefix_hd_safe te pre prefix hd)
                 ::(bexp_program_safe_qfbv (instr_succ_typenv hd te) pre (rcons prefix hd) tl)
   end .
-  
+
 Definition bexp_program_safe_at te (p : program) s : bool :=
   if (bexp_program te p) s then
     QFBV.eval_bexp (bexp_program_safe te p) s
   else
     true .
-*)                                                    
+*)
 
 Fixpoint bexp_program_safe_at te p : QFBV.bexp :=
   match p with
@@ -2784,23 +2894,63 @@ Fixpoint bexp_program_safe_at te p : QFBV.bexp :=
                  (bexp_program_safe_at (instr_succ_typenv hd te) tl))
   end .
 
-Lemma ssa_instr_conform_pred te s i :
-  ssa_vars_unchanged_instr (SSA.vars_env te) i ->
-  SSAStore.conform s (instr_succ_typenv i te) ->
-  SSAStore.conform s te .
-Admitted .
-  
-Lemma eval_bexp_program_safe1 te pre p :
+Lemma eval_bexp_program_safe1 E pre p :
+  well_formed_rbexp E pre ->
   ssa_vars_unchanged_program (vars_rbexp pre) p ->
-  well_formed_ssa_program te p ->
-  (forall s, SSAStore.conform s te ->
+  well_formed_ssa_program E p ->
+  (forall s, SSAStore.conform s E ->
              QFBV.eval_bexp (bexp_rbexp pre) s ->
-             QFBV.eval_bexp (bexp_program_safe_at te p) s) ->
-  (forall s, SSAStore.conform s te ->
+             QFBV.eval_bexp (bexp_program_safe_at E p) s) ->
+  (forall s, SSAStore.conform s E ->
              eval_rbexp pre s ->
-             ssa_program_safe_at te p s) .
-Admitted .
-      
+             ssa_program_safe_at E p s) .
+Proof.
+  move=> Hwf_pre Hun Hwf_p H s.
+  have: (forall t : SSAStore.t,
+            bvs_eqi E s t ->
+            SSAStore.conform t E ->
+            QFBV.eval_bexp (bexp_rbexp pre) t ->
+            QFBV.eval_bexp (bexp_program_safe_at E p) t).
+  { move=> t Heqi Hco Hpre. exact: (H _ Hco Hpre). }
+  move: {H} Hwf_pre Hun Hwf_p s.
+
+  elim: p E => [| i p IH] E /=.
+  - move=> *. exact: ssa_program_safe_at_nil.
+  - rewrite ssa_unchanged_program_cons /well_formed_ssa_program.
+    rewrite well_formed_program_cons ssa_single_assignment_cons.
+    rewrite ssa_unchanged_program_cons.
+    move=> Hwf_pre /andP [Hun_prei Hun_prep]
+            /andP [/andP [/andP
+                           [Hwf_i Hwf_p] /andP [Hun_Ei Hun_Ep]] /andP [Hun_ip Hssa]].
+    move=> s H Hco Hpre. apply: ssa_program_safe_at_cons.
+    + move/eval_bexp_rbexp: Hpre => Hpre. apply/(eval_bexp_instr_safe _ Hwf_i).
+      move: (H s (bvs_eqi_refl s) Hco Hpre) => /andP [H1 _]. exact: H1.
+    + move=> t Hei. have Hssa_p: well_formed_ssa_program (instr_succ_typenv i E) p.
+      { repeat (apply/andP; split); try assumption.
+        apply: (ssa_unchanged_program_replace
+                  (SSAVS.Lemmas.P.equal_sym (vars_env_instr_succ_typenv i E))).
+        rewrite ssa_unchanged_program_union. rewrite Hun_Ep /=. exact: Hun_ip. }
+
+      move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsubm.
+      move: (bvs_eqi_eval_instr Hun_Ei Hei) => Hei_st.
+      move: (well_formed_rbexp_submap Hsubm Hwf_pre) => Hwf_pre_succ.
+
+      apply: (IH (instr_succ_typenv i E) Hwf_pre_succ Hun_prep Hssa_p).
+      * move=> t' Heqi Hco' Hpre'.
+        have Heqi': bvs_eqi E s t'.
+        { move: (bvs_eqi_submap Hsubm Heqi) => Hei_st'.
+          exact: (bvs_eqi_trans Hei_st Hei_st'). }
+        move: (bvs_eqi_conform Heqi' Hco) => Hco'E.
+        move: (H _ Heqi' Hco'E Hpre') => /andP [H1 H2].
+
+        move: (bexp_instr_eval Hwf_i Hco Hun_Ei Hei).
+        move/andP: Hwf_i => [Hwd_i Hwt_i].
+        rewrite (bvs_eqi_qfbv_eval_bexp (bexp_instr_are_defined Hwd_i) Heqi).
+        move=> Heb. rewrite Heb /= in H2. exact: H2.
+      * exact: (conform_eval_succ_typenv Hwf_i Hco Hei).
+      * apply/(ssa_unchanged_instr_eval_rbexp Hun_prei Hei). exact: Hpre.
+Qed.
+
 (* Working
 Fixpoint bexp_program_safe_at te p : QFBV.bexp :=
   match p with
