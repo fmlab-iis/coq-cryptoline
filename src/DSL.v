@@ -1526,6 +1526,19 @@ Module MakeDSL
 
   Definition eval_program (te : TE.env) p s t : Prop := eval_instrs te p s t.
 
+  Lemma program_succ_typenv_cons E i p :
+    program_succ_typenv (i::p) E = program_succ_typenv p (instr_succ_typenv i E).
+  Proof. reflexivity. Qed.
+
+  Lemma program_succ_typenv_rcons E p i :
+    program_succ_typenv (rcons p i) E = instr_succ_typenv i (program_succ_typenv p E).
+  Proof. by elim: p E => [| hd tl IH] //=. Qed.
+
+  Lemma program_succ_typenv_cat E p1 p2 :
+    program_succ_typenv (p1 ++ p2) E =
+    program_succ_typenv p2 (program_succ_typenv p1 E).
+  Proof. by elim: p1 E => [| hd1 tl1 IH] //=. Qed.
+
   Lemma eval_ebexp_split e te s :
     eval_ebexp e te s -> (forall se, se \in split_eand e -> eval_ebexp se te s).
   Proof.

@@ -277,11 +277,9 @@ Section Safety.
                   ssa_program_safe_at (instr_succ_typenv hd te) tl s') ->
       ssa_program_safe_at te (hd::tl) s.
 
-  Definition ssa_program_safe te p : Prop :=
-    forall s, ssa_program_safe_at te p s.
-
   Definition ssa_spec_safe sp :=
-    forall s, eval_rbexp (rng_bexp (spre sp)) s ->
+    forall s, SSAStore.conform s (sinputs sp) ->
+              eval_rbexp (rng_bexp (spre sp)) s ->
               ssa_program_safe_at (sinputs sp) (sprog sp) s.
 
 
@@ -2639,7 +2637,7 @@ Section SplitSpec.
     dcase (bv2z_program o E avn g1 (eqn_program p)) => [[g2 eprogs] Hzp].
     move=> Hsafe Hrng Heqn bs1 bs2 /= Hcon [Hpre_eqn Hpre_rng] Hprog.
 
-    split; last exact: (Hrng _ _ Hcon Hpre_rng (eval_rng_program Hprog)). 
+    split; last exact: (Hrng _ _ Hcon Hpre_rng (eval_rng_program Hprog)).
     rewrite /ZSSA.valid_zspec /= in Heqn.
 
     rewrite /new_svar_spec /= in Havn.
@@ -2669,7 +2667,7 @@ Section SplitSpec.
     rewrite -eqn_program_succ_typenv => H.
     move/H/Hiff: Heval_ef => {H} Hzf.
 
-    move: (Hsafe bs1 Hpre_rng) => /= => Hsafe_at.
+    move: (Hsafe bs1 Hcon Hpre_rng) => /= => Hsafe_at.
     rewrite bv2z_eqn_program in Hzp.
     move: (bv2z_upd_avars_sat_program
              Hwf_p Hunch Hssa Hni Hni0 Hcon Hsafe_at Hprog Hzp) => Hzprog.
