@@ -2104,9 +2104,9 @@ Definition bexp_atomic_shl_safe E a n : QFBV.bexp :=
             (qfbv_zero n)
   else
     qfbv_disj (qfbv_eq (qfbv_high (n + 1) (qfbv_atomic a))
-                       (qfbv_zero n))
+                       (qfbv_zero (n + 1)))
               (qfbv_eq (qfbv_high (n + 1) (qfbv_atomic a))
-                       (qfbv_not (qfbv_zero n))).
+                       (qfbv_not (qfbv_zero (n + 1)))).
 
 Definition bexp_atomic_cshl_safe E (a1 : atomic) a2 n  : QFBV.bexp :=
   let 'concatbv := qfbv_concat (qfbv_atomic a2) (qfbv_atomic a1) in
@@ -2114,9 +2114,9 @@ Definition bexp_atomic_cshl_safe E (a1 : atomic) a2 n  : QFBV.bexp :=
     qfbv_eq (qfbv_high n concatbv) (qfbv_zero n)
   else
     qfbv_disj (qfbv_eq (qfbv_high (n + 1) concatbv)
-                       (qfbv_zero n))
+                       (qfbv_zero (n + 1)))
               (qfbv_eq (qfbv_high (n + 1) concatbv)
-                       (qfbv_not (qfbv_zero n))).
+                       (qfbv_not (qfbv_zero (n + 1)))).
 
 Definition bexp_atomic_vpc_safe E t a : QFBV.bexp :=
   let 'a_typ := atyp a E in

@@ -182,7 +182,7 @@ Section Safety.
   Definition ushlBn_safe bs n : bool := high n bs == zeros n.
 
   Definition sshlBn_safe bs n : bool :=
-  (high (n + 1) bs == zeros n) || (high (n + 1) bs == ones n).
+  (high (n + 1) bs == zeros (n + 1)) || (high (n + 1) bs == ones (n + 1)).
 
   Definition shlBn_safe typ_a bs n : bool :=
     if Typ.is_unsigned typ_a then ushlBn_safe bs n
