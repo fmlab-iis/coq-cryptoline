@@ -2969,6 +2969,41 @@ Module MakeDSL
     move => Hsub Hcon. rewrite (conform_size_eval_atomic Hsub Hcon). reflexivity.
   Qed.
 
+  Lemma tbit_var_size E s v :
+    S.conform s E -> TE.mem v E -> TE.vtyp v E = Tbit -> size (S.acc v s) = 1.
+  Proof.
+    move=> Hco Hmem Htyp. rewrite -(S.conform_mem Hco Hmem).
+    rewrite (TE.vtyp_vsize Htyp). reflexivity.
+  Qed.
+
+  Lemma tbit_var_singleton E s v :
+    S.conform s E -> TE.mem v E -> TE.vtyp v E = Tbit ->
+    exists b, S.acc v s = [:: b].
+  Proof.
+    move=> Hco Hmem Htyp. move: (tbit_var_size Hco Hmem Htyp).
+    clear Hco Hmem Htyp. case: (S.acc v s) => [| b1 [| b2 bs]] //=.
+    move=> _; by exists b1.
+  Qed.
+
+  Lemma tbit_atomic_size E s a :
+    S.conform s E -> atyp a E = Typ.Tbit ->
+    VS.subset (vars_atomic a) (vars_env E) ->
+    size (eval_atomic a s) = 1.
+  Proof.
+    move=> Hco Htyp Hsub. move: (size_eval_atomic_asize Hsub Hco) => Hsc.
+    rewrite /asize Htyp /= in Hsc. exact: Hsc.
+  Qed.
+
+  Lemma tbit_atomic_singleton E s a :
+    S.conform s E -> atyp a E = Typ.Tbit ->
+    VS.subset (vars_atomic a) (vars_env E) ->
+    exists b, eval_atomic a s = [:: b].
+  Proof.
+    move=> Hco Htyp Hsub. move: (tbit_atomic_size Hco Htyp Hsub).
+    clear Hco Htyp Hsub. case: (eval_atomic a s) => [| b1 [| b2 bs]] //=.
+    move=> _. by exists b1.
+  Qed.
+
   Lemma size_eval_atomic_same te s a0 a1 :
     S.conform s te ->
     VS.subset (vars_atomic a0) (vars_env te) ->

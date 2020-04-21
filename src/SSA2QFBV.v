@@ -18,18 +18,34 @@ Import Prenex Implicits.
 (* auxiliary lemmas *)
 
 Lemma from_nat_simple :
-  forall n, to_nat (NBitsDef.from_nat (trunc_log 2 n).+1 n) == n.
+  forall n, to_nat (NBitsDef.from_nat (trunc_log 2 n).+1 n) = n.
 Proof.
   move => n.
   rewrite to_nat_from_nat_bounded; first done.
   by apply : trunc_log_ltn.
 Qed.
 
+Ltac rewrite_from_nat_simple :=
+  repeat
+  match goal with
+  | H : context f [(nat_of_bool (odd ?n) +
+                    (to_nat (trunc_log 2 ?n) -bits of (?n./2)).*2)%bits]
+    |- _ =>
+    let Hn := fresh in
+    move: (from_nat_simple n) => Hn; rewrite /= in Hn; rewrite Hn in H; clear Hn
+  | |- context f [(nat_of_bool (odd ?n) +
+                   (to_nat (trunc_log 2 ?n) -bits of (?n./2)).*2)%bits] =>
+    let Hn := fresh in
+    move: (from_nat_simple n) => Hn; rewrite /= in Hn; rewrite Hn; clear Hn
+  end.
+
+(*
 Lemma size0 (bs : bitseq) :
   size bs == 0 -> bs == [::].
 Proof.
   case : bs; done.
 Qed.
+ *)
 
 Lemma to_bool_bit_is_true :
   forall bs,
@@ -85,6 +101,13 @@ Proof.
   rewrite -(addnA n0 n2) (addnC n2) (addnA n0 n1).
   done.
 Qed.
+
+Lemma atyp_asize E a0 a1 :
+  atyp a0 E = atyp a1 E -> asize a0 E == asize a1 E.
+Proof.
+  rewrite /asize. by move=> ->.
+Qed.
+
 
 (*
 Lemma adcB_addB bsc bs0 bs1 :
@@ -1049,8 +1072,7 @@ Proof.
   eval_exp_exp_atomic_to_pred_state.
   inversion_clear Hinst.
   qfbv_store_acc.
-  move : (from_nat_simple n) => /= Hn.
-  by rewrite (eqP Hn) //.
+  rewrite_from_nat_simple. exact: eqxx.
 Qed.
 
 Lemma bexp_instr_eval_Icshl E t t0 a a0 n s1 s2 :
@@ -1065,8 +1087,7 @@ Proof.
   repeat eval_exp_exp_atomic_to_pred_state.
   inversion_clear Hinst.
   repeat qfbv_store_acc.
-  move : (from_nat_simple n) => /= Hn.
-  rewrite !(eqP Hn).
+  rewrite_from_nat_simple.
   rewrite !(conform_size_eval_atomic H0 Hcon)
           !(conform_size_eval_atomic H Hcon).
   apply /andP; split; done.
@@ -1137,36 +1158,6 @@ Proof.
   inversion_clear Hinst; by repeat qfbv_store_acc.
 Qed.
 
-Lemma atyp_asize E a0 a1 :
-  atyp a0 E = atyp a1 E -> asize a0 E == asize a1 E.
-Proof.
-  rewrite /asize. by move=> ->.
-Qed.
-
-Lemma high1_joinmsb b bs :
-  high 1 (joinmsb bs b) == [:: b].
-Proof.
-  apply/eqP. exact: high1_rcons.
-Qed.
-
-Lemma low_joinmsb b bs :
-  low (size bs) (joinmsb bs b) == bs.
-Proof.
-  elim : bs => /=.
-  - by rewrite /low.
-  - move => c cs IH.
-    rewrite /low /=.
-    rewrite eqseq_cons; apply /andP; split; first done.
-    by rewrite -{5}(eqP IH) /low size_joinmsb subSS /=
-                   addn1 subnS subnn /= cats0.
-Qed.
-
-Lemma from_nat_bool b :
-  from_bool 1 b == [:: b].
-Proof.
-  case : b; by rewrite /from_bool /= /joinlsb.
-Qed.
-
 Lemma bexp_instr_eval_Iadds E t t0 a a0 s1 s2 :
   well_formed_instr E (Iadds t t0 a a0) ->
   SSAStore.conform s1 E ->
@@ -1182,18 +1173,8 @@ Proof.
   move : (atyp_asize Hty) => /eqP.
   rewrite /asize -(conform_size_eval_atomic H Hcon)
           -(conform_size_eval_atomic H0 Hcon) => Hss.
-  move : (addB_zext1_catB Hss) => /eqP ->.
-  move : (high1_joinmsb
-            (adcB false (eval_atomic a s1) (eval_atomic a0 s1)).1
-            (adcB false (eval_atomic a s1) (eval_atomic a0 s1)).2)
-  => /eqP ->.
-  move : (low_joinmsb
-            (adcB false (eval_atomic a s1) (eval_atomic a0 s1)).1
-            (adcB false (eval_atomic a s1) (eval_atomic a0 s1)).2).
-  rewrite size_adcB -Hss minnE subKn; last apply leqnn.
-  case => /eqP ->.
-  rewrite /carry_addB /addB /= from_nat_bool.
-  apply /andP; split; done.
+  rewrite (addB_zext1_high1 Hss) eqxx andTb.
+  rewrite (addB_zext1_lown Hss) eqxx. exact: is_true_true.
 Qed.
 
 Lemma bexp_instr_eval_Iadc E t a a0 a1 s1 s2 :
@@ -1215,20 +1196,8 @@ Proof.
   rewrite -(conform_size_eval_atomic H Hcon) => /eqP Hszeq.
   rewrite /asize -(conform_size_eval_atomic H3 Hcon).
   elim : (size1 Hsz1) => /eqP ->.
-  - rewrite (eqP (addB_addB_adcB _ Hszeq)).
-    have : (size (eval_atomic a s1) =
-            size (adcB false (eval_atomic a s1)
-                             (eval_atomic a0 s1)).2).
-    { by rewrite size_adcB -(eqP Hszeq) minnE subKn. }
-    case => ->.
-    by rewrite (eqP (@low_joinmsb _ _)).
-  - rewrite (eqP (addB_addB_adcB _ Hszeq)).
-    have : (size (eval_atomic a s1) =
-            size (adcB true (eval_atomic a s1)
-                            (eval_atomic a0 s1)).2).
-    { by rewrite size_adcB -(eqP Hszeq) minnE subKn. }
-    case => ->.
-    by rewrite (eqP (@low_joinmsb _ _)).
+  - rewrite (adcB_zext1_lown false (eqP Hszeq)). exact: eqxx.
+  - rewrite (adcB_zext1_lown true (eqP Hszeq)). exact: eqxx.
 Qed.
 
 Lemma bexp_instr_eval_Iadcs E t t0 a a0 a1 s1 s2 :
@@ -1245,22 +1214,12 @@ Proof.
   rewrite /well_typed_instr in Hty.
   move : Hty => /andP [Hty Htyb].
   move : (size_eval_atomic_same Hcon H0 H1 (eqP Hty)) => /eqP Hsize.
-  have : size (eval_atomic a1 s1) = 1.
+  have Hsz1 : size (eval_atomic a1 s1) = 1.
   { by rewrite (conform_size_eval_atomic H2 Hcon) (eqP Htyb). }
-  move => Hsz1.
-  have : size (eval_atomic a s1) ==
-         size ((adcB false (eval_atomic a s1) (eval_atomic a0 s1)).2).
-  { by rewrite size_adcB -(eqP Hsize) minnE subKn. }
-  have : size (eval_atomic a s1) ==
-         size ((adcB true (eval_atomic a s1) (eval_atomic a0 s1)).2).
-  { by rewrite size_adcB -(eqP Hsize) minnE subKn. }
-  move : (size1 Hsz1); case => /eqP ->;
-    rewrite /asize -(conform_size_eval_atomic H0 Hcon);
-    rewrite (eqP (addB_addB_adcB _ Hsize)) /=;
-    [ case => _ /eqP ->
-    | case => /eqP -> _ ];
-    by rewrite (eqP (@high1_joinmsb _ _)) from_nat_bool
-               (eqP (@low_joinmsb _ _)) /to_bool /=.
+  move : (size1 Hsz1). rewrite /asize -(conform_size_eval_atomic H0 Hcon).
+  case=> /eqP ->;
+          rewrite (adcB_zext1_high1 _ (eqP Hsize)) eqxx andTb;
+           rewrite (adcB_zext1_lown _ (eqP Hsize)) eqxx; exact: is_true_true.
 Qed.
 
 Lemma bexp_instr_eval_Isub E t a a0 s1 s2 :
@@ -1289,23 +1248,13 @@ Proof.
   repeat well_defined_to_vs_subset.
   repeat eval_exp_exp_atomic_to_pred_state.
   inversion_clear Hinst; repeat qfbv_store_acc.
-  rewrite /carry_addB.
-  rewrite /well_typed_instr in Hty.
+
   move : (size_eval_atomic_same Hcon H H0 (eqP Hty)) => Hsize.
-  have : (size (eval_atomic a s1) = size (-# eval_atomic a0 s1)%bits).
+  have Hszneg: (size (eval_atomic a s1) = size (-# eval_atomic a0 s1)%bits).
   { by rewrite size_negB -Hsize. }
-  move => Hszneg.
-  rewrite (eqP (addB_zext1_catB Hszneg)) /=.
-  rewrite /from_bool high1_rcons.
-  rewrite from_nat_bool /=.
   rewrite /asize -(conform_size_eval_atomic H Hcon).
-  have : (size (eval_atomic a s1) =
-          size (adcB false (eval_atomic a s1)
-                           (-# eval_atomic a0 s1)%bits).2).
-  { by rewrite size_adcB size_negB -Hsize minnE subKn. }
-  case => ->.
-  rewrite (eqP (@low_joinmsb _ _)) /=.
-  by rewrite /addB /=.
+  rewrite (addB_zext1_high1 Hszneg) eqxx andTb.
+  rewrite (addB_zext1_lown Hszneg) eqxx. exact: is_true_true.
 Qed.
 
 Lemma bexp_instr_eval_Isubb E t t0 a a0 s1 s2 :
@@ -1319,18 +1268,11 @@ Proof.
   repeat well_defined_to_vs_subset.
   repeat eval_exp_exp_atomic_to_pred_state.
   inversion_clear Hinst; repeat qfbv_store_acc.
-  rewrite /borrow_subB.
-  rewrite /well_typed_instr in Hty.
+
   move : (size_eval_atomic_same Hcon H H0 (eqP Hty)) => Hsize.
-  rewrite !(eqP (subB_zext1_catB Hsize)) /=.
-  rewrite /from_bool high1_rcons from_nat_bool /=.
   rewrite /asize -(conform_size_eval_atomic H Hcon).
-  have : (size (eval_atomic a s1) =
-          size (sbbB false (eval_atomic a s1) (eval_atomic a0 s1)).2).
-  { by rewrite size_sbbB -Hsize minnE subKn. }
-  case => ->.
-  rewrite (eqP (@low_joinmsb _ _)) /=.
-  by rewrite /subB.
+  rewrite (subB_zext1_high1 Hsize) eqxx andTb.
+  rewrite (subB_zext1_lown Hsize) eqxx. exact: is_true_true.
 Qed.
 
 Lemma bexp_instr_eval_Isbc E t a a0 a1 s1 s2 :
@@ -1344,27 +1286,16 @@ Proof.
   repeat well_defined_to_vs_subset.
   repeat eval_exp_exp_atomic_to_pred_state.
   inversion_clear Hinst; repeat qfbv_store_acc.
+
   move : Hty; rewrite /well_typed_instr => /andP [Hty Htyb].
   move : (size_eval_atomic_same Hcon H3 H (eqP Hty)) => Hsize.
-  rewrite /asize -(conform_size_eval_atomic H3 Hcon).
-  have : (size (eval_atomic a1 s1) = 1).
-  { by rewrite (conform_size_eval_atomic H0 Hcon) (eqP Htyb). }
-  move => Hsz1.
-  have : (size (eval_atomic a s1) == size (~~# eval_atomic a0 s1)%bits).
+  have Hszinv: (size (eval_atomic a s1) = size (~~# eval_atomic a0 s1)%bits).
   { by rewrite size_invB -Hsize. }
-  move => Hszinv.
+  rewrite /asize -(conform_size_eval_atomic H3 Hcon).
+  have Hsz1: (size (eval_atomic a1 s1) = 1).
+  { by rewrite (conform_size_eval_atomic H0 Hcon) (eqP Htyb). }
   case (size1 Hsz1) => /eqP ->;
-    rewrite (eqP (@addB_addB_adcB _ _ _ Hszinv)).
-  - have : (size (eval_atomic a s1) =
-            size (adcB false (eval_atomic a s1)
-                             (~~# eval_atomic a0 s1)%bits).2).
-    { by rewrite size_adcB size_invB -Hsize minnE subKn. }
-    case => ->; by rewrite (eqP (@low_joinmsb _ _)) /to_bool.
-  - have : (size (eval_atomic a s1) =
-            size (adcB true (eval_atomic a s1)
-                            (~~# eval_atomic a0 s1)%bits).2).
-    { by rewrite size_adcB size_invB -Hsize minnE subKn. }
-    case => ->; by rewrite (eqP (@low_joinmsb _ _)) /to_bool.
+  rewrite (adcB_zext1_lown _ Hszinv) eqxx; exact: is_true_true.
 Qed.
 
 Lemma bexp_instr_eval_Isbcs E t t0 a a0 a1 s1 s2 :
@@ -1384,24 +1315,13 @@ Proof.
   have : (size (eval_atomic a1 s1) = 1).
   { by rewrite (conform_size_eval_atomic H2 Hcon) (eqP Htyb). }
   move => Hsz1.
-  have : (size (eval_atomic a s1) == size (~~# eval_atomic a0 s1)%bits).
+  have : (size (eval_atomic a s1) = size (~~# eval_atomic a0 s1)%bits).
   { by rewrite size_invB -Hsize. }
   move => Hszinv.
   rewrite /asize -(conform_size_eval_atomic H0 Hcon).
-  case (size1 Hsz1) => /eqP ->;
-    rewrite (eqP (@addB_addB_adcB _ _ _ Hszinv)).
-  - rewrite high1_rcons from_nat_bool /=.
-    have : (size (eval_atomic a s1) =
-            size (adcB false (eval_atomic a s1)
-                             (~~# eval_atomic a0 s1)%bits).2).
-    { by rewrite size_adcB size_invB -Hsize minnE subKn. }
-    case => ->; by rewrite (eqP (@low_joinmsb _ _)) /to_bool.
-  - rewrite high1_rcons from_nat_bool /=.
-    have : (size (eval_atomic a s1) =
-            size (adcB true (eval_atomic a s1)
-                            (~~# eval_atomic a0 s1)%bits).2).
-    { by rewrite size_adcB size_invB -Hsize minnE subKn. }
-    case => ->; by rewrite (eqP (@low_joinmsb _ _)) /to_bool.
+  (case (size1 Hsz1) => /eqP ->);
+    rewrite (adcB_zext1_lown _ Hszinv) eqxx;
+    rewrite (adcB_zext1_high1 _ Hszinv) eqxx; exact: is_true_true.
 Qed.
 
 Lemma bexp_instr_eval_Isbb E t a a0 a1 s1 s2 :
@@ -1422,18 +1342,8 @@ Proof.
   { by rewrite (conform_size_eval_atomic H0 Hcon) (eqP Htyb). }
   move => Hsz1.
   rewrite /asize -(conform_size_eval_atomic H3 Hcon).
-  case : (size1 Hsz1); case => /eqP ->;
-    rewrite (eqP (subB_subB_sbbB _ Hsize)).
-  - have : (size (eval_atomic a s1) =
-            size (sbbB false (eval_atomic a s1) (eval_atomic a0 s1)).2).
-    { by rewrite size_sbbB -Hsize minnE subKn. }
-    case => ->.
-    by rewrite (eqP (@low_joinmsb _ _)) /to_bool.
-  - have : (size (eval_atomic a s1) =
-            size (sbbB true (eval_atomic a s1) (eval_atomic a0 s1)).2).
-    { by rewrite size_sbbB -Hsize minnE subKn. }
-    case => ->.
-    by rewrite (eqP (@low_joinmsb _ _)) /to_bool.
+  (case : (size1 Hsz1) => /eqP ->);
+    rewrite (sbbB_zext1_lown _ Hsize) eqxx; exact: is_true_true.
 Qed.
 
 Lemma bexp_instr_eval_Isbbs E t t0 a a0 a1 s1 s2 :
@@ -1454,19 +1364,9 @@ Proof.
   { by rewrite (conform_size_eval_atomic H2 Hcon) (eqP Htyb). }
   move => Hsz1.
   rewrite /asize -(conform_size_eval_atomic H0 Hcon).
-  case : (size1 Hsz1); case => /eqP ->;
-    rewrite (eqP (subB_subB_sbbB _ Hsize));
-    rewrite high1_rcons from_nat_bool /=.
-  - have : (size (eval_atomic a s1) =
-            size (sbbB false (eval_atomic a s1) (eval_atomic a0 s1)).2).
-    { by rewrite size_sbbB -Hsize minnE subKn. }
-    case => ->.
-    by rewrite (eqP (@low_joinmsb _ _)) /to_bool.
-  - have : (size (eval_atomic a s1) =
-            size (sbbB true (eval_atomic a s1) (eval_atomic a0 s1)).2).
-    { by rewrite size_sbbB -Hsize minnE subKn. }
-    case => ->.
-    by rewrite (eqP (@low_joinmsb _ _)) /to_bool.
+  (case : (size1 Hsz1) => /eqP ->);
+    rewrite (sbbB_zext1_high1 _ Hsize) (sbbB_zext1_lown _ Hsize) !eqxx;
+    exact: is_true_true.
 Qed.
 
 Lemma bexp_instr_eval_Imul E t a a0 s1 s2 :
@@ -1529,9 +1429,7 @@ Proof.
   [ rewrite H7 /= | rewrite -Typ.not_signed_is_unsigned H7 /= ];
     repeat eval_exp_exp_atomic_to_pred_state;
     repeat qfbv_store_acc;
-    move : (from_nat_simple n) => /= /eqP Hszlo;
-    move : (from_nat_simple (asize a E - n)) => /= /eqP Hszhi;
-    rewrite !Hszlo !Hszhi;
+    rewrite_from_nat_simple;
     rewrite !(size_eval_atomic_asize Hdef Hcon);
     apply /andP; split; done.
 Qed.
@@ -1680,6 +1578,525 @@ Proof.
   - move => v t a; exact: bexp_instr_eval_Ivpc.
   - move => v a0 a1; exact: bexp_instr_eval_Ijoin.
   - move => b; exact: bexp_instr_eval_Iassume.
+Qed.
+
+
+
+(* From QFBV to instruction evaluation *)
+
+Lemma ssastore_reupd v s : SSAStore.Upd v (SSAStore.acc v s) s s.
+Proof.
+  move=> x. case Hxv: (x == v).
+  - rewrite (SSAStore.S.acc_upd_eq Hxv). rewrite (eqP Hxv). reflexivity.
+  - move/idP/negP: Hxv => Hxv. rewrite (SSAStore.S.acc_upd_neq Hxv). reflexivity.
+Qed.
+
+Lemma ssastore_reupd_imp v bs s : bs = SSAStore.acc v s -> SSAStore.Upd v bs s s.
+Proof. move=> ->. exact: ssastore_reupd. Qed.
+
+Lemma ssastore_reupd2 vl vh s :
+  SSAStore.Upd2 vl (SSAStore.acc vl s) vh (SSAStore.acc vh s) s s.
+Proof.
+  move=> x. case Hxh: (x == vh).
+  - rewrite (SSAStore.S.acc_upd_eq Hxh). rewrite (eqP Hxh). reflexivity.
+  - move/idP/negP: Hxh => Hxh. rewrite (SSAStore.S.acc_upd_neq Hxh).
+    case Hxl: (x == vl).
+    + rewrite (SSAStore.S.acc_upd_eq Hxl). rewrite (eqP Hxl). reflexivity.
+    + move/idP/negP: Hxl => Hxl. rewrite (SSAStore.S.acc_upd_neq Hxl).
+      reflexivity.
+Qed.
+
+Lemma ssastore_reupd2_imp vl vh bsl bsh s :
+  bsl = SSAStore.acc vl s ->
+  bsh = SSAStore.acc vh s ->
+  SSAStore.Upd2 vl bsl vh bsh s s.
+Proof. move=> -> ->.  exact: ssastore_reupd2. Qed.
+
+
+Ltac intro_atomic_size :=
+  match goal with
+  | Hco : SSAStore.conform ?bs ?E,
+    Hsub : is_true (SSAVS.subset (vars_atomic ?a) (vars_env ?E)) |- _ =>
+    let Hsize := fresh "Hsize" in
+    move: (conform_size_eval_atomic Hsub Hco) => Hsize; move: Hsub; intro_atomic_size
+  | |- _ => intros
+  end.
+
+Ltac to_asize :=
+  repeat
+  match goal with
+  | Hsub : is_true (SSAVS.subset (vars_atomic ?a) (vars_env ?E)),
+    Hco : SSAStore.conform ?s ?E |-
+    context f [size (eval_atomic ?a ?s)] =>
+    rewrite (size_eval_atomic_asize Hsub Hco)
+  | Hsub : is_true (SSAVS.subset (vars_atomic ?a) (vars_env ?E)),
+    Hco : SSAStore.conform ?s ?E,
+    H : context f [size (eval_atomic ?a ?s)] |- _ =>
+    rewrite (size_eval_atomic_asize Hsub Hco) in H
+  end.
+
+Ltac of_asize :=
+  repeat
+  match goal with
+  | Hsub : is_true (SSAVS.subset (vars_atomic ?a) (vars_env ?E)),
+    Hco : SSAStore.conform ?s ?E |-
+    context f [asize ?a ?E] =>
+    rewrite -(size_eval_atomic_asize Hsub Hco)
+  | Hsub : is_true (SSAVS.subset (vars_atomic ?a) (vars_env ?E)),
+    Hco : SSAStore.conform ?s ?E,
+    H : context f [asize ?a ?E] |- _ =>
+    rewrite -(size_eval_atomic_asize Hsub Hco) in H
+  end.
+
+Ltac to_size_eval_atomic H :=
+  match type of H with
+  | context f [asize ?a ?E] =>
+    match goal with
+    | Hsub : is_true (SSAVS.subset (vars_atomic a) (vars_env E)),
+      Hco : SSAStore.conform ?s E |- _ =>
+      rewrite -(size_eval_atomic_asize Hsub Hco) in H
+    end
+  end.
+
+Ltac norm_tac :=
+  rewrite_from_nat_simple;
+  repeat
+    match goal with
+    | H : is_true (well_formed_instr _ _) |- _ =>
+      let H1 := fresh in
+      let H2 := fresh in
+      move/andP: H => /= [H1 H2]
+    | H : is_true (_ && _) |- _ =>
+      let H1 := fresh in
+      let H2 := fresh in
+      move/andP: H => [H1 H2]
+    | H : is_true (are_defined _ _) |- _ =>
+      move/defsubP: H => H
+    | H : context f [QFBV.eval_exp (qfbv_atomic _) _] |- _ =>
+      rewrite eval_exp_atomic in H
+    | |- context f [QFBV.eval_exp (qfbv_atomic _) _] =>
+      rewrite eval_exp_atomic
+    | Hsub : is_true (SSAVS.subset (vars_atomic ?a) (vars_env ?E)),
+      Hco : SSAStore.conform ?s ?E |-
+      context f [size (eval_atomic ?a ?s)] =>
+      rewrite (size_eval_atomic_asize Hsub Hco)
+    | Hco : SSAStore.conform ?s ?E,
+      Htyp : is_true (atyp ?c ?E == Typ.Tbit),
+      Hsub : is_true (SSAVS.subset (vars_atomic ?c) (vars_env ?E)) |- _ =>
+      let b := fresh "b" in
+      let Hb := fresh "Hb" in
+      (move: (tbit_atomic_singleton Hco (eqP Htyp) Hsub) => [b Hb]);
+      repeat match goal with
+             | H : context f [eval_atomic c s] |- _ => rewrite Hb in H
+             | |- context f [eval_atomic c s] => rewrite Hb
+             end;
+      move/eqP: Htyp=> Htyp
+    end; intro_atomic_size.
+
+Ltac solve_tac :=
+  match goal with
+  | |- SSAStore.Upd _ _ ?s ?s => apply: ssastore_reupd_imp; solve_tac
+  | |- SSAStore.Upd2 _ _ _ _ ?s ?s => apply: ssastore_reupd2_imp; solve_tac
+  | H : is_true (?l == ?r) |- ?r = ?l =>
+    rewrite (eqP H); reflexivity
+  end.
+
+Lemma eval_bexp_instr_Imov E s :
+  forall (t : SSAVarOrder.t) (a : atomic),
+    well_formed_instr E (Imov t a) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Imov t a) E) ->
+    QFBV.eval_bexp (bexp_instr E (Imov t a)) s -> eval_instr E (Imov t a) s s.
+Proof. move=> /= *. apply: EImov. norm_tac. by solve_tac. Qed.
+
+Lemma eval_bexp_instr_Ishl E s :
+  forall (t : SSAVarOrder.t) (a : atomic) (n : nat),
+    well_formed_instr E (Ishl t a n) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Ishl t a n) E) ->
+    QFBV.eval_bexp (bexp_instr E (Ishl t a n)) s -> eval_instr E (Ishl t a n) s s.
+Proof. move=> /= *. apply: EIshl. norm_tac. by solve_tac. Qed.
+
+Lemma eval_bexp_instr_Icshl E s :
+  forall (t t0 : SSAVarOrder.t) (a a0 : atomic) (n : nat),
+    well_formed_instr E (Icshl t t0 a a0 n) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Icshl t t0 a a0 n) E) ->
+    QFBV.eval_bexp (bexp_instr E (Icshl t t0 a a0 n)) s ->
+    eval_instr E (Icshl t t0 a a0 n) s s.
+Proof. move=> /= *. apply: EIcshl. norm_tac. by solve_tac. Qed.
+
+Lemma eval_bexp_instr_Inondet E s :
+  forall (t : SSAVarOrder.t) (t0 : Typ.typ),
+    well_formed_instr E (Inondet t t0) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Inondet t t0) E) ->
+    QFBV.eval_bexp (bexp_instr E (Inondet t t0)) s -> eval_instr E (Inondet t t0) s s.
+Proof.
+  move=> /= v t Hwf Hco Hco' H. apply: (@EInondet _ _ _ _ _ (SSAStore.acc v s)).
+  - move: (Hco' v) => HH. rewrite -HH.
+    + rewrite (SSATE.vsize_add_eq (eqxx v)). reflexivity.
+    + exact: SSATE.Lemmas.mem_add_eq.
+  - exact: ssastore_reupd.
+Qed.
+
+Lemma eval_bexp_instr_Icmov E s :
+  forall (t : SSAVarOrder.t) (a a0 a1 : atomic),
+    well_formed_instr E (Icmov t a a0 a1) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Icmov t a a0 a1) E) ->
+    QFBV.eval_bexp (bexp_instr E (Icmov t a a0 a1)) s ->
+    eval_instr E (Icmov t a a0 a1) s s.
+Proof.
+  move=> /= v c a1 a2 Hwf Hco1 Hco2 Heq. norm_tac.
+  case: b Hb Heq => /= Hb Heq.
+  - apply: EIcmovT.
+    + by rewrite Hb.
+    + norm_tac. by solve_tac.
+  - apply: EIcmovF.
+    + by rewrite Hb.
+    + norm_tac. by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Inop E s :
+  well_formed_instr E Inop ->
+  SSAStore.conform s E ->
+  SSAStore.conform s (instr_succ_typenv Inop E) ->
+  QFBV.eval_bexp (bexp_instr E Inop) s -> eval_instr E Inop s s.
+Proof. move=> /= *. by apply: EInop. Qed.
+
+Lemma eval_bexp_instr_Inot E s :
+  forall (t : SSAVarOrder.t) (t0 : Typ.typ) (a : atomic),
+    well_formed_instr E (Inot t t0 a) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Inot t t0 a) E) ->
+    QFBV.eval_bexp (bexp_instr E (Inot t t0 a)) s -> eval_instr E (Inot t t0 a) s s.
+Proof. move=> /= *. apply: EInot. norm_tac. by solve_tac. Qed.
+
+Lemma eval_bexp_instr_Iadd E s :
+  forall (t : SSAVarOrder.t) (a a0 : atomic),
+    well_formed_instr E (Iadd t a a0) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Iadd t a a0) E) ->
+    QFBV.eval_bexp (bexp_instr E (Iadd t a a0)) s -> eval_instr E (Iadd t a a0) s s.
+Proof. move=> /= *. apply: EIadd. norm_tac. by solve_tac. Qed.
+
+Lemma eval_bexp_instr_Iadds E s :
+  forall (t t0 : SSAVarOrder.t) (a a0 : atomic),
+    well_formed_instr E (Iadds t t0 a a0) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Iadds t t0 a a0) E) ->
+    QFBV.eval_bexp (bexp_instr E (Iadds t t0 a a0)) s ->
+    eval_instr E (Iadds t t0 a a0) s s.
+Proof.
+  move=> /= c v a1 a2 Hwf Hco1 Hco2 Hev. apply: EIadds. norm_tac.
+  have Hs: (size (eval_atomic a1 s) = size (eval_atomic a2 s))
+             by rewrite Hsize Hsize0 (eqP H0).
+  rewrite (addB_zext1_high1 Hs) in H1. of_asize.
+  rewrite (addB_zext1_lown Hs) in H4. by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Iadc E s :
+  forall (t : SSAVarOrder.t) (a a0 a1 : atomic),
+    well_formed_instr E (Iadc t a a0 a1) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Iadc t a a0 a1) E) ->
+    QFBV.eval_bexp (bexp_instr E (Iadc t a a0 a1)) s ->
+    eval_instr E (Iadc t a a0 a1) s s.
+Proof.
+  move=> /= v a1 a2 ac Hwf Hco1 Hco2 Hev. apply: EIadc. norm_tac.
+  apply: ssastore_reupd_imp. rewrite (eqP Hev).
+  have Hs: (size (eval_atomic a1 s) = size (eval_atomic a2 s)) by
+      rewrite Hsize0 Hsize1 (eqP H1). of_asize.
+  rewrite (adcB_zext1_lown b Hs). reflexivity.
+Qed.
+
+Lemma eval_bexp_instr_Iadcs E s :
+  forall (t t0 : SSAVarOrder.t) (a a0 a1 : atomic),
+    well_formed_instr E (Iadcs t t0 a a0 a1) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Iadcs t t0 a a0 a1) E) ->
+    QFBV.eval_bexp (bexp_instr E (Iadcs t t0 a a0 a1)) s ->
+    eval_instr E (Iadcs t t0 a a0 a1) s s.
+Proof.
+  move=> /= c v a1 a2 ac Hwf Hco1 Hco2 Hev. apply: EIadcs. norm_tac.
+  have Hs: (size (eval_atomic a1 s) = size (eval_atomic a2 s))
+    by rewrite Hsize0 Hsize1 (eqP H1). of_asize.
+  rewrite (adcB_zext1_lown b Hs) in H6.
+  rewrite (adcB_zext1_high1 b Hs) in H. by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Isub E s :
+  forall (t : SSAVarOrder.t) (a a0 : atomic),
+    well_formed_instr E (Isub t a a0) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Isub t a a0) E) ->
+    QFBV.eval_bexp (bexp_instr E (Isub t a a0)) s -> eval_instr E (Isub t a a0) s s.
+Proof.
+  move=> /= v a1 a2 Hwf Hco1 Hco2 Hev. apply: EIsub. norm_tac. by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Isubc E s :
+  forall (t t0 : SSAVarOrder.t) (a a0 : atomic),
+    well_formed_instr E (Isubc t t0 a a0) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Isubc t t0 a a0) E) ->
+    QFBV.eval_bexp (bexp_instr E (Isubc t t0 a a0)) s ->
+    eval_instr E (Isubc t t0 a a0) s s.
+Proof.
+  move=> /= c v a1 a2 Hwf Hco1 Hco2 Hev. apply: EIsubc. norm_tac.
+  have Hs: (size (eval_atomic a1 s) = size (-# eval_atomic a2 s)%bits) by
+      by rewrite size_negB Hsize Hsize0 (eqP H0). of_asize.
+  rewrite (addB_zext1_high1 Hs) in H1. rewrite (addB_zext1_lown Hs) in H4.
+    by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Isubb E s :
+  forall (t t0 : SSAVarOrder.t) (a a0 : atomic),
+    well_formed_instr E (Isubb t t0 a a0) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Isubb t t0 a a0) E) ->
+    QFBV.eval_bexp (bexp_instr E (Isubb t t0 a a0)) s ->
+    eval_instr E (Isubb t t0 a a0) s s.
+Proof.
+  move=> /= bw v a1 a2 Hwf Hco1 Hco2 Hev. apply: EIsubb. norm_tac.
+  have Hs: (size (eval_atomic a1 s) = size (eval_atomic a2 s)%bits) by
+      by rewrite Hsize Hsize0 (eqP H0). of_asize.
+  rewrite (subB_zext1_lown Hs) in H4. rewrite (subB_zext1_high1 Hs) in H1.
+    by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Isbc E s :
+  forall (t : SSAVarOrder.t) (a a0 a1 : atomic),
+    well_formed_instr E (Isbc t a a0 a1) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Isbc t a a0 a1) E) ->
+    QFBV.eval_bexp (bexp_instr E (Isbc t a a0 a1)) s ->
+    eval_instr E (Isbc t a a0 a1) s s.
+Proof.
+  move=> /= v a1 a2 ac Hwf Hco1 Hco2 Hev. apply: EIsbc. norm_tac.
+  have Hs: size (eval_atomic a1 s) = size (~~# eval_atomic a2 s)%bits
+    by rewrite size_invB Hsize0 Hsize1 (eqP H1). of_asize.
+  rewrite (adcB_zext1_lown _ Hs) in Hev. by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Isbcs E s :
+  forall (t t0 : SSAVarOrder.t) (a a0 a1 : atomic),
+    well_formed_instr E (Isbcs t t0 a a0 a1) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Isbcs t t0 a a0 a1) E) ->
+    QFBV.eval_bexp (bexp_instr E (Isbcs t t0 a a0 a1)) s ->
+    eval_instr E (Isbcs t t0 a a0 a1) s s.
+Proof.
+  move=> /= c v a1 a2 ay Hwf Hco1 Hco2 Hev. apply: EIsbcs. norm_tac.
+  have Hs: size (eval_atomic a1 s) = size (~~# eval_atomic a2 s)%bits
+    by rewrite size_invB Hsize0 Hsize1 (eqP H1). of_asize.
+  rewrite (adcB_zext1_high1 _ Hs) in H. rewrite (adcB_zext1_lown _ Hs) in H6.
+    by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Isbb E s :
+  forall (t : SSAVarOrder.t) (a a0 a1 : atomic),
+    well_formed_instr E (Isbb t a a0 a1) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Isbb t a a0 a1) E) ->
+    QFBV.eval_bexp (bexp_instr E (Isbb t a a0 a1)) s ->
+    eval_instr E (Isbb t a a0 a1) s s.
+Proof.
+  move=> /= v a1 a2 ab Hwf Hco1 Hco2 Hev. apply: EIsbb. norm_tac.
+  have Hs: size (eval_atomic a1 s) = size (eval_atomic a2 s)%bits
+    by rewrite Hsize0 Hsize1 (eqP H1). of_asize.
+  rewrite (sbbB_zext1_lown _ Hs) in Hev. by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Isbbs E s :
+  forall (t t0 : SSAVarOrder.t) (a a0 a1 : atomic),
+    well_formed_instr E (Isbbs t t0 a a0 a1) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Isbbs t t0 a a0 a1) E) ->
+    QFBV.eval_bexp (bexp_instr E (Isbbs t t0 a a0 a1)) s ->
+    eval_instr E (Isbbs t t0 a a0 a1) s s.
+Proof.
+  move=> /= b v a1 a2 ab Hwf Hco1 Hco2 Hev. apply: EIsbbs. norm_tac.
+  have Hs: size (eval_atomic a1 s) = size (eval_atomic a2 s)%bits
+    by rewrite Hsize0 Hsize1 (eqP H1). of_asize.
+  rewrite (sbbB_zext1_lown _ Hs) in H6. rewrite (sbbB_zext1_high1 _ Hs) in H.
+    by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Imul E s :
+  forall (t : SSAVarOrder.t) (a a0 : atomic),
+    well_formed_instr E (Imul t a a0) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Imul t a a0) E) ->
+    QFBV.eval_bexp (bexp_instr E (Imul t a a0)) s -> eval_instr E (Imul t a a0) s s.
+Proof.
+  move=> /= v a1 a2 Hwf Hco1 Hco2 Hev. apply: EImul. norm_tac. by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Imull E s :
+  forall (t t0 : SSAVarOrder.t) (a a0 : atomic),
+    well_formed_instr E (Imull t t0 a a0) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Imull t t0 a a0) E) ->
+    QFBV.eval_bexp (bexp_instr E (Imull t t0 a a0)) s ->
+    eval_instr E (Imull t t0 a a0) s s.
+Proof.
+  move=> /= vh vl a1 a2 Hwf Hco1 Hco2 Hev. apply: EImull. norm_tac.
+  rewrite (eqP (mul_sext _ _)). to_asize. by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Imulj E s :
+  forall (t : SSAVarOrder.t) (a a0 : atomic),
+    well_formed_instr E (Imulj t a a0) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Imulj t a a0) E) ->
+    QFBV.eval_bexp (bexp_instr E (Imulj t a a0)) s -> eval_instr E (Imulj t a a0) s s.
+Proof.
+  move=> /= v a1 a2 Hwf Hco1 Hco2 Hev. apply: EImulj. norm_tac.
+  rewrite (eqP (mul_sext _ _)). to_asize. by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Isplit E s :
+  forall (t t0 : SSAVarOrder.t) (a : atomic) (n : nat),
+    well_formed_instr E (Isplit t t0 a n) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Isplit t t0 a n) E) ->
+    QFBV.eval_bexp (bexp_instr E (Isplit t t0 a n)) s ->
+    eval_instr E (Isplit t t0 a n) s s.
+Proof.
+  move=> /= vh vl a n Hwf Hco1 Hco2 Hev. dcase (atyp a E). case => wa Htyp.
+  - have Hun: Typ.is_unsigned (atyp a E) by rewrite Htyp.
+    rewrite Htyp /= in Hev. move/andP: Hev => [Hev1 Hev2].
+    apply: (EIsplitU Hun). norm_tac. by solve_tac.
+  - have Hsn: Typ.is_signed (atyp a E) by rewrite Htyp.
+    rewrite Htyp /= in Hev. move/andP: Hev => [Hev1 Hev2].
+    apply: (EIsplitS Hsn). norm_tac. by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Iand E s :
+  forall (t : SSAVarOrder.t) (t0 : Typ.typ) (a a0 : atomic),
+    well_formed_instr E (Iand t t0 a a0) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Iand t t0 a a0) E) ->
+    QFBV.eval_bexp (bexp_instr E (Iand t t0 a a0)) s ->
+    eval_instr E (Iand t t0 a a0) s s.
+Proof.
+  move=> /= v t a1 a2 Hwf Hco1 Hco2 Hev. apply: EIand. norm_tac. by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Ior E s :
+  forall (t : SSAVarOrder.t) (t0 : Typ.typ) (a a0 : atomic),
+    well_formed_instr E (Ior t t0 a a0) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Ior t t0 a a0) E) ->
+    QFBV.eval_bexp (bexp_instr E (Ior t t0 a a0)) s ->
+    eval_instr E (Ior t t0 a a0) s s.
+Proof.
+  move=> /= v t a1 a2 Hwf Hco1 Hco2 Hev. apply: EIor. norm_tac. by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Ixor E s :
+  forall (t : SSAVarOrder.t) (t0 : Typ.typ) (a a0 : atomic),
+    well_formed_instr E (Ixor t t0 a a0) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Ixor t t0 a a0) E) ->
+    QFBV.eval_bexp (bexp_instr E (Ixor t t0 a a0)) s ->
+    eval_instr E (Ixor t t0 a a0) s s.
+Proof.
+  move=> /= v t a1 a2 Hwf Hco1 Hco2 Hev. apply: EIxor. norm_tac. by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Icast E s :
+  forall (t : SSAVarOrder.t) (t0 : Typ.typ) (a : atomic),
+    well_formed_instr E (Icast t t0 a) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Icast t t0 a) E) ->
+    QFBV.eval_bexp (bexp_instr E (Icast t t0 a)) s ->
+    eval_instr E (Icast t t0 a) s s.
+Proof.
+  move=> /= v t a Hwf Hco1 Hco2 Hev. apply: EIcast. norm_tac.
+  rewrite /Typ.tcast /ucastB /scastB Hsize /=. move: Hev.
+  case: (atyp a E) => wa /=.
+  - case: (Typ.sizeof_typ t == wa) => /=.
+    + norm_tac. by solve_tac.
+    + case: (Typ.sizeof_typ t < wa) => /=; norm_tac; by solve_tac.
+  - case: (Typ.sizeof_typ t == wa) => /=.
+    + norm_tac. by solve_tac.
+    + case: (Typ.sizeof_typ t < wa) => /=; norm_tac; by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Ivpc E s :
+  forall (t : SSAVarOrder.t) (t0 : Typ.typ) (a : atomic),
+    well_formed_instr E (Ivpc t t0 a) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Ivpc t t0 a) E) ->
+    QFBV.eval_bexp (bexp_instr E (Ivpc t t0 a)) s ->
+    eval_instr E (Ivpc t t0 a) s s.
+Proof.
+  move=> /= v t a Hwf Hco1 Hco2 Hev. apply: EIvpc.
+  have Hwf': (well_formed_instr E (Icast v t a)) by exact: Hwf.
+  move: (eval_bexp_instr_Icast Hwf' Hco1 Hco2 Hev). inversion_clear 1.
+  assumption.
+Qed.
+
+Lemma eval_bexp_instr_Ijoin E s :
+  forall (t : SSAVarOrder.t) (a a0 : atomic),
+    well_formed_instr E (Ijoin t a a0) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Ijoin t a a0) E) ->
+    QFBV.eval_bexp (bexp_instr E (Ijoin t a a0)) s ->
+    eval_instr E (Ijoin t a a0) s s.
+Proof.
+  move=> /= v a1 a2 Hwf Hco1 Hco2 Hev. apply: EIjoin. norm_tac. by solve_tac.
+Qed.
+
+Lemma eval_bexp_instr_Iassume E s :
+  forall b : bexp,
+    well_formed_instr E (Iassume b) ->
+    SSAStore.conform s E ->
+    SSAStore.conform s (instr_succ_typenv (Iassume b) E) ->
+    QFBV.eval_bexp (bexp_instr E (Iassume b)) s -> eval_instr E (Iassume b) s s.
+Proof.
+  move=> /= b Hwf Hco1 Hco2 Hev. apply: EIassume.
+Admitted.
+
+Lemma eval_bexp_instr E i s :
+  well_formed_instr E i ->
+  SSAStore.conform s E ->
+  SSAStore.conform s (instr_succ_typenv i E) ->
+  QFBV.eval_bexp (bexp_instr E i) s -> eval_instr E i s s.
+Proof.
+  case: i.
+  - exact: eval_bexp_instr_Imov.
+  - exact: eval_bexp_instr_Ishl.
+  - exact: eval_bexp_instr_Icshl.
+  - exact: eval_bexp_instr_Inondet.
+  - exact: eval_bexp_instr_Icmov.
+  - exact: eval_bexp_instr_Inop.
+  - exact: eval_bexp_instr_Inot.
+  - exact: eval_bexp_instr_Iadd.
+  - exact: eval_bexp_instr_Iadds.
+  - exact: eval_bexp_instr_Iadc.
+  - exact: eval_bexp_instr_Iadcs.
+  - exact: eval_bexp_instr_Isub.
+  - exact: eval_bexp_instr_Isubc.
+  - exact: eval_bexp_instr_Isubb.
+  - exact: eval_bexp_instr_Isbc.
+  - exact: eval_bexp_instr_Isbcs.
+  - exact: eval_bexp_instr_Isbb.
+  - exact: eval_bexp_instr_Isbbs.
+  - exact: eval_bexp_instr_Imul.
+  - exact: eval_bexp_instr_Imull.
+  - exact: eval_bexp_instr_Imulj.
+  - exact: eval_bexp_instr_Isplit.
+  - exact: eval_bexp_instr_Iand.
+  - exact: eval_bexp_instr_Ior.
+  - exact: eval_bexp_instr_Ixor.
+  - exact: eval_bexp_instr_Icast.
+  - exact: eval_bexp_instr_Ivpc.
+  - exact: eval_bexp_instr_Ijoin.
+  - exact: eval_bexp_instr_Iassume.
 Qed.
 
 
@@ -3028,6 +3445,36 @@ Proof.
 
   apply: (eval_bexp_program_safe_steps Hwf_f_rng Hun_f_rng Hwf_ssa_p _ Hco Hf).
   exact: Hbv.
+Qed.
+
+Lemma ssa_spec_safe_qfbv_steps_complete sp :
+  well_formed_ssa_spec sp -> ssa_spec_safe sp -> ssa_spec_safe_qfbv_steps sp.
+Proof.
+  case: sp => E f p g.
+  rewrite /well_formed_ssa_spec /well_formed_spec /ssa_spec_safe_qfbv
+          /ssa_spec_safe /ssa_spec_safe_qfbv_steps /=.
+  move=> /andP [/andP [/andP [/andP [Hwf_f Hwf_p] Hwf_g] Hun_Ep] Hssa]
+          Hsafe s Hf.
+  case: f Hwf_f Hsafe Hf => [ef rf] => /=.
+  rewrite well_formed_bexp_split => /andP [/= Hwf_ef Hwf_rf] Hsafe Hf.
+  clear ef Hwf_ef g Hwf_g. move: (Hsafe s) => {Hsafe} Hsafe.
+  elim: p E rf Hwf_rf Hwf_p Hun_Ep Hssa s Hsafe Hf => [| i p IH] //=.
+  move=> E f Hwf /andP [Hwf_i Hwf_p] Hun_Eip /andP [Hun_ip Hssa_p]
+           s Hsafe Hf Hco.
+  rewrite ssa_unchanged_program_cons in Hun_Eip.
+  move/andP: Hun_Eip => [Hun_Ei Hun_Ep].
+  move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsubm.
+  move/eval_bexp_rbexp: Hf=> Hf. move: (Hsafe Hco Hf) => Hsafe_at.
+  inversion_clear Hsafe_at. split.
+  - apply/(eval_bexp_instr_safe s Hwf_i). assumption.
+  - move=> His. apply: (IH (instr_succ_typenv i E) f
+                           (well_formed_rbexp_submap Hsubm Hwf) Hwf_p
+                           _ Hssa_p).
+    + apply: (ssa_unchanged_program_replace
+                (SSAVS.Lemmas.P.equal_sym (vars_env_instr_succ_typenv i E))).
+      rewrite ssa_unchanged_program_union Hun_Ep Hun_ip. exact: is_true_true.
+    + move=> Hco_s Hf_s. apply: H0. exact: (eval_bexp_instr Hwf_i Hco Hco_s His).
+    + apply/eval_bexp_rbexp. exact: Hf.
 Qed.
 
 
