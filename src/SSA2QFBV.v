@@ -1,7 +1,7 @@
 
 From Coq Require Import Arith List.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun prime.
-From ssrlib Require Import Var Tactics.
+From ssrlib Require Import Var Tactics Seqs.
 From BitBlasting Require Import State QFBV TypEnv.
 From Cryptoline Require Import DSL SSA SSA2ZSSA.
 From nbits Require Import NBits.
@@ -2056,16 +2056,18 @@ Lemma eval_bexp_instr_Iassume E s :
     well_formed_instr E (Iassume b) ->
     SSAStore.conform s E ->
     SSAStore.conform s (instr_succ_typenv (Iassume b) E) ->
-    QFBV.eval_bexp (bexp_instr E (Iassume b)) s -> eval_instr E (Iassume b) s s.
+    QFBV.eval_bexp (bexp_instr E (rng_instr (Iassume b))) s ->
+    eval_instr E (rng_instr (Iassume b)) s s.
 Proof.
-  move=> /= b Hwf Hco1 Hco2 Hev. apply: EIassume.
-Admitted.
+  move=> /= b Hwf Hco1 Hco2 Hev. case: b Hwf Hev => e r /= Hwf Hev.
+  apply: EIassume. rewrite /eval_bexp /=. split; first by trivial.
+  apply/eval_bexp_rbexp. assumption.
+Qed.
 
 Lemma eval_bexp_instr E i s :
   well_formed_instr E i ->
-  SSAStore.conform s E ->
-  SSAStore.conform s (instr_succ_typenv i E) ->
-  QFBV.eval_bexp (bexp_instr E i) s -> eval_instr E i s s.
+  SSAStore.conform s E -> SSAStore.conform s (instr_succ_typenv i E) ->
+  QFBV.eval_bexp (bexp_instr E (rng_instr i)) s -> eval_instr E (rng_instr i) s s.
 Proof.
   case: i.
   - exact: eval_bexp_instr_Imov.
@@ -2146,130 +2148,6 @@ Definition valid_bexp_spec_conj (s : bexp_spec) : Prop :=
     eval_bexps_conj (bprog s) st ->
     QFBV.eval_bexp (bpost s) st.
 
-Lemma ssa_vars_unchanged_program_rng vs p :
-  ssa_vars_unchanged_program vs p ->
-  ssa_vars_unchanged_program vs (rng_program p).
-Proof.
-  elim : p.
-  - done.
-  - elim; rewrite /rng_program /= -/rng_program;
-    [ move => v a tl IH Hun
-    | move => v a n tl IH Hun
-    | move => u v a0 a1 n tl IH Hun
-    | move => v t tl IH Hun
-    | move => v c a0 a1 tl IH Hun
-    | move => tl IH Hun
-    | move => v t a tl IH Hun
-    | move => v a0 a1 tl IH Hun
-    | move => u v a0 a1 tl IH Hun
-    | move => v c a0 a1 tl IH Hun
-    | move => u v c a0 a1 tl IH Hun
-    | move => v a0 a1 tl IH Hun
-    | move => u v a0 a1 tl IH Hun
-    | move => u v a0 a1 tl IH Hun
-    | move => v c a0 a1 tl IH Hun
-    | move => u v c a0 a1 tl IH Hun
-    | move => v c a0 a1 tl IH Hun
-    | move => u v c a0 a1 tl IH Hun
-    | move => v a0 a1 tl IH Hun
-    | move => u v a0 a1 tl IH Hun
-    | move => v a0 a1 tl IH Hun
-    | move => u v a n tl IH Hun
-    | move => v t a0 a1 tl IH Hun
-    | move => v t a0 a1 tl IH Hun
-    | move => v t a0 a1 tl IH Hun
-    | move => v t a tl IH Hun
-    | move => v t a tl IH Hun
-    | move => v a0 a1 tl IH Hun
-    | move => b tl IH Hun ];
-    try
-      (apply : ssa_unchanged_program_cons2;
-       [ apply : (ssa_unchanged_program_hd Hun)
-       | apply : IH (ssa_unchanged_program_tl Hun) ]).
-    apply : ssa_unchanged_program_cons2;
-      [     move : (ssa_unchanged_program_hd Hun); case b; done
-      | apply : IH (ssa_unchanged_program_tl Hun) ].
-Qed.
-
-Lemma well_formed_program_rng E p :
-  well_formed_program E p ->
-  well_formed_program E (rng_program p).
-Proof.
-  elim : p E; first done.
-  elim; rewrite /rng_program /= -/rng_program;
-  [ move => v a tl IH E /andP [Hwfhd Hwftl]
-  | move => v a n tl IH E /andP [Hwfhd Hwftl]
-  | move => u v a0 a1 n tl IH E /andP [Hwfhd Hwftl]
-  | move => v t tl IH E Hwftl
-  | move => v c a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => tl IH E Hwftl
-  | move => v t a tl IH E /andP [Hwfhd Hwftl]
-  | move => v a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => u v a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => v c a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => u v c a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => v a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => u v a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => u v a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => v c a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => u v c a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => v c a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => u v c a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => v a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => u v a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => v a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => u v a n tl IH E /andP [Hwfhd Hwftl]
-  | move => v t a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => v t a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => v t a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => v t a tl IH E /andP [Hwfhd Hwftl]
-  | move => v t a tl IH E /andP [Hwfhd Hwftl]
-  | move => v a0 a1 tl IH E /andP [Hwfhd Hwftl]
-  | move => b tl IH E /andP [Hwfhd Hwftl] ];
-    try
-      ((rewrite Hwfhd /=; by apply : IH) ||
-        by apply : IH).
-  apply /andP; split.
-  + move : Hwfhd; case b => e r.
-    rewrite /well_formed_instr /well_defined_instr
-            /well_typed_instr => /andP [Hdef Hwtyp].
-    apply /andP; split.
-    * move : Hdef; rewrite /vars_bexp /=.
-      apply : are_defined_subset.
-      apply : SSAVS.S.Lemmas.union_subsets;
-        [ apply : SSAVS.S.Lemmas.subset_empty
-        | apply : SSAVS.S.Lemmas.subset_refl].
-    * move : Hwtyp.
-      by rewrite /well_typed_bexp /= => /andP [_ Hwtypr].
-    * apply IH.
-      case b => _ r.
-      by rewrite /instr_succ_typenv /=.
-Qed.
-
-Lemma lvs_instr_subset_rng i :
-  SSAVS.subset (lvs_instr (rng_instr i)) (lvs_instr i).
-Proof.
-  case i => /=; try (intros; apply : SSAVS.S.Lemmas.subset_refl).
-  case => _ r; done.
-Qed.
-
-Lemma ssa_single_assignment_rng p :
-  ssa_single_assignment p ->
-  ssa_single_assignment (rng_program p).
-Proof.
-  elim : p; first done.
-  move => hd tl IH Hssa.
-  rewrite /rng_program /= -/rng_program.
-  move : Hssa;
-    rewrite /ssa_single_assignment /=
-            -/ssa_single_assignment => /andP [Huntl Hssatl].
-  apply /andP; split.
-  + apply : (ssa_unchanged_program_subset
-               (ssa_vars_unchanged_program_rng Huntl)).
-    apply : lvs_instr_subset_rng.
-  + by apply IH.
-Qed.
-
 Lemma bexp_spec_sound_conj (s : spec) :
   well_formed_ssa_spec s ->
   valid_bexp_spec_conj (bexp_of_rspec (sinputs s) (rspec_of_spec s)) ->
@@ -2285,16 +2163,16 @@ Proof.
   apply: Hvalid.
   - apply: eval_bexp_rbexp2.
     apply: (proj1 (ssa_unchanged_program_eval_rbexp _ Hp) Hf).
-    apply : (ssa_unchanged_program_subset
-               (ssa_vars_unchanged_program_rng Huc)).
+    rewrite ssa_vars_unchanged_rng_program.
+    apply : (ssa_unchanged_program_subset Huc).
     move : (are_defined_subset (vars_rbexp_subset p) Hdef).
     by rewrite are_defined_subset_env.
   - apply : (bexp_program_eval _ Hcon Hp).
     rewrite /well_formed_ssa_program.
     apply /andP; split; first (apply /andP; split).
-    + apply : (well_formed_program_rng Hwfg).
-    + apply : (ssa_vars_unchanged_program_rng Huc).
-    + apply : (ssa_single_assignment_rng Hssa).
+    + apply : (well_formed_rng_program Hwfg).
+    + rewrite ssa_vars_unchanged_rng_program. exact: Huc.
+    + apply : (ssa_single_assignment_rng_program Hssa).
 Qed.
 
 Lemma vars_exp_rexp e : QFBV.vars_exp (exp_rexp e) = vars_rexp e.
@@ -3239,7 +3117,7 @@ Fixpoint bexp_program_safe_at E p : QFBV.bexp :=
   | hd::tl =>
     qfbv_conj (bexp_instr_safe E hd)
               (qfbv_disj
-                 (qfbv_lneg (bexp_instr E hd))
+                 (qfbv_lneg (bexp_instr E (rng_instr hd)))
                  (bexp_program_safe_at (instr_succ_typenv hd E) tl))
   end.
 
@@ -3282,6 +3160,7 @@ Proof.
         rewrite ssa_unchanged_program_union. rewrite Hun_Ep /=. exact: Hun_ip. }
 
       move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsubm.
+      rewrite -ssa_vars_unchanged_rng_instr in Hun_Ei.
       move: (bvs_eqi_eval_instr Hun_Ei Hei) => Hei_st.
       move: (well_formed_rbexp_submap Hsubm Hwf_pre) => Hwf_pre_succ.
 
@@ -3293,12 +3172,16 @@ Proof.
         move: (bvs_eqi_conform Heqi' Hco) => Hco'E.
         move: (H _ Heqi' Hco'E Hpre') => /andP [H1 H2].
 
-        move: (bexp_instr_eval Hwf_i Hco Hun_Ei Hei).
+        move: (bexp_instr_eval (well_formed_rng_instr Hwf_i) Hco Hun_Ei Hei).
         move/andP: Hwf_i => [Hwd_i Hwt_i].
-        rewrite (bvs_eqi_qfbv_eval_bexp (bexp_instr_are_defined Hwd_i) Heqi).
+        rewrite -rng_instr_succ_typenv in Heqi.
+        rewrite (bvs_eqi_qfbv_eval_bexp
+                 (bexp_instr_are_defined (well_defined_rng_instr Hwd_i)) Heqi).
         move=> Heb. rewrite Heb /= in H2. exact: H2.
-      * exact: (conform_eval_succ_typenv Hwf_i Hco Hei).
-      * apply/(ssa_unchanged_instr_eval_rbexp Hun_prei Hei). exact: Hpre.
+      * rewrite -rng_instr_succ_typenv.
+        exact: (conform_eval_succ_typenv (well_formed_rng_instr Hwf_i) Hco Hei).
+      * rewrite -ssa_vars_unchanged_rng_instr in Hun_prei.
+        apply/(ssa_unchanged_instr_eval_rbexp Hun_prei Hei). exact: Hpre.
 Qed.
 
 (* Evaluate safety conditions one by one.
@@ -3310,7 +3193,7 @@ Fixpoint bexp_program_safe_steps E p s : Prop :=
   | [::] => True
   | hd::tl =>
     QFBV.eval_bexp (bexp_instr_safe E hd) s /\
-    ((QFBV.eval_bexp (bexp_instr E hd) s) ->
+    ((QFBV.eval_bexp (bexp_instr E (rng_instr hd)) s) ->
      (bexp_program_safe_steps (instr_succ_typenv hd E) tl s))
   end.
 
@@ -3350,6 +3233,7 @@ Proof.
         rewrite ssa_unchanged_program_union. rewrite Hun_Ep /=. exact: Hun_ip. }
 
       move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsubm.
+      rewrite -ssa_vars_unchanged_rng_instr in Hun_Ei.
       move: (bvs_eqi_eval_instr Hun_Ei Hei) => Hei_st.
       move: (well_formed_rbexp_submap Hsubm Hwf_pre) => Hwf_pre_succ.
 
@@ -3361,12 +3245,16 @@ Proof.
         move: (bvs_eqi_conform Heqi' Hco) => Hco'E.
         move: (H _ Heqi' Hpre' Hco'E) => [H1 H2].
 
-        move: (bexp_instr_eval Hwf_i Hco Hun_Ei Hei).
+        move: (bexp_instr_eval (well_formed_rng_instr Hwf_i) Hco Hun_Ei Hei).
         move/andP: Hwf_i => [Hwd_i Hwt_i].
-        rewrite (bvs_eqi_qfbv_eval_bexp (bexp_instr_are_defined Hwd_i) Heqi).
+        rewrite -rng_instr_succ_typenv in Heqi.
+        rewrite (bvs_eqi_qfbv_eval_bexp
+                   (bexp_instr_are_defined (well_defined_rng_instr Hwd_i)) Heqi).
         move=> Heb. rewrite Heb /= in H2. by apply: H2.
-      * exact: (conform_eval_succ_typenv Hwf_i Hco Hei).
-      * apply/(ssa_unchanged_instr_eval_rbexp Hun_prei Hei). exact: Hpre.
+      * rewrite -rng_instr_succ_typenv.
+        exact: (conform_eval_succ_typenv (well_formed_rng_instr Hwf_i) Hco Hei).
+      * rewrite -ssa_vars_unchanged_rng_instr in Hun_prei.
+        apply/(ssa_unchanged_instr_eval_rbexp Hun_prei Hei). exact: Hpre.
 Qed.
 
 (*
@@ -3473,7 +3361,8 @@ Proof.
     + apply: (ssa_unchanged_program_replace
                 (SSAVS.Lemmas.P.equal_sym (vars_env_instr_succ_typenv i E))).
       rewrite ssa_unchanged_program_union Hun_Ep Hun_ip. exact: is_true_true.
-    + move=> Hco_s Hf_s. apply: H0. exact: (eval_bexp_instr Hwf_i Hco Hco_s His).
+    + move=> Hco_s Hf_s. apply: H0.
+      exact: (eval_bexp_instr Hwf_i Hco Hco_s His).
     + apply/eval_bexp_rbexp. exact: Hf.
 Qed.
 
@@ -3497,7 +3386,7 @@ Section SplitConditions.
       (E, pre_is, pre_es, hd, tl, bexp_instr_safe E hd)
         ::(bexp_program_safe_split_rec_full
              (instr_succ_typenv hd E) (rcons pre_is hd)
-             (rcons pre_es (bexp_instr E hd)) tl)
+             (rcons pre_es (bexp_instr E (rng_instr hd))) tl)
     end.
 
   Definition bexp_program_safe_split_full E p :=
@@ -3522,7 +3411,7 @@ Section SplitConditions.
     forall E' pre_is' pre_es' hd tl safe,
       List.In (E', pre_is', pre_es', hd, tl, safe)
               (bexp_program_safe_split_rec_full E pre_is pre_es p) ->
-      pre_is' ++ (hd::tl) = pre_is ++ p.
+      pre_is' ++ hd::tl = pre_is ++ p.
   Proof.
     elim: p E pre_is pre_es => [| i p IH] E pre_is pre_es //=.
     move=> E' pre_is' pre_es' hd tl safe. case.
@@ -3549,15 +3438,16 @@ Section SplitConditions.
               (bexp_program_safe_split_rec_full E pre_is pre_es p) ->
       forall Einit,
         E = program_succ_typenv pre_is Einit ->
-        pre_es = bexp_program Einit pre_is ->
-        pre_es' = bexp_program Einit pre_is'.
+        pre_es = bexp_program Einit (rng_program pre_is) ->
+        pre_es' = bexp_program Einit (rng_program pre_is').
   Proof.
     elim: p E pre_is pre_es => [| i p IH] E pre_is pre_es //=.
     move=> E' pre_is' pre_es' hd tl safe. case.
     - case=> ? ? ? ? ?; subst. move=> _ Einit _. by apply.
     - move=> Hin Einit Hinit H. apply: (IH _ _ _ _ _ _ _ _ _ Hin).
       + rewrite program_succ_typenv_rcons. rewrite -Hinit. reflexivity.
-      + rewrite bexp_program_rcons. rewrite -H. rewrite -Hinit. reflexivity.
+      + rewrite rng_program_rcons. rewrite bexp_program_rcons.
+        rewrite -H. rewrite rng_program_succ_typenv. rewrite -Hinit. reflexivity.
   Qed.
 
   Lemma bexp_program_safe_split_full_env E p :
@@ -3584,26 +3474,10 @@ Section SplitConditions.
     forall E' pre_is' pre_es' hd tl safe,
       List.In (E', pre_is', pre_es', hd, tl, safe)
               (bexp_program_safe_split_full E p) ->
-      pre_es' = bexp_program E pre_is'.
+      pre_es' = bexp_program E (rng_program pre_is').
   Proof.
     move=> E' pre_is' pre_es' hd tl safe Hin.
       by apply: (bexp_program_safe_split_rec_full_es Hin).
-  Qed.
-
-  Lemma catsl_inj {A : Type} (s1 s2 s3 : seq A) :
-    s1 ++ s2 = s1 ++ s3 -> s2 = s3.
-  Proof.
-    elim: s1 s2 s3 => [| hd tl IH] s2 s3 //=.
-    case. exact: IH.
-  Qed.
-
-  Lemma catsr_inj {A : Type} (s1 s2 s3 : seq A) :
-    s2 ++ s1 = s3 ++ s1 -> s2 = s3.
-  Proof.
-    elim: s1 s2 s3 => [| hd tl IH] s2 s3 /=.
-    - rewrite !cats0. by apply.
-    - rewrite -!cat_rcons. case. move=> H. move: (IH _ _ H) => {H} H.
-      move: (rcons_inj H). case. by apply.
   Qed.
 
   Lemma bexp_program_safe_split_rec_full_complete E pre_is pre_es p :
@@ -3630,7 +3504,7 @@ Section SplitConditions.
         rewrite -!cat_rcons in Heq1. rewrite -(cat_rcons i1) in Heq2.
 
         move: (IH (instr_succ_typenv i1 E) (rcons pre_is i1)
-                  (rcons pre_es (bexp_instr E i1)) pre_is' hd tl suf_p
+                  (rcons pre_es (bexp_instr E (rng_instr i1))) pre_is' hd tl suf_p
                   Heq1 Heq2). move=> [E' [pre_es' [safe' Hin]]].
         exists E'. exists pre_es'. exists safe'. right. exact: Hin.
   Qed.
@@ -3669,7 +3543,7 @@ Section SplitConditions.
       rewrite negb_and Hf Hprefix /=. by apply.
     - move=> His. move: (well_formed_ssa_tl Hwf) => Hwf_p.
       apply: (IH (instr_succ_typenv i E) f Hwf_p
-                 (rcons pre_es (bexp_instr E i)) (rcons pre_is i)).
+                 (rcons pre_es (bexp_instr E (rng_instr i))) (rcons pre_is i)).
       + move=> E_t pre_is_t pre_es_t i_t p_t safe_t Hin_t t Hco_t.
         apply: (He E_t pre_is_t pre_es_t i_t p_t safe_t _ t Hco_t).
         right. assumption.
@@ -3686,7 +3560,7 @@ Section SplitConditions.
     | hd::tl =>
       (E, pre_es, bexp_instr_safe E hd)
         ::(bexp_program_safe_split_rec
-             (instr_succ_typenv hd E) (rcons pre_es (bexp_instr E hd)) tl)
+             (instr_succ_typenv hd E) (rcons pre_es (bexp_instr E (rng_instr hd))) tl)
     end.
 
   Definition bexp_program_safe_split E p := bexp_program_safe_split_rec E [::] p.
@@ -3707,12 +3581,12 @@ Section SplitConditions.
     forall E' pre_es' safe,
       List.In (E', pre_es', safe) (bexp_program_safe_split_rec E pre_es p) ->
       E = program_succ_typenv pre_is Einit ->
-      pre_es = bexp_program Einit pre_is ->
+      pre_es = bexp_program Einit (rng_program pre_is) ->
     exists pre_is' hd tl,
       List.In (E', pre_is', pre_es', hd, tl, safe)
               (bexp_program_safe_split_rec_full E pre_is pre_es p) /\
       (pre_is' ++ (hd :: tl) = pre_is ++ p) /\
-      (pre_es' = bexp_program Einit pre_is').
+      (pre_es' = bexp_program Einit (rng_program pre_is')).
   Proof.
     elim: p E pre_is pre_es => [| i p IH] E pre_is pre_es //=.
     move=> E' pre_es' safe. case.
@@ -3722,7 +3596,8 @@ Section SplitConditions.
       + assumption.
     - move=> Hin HE Hes. move: (IH _ (rcons pre_is i) _ _ _ _ Hin).
       rewrite program_succ_typenv_rcons -HE.
-      rewrite bexp_program_rcons -Hes. rewrite -HE.
+      rewrite rng_program_rcons bexp_program_rcons -Hes.
+      rewrite rng_program_succ_typenv -HE.
       move=> H. move: (H (Logic.eq_refl _) (Logic.eq_refl _)) => {H}.
       move=> [pre_is' [hd [tl [Hin' [His' Hes']]]]].
       exists pre_is'; exists hd; exists tl. repeat split.
@@ -3748,7 +3623,7 @@ Section SplitConditions.
         List.In (E', pre_is', pre_es', hd, tl, safe)
                 (bexp_program_safe_split_full E p) /\
         (pre_is' ++ (hd :: tl) = p) /\
-        (pre_es' = bexp_program E pre_is').
+        (pre_es' = bexp_program E (rng_program pre_is')).
   Proof.
     move=> E' pre_es' safe Hin.
     by apply: (bexp_program_safe_split_rec_partial_full Hin).

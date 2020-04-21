@@ -273,7 +273,7 @@ Section Safety.
       ssa_program_safe_at te [::] s
   | ssa_program_safe_at_cons te hd tl s :
       ssa_instr_safe_at te hd s ->
-      (forall s', eval_instr te hd s s' ->
+      (forall s', eval_instr te (rng_instr hd) s s' ->
                   ssa_program_safe_at (instr_succ_typenv hd te) tl s') ->
       ssa_program_safe_at te (hd::tl) s.
 
@@ -2563,7 +2563,7 @@ Section SplitSpec.
           by rewrite Hupd_tl; reflexivity.
         move: (conform_eval_succ_typenv Hwf_i Hco Hi) => Hco_3succi.
         apply: (IH _ _ _ _ _ _ _ _ Hwf_p Hun_iep Hssa_p Hni_ie Hni_p
-                   Hco_3succi (Hsa_p bs3 Hi) Hp Htl).
+                   Hco_3succi (Hsa_p bs3 (eval_rng_instr Hi)) Hp Htl).
         apply: (bvz_zs_eqi Heqi2). apply: (bv2z_upd_avars_instr_eqi Hupd_hd).
         apply: (svar_notin_replace
                   (SSAVS.Lemmas.P.equal_sym

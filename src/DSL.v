@@ -1102,6 +1102,11 @@ Module MakeDSL
     | hd::tl => (rng_instr hd)::(rng_program tl)
     end.
 
+  Lemma rng_program_rcons p i :
+    rng_program (rcons p i) = rcons (rng_program p) (rng_instr i).
+  Proof.
+    elim: p => [| hd tl IH] //=. rewrite IH. reflexivity.
+  Qed.
 
 
   (* Specifications *)
@@ -1359,6 +1364,13 @@ Module MakeDSL
   Lemma rng_instr_succ_typenv i te :
     instr_succ_typenv (rng_instr i) te = instr_succ_typenv i te.
   Proof. case: i => //=. move=> [e r] /=. reflexivity. Qed.
+
+  Lemma rng_lvs_instr_subset i :
+    VS.subset (lvs_instr (rng_instr i)) (lvs_instr i).
+  Proof.
+    case: i => /=; try (intros; apply: VSLemmas.subset_refl).
+    case => _ r /=. exact: VSLemmas.subset_refl.
+  Qed.
 
   Local Notation state := S.t.
 
@@ -2874,6 +2886,38 @@ Module MakeDSL
   Lemma well_formed_rng_bexp te e :
     well_formed_bexp te e -> well_formed_rbexp te (rng_bexp e).
   Proof. rewrite well_formed_bexp_split. by move/andP=> [? ?]. Qed.
+
+  Lemma well_defined_rng_instr E i :
+    well_defined_instr E i -> well_defined_instr E (rng_instr i).
+  Proof.
+    case: i => //=. case => e r //=. rewrite /vars_bexp /=.
+    rewrite !are_defined_union. move/andP => [Hdefe Hdefr].
+    rewrite Hdefr are_defined_empty. exact: is_true_true.
+  Qed.
+
+  Lemma well_typed_rng_instr E i :
+    well_typed_instr E i -> well_typed_instr E (rng_instr i).
+  Proof.
+    case: i => //=. case => e r //=. rewrite /well_typed_bexp.
+    move/andP=> /= [Hwte Hwtr]. exact: Hwtr.
+  Qed.
+
+  Lemma well_formed_rng_instr E i :
+    well_formed_instr E i -> well_formed_instr E (rng_instr i).
+  Proof.
+    case: i => //=. case => e r //=. move/andP => [H1 H2]. apply/andP. split.
+  - exact: (well_defined_rng_instr H1).
+  - exact: (well_typed_rng_instr H2).
+  Qed.
+
+  Lemma well_formed_rng_program E p :
+    well_formed_program E p ->
+    well_formed_program E (rng_program p).
+  Proof.
+    elim: p E => [| i p IH] E Hwf //=. rewrite well_formed_program_cons in Hwf.
+    move/andP: Hwf => [Hwf_i Hwf_p]. rewrite (well_formed_rng_instr Hwf_i) andTb.
+    rewrite rng_instr_succ_typenv. exact: (IH _ Hwf_p).
+  Qed.
 
 
   (* Non-blocking *)

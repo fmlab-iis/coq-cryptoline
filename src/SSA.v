@@ -3102,7 +3102,6 @@ Section MakeSSA.
   Qed.
 
 
-
   Lemma ssa_unchanged_instr_eval_singleton v te s1 s2 i :
     ssa_vars_unchanged_instr (SSAVS.singleton v) i ->
     SSA.eval_instr te i s1 s2 ->
@@ -3467,6 +3466,16 @@ Section MakeSSA.
           apply: SSA.VSLemmas.subset_union1. exact: SSA.VSLemmas.subset_refl.
       + apply: (IH Hssa1 Hssa2). apply: (ssa_unchanged_program_subset Hun12).
         apply: SSA.VSLemmas.subset_union2. exact: SSA.VSLemmas.subset_refl.
+  Qed.
+
+  Lemma ssa_single_assignment_rng_program p :
+    ssa_single_assignment p -> ssa_single_assignment (SSA.rng_program p).
+  Proof.
+    elim: p => [| i p IH] Hssa //=. rewrite ssa_single_assignment_cons in Hssa.
+    move/andP: Hssa => [Hun Hssa]. rewrite (IH Hssa) andbT.
+    rewrite -ssa_vars_unchanged_rng_program in Hun.
+    apply : (ssa_unchanged_program_subset Hun).
+    exact: SSA.rng_lvs_instr_subset.
   Qed.
 
 
