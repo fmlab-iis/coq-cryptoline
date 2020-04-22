@@ -188,11 +188,11 @@ Section Safety.
     if Typ.is_unsigned typ_a then ushlBn_safe bs n
     else sshlBn_safe bs n.
 
-  Definition ucshlBn_safe (bs1 bs2 : bits) n : bool :=
-    ushlBn_safe (cat bs1 bs2) n.
+  Definition ucshlBn_safe (bsh bsl : bits) n : bool :=
+    ushlBn_safe (cat bsl bsh) n.
 
-  Definition scshlBn_safe (bs1 bs2 : bits) n : bool :=
-    sshlBn_safe (cat bs1 bs2) n.
+  Definition scshlBn_safe (bsh bsl : bits) n : bool :=
+    sshlBn_safe (cat bsl bsh) n.
 
   Definition cshlBn_safe typ_a (bs1 bs2 : bits) n : bool :=
     if Typ.is_unsigned typ_a then ucshlBn_safe bs1 bs2 n
@@ -382,8 +382,11 @@ Section SSA2Algebra.
       let za1 := bv2z_atomic a1 in
       let za2 := bv2z_atomic a2 in
       let a2size := asize a2 te in
-      (g, [:: bv2z_split vh vl (eadd (emul2p za1 (Z.of_nat a2size)) za2)
-              (a2size - n)])
+      (g, [:: bv2z_join
+              (emul2p (eadd (emul2p za1 (Z.of_nat a2size)) za2) (Z.of_nat n))
+              (evar vh)
+              (emul2p (evar vl) (Z.of_nat n))
+              a2size])
     | Inondet v t =>
       if t == Tbit then (g, carry_constr v)
       else (g, [::])
@@ -1721,10 +1724,12 @@ Section SplitSpec.
     is_unsigned tl -> compatible th tl ->
     size bsh = sizeof_typ th -> size bsl = sizeof_typ tl ->
     cshlBn_safe th bsh bsl n ->
-    (bv2z tl (low (size bsl) ((bsl ++ bsh) <<# n) >># n)%bits +
+    (bv2z tl (low (size bsl) ((bsl ++ bsh) <<# n) >># n)%bits *
+     Cryptoline.DSL.z2expn (Z.of_nat n) +
      bv2z th (high (size bsh) ((bsl ++ bsh) <<# n)%bits) *
-     Cryptoline.DSL.z2expn (Z.of_nat (size bsl - n)))%Z =
-    (bv2z th bsh * Cryptoline.DSL.z2expn (Z.of_nat (size bsl)) + bv2z tl bsl)%Z.
+     Cryptoline.DSL.z2expn (Z.of_nat (size bsl)))%Z =
+    ((bv2z th bsh * Cryptoline.DSL.z2expn (Z.of_nat (size bsl)) +
+      bv2z tl bsl) * Cryptoline.DSL.z2expn (Z.of_nat n))%Z.
   Proof.
     rewrite /compatible /cshlBn_safe /ucshlBn_safe /scshlBn_safe /ushlBn_safe
             /sshlBn_safe /Cryptoline.DSL.z2expn. case: th; case: tl => //=.

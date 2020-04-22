@@ -2404,7 +2404,7 @@ Definition bexp_atomic_shl_safe E a n : QFBV.bexp :=
                        (qfbv_not (qfbv_zero (n + 1)))).
 
 Definition bexp_atomic_cshl_safe E (a1 : atomic) a2 n  : QFBV.bexp :=
-  let 'concatbv := qfbv_concat (qfbv_atomic a2) (qfbv_atomic a1) in
+  let 'concatbv := qfbv_concat (qfbv_atomic a1) (qfbv_atomic a2) in
   if Typ.is_unsigned (atyp a1 E) then
     qfbv_eq (qfbv_high n concatbv) (qfbv_zero n)
   else
