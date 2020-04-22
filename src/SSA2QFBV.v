@@ -677,12 +677,14 @@ Fixpoint bexp_program E (p : program) : seq QFBV.bexp :=
   end.
 
 Record bexp_spec : Type :=
-  mkQFBVSpec { bpre : QFBV.bexp;
+  mkQFBVSpec { binputs : SSATE.env;
+               bpre : QFBV.bexp;
                bprog : seq QFBV.bexp;
                bpost : QFBV.bexp }.
 
 Definition bexp_of_rspec E (s : rspec) : bexp_spec :=
-  {| bpre := bexp_rbexp (rspre s);
+  {| binputs := program_succ_typenv (rsprog s) E;
+     bpre := bexp_rbexp (rspre s);
      bprog := bexp_program E (rsprog s);
      bpost := bexp_rbexp (rspost s) |}.
 
@@ -2111,16 +2113,6 @@ Fixpoint eval_bexps_conj (es : seq QFBV.bexp) (s : SSAStore.t) : Prop :=
   | hd::tl => QFBV.eval_bexp hd s /\ eval_bexps_conj tl s
   end.
 
-Lemma eval_program_cons E hd tl s1 s3 :
-  eval_program E (hd :: tl) s1 s3 ->
-  exists s2, eval_instr E hd s1 s2 /\
-             eval_program (instr_succ_typenv hd E) tl s2 s3.
-Proof.
-  move => Hev.
-  inversion_clear Hev.
-  exists t => //.
-Qed.
-
 Lemma bexp_program_eval E p s1 s2 :
   well_formed_ssa_program E p ->
   SSAStore.conform s1 E ->
@@ -2139,11 +2131,39 @@ Proof.
     rewrite (bexp_instr_submap Hwd_hd Hsubm).
     exact: (eval_vars_unchanged_program_bexp_instr Hun_hd Hetl).
   - apply: (IH _ _ _ (well_formed_ssa_tl Hwfssa) _ Hetl).
-    exact: (conform_eval_succ_typenv (well_formed_program_cons1 Hwf) Hcon Hehd).
+    exact: (conform_instr_succ_typenv (well_formed_program_cons1 Hwf) Hcon Hehd).
+Qed.
+
+Lemma bexp_program_eval_rng_program E p s :
+  well_formed_ssa_program E p ->
+  SSAStore.conform s (program_succ_typenv p E) ->
+  eval_bexps_conj (bexp_program E (rng_program p)) s ->
+  eval_program E (rng_program p) s s.
+Proof.
+  move/andP=> [/andP [Hwf Hun] Hssa] Hco Hev.
+  move: (ssa_unchanged_program_succ_typenv_submap Hun Hssa) => Hsubm.
+  elim: p E Hwf Hun Hssa Hco Hev Hsubm => /= [| i p IH] E Hwf Hun Hssa Hco Hev Hsubm.
+  - exact: Enil.
+  - move: Hev => [Hev_i Hev_p]. move/andP: Hwf => [Hwf_i Hwf_p].
+    move: Hun. rewrite ssa_unchanged_program_cons. move/andP=> [Hun_i Hun_p].
+    move/andP: Hssa => [Hssa_i Hssa_p].
+    move: (conform_submap Hsubm Hco) => Hco_E.
+    have Hun_p': ssa_vars_unchanged_program (vars_env (instr_succ_typenv i E)) p.
+    { apply: (ssa_unchanged_program_replace
+                (SSAVS.Lemmas.P.equal_sym (vars_env_instr_succ_typenv i E))).
+      rewrite ssa_unchanged_program_union. rewrite Hun_p Hssa_i.
+      exact: is_true_true. }
+    move: (ssa_unchanged_program_succ_typenv_submap Hun_p' Hssa_p) => Hsubm'.
+    apply: (Econs (t:=s)).
+    + apply: (eval_bexp_instr Hwf_i Hco_E _ Hev_i).
+      exact: (conform_submap Hsubm' Hco).
+    + rewrite rng_instr_succ_typenv. apply: (IH _ Hwf_p Hun_p' Hssa_p Hco _ Hsubm').
+      rewrite -rng_instr_succ_typenv. exact: Hev_p.
 Qed.
 
 Definition valid_bexp_spec_conj (s : bexp_spec) : Prop :=
   forall st : SSAStore.t,
+    SSAStore.conform st (binputs s) ->
     QFBV.eval_bexp (bpre s) st ->
     eval_bexps_conj (bprog s) st ->
     QFBV.eval_bexp (bpost s) st.
@@ -2161,6 +2181,7 @@ Proof.
   move : Hwf => /andP [/andP /= [Hwfb Hwfg] _].
   move : Hwfb => /= /andP [Hdef _].
   apply: Hvalid.
+  - exact: (conform_program_succ_typenv (well_formed_rng_program Hwfg) Hcon Hp).
   - apply: eval_bexp_rbexp2.
     apply: (proj1 (ssa_unchanged_program_eval_rbexp _ Hp) Hf).
     rewrite ssa_vars_unchanged_rng_program.
@@ -2173,6 +2194,24 @@ Proof.
     + apply : (well_formed_rng_program Hwfg).
     + rewrite ssa_vars_unchanged_rng_program. exact: Huc.
     + apply : (ssa_single_assignment_rng_program Hssa).
+Qed.
+
+Lemma bexp_spec_complete_conj (s : spec) :
+  well_formed_ssa_spec s ->
+  valid_rspec (rspec_of_spec s) ->
+  valid_bexp_spec_conj (bexp_of_rspec (sinputs s) (rspec_of_spec s)).
+Proof.
+  case: s => E f p g. rewrite /well_formed_ssa_spec /valid_rspec /bexp_of_rspec /=.
+  rewrite /well_formed_spec /valid_bexp_spec_conj /=.
+  move/andP=> [/andP [/andP [/andP [Hwf_f Hwf_p] Hwf_g] Hun_Ep] Hssa_p].
+  move=> Hvr s Hco /eval_bexp_rbexp Hf Heb. apply/eval_bexp_rbexp. apply: (Hvr s s).
+  - apply: (conform_submap _ Hco). rewrite rng_program_succ_typenv.
+    exact: (ssa_unchanged_program_succ_typenv_submap Hun_Ep Hssa_p).
+  - exact: Hf.
+  - rewrite rng_program_succ_typenv in Hco.
+    apply: (bexp_program_eval_rng_program _ Hco Heb).
+    rewrite /well_formed_ssa_program. rewrite Hwf_p Hun_Ep Hssa_p.
+    exact: is_true_true.
 Qed.
 
 Lemma vars_exp_rexp e : QFBV.vars_exp (exp_rexp e) = vars_rexp e.
@@ -2246,15 +2285,16 @@ Fixpoint eval_bexps_imp (es : seq QFBV.bexp) (s : SSAStore.t) (p : Prop) : Prop 
 
 Definition valid_bexp_spec_imp (s : bexp_spec) : Prop :=
   forall st : SSAStore.t,
+    SSAStore.conform st (binputs s) ->
     QFBV.eval_bexp (bpre s) st ->
     eval_bexps_imp (bprog s) st (QFBV.eval_bexp (bpost s) st).
 
 Lemma valid_bexp_spec_conj_imp (s : bexp_spec) :
   valid_bexp_spec_conj s -> valid_bexp_spec_imp s.
 Proof.
-  destruct s as [f p g].
-  move => Hc s /= Hf.
-  move: (Hc s Hf) => /= {Hc Hf f} Hc.
+  destruct s as [E f p g].
+  move => Hc s /= Hco Hf.
+  move: (Hc s Hco Hf) => /= {Hc Hf f} Hc.
   elim: p Hc => /=.
   - by apply.
   - move=> hd tl IH Hc Hhd.
@@ -2265,9 +2305,9 @@ Qed.
 Lemma valid_bexp_spec_imp_conj (s : bexp_spec) :
   valid_bexp_spec_imp s -> valid_bexp_spec_conj s.
 Proof.
-  destruct s as [f p g].
-  move => Hi s /= Hf.
-  move: (Hi s Hf) => /= {Hi Hf f} Hi.
+  destruct s as [E f p g].
+  move => Hi s /= Hco Hf.
+  move: (Hi s Hco Hf) => /= {Hi Hf f} Hi.
   elim: p Hi => /=.
   - done.
   - move=> hd tl IH Hi [Hhd Htl].
@@ -2284,6 +2324,15 @@ Proof.
   exact: valid_bexp_spec_imp_conj.
 Qed.
 
+Lemma bexp_spec_complete_imp (s : spec) :
+  well_formed_ssa_spec s ->
+  valid_rspec (rspec_of_spec s) ->
+  valid_bexp_spec_imp (bexp_of_rspec (sinputs s) (rspec_of_spec s)).
+Proof.
+  move=> Hwf Hvr. apply: valid_bexp_spec_conj_imp.
+  exact: bexp_spec_complete_conj.
+Qed.
+
 
 (* Soundness of range check *)
 
@@ -2295,6 +2344,14 @@ Theorem bexp_spec_sound (s : spec) :
   valid_rspec (rspec_of_spec s).
 Proof.
   exact: bexp_spec_sound_imp.
+Qed.
+
+Theorem bexp_spec_complete (s : spec) :
+  well_formed_ssa_spec s ->
+  valid_rspec (rspec_of_spec s) ->
+  valid_bexp_spec (bexp_of_rspec (sinputs s) (rspec_of_spec s)).
+Proof.
+  exact: bexp_spec_complete_imp.
 Qed.
 
 
@@ -3179,7 +3236,7 @@ Proof.
                  (bexp_instr_are_defined (well_defined_rng_instr Hwd_i)) Heqi).
         move=> Heb. rewrite Heb /= in H2. exact: H2.
       * rewrite -rng_instr_succ_typenv.
-        exact: (conform_eval_succ_typenv (well_formed_rng_instr Hwf_i) Hco Hei).
+        exact: (conform_instr_succ_typenv (well_formed_rng_instr Hwf_i) Hco Hei).
       * rewrite -ssa_vars_unchanged_rng_instr in Hun_prei.
         apply/(ssa_unchanged_instr_eval_rbexp Hun_prei Hei). exact: Hpre.
 Qed.
@@ -3252,7 +3309,7 @@ Proof.
                    (bexp_instr_are_defined (well_defined_rng_instr Hwd_i)) Heqi).
         move=> Heb. rewrite Heb /= in H2. by apply: H2.
       * rewrite -rng_instr_succ_typenv.
-        exact: (conform_eval_succ_typenv (well_formed_rng_instr Hwf_i) Hco Hei).
+        exact: (conform_instr_succ_typenv (well_formed_rng_instr Hwf_i) Hco Hei).
       * rewrite -ssa_vars_unchanged_rng_instr in Hun_prei.
         apply/(ssa_unchanged_instr_eval_rbexp Hun_prei Hei). exact: Hpre.
 Qed.

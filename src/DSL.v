@@ -1607,13 +1607,50 @@ Module MakeDSL
   Qed.
 
   Lemma eval_program_singleton i te1 s1 s2:
-      eval_program te1 ([:: i]) s1 s2 ->
-      eval_instr te1 i s1 s2.
+    eval_program te1 ([:: i]) s1 s2 -> eval_instr te1 i s1 s2.
   Proof.
     move=> H.
     inversion H; subst.
     inversion H5; subst.
     assumption.
+  Qed.
+
+  Lemma eval_program_cons E hd tl s1 s3 :
+    eval_program E (hd :: tl) s1 s3 ->
+    exists s2, eval_instr E hd s1 s2 /\
+               eval_program (instr_succ_typenv hd E) tl s2 s3.
+  Proof.
+    move => Hev.
+    inversion_clear Hev.
+    exists t => //.
+  Qed.
+
+  Lemma eval_program_rcons E p i s1 s3 :
+    eval_program E (rcons p i) s1 s3 ->
+    exists s2, eval_program E p s1 s2 /\
+               eval_instr (program_succ_typenv p E) i s2 s3.
+  Proof.
+    elim: p E s1 s3 => [| hd tl IH] E s1 s3 Hev /=.
+    - inversion_clear Hev. move: H. inversion_clear H0. move=> Hev.
+      exists s1. split; [exact: Enil | exact: Hev].
+    - move: (eval_program_cons Hev) => [s2 [Hev_hd Hev_tli]].
+      move: (IH _ _ _ Hev_tli) => [s4 [Hev_tl Hev_i]].
+      exists s4. split.
+      + exact: (Econs Hev_hd Hev_tl).
+      + exact: Hev_i.
+  Qed.
+
+  Lemma eval_program_cat E p1 p2 s1 s3 :
+    eval_program E (p1 ++ p2) s1 s3 ->
+    exists s2, eval_program E p1 s1 s2 /\
+               eval_program (program_succ_typenv p1 E) p2 s2 s3.
+  Proof.
+    elim: p1 p2 E s1 s3 => [| i1 p1 IH] p2 E s1 s3 Hev /=.
+    - rewrite cat0s in Hev. exists s1. split; [exact: Enil | exact: Hev].
+    - rewrite cat_cons in Hev. move: (eval_program_cons Hev) => [s4 [Hev_i1 Hev_cat]].
+      move: (IH _ _ _ _ Hev_cat) => [s5 [Hev_p1 Hev_p2]]. exists s5. split.
+      + exact: (Econs Hev_i1 Hev_p1).
+      + exact: Hev_p2.
   Qed.
 
   Lemma eval_eqn_instr i te s1 s2 :
@@ -2992,6 +3029,17 @@ Module MakeDSL
     exact: (S.conform_Upd2 Hneq Hty1 Hty2 HUpd2 Hcon).
   Qed.
 
+  Lemma conform_submap E1 E2 s :
+    TELemmas.submap E1 E2 -> S.conform s E2 -> S.conform s E1.
+  Proof.
+    move=> Hsubm Hco. apply: S.conform_def => x Hmem1.
+    move: (TELemmas.submap_mem Hsubm Hmem1) => Hmem2.
+    move: (TELemmas.mem_find_some Hmem1) => [ty Hfind1].
+    move: (Hsubm x ty Hfind1) => Hfind2. move: (TE.find_some_vtyp Hfind1) => Hty1.
+    move: (TE.find_some_vtyp Hfind2) => Hty2. rewrite -(S.conform_mem Hco Hmem2).
+    rewrite (TE.vtyp_vsize Hty1) (TE.vtyp_vsize Hty2). reflexivity.
+  Qed.
+
   Lemma conform_size_eval_atomic te s a :
     VS.subset (vars_atomic a) (vars_env te) -> S.conform s te ->
     size (eval_atomic a s) = Typ.sizeof_typ (atyp a te).
@@ -3503,7 +3551,7 @@ Module MakeDSL
       by inversion Hev; rewrite -H2 // .
   Qed .
 
-  Lemma conform_eval_succ_typenv te i s1 s2 :
+  Lemma conform_instr_succ_typenv te i s1 s2 :
     well_formed_instr te i ->
     S.conform s1 te ->
     eval_instr te i s1 s2 ->
@@ -3541,6 +3589,19 @@ Module MakeDSL
     - move => v a0 a1; apply conform_eval_succ_typenv_Ijoin .
     - move => b; apply conform_eval_succ_typenv_Iassume .
   Qed .
+
+  Lemma conform_program_succ_typenv E p s1 s2 :
+    well_formed_program E p ->
+    S.conform s1 E ->
+    eval_program E p s1 s2 ->
+    S.conform s2 (program_succ_typenv p E).
+  Proof.
+    elim: p E s1 s2 => [| i p IH] E s1 s2 Hwf Hco Hep /=.
+    - move: Hco. inversion_clear Hep. by apply.
+    - inversion_clear Hep. rewrite well_formed_program_cons in Hwf.
+      move/andP: Hwf => [Hwf_i Hwf_p]. apply: (IH _ _ _ Hwf_p _ H0).
+      exact: (conform_instr_succ_typenv Hwf_i Hco H).
+  Qed.
 
 End MakeDSL.
 

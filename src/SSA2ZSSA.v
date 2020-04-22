@@ -2566,7 +2566,7 @@ Section SplitSpec.
       + have ->: (zs_tl =
                   (bv2z_upd_avars_program (instr_succ_typenv i E) avn g_hd' p zs_hd).2)
           by rewrite Hupd_tl; reflexivity.
-        move: (conform_eval_succ_typenv Hwf_i Hco Hi) => Hco_3succi.
+        move: (conform_instr_succ_typenv Hwf_i Hco Hi) => Hco_3succi.
         apply: (IH _ _ _ _ _ _ _ _ Hwf_p Hun_iep Hssa_p Hni_ie Hni_p
                    Hco_3succi (Hsa_p bs3 (eval_rng_instr Hi)) Hp Htl).
         apply: (bvz_zs_eqi Heqi2). apply: (bv2z_upd_avars_instr_eqi Hupd_hd).
