@@ -39,14 +39,6 @@ Ltac rewrite_from_nat_simple :=
     move: (from_nat_simple n) => Hn; rewrite /= in Hn; rewrite Hn; clear Hn
   end.
 
-(*
-Lemma size0 (bs : bitseq) :
-  size bs == 0 -> bs == [::].
-Proof.
-  case : bs; done.
-Qed.
- *)
-
 Lemma to_bool_bit_is_true :
   forall bs,
     size bs = 1 ->
@@ -389,21 +381,14 @@ Proof. by case: a. Qed.
 
 Lemma eval_exp_rexp (e : SSA.rexp) s:
   QFBV.eval_exp (exp_rexp e) s = eval_rexp e s.
-Admitted.
-(* TODO: wait for the mod, smod, srem
-Proof.
-  elim: e => /=.
+  elim: e => w /=.
   - reflexivity.
   - reflexivity.
-  - move=> w op e IH;
-             case : op; rewrite /= IH; reflexivity.
-  - move=> w op e0 IH0 e1 IH1.
-    case : op; rewrite /=; rewrite IH0 IH1 //.
-  - move => w e IH n; rewrite /= IH //.
-  - move => w e IH n; rewrite /= IH //.
-    
+  - move=> op e IH. case: op => /=; rewrite IH; reflexivity.
+  - move=> op e1 IH1 e2 IH2. case: op => /=; rewrite IH1 IH2; reflexivity.
+  - move=> v IH n; rewrite IH. reflexivity.
+  - move=> v IH n; rewrite IH. reflexivity.
 Qed.
- *)
 
 Lemma eval_bexp_rbexp e s:
   QFBV.eval_bexp (bexp_rbexp e) s <-> eval_rbexp e s.
@@ -2357,88 +2342,134 @@ Qed.
 
 (* Define the safety condition in terms of a QFBV expression *)
 
+Definition bexp_atomic_uaddB_safe a1 a2 : QFBV.bexp :=
+  qfbv_lneg (qfbv_uaddo (qfbv_atomic a1) (qfbv_atomic a2)).
+
+Definition bexp_atomic_saddB_safe a1 a2 : QFBV.bexp :=
+  qfbv_lneg (qfbv_saddo (qfbv_atomic a1) (qfbv_atomic a2)).
+
 Definition bexp_atomic_addB_safe E a1 a2 : QFBV.bexp :=
   let 'a_typ := atyp a1 E in
-  if Typ.is_unsigned a_typ then
-    qfbv_lneg (qfbv_uaddo (qfbv_atomic a1)
-                          (qfbv_atomic a2))
-  else
-    qfbv_lneg (qfbv_saddo (qfbv_atomic a1)
-                          (qfbv_atomic a2)).
+  if Typ.is_unsigned a_typ then bexp_atomic_uaddB_safe a1 a2
+  else bexp_atomic_saddB_safe a1 a2.
+
+Definition bexp_atomic_adds_safe E a1 a2 : QFBV.bexp :=
+  let 'a_typ := atyp a1 E in
+  if Typ.is_unsigned a_typ then QFBV.Btrue
+  else bexp_atomic_saddB_safe a1 a2.
+
+Definition bexp_atomic_uadcB_safe a1 a2 ac : QFBV.bexp :=
+  qfbv_conj
+    (qfbv_lneg
+       (qfbv_uaddo (qfbv_atomic a1)
+                   (qfbv_atomic a2)))
+    (qfbv_lneg
+       (qfbv_uaddo (qfbv_add (qfbv_atomic a1)
+                             (qfbv_atomic a2))
+                   (qfbv_atomic ac))).
+
+Definition bexp_atomic_sadcB_safe a1 a2 ac : QFBV.bexp :=
+  qfbv_conj
+    (qfbv_lneg
+       (qfbv_saddo (qfbv_atomic a1)
+                   (qfbv_atomic a2)))
+    (qfbv_lneg
+       (qfbv_saddo (qfbv_add (qfbv_atomic a1)
+                             (qfbv_atomic a2))
+                   (qfbv_atomic ac))).
 
 Definition bexp_atomic_adcB_safe E a1 a2 ac : QFBV.bexp :=
   let 'a_typ := atyp a1 E in
-  if Typ.is_unsigned a_typ then
-    qfbv_conj
-      (qfbv_lneg
-         (qfbv_uaddo (qfbv_atomic a1)
-                     (qfbv_atomic a2)))
-      (qfbv_lneg
-         (qfbv_uaddo (qfbv_add (qfbv_atomic a1)
-                               (qfbv_atomic a2))
-                     (qfbv_atomic ac)))
-  else
-    qfbv_conj
-      (qfbv_lneg
-         (qfbv_saddo (qfbv_atomic a1)
-                     (qfbv_atomic a2)))
-      (qfbv_lneg
-         (qfbv_saddo (qfbv_add (qfbv_atomic a1)
-                               (qfbv_atomic a2))
-                     (qfbv_atomic ac))).
+  if Typ.is_unsigned a_typ then bexp_atomic_uadcB_safe a1 a2 ac
+  else bexp_atomic_sadcB_safe a1 a2 ac.
+
+Definition bexp_atomic_adcs_safe E a1 a2 ac : QFBV.bexp :=
+  let 'a_typ := atyp a1 E in
+  if Typ.is_unsigned a_typ then QFBV.Btrue
+  else bexp_atomic_sadcB_safe a1 a2 ac.
+
+Definition bexp_atomic_usubB_safe a1 a2 : QFBV.bexp :=
+  qfbv_lneg (qfbv_usubo (qfbv_atomic a1) (qfbv_atomic a2)).
+
+Definition bexp_atomic_ssubB_safe a1 a2 : QFBV.bexp :=
+  qfbv_lneg (qfbv_ssubo (qfbv_atomic a1) (qfbv_atomic a2)).
 
 Definition bexp_atomic_subB_safe E a1 a2 : QFBV.bexp :=
   let 'a_typ := atyp a1 E in
-  if Typ.is_unsigned a_typ then
-    qfbv_lneg (qfbv_usubo (qfbv_atomic a1)
-                          (qfbv_atomic a2))
-  else
-    qfbv_lneg (qfbv_ssubo (qfbv_atomic a1)
-                          (qfbv_atomic a2)).
+  if Typ.is_unsigned a_typ then bexp_atomic_usubB_safe a1 a2
+  else bexp_atomic_ssubB_safe a1 a2.
 
-Definition bexp_atomic_sbbB_safe  E a1 a2 ab : QFBV.bexp :=
+Definition bexp_atomic_subc_safe E a1 a2 : QFBV.bexp :=
   let 'a_typ := atyp a1 E in
-  if Typ.is_unsigned a_typ then
-    qfbv_conj
-      (qfbv_lneg
-         (qfbv_usubo (qfbv_atomic a1)
-                     (qfbv_atomic a2)))
-      (qfbv_lneg
-         (qfbv_usubo (qfbv_sub (qfbv_atomic a1)
-                               (qfbv_atomic a2))
-                     (qfbv_atomic ab)))
-  else
-    qfbv_conj
-      (qfbv_lneg
-         (qfbv_ssubo (qfbv_atomic a1)
-                     (qfbv_atomic a2)))
-      (qfbv_lneg
-         (qfbv_ssubo (qfbv_sub (qfbv_atomic a1)
-                               (qfbv_atomic a2))
-                     (qfbv_atomic ab))).
+  if Typ.is_unsigned a_typ then QFBV.Btrue
+  else bexp_atomic_ssubB_safe a1 a2.
 
-Definition bexp_atomic_sbcB_safe  E a1 a2 ac : QFBV.bexp :=
+Definition bexp_atomic_subb_safe E a1 a2 : QFBV.bexp :=
   let 'a_typ := atyp a1 E in
-  if Typ.is_unsigned a_typ then
-    qfbv_conj
-      (qfbv_lneg
-         (qfbv_usubo (qfbv_atomic a1)
-                     (qfbv_atomic a2)))
-      (qfbv_lneg
-         (qfbv_usubo (qfbv_sub (qfbv_atomic a1)
-                               (qfbv_atomic a2))
-                     (qfbv_sub (qfbv_one 1)
-                               (qfbv_atomic ac))))
-  else
-    qfbv_conj
-      (qfbv_lneg
-         (qfbv_ssubo (qfbv_atomic a1)
-                     (qfbv_atomic a2)))
-      (qfbv_lneg
-         (qfbv_ssubo (qfbv_sub (qfbv_atomic a1)
-                               (qfbv_atomic a2))
-                     (qfbv_sub (qfbv_one 1)
-                               (qfbv_atomic ac)))).
+  if Typ.is_unsigned a_typ then QFBV.Btrue
+  else bexp_atomic_ssubB_safe a1 a2.
+
+Definition bexp_atomic_usbbB_safe a1 a2 ab : QFBV.bexp :=
+  qfbv_conj
+    (qfbv_lneg
+       (qfbv_usubo (qfbv_atomic a1)
+                   (qfbv_atomic a2)))
+    (qfbv_lneg
+       (qfbv_usubo (qfbv_sub (qfbv_atomic a1)
+                             (qfbv_atomic a2))
+                   (qfbv_atomic ab))).
+
+Definition bexp_atomic_ssbbB_safe a1 a2 ab : QFBV.bexp :=
+  qfbv_conj
+    (qfbv_lneg
+       (qfbv_ssubo (qfbv_atomic a1)
+                   (qfbv_atomic a2)))
+    (qfbv_lneg
+       (qfbv_ssubo (qfbv_sub (qfbv_atomic a1)
+                             (qfbv_atomic a2))
+                   (qfbv_atomic ab))).
+
+Definition bexp_atomic_sbbB_safe E a1 a2 ab : QFBV.bexp :=
+  let 'a_typ := atyp a1 E in
+  if Typ.is_unsigned a_typ then bexp_atomic_usbbB_safe a1 a2 ab
+  else bexp_atomic_ssbbB_safe a1 a2 ab.
+
+Definition bexp_atomic_sbbs_safe E a1 a2 ab : QFBV.bexp :=
+  let 'a_typ := atyp a1 E in
+  if Typ.is_unsigned a_typ then QFBV.Btrue
+  else bexp_atomic_ssbbB_safe a1 a2 ab.
+
+Definition bexp_atomic_usbcB_safe a1 a2 ac : QFBV.bexp :=
+  qfbv_conj
+    (qfbv_lneg
+       (qfbv_usubo (qfbv_atomic a1)
+                   (qfbv_atomic a2)))
+    (qfbv_lneg
+       (qfbv_usubo (qfbv_sub (qfbv_atomic a1)
+                             (qfbv_atomic a2))
+                   (qfbv_sub (qfbv_one 1)
+                             (qfbv_atomic ac)))).
+
+Definition bexp_atomic_ssbcB_safe a1 a2 ac : QFBV.bexp :=
+  qfbv_conj
+    (qfbv_lneg
+       (qfbv_ssubo (qfbv_atomic a1)
+                   (qfbv_atomic a2)))
+    (qfbv_lneg
+       (qfbv_ssubo (qfbv_sub (qfbv_atomic a1)
+                             (qfbv_atomic a2))
+                   (qfbv_sub (qfbv_one 1)
+                             (qfbv_atomic ac)))).
+
+Definition bexp_atomic_sbcB_safe E a1 a2 ac : QFBV.bexp :=
+  let 'a_typ := atyp a1 E in
+  if Typ.is_unsigned a_typ then bexp_atomic_usbcB_safe a1 a2 ac
+  else bexp_atomic_ssbcB_safe a1 a2 ac.
+
+Definition bexp_atomic_sbcs_safe E a1 a2 ac : QFBV.bexp :=
+  let 'a_typ := atyp a1 E in
+  if Typ.is_unsigned a_typ then QFBV.Btrue
+  else bexp_atomic_ssbcB_safe a1 a2 ac.
 
 Definition bexp_atomic_mulB_safe E a1 a2 : QFBV.bexp :=
   let 'a_typ := atyp a1 E in
@@ -2515,14 +2546,26 @@ Definition bexp_instr_safe E (i : instr) : QFBV.bexp :=
   match i with
   | Iadd _ a1 a2 =>
     bexp_atomic_addB_safe E a1 a2
+  | Iadds _ _ a1 a2 =>
+    bexp_atomic_adds_safe E a1 a2
   | Iadc _ a1 a2 ac =>
     bexp_atomic_adcB_safe E a1 a2 ac
+  | Iadcs _ _ a1 a2 ac =>
+    bexp_atomic_adcs_safe E a1 a2 ac
   | Isub _ a1 a2 =>
     bexp_atomic_subB_safe E a1 a2
+  | Isubc _ _ a1 a2 =>
+    bexp_atomic_subc_safe E a1 a2
+  | Isubb _ _ a1 a2 =>
+    bexp_atomic_subb_safe E a1 a2
   | Isbc _ a1 a2 ac =>
     bexp_atomic_sbcB_safe E a1 a2 ac
+  | Isbcs _ _ a1 a2 ac =>
+    bexp_atomic_sbcs_safe E a1 a2 ac
   | Isbb _ a1 a2 ab =>
     bexp_atomic_sbbB_safe E a1 a2 ab
+  | Isbbs _ _ a1 a2 ab =>
+    bexp_atomic_sbbs_safe E a1 a2 ab
   | Imul _ a1 a2 =>
     bexp_atomic_mulB_safe E a1 a2
   | Ishl v a n =>
@@ -2535,12 +2578,6 @@ Definition bexp_instr_safe E (i : instr) : QFBV.bexp :=
   | Inondet _ _
   | Imov _ _
   | Icmov _ _ _ _
-  | Iadds _ _ _ _
-  | Iadcs _ _ _ _ _
-  | Isubc _ _ _ _
-  | Isubb _ _ _ _
-  | Isbcs _ _ _ _ _
-  | Isbbs _ _ _ _ _
   | Imull _ _ _ _
   | Imulj _ _ _
   | Inot _ _ _
@@ -2563,6 +2600,15 @@ Proof.
   - rewrite /saddB_safe /= !eval_exp_atomic //.
 Qed.
 
+Lemma eval_bexp_atomic_adds_safe E a1 a2 s :
+  QFBV.eval_bexp (bexp_atomic_adds_safe E a1 a2) s <->
+  adds_safe (atyp a1 E) (eval_atomic a1 s) (eval_atomic a2 s).
+Proof.
+  rewrite /bexp_atomic_adds_safe /adds_safe.
+  case: (Typ.is_unsigned (atyp a1 E)) => //=.
+  rewrite /saddB_safe !eval_exp_atomic. done.
+Qed.
+
 Lemma eval_bexp_atomic_adcB_safe E a1 a2 ac s :
   QFBV.eval_bexp (bexp_atomic_adcB_safe E a1 a2 ac) s <->
   adcB_safe (atyp a1 E) (eval_atomic a1 s) (eval_atomic a2 s) (eval_atomic ac s).
@@ -2571,6 +2617,15 @@ Proof.
     rewrite /bexp_atomic_adcB_safe /adcB_safe Ht /=.
   - rewrite /uadcB_safe /= !eval_exp_atomic //.
   - rewrite /sadcB_safe /= !eval_exp_atomic //.
+Qed.
+
+Lemma eval_bexp_atomic_adcs_safe E a1 a2 ac s :
+  QFBV.eval_bexp (bexp_atomic_adcs_safe E a1 a2 ac) s <->
+  adcs_safe (atyp a1 E) (eval_atomic a1 s) (eval_atomic a2 s) (eval_atomic ac s).
+Proof.
+  rewrite /bexp_atomic_adcs_safe /adcs_safe.
+  case: (Typ.is_unsigned (atyp a1 E)) => //=.
+  rewrite /sadcB_safe !eval_exp_atomic. done.
 Qed.
 
 Lemma eval_bexp_atomic_subB_safe E a1 a2 s :
@@ -2583,6 +2638,24 @@ Proof.
   - rewrite /ssubB_safe /= !eval_exp_atomic //.
 Qed.
 
+Lemma eval_bexp_atomic_subc_safe E a1 a2 s :
+  QFBV.eval_bexp (bexp_atomic_subc_safe E a1 a2) s <->
+  subc_safe (atyp a1 E) (eval_atomic a1 s) (eval_atomic a2 s).
+Proof.
+  rewrite /bexp_atomic_subc_safe /subc_safe.
+  case: (Typ.is_unsigned (atyp a1 E)) => //=.
+  rewrite /ssubB_safe !eval_exp_atomic. done.
+Qed.
+
+Lemma eval_bexp_atomic_subb_safe E a1 a2 s :
+  QFBV.eval_bexp (bexp_atomic_subb_safe E a1 a2) s <->
+  subb_safe (atyp a1 E) (eval_atomic a1 s) (eval_atomic a2 s).
+Proof.
+  rewrite /bexp_atomic_subb_safe /subb_safe.
+  case: (Typ.is_unsigned (atyp a1 E)) => //=.
+  rewrite /ssubB_safe !eval_exp_atomic. done.
+Qed.
+
 Lemma eval_bexp_atomic_sbbB_safe E a1 a2 ac s :
   QFBV.eval_bexp (bexp_atomic_sbbB_safe E a1 a2 ac) s <->
   sbbB_safe (atyp a1 E) (eval_atomic a1 s) (eval_atomic a2 s) (eval_atomic ac s).
@@ -2593,6 +2666,15 @@ Proof.
   - rewrite /ssbbB_safe /= !eval_exp_atomic //.
 Qed.
 
+Lemma eval_bexp_atomic_sbbs_safe E a1 a2 ac s :
+  QFBV.eval_bexp (bexp_atomic_sbbs_safe E a1 a2 ac) s <->
+  sbbs_safe (atyp a1 E) (eval_atomic a1 s) (eval_atomic a2 s) (eval_atomic ac s).
+Proof.
+  rewrite /bexp_atomic_sbbs_safe /sbbs_safe.
+  case: (Typ.is_unsigned (atyp a1 E)) => //=.
+  rewrite /ssbcB_safe !eval_exp_atomic. done.
+Qed.
+
 Lemma eval_bexp_atomic_sbcB_safe E a1 a2 ac s :
   QFBV.eval_bexp (bexp_atomic_sbcB_safe E a1 a2 ac) s <->
   sbcB_safe (atyp a1 E) (eval_atomic a1 s) (eval_atomic a2 s) (eval_atomic ac s).
@@ -2601,6 +2683,15 @@ Proof.
     rewrite /bexp_atomic_sbcB_safe /sbcB_safe Ht /=.
   - rewrite /usbcB_safe /= !eval_exp_atomic //.
   - rewrite /ssbcB_safe /= !eval_exp_atomic //.
+Qed.
+
+Lemma eval_bexp_atomic_sbcs_safe E a1 a2 ac s :
+  QFBV.eval_bexp (bexp_atomic_sbcs_safe E a1 a2 ac) s <->
+  sbcs_safe (atyp a1 E) (eval_atomic a1 s) (eval_atomic a2 s) (eval_atomic ac s).
+Proof.
+  rewrite /bexp_atomic_sbcs_safe /sbcs_safe.
+  case: (Typ.is_unsigned (atyp a1 E)) => //=.
+  rewrite /ssbcB_safe !eval_exp_atomic. done.
 Qed.
 
 Lemma eval_bexp_atomic_mulB_safe E a1 a2 s :
@@ -2659,514 +2750,26 @@ Proof.
 Qed.
 
 Lemma eval_bexp_instr_safe E i s :
-  well_formed_instr E i ->
-  (QFBV.eval_bexp (bexp_instr_safe E i) s <->
-   ssa_instr_safe_at E i s).
+  (QFBV.eval_bexp (bexp_instr_safe E i) s <-> ssa_instr_safe_at E i s).
 Proof.
-  move => /andP [Hdef _].
-  move : Hdef; case i => /=; try done.
-  - move => v a n _.
-    apply eval_bexp_atomic_shl_safe.
-  - move => h l a1 a2 n _.
-    apply : eval_bexp_atomic_cshl_safe.
-  - move => v a1 a2 _.
-    apply : eval_bexp_atomic_addB_safe.
-  - move => v a1 a2 ac _.
-(* TODO: add safety for signed operations: adds, adcs, subc, subb, sbcs, and sbbs *)
-(*
-    apply : eval_bexp_atomic_adcB_safe.
-  - move => v a1 a2 _.
-    apply : eval_bexp_atomic_subB_safe.
-  - move => v a1 a2 ac _.
-    apply : eval_bexp_atomic_sbcB_safe.
-  - move => v a1 a2 ac _.
-    apply : eval_bexp_atomic_sbbB_safe.
-  - move => v a1 a2 _.
-    apply : eval_bexp_atomic_mulB_safe.
-  - move => v t a _.
-    apply : eval_bexp_atomic_vpc_safe.
-*)
-Admitted.
-
-Lemma unchanged_instr_eval_instr E i a s1 s2 :
-  ssa_vars_unchanged_instr (vars_atomic a) i ->
-  eval_instr E i s1 s2 ->
-  eval_atomic a s1 = eval_atomic a s2.
-Proof.
-  case a => //.
-  case i => /=;
-  [ move => u b v Hun Hev
-  | move => u b n v Hun Hev
-  | move => u w b0 b1 n v Hun Hev
-  | move => u t v Hun Hev
-  | move => u b0 b1 bc v Hun Hev
-  | move => v Hun Hev
-  | move => u ty b v Hun Hev
-  | move => u b0 b1 v Hun Hev
-  | move => u w b0 b1 v Hun Hev
-  | move => u b0 b1 bc v Hun Hev
-  | move => u w b0 b1 bc v Hun Hev
-  | move => u b0 b1 v Hun Hev
-  | move => u w b0 b1 v Hun Hev
-  | move => u w b0 b1 v Hun Hev
-  | move => u b0 b1 bc v Hun Hev
-  | move => u w b0 b1 bc v Hun Hev
-  | move => u b0 b1 bc v Hun Hev
-  | move => u w b0 b1 bc v Hun Hev
-  | move => u b0 b1 v Hun Hev
-  | move => u w b0 b1 v Hun Hev
-  | move => u b0 b1 v Hun Hev
-  | move => u w b n v Hun Hev
-  | move => u w b0 b1 v Hun Hev
-  | move => u ty b0 b1 v Hun Hev
-  | move => u ty b0 b1 v Hun Hev
-  | move => u ty b0 v Hun Hev
-  | move => u ty b0 v Hun Hev
-  | move => u b0 b1 v Hun Hev
-  | move => e u Hun Hev ];
-    move : (ssa_unchanged_instr_singleton1 Hun) => {Hun} Hun;
-    apply : (acc_unchanged_instr Hun Hev).
+  case i => //=.
+  - move => v a n. exact: eval_bexp_atomic_shl_safe.
+  - move => h l a1 a2 n. exact: eval_bexp_atomic_cshl_safe.
+  - move => v a1 a2. exact: eval_bexp_atomic_addB_safe.
+  - move => c v a1 a2. exact: eval_bexp_atomic_adds_safe.
+  - move=> v a1 a2 ac. exact: eval_bexp_atomic_adcB_safe.
+  - move=> c v a1 a2 ac. exact: eval_bexp_atomic_adcs_safe.
+  - move=> v a1 a2. exact: eval_bexp_atomic_subB_safe.
+  - move=> c v a1 a2. exact: eval_bexp_atomic_subc_safe.
+  - move=> c v a1 a2. exact: eval_bexp_atomic_subb_safe.
+  - move=> v a1 a2 ac. exact: eval_bexp_atomic_sbcB_safe.
+  - move=> c v a1 a2 ac. exact: eval_bexp_atomic_sbcs_safe.
+  - move=> v a1 a2 ab. exact: eval_bexp_atomic_sbbB_safe.
+  - move=> b v a1 a2 ab. exact: eval_bexp_atomic_sbbs_safe.
+  - move=> v a1 a2. exact: eval_bexp_atomic_mulB_safe.
+  - move=> v t a. exact: eval_bexp_atomic_vpc_safe.
 Qed.
 
-Lemma eval_bexp_instr_safe_succ_Ishl E t a n s1 s2 :
-  ssa_vars_unchanged_instr (rvs_instr (Ishl t a n)) (Ishl t a n) ->
-  eval_instr E (Ishl t a n) s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Ishl t a n)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Ishl t a n)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite /bexp_atomic_shl_safe.
-  by case : (Typ.is_unsigned (atyp a E)) => /=;
-       rewrite !eval_exp_atomic
-               (ssa_unchanged_instr_eval_atomic Hun Hev).
-Qed.
-
-
-Lemma eval_bexp_instr_safe_succ_Icshl E t t0 a a0 n s1 s2 :
-  ssa_vars_unchanged_instr (rvs_instr (Icshl t t0 a a0 n))
-                           (Icshl t t0 a a0 n) ->
-  eval_instr E (Icshl t t0 a a0 n) s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Icshl t t0 a a0 n)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Icshl t t0 a a0 n)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite /bexp_atomic_cshl_safe.
-  by case : (Typ.is_unsigned (atyp a E)) => /=;
-     rewrite !eval_exp_atomic;
-     move : (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun0 Hun1];
-     rewrite (ssa_unchanged_instr_eval_atomic Hun0 Hev)
-             (ssa_unchanged_instr_eval_atomic Hun1 Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succ_Iadd E t a a0 s1 s2 :
-  ssa_vars_unchanged_instr (rvs_instr (Iadd t a a0)) (Iadd t a a0) ->
-  eval_instr E (Iadd t a a0) s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Iadd t a a0)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Iadd t a a0)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite /bexp_atomic_addB_safe.
-  rewrite !eval_bexp_if => /=.
-  rewrite !eval_exp_atomic.
-  move : (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun0 Hun1].
-  by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
-             !(unchanged_instr_eval_instr Hun1 Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succ_Iadc E t a a0 a1 s1 s2 :
-  ssa_vars_unchanged_instr (rvs_instr (Iadc t a a0 a1))
-                           (Iadc t a a0 a1) ->
-  eval_instr E (Iadc t a a0 a1) s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Iadc t a a0 a1)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Iadc t a a0 a1)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite /bexp_atomic_adcB_safe !eval_bexp_if => /=.
-  rewrite !eval_exp_atomic.
-  move : (ssa_unchanged_instr_union1 Hun) =>
-  {Hun} [Hun0 Hun].
-  move : (ssa_unchanged_instr_union1 Hun) =>
-  {Hun} [Hun1 Hunc].
-  by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
-            !(unchanged_instr_eval_instr Hun1 Hev)
-            !(unchanged_instr_eval_instr Hunc Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succ_Isub E t a a0 s1 s2 :
-  ssa_vars_unchanged_instr (rvs_instr (Isub t a a0)) (Isub t a a0) ->
-  eval_instr E (Isub t a a0) s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Isub t a a0)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Isub t a a0)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite /bexp_atomic_subB_safe !eval_bexp_if => /=.
-  rewrite !eval_exp_atomic.
-  move : (ssa_unchanged_instr_union1 Hun) =>
-  {Hun} [Hun0 Hun1].
-  by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
-             !(unchanged_instr_eval_instr Hun1 Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succ_Isbc E t a a0 a1 s1 s2 :
-  ssa_vars_unchanged_instr (rvs_instr (Isbc t a a0 a1))
-                           (Isbc t a a0 a1) ->
-  eval_instr E (Isbc t a a0 a1) s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Isbc t a a0 a1)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Isbc t a a0 a1)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite /bexp_atomic_sbcB_safe !eval_bexp_if => /=.
-  rewrite !eval_exp_atomic.
-  move : (ssa_unchanged_instr_union1 Hun) =>
-  {Hun} [Hun0 Hun].
-  move : (ssa_unchanged_instr_union1 Hun) =>
-  {Hun} [Hun1 Hunc].
-  by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
-             !(unchanged_instr_eval_instr Hun1 Hev)
-             !(unchanged_instr_eval_instr Hunc Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succ_Isbb E t a a0 a1 s1 s2 :
-  ssa_vars_unchanged_instr (rvs_instr (Isbb t a a0 a1))
-                           (Isbb t a a0 a1) ->
-  eval_instr E (Isbb t a a0 a1) s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Isbb t a a0 a1)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Isbb t a a0 a1)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite /bexp_atomic_sbbB_safe !eval_bexp_if => /=.
-  rewrite !eval_exp_atomic.
-  move : (ssa_unchanged_instr_union1 Hun) =>
-  {Hun} [Hun0 Hun].
-  move : (ssa_unchanged_instr_union1 Hun) =>
-  {Hun} [Hun1 Hunc].
-  by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
-             !(unchanged_instr_eval_instr Hun1 Hev)
-             !(unchanged_instr_eval_instr Hunc Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succ_Imul E t a a0 s1 s2 :
-  ssa_vars_unchanged_instr (rvs_instr (Imul t a a0)) (Imul t a a0) ->
-  eval_instr E (Imul t a a0) s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Imul t a a0)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Imul t a a0)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite /bexp_atomic_mulB_safe !eval_bexp_if => /=.
-  rewrite !eval_exp_atomic.
-  move : (ssa_unchanged_instr_union1 Hun) =>
-  {Hun} [Hun0 Hun1].
-  by rewrite !(unchanged_instr_eval_instr Hun0 Hev)
-             !(unchanged_instr_eval_instr Hun1 Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succ_Ivpc E t t0 a s1 s2 :
-  ssa_vars_unchanged_instr (rvs_instr (Ivpc t t0 a)) (Ivpc t t0 a) ->
-  eval_instr E (Ivpc t t0 a) s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Ivpc t t0 a)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Ivpc t t0 a)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite /bexp_atomic_vpc_safe !eval_bexp_if => /=.
-  rewrite !eval_exp_atomic.
-  by rewrite !(unchanged_instr_eval_instr Hun Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succ E i s1 s2 :
-  ssa_vars_unchanged_instr (rvs_instr i) i ->
-  eval_instr E i s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E i) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E i) s2.
-Proof.
-  case i; rewrite /bexp_instr_safe => //.
-  - move => v a n; apply eval_bexp_instr_safe_succ_Ishl.
-  - move => u v a0 a1 n; apply eval_bexp_instr_safe_succ_Icshl.
-  - move => v a0 a1; apply eval_bexp_instr_safe_succ_Iadd.
-  - move => v a0 a1 ac; apply eval_bexp_instr_safe_succ_Iadc.
-  - move => v a0 a1; apply eval_bexp_instr_safe_succ_Isub.
-  - move => v a0 a1 ac; apply eval_bexp_instr_safe_succ_Isbc.
-  - move => v a0 a1 ac; apply eval_bexp_instr_safe_succ_Isbb.
-  - move => v a0 a1; apply eval_bexp_instr_safe_succ_Imul.
-  - move => v t a; apply eval_bexp_instr_safe_succ_Ivpc.
-Qed.
-
-Lemma eval_bexp_instr_safe_succs_Ishl E t a n p s1 s2 :
-  ssa_vars_unchanged_program (rvs_instr (Ishl t a n)) p ->
-  eval_program E p s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Ishl t a n)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Ishl t a n)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite /bexp_atomic_shl_safe.
-  by case : (Typ.is_unsigned (atyp a E)) => /=;
-      rewrite !eval_exp_atomic
-              (ssa_unchanged_program_eval_atomic Hun Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succs_Icshl E t t0 a a0 n p s1 s2 :
-  ssa_vars_unchanged_program (rvs_instr (Icshl t t0 a a0 n)) p ->
-  eval_program E p s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Icshl t t0 a a0 n)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Icshl t t0 a a0 n)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite /bexp_atomic_cshl_safe.
-  by case : (Typ.is_unsigned (atyp a E)) => /=;
-       rewrite !eval_exp_atomic;
-       move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun1];
-       rewrite (ssa_unchanged_program_eval_atomic Hun0 Hev)
-               (ssa_unchanged_program_eval_atomic Hun1 Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succs_Iadd E t a a0 p s1 s2 :
-  ssa_vars_unchanged_program (rvs_instr (Iadd t a a0)) p ->
-  eval_program E p s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Iadd t a a0)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Iadd t a a0)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite !eval_bexp_if /= !eval_exp_atomic.
-  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun1].
-  by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-             !(ssa_unchanged_program_eval_atomic Hun1 Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succs_Iadc E t a a0 a1 p s1 s2 :
-  ssa_vars_unchanged_program (rvs_instr (Iadc t a a0 a1)) p ->
-  eval_program E p s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Iadc t a a0 a1)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Iadc t a a0 a1)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite !eval_bexp_if /= !eval_exp_atomic.
-  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun].
-  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hunc].
-  by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-             !(ssa_unchanged_program_eval_atomic Hun1 Hev)
-             !(ssa_unchanged_program_eval_atomic Hunc Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succs_Isub E t a a0 p s1 s2 :
-  ssa_vars_unchanged_program (rvs_instr (Isub t a a0)) p ->
-  eval_program E p s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Isub t a a0)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Isub t a a0)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite !eval_bexp_if /= !eval_exp_atomic.
-  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun1].
-  by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-             !(ssa_unchanged_program_eval_atomic Hun1 Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succs_Isbc E t a a0 a1 p s1 s2 :
-  ssa_vars_unchanged_program (rvs_instr (Isbc t a a0 a1)) p ->
-  eval_program E p s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Isbc t a a0 a1)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Isbc t a a0 a1)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite !eval_bexp_if /= !eval_exp_atomic.
-  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun].
-  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hunc].
-  by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-             !(ssa_unchanged_program_eval_atomic Hun1 Hev)
-             !(ssa_unchanged_program_eval_atomic Hunc Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succs_Isbb E t a a0 a1 p s1 s2 :
-  ssa_vars_unchanged_program (rvs_instr (Isbb t a a0 a1)) p ->
-  eval_program E p s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Isbb t a a0 a1)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Isbb t a a0 a1)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite !eval_bexp_if /= !eval_exp_atomic.
-  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun].
-  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hunc].
-  by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-             !(ssa_unchanged_program_eval_atomic Hun1 Hev)
-             !(ssa_unchanged_program_eval_atomic Hunc Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succs_Imul E t a a0 p s1 s2 :
-  ssa_vars_unchanged_program (rvs_instr (Imul t a a0)) p ->
-  eval_program E p s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Imul t a a0)) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E (Imul t a a0)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite !eval_bexp_if /= !eval_exp_atomic.
-  move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun1].
-  by rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-             !(ssa_unchanged_program_eval_atomic Hun1 Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succs_Ivpc E t t0 a p s1 s2 :
- ssa_vars_unchanged_program (rvs_instr (Ivpc t t0 a)) p ->
- eval_program E p s1 s2 ->
- QFBV.eval_bexp (bexp_instr_safe E (Ivpc t t0 a)) s1 ->
- QFBV.eval_bexp (bexp_instr_safe E (Ivpc t t0 a)) s2.
-Proof.
-  move => Hun Hev /=.
-  rewrite !eval_bexp_if /= !eval_exp_atomic.
-  by rewrite (ssa_unchanged_program_eval_atomic Hun Hev).
-Qed.
-
-Lemma eval_bexp_instr_safe_succs E i p s1 s2 :
-  ssa_vars_unchanged_program (rvs_instr i) p ->
-  eval_program E p s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E i) s1 ->
-  QFBV.eval_bexp (bexp_instr_safe E i) s2.
-Proof.
-  case i; rewrite /bexp_instr_safe => //.
-  - move => v a n; apply eval_bexp_instr_safe_succs_Ishl.
-  - move => u v a0 a1 n; apply eval_bexp_instr_safe_succs_Icshl.
-  - move => v a0 a1; apply eval_bexp_instr_safe_succs_Iadd.
-  - move => v a0 a1 ac; apply eval_bexp_instr_safe_succs_Iadc.
-  - move => v a0 a1; apply eval_bexp_instr_safe_succs_Isub.
-  - move => v a0 a1 ac; apply eval_bexp_instr_safe_succs_Isbc.
-  - move => v a0 a1 ac; apply eval_bexp_instr_safe_succs_Isbb.
-  - move => v a0 a1; apply eval_bexp_instr_safe_succs_Imul.
-  - move => v ty a; apply eval_bexp_instr_safe_succs_Ivpc.
-Qed.
-
-(*
-Lemma eval_bexp_instr_safe_pred E i s1 s2 :
-  ssa_vars_unchanged_instr (rvs_instr i) i ->
-  eval_instr E i s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E i) s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E i) s1.
-Proof.
-  case i => //.
-  - move => v a n Hun Hev.
-    rewrite /= !eval_exp_atomic.
-    rewrite (unchanged_instr_eval_instr Hun Hev) //.
-  - move => u v a0 a1 n Hun Hev.
-    rewrite /= !eval_exp_atomic.
-    move : (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun0 Hun1].
-    rewrite (unchanged_instr_eval_instr Hun1 Hev) //.
-  - move => v a0 a1 Hun Hev.
-    rewrite !eval_bexp_if /= !eval_exp_atomic. 
-    move : (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun0 Hun1].
-    rewrite (unchanged_instr_eval_instr Hun0 Hev)
-            (unchanged_instr_eval_instr Hun1 Hev) //.
-  - move => v a0 a1 ac Hun Hev.
-    rewrite !eval_bexp_if /= !eval_exp_atomic. 
-    move : (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun0 Hun].
-    move : (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hunc].
-    rewrite (unchanged_instr_eval_instr Hun0 Hev)
-            (unchanged_instr_eval_instr Hun1 Hev)
-            (unchanged_instr_eval_instr Hunc Hev) //.
-  - move => v a0 a1 Hun Hev.
-    rewrite !eval_bexp_if /= !eval_exp_atomic. 
-    move : (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun0 Hun1].
-    rewrite (unchanged_instr_eval_instr Hun0 Hev)
-            (unchanged_instr_eval_instr Hun1 Hev) //.
-  - move => v a0 a1 ac Hun Hev.
-    rewrite !eval_bexp_if /= !eval_exp_atomic. 
-    move : (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun0 Hun].
-    move : (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hunc].
-    rewrite (unchanged_instr_eval_instr Hun0 Hev)
-            (unchanged_instr_eval_instr Hun1 Hev)
-            (unchanged_instr_eval_instr Hunc Hev) //.
-  - move => v a0 a1 ac Hun Hev.
-    rewrite !eval_bexp_if /= !eval_exp_atomic. 
-    move : (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun0 Hun].
-    move : (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hunc].
-    rewrite (unchanged_instr_eval_instr Hun0 Hev)
-            (unchanged_instr_eval_instr Hun1 Hev)
-            (unchanged_instr_eval_instr Hunc Hev) //.
-  - move => v a0 a1 Hun Hev.
-    rewrite !eval_bexp_if /= !eval_exp_atomic. 
-    move : (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun0 Hun1].
-    rewrite (unchanged_instr_eval_instr Hun0 Hev)
-            (unchanged_instr_eval_instr Hun1 Hev) //.
-  - move => v ty a Hun Hev.
-    rewrite !eval_bexp_if /= !eval_exp_atomic.
-    rewrite (unchanged_instr_eval_instr Hun Hev) //.
-Qed.
-
-Lemma eval_bexp_instr_safe_preds E i p s1 s2 :
-  ssa_vars_unchanged_program (rvs_instr i) p ->
-  eval_program E p s1 s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E i) s2 ->
-  QFBV.eval_bexp (bexp_instr_safe E i) s1.
-Proof.
-  case i; rewrite /bexp_instr_safe => //.
-  - move => v a n Hun Hev.
-    rewrite /= !eval_exp_atomic.
-    rewrite (ssa_unchanged_program_eval_atomic Hun Hev) //.
-  - move => u v a0 a1 n Hun Hev.
-    rewrite /= !eval_exp_atomic.
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun1].
-    rewrite (ssa_unchanged_program_eval_atomic Hun1 Hev) //.
-  - move => v a0 a1 Hun Hev.
-    rewrite !eval_bexp_if /= !eval_exp_atomic.
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun1].
-    rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-            !(ssa_unchanged_program_eval_atomic Hun1 Hev) //.
-  - move => v a0 a1 ac Hun Hev.
-    rewrite !eval_bexp_if /= !eval_exp_atomic.
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun].
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hunc].
-    rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-            !(ssa_unchanged_program_eval_atomic Hun1 Hev)
-            !(ssa_unchanged_program_eval_atomic Hunc Hev) //.
-  - move => v a0 a1 Hun Hev.
-    rewrite !eval_bexp_if /= !eval_exp_atomic.
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun1].
-    rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-            !(ssa_unchanged_program_eval_atomic Hun1 Hev) //.
-  - move => v a0 a1 ac Hun Hev.
-    rewrite !eval_bexp_if /= !eval_exp_atomic.
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun].
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hunc].
-    rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-            !(ssa_unchanged_program_eval_atomic Hun1 Hev)
-            !(ssa_unchanged_program_eval_atomic Hunc Hev) //.
-  - move => v a0 a1 ac Hun Hev.
-    rewrite !eval_bexp_if /= !eval_exp_atomic.
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun].
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hunc].
-    rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-            !(ssa_unchanged_program_eval_atomic Hun1 Hev)
-            !(ssa_unchanged_program_eval_atomic Hunc Hev) //.
-  - move => v a0 a1 Hun Hev.
-    rewrite !eval_bexp_if /= !eval_exp_atomic.
-    move : (ssa_unchanged_program_union1 Hun) => {Hun} [Hun0 Hun1].
-    rewrite !(ssa_unchanged_program_eval_atomic Hun0 Hev)
-            !(ssa_unchanged_program_eval_atomic Hun1 Hev) //.
-  - move => v ty a Hun Hev.
-    rewrite !eval_bexp_if /= !eval_exp_atomic.
-    rewrite (ssa_unchanged_program_eval_atomic Hun Hev) //.
-Qed.
- *)
-(*
-Fixpoint bexp_program_qfbv E (p : program) : QFBV.bexp :=
-  match p with
-  | [::] => qfbv_true
-  | hd::tl => qfbv_conj (bexp_instr E hd)
-                        (bexp_program_qfbv (instr_succ_typenv hd E) tl)
-  end.
-
-Definition bexp_prefix_hd_safe E pre prefix hd : QFBV.bexp :=
-  qfbv_disj (qfbv_lneg (qfbv_conj pre (bexp_program_qfbv E prefix)))
-            (bexp_instr_safe (program_succ_typenv prefix E) hd).
-
-Fixpoint bexp_program_safe_qfbv E pre prefix (p : program) : seq QFBV.bexp :=
-  match p with
-  | [::] => [::]
-  | hd::tl => (bexp_prefix_hd_safe E pre prefix hd)
-                ::(bexp_program_safe_qfbv (instr_succ_typenv hd E) pre (rcons prefix hd) tl)
-  end.
-
-Definition bexp_program_safe_at E (p : program) s : bool :=
-  if (bexp_program E p) s then
-    QFBV.eval_bexp (bexp_program_safe E p) s
-  else
-    true.
-*)
 
 Fixpoint bexp_program_safe_at E p : QFBV.bexp :=
   match p with
@@ -3208,7 +2811,7 @@ Proof.
             /andP [/andP [/andP
                            [Hwf_i Hwf_p] /andP [Hun_Ei Hun_Ep]] /andP [Hun_ip Hssa]].
     move=> s H Hco Hpre. apply: ssa_program_safe_at_cons.
-    + move/eval_bexp_rbexp: Hpre => Hpre. apply/(eval_bexp_instr_safe _ Hwf_i).
+    + move/eval_bexp_rbexp: Hpre => Hpre. apply/eval_bexp_instr_safe.
       move: (H s (bvs_eqi_refl s) Hco Hpre) => /andP [H1 _]. exact: H1.
     + move=> t Hei. have Hssa_p: well_formed_ssa_program (instr_succ_typenv i E) p.
       { repeat (apply/andP; split); try assumption.
@@ -3281,7 +2884,7 @@ Proof.
             /andP [/andP [/andP
                            [Hwf_i Hwf_p] /andP [Hun_Ei Hun_Ep]] /andP [Hun_ip Hssa]].
     move=> s H Hco Hpre. apply: ssa_program_safe_at_cons.
-    + move/eval_bexp_rbexp: Hpre => Hpre. apply/(eval_bexp_instr_safe _ Hwf_i).
+    + move/eval_bexp_rbexp: Hpre => Hpre. apply/eval_bexp_instr_safe.
       move: (H s (bvs_eqi_refl s) Hpre Hco) => [H1 _]. exact: H1.
     + move=> t Hei. have Hssa_p: well_formed_ssa_program (instr_succ_typenv i E) p.
       { repeat (apply/andP; split); try assumption.
@@ -3313,34 +2916,6 @@ Proof.
       * rewrite -ssa_vars_unchanged_rng_instr in Hun_prei.
         apply/(ssa_unchanged_instr_eval_rbexp Hun_prei Hei). exact: Hpre.
 Qed.
-
-(*
-Lemma eval_bexp_program_safe2 E pre p :
-  ssa_vars_unchanged_program (vars_rbexp pre) p ->
-  well_formed_ssa_program E p ->
-  (forall s, eval_rbexp pre s ->
-             ssa_program_safe_at E p s) ->
-  (forall s, QFBV.eval_bexp (bexp_rbexp pre) s ->
-             QFBV.eval_bexp (bexp_program_safe_at E p) s).
-Proof.
-  elim : p E => /=.
-  - done.
-  - move => hd tl IH E Hun Hwf H s Hpre.
-    move : (H s (eval_bexp_rbexp1 Hpre)) => Hhdtl.
-    inversion_clear Hhdtl.
-    apply /andP; split; [idtac | apply /andP; split].
-    + apply eval_bexp_instr_safe.
-      * move : Hwf; rewrite /well_formed_ssa_program
-        => /andP [/andP [Hwf _] _].
-        by move : (well_formed_program_cons1 Hwf).
-      * done.
-    + apply IH.
-      * apply (ssa_unchanged_program_tl Hun).
-      * apply : (well_formed_ssa_tl Hwf).
-      * move => s' Hpre'.
-        apply (H1 s').
-        Check (H s'').
- *)
 
 
 (* Soundness of safety check. *)
@@ -3411,7 +2986,7 @@ Proof.
   move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsubm.
   move/eval_bexp_rbexp: Hf=> Hf. move: (Hsafe Hco Hf) => Hsafe_at.
   inversion_clear Hsafe_at. split.
-  - apply/(eval_bexp_instr_safe s Hwf_i). assumption.
+  - apply/eval_bexp_instr_safe. assumption.
   - move=> His. apply: (IH (instr_succ_typenv i E) f
                            (well_formed_rbexp_submap Hsubm Hwf) Hwf_p
                            _ Hssa_p).

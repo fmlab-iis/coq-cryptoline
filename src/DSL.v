@@ -1249,9 +1249,9 @@ Module MakeDSL
     | Radd => addB v1 v2
     | Rsub => subB v1 v2
     | Rmul => mulB v1 v2
-    | Rumod => [::] (* TODO: Add correct semantics *)
-    | Rsrem => [::] (* TODO: Add correct semantics *)
-    | Rsmod => [::] (* TODO: Add correct semantics *)
+    | Rumod => uremB v1 v2
+    | Rsrem => sremB v1 v2
+    | Rsmod => smodB v1 v2
     | Randb => andB v1 v2
     | Rorb => orB v1 v2
     | Rxorb => xorB v1 v2
@@ -3031,14 +3031,7 @@ Module MakeDSL
 
   Lemma conform_submap E1 E2 s :
     TELemmas.submap E1 E2 -> S.conform s E2 -> S.conform s E1.
-  Proof.
-    move=> Hsubm Hco. apply: S.conform_def => x Hmem1.
-    move: (TELemmas.submap_mem Hsubm Hmem1) => Hmem2.
-    move: (TELemmas.mem_find_some Hmem1) => [ty Hfind1].
-    move: (Hsubm x ty Hfind1) => Hfind2. move: (TE.find_some_vtyp Hfind1) => Hty1.
-    move: (TE.find_some_vtyp Hfind2) => Hty2. rewrite -(S.conform_mem Hco Hmem2).
-    rewrite (TE.vtyp_vsize Hty1) (TE.vtyp_vsize Hty2). reflexivity.
-  Qed.
+  Proof. exact: S.conform_submap. Qed.
 
   Lemma conform_size_eval_atomic te s a :
     VS.subset (vars_atomic a) (vars_env te) -> S.conform s te ->
