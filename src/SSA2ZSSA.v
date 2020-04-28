@@ -2260,9 +2260,10 @@ Section SplitSpec.
     match goal with
     | Hco : SSAStore.conform ?bs1 ?E,
       H : is_true (atyp ?c ?E == Tbit),
-      Hsub : is_true (SSAVS.subset (vars_atomic ?c) (vars_env ?E)) |- _ =>
+      Hsub : is_true (SSAVS.subset (vars_atomic ?c) (vars_env ?E)),
+      Hsm : is_true (size_matched_atomic ?c) |- _ =>
       let Hsc := fresh "Hsc" in
-      (move: (size_eval_atomic_asize Hsub Hco) => Hsc);
+      (move: (size_eval_atomic_asize Hsub Hco Hsm) => Hsc);
       rewrite /asize (eqP H) /= in Hsc
     end.
 
@@ -2293,9 +2294,11 @@ Section SplitSpec.
   Ltac intro_atomic_size :=
     match goal with
     | Hco : SSAStore.conform ?bs ?E,
-      Hsub : is_true (SSAVS.subset (vars_atomic ?a) (vars_env ?E)) |- _ =>
+      Hsub : is_true (SSAVS.subset (vars_atomic ?a) (vars_env ?E)),
+      Hsm : is_true (size_matched_atomic ?a) |- _ =>
       let Hsize := fresh "Hsize" in
-      move: (conform_size_eval_atomic Hsub Hco) => Hsize; move: Hsub; intro_atomic_size
+      (move: (conform_size_eval_atomic Hsub Hco Hsm) => Hsize);
+      move: Hsub; intro_atomic_size
     | |- _ =>
       intros; try rewrite /asize;
       repeat (match goal with
@@ -2362,11 +2365,11 @@ Section SplitSpec.
       split; last by trivial. mytac. reflexivity.
     (* Ishl *)
     - move=> v a n Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst; rewrite /=.
-      split; last by trivial. mytac. exact: (bv2z_Ishl Hsize Hsa).
+      split; last by trivial. mytac. exact: (bv2z_Ishl _ Hsa).
     (* Icshl *)
     - move=> vh vl ah al n Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst;
                rewrite /=. split; last by trivial. mytac.
-      exact: (bv2z_Icshl H H3 Hsize0 Hsize Hsa).
+      exact: (bv2z_Icshl _ _ _ _ Hsa).
     (* Inondet *)
     - move=> v t Hwf Hun Hni Hco _ Hev.
       case Ht: (t == Tbit); (move=> [] ? ? [] ? ? Heq; subst; rewrite /=);
@@ -2375,93 +2378,90 @@ Section SplitSpec.
     (* Icmov *)
     - move=> v c a1 a2 Hwf Hun Hni Hco _ Hev [] ? ? [] ? ? Heq; subst; rewrite /=.
       split; last by trivial. mytac.
-      + exact: (bv2z_Icmov_true _ _ _ Hsize0 H7).
-      + exact: (bv2z_Icmov_false _ _ _ Hsize0 H7).
+      + exact: (bv2z_Icmov_true _ _ _ _ _).
+      + exact: (bv2z_Icmov_false _ _ _ _ _).
     (* Inop *)
     - move=> Hwf Hun Hni Hco _ Hev [] ? ? [] ? ? Heq; subst; rewrite /=. done.
     (* Inot *)
     - move=> v t a Hwf Hun Hni Hco _ Hev. (case: t Hwf Hun Hev => n Hwf Hun Hev);
                                             case Hta: (atyp a E) => /=.
       + move=> [] ? ? [] ? ? Heq; subst; rewrite /=. split; last by trivial.
-        mytac. exact: (bv2z_Inot_unsigned Hwt Hsize).
+        mytac. exact: (bv2z_Inot_unsigned _ _).
       + move=> [] ? ? [] ? ? Heq; subst; rewrite /=. by trivial.
       + move=> [] ? ? [] ? ? Heq; subst; rewrite /=. by trivial.
       + move=> [] ? ? [] ? ? Heq; subst; rewrite /=. split; last by trivial.
-        mytac. exact: (bv2z_Inot_signed Hwt Hsize).
+        mytac. exact: (bv2z_Inot_signed _ _).
     (* Iadd *)
     - move=> v a1 a2 Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
-      split; last by trivial. mytac. exact: (bv2z_Iadd Hsize Hsize0 Hsa).
+      split; last by trivial. mytac. exact: (bv2z_Iadd Hsize _ Hsa).
     (* Iadds *)
     - move=> y v a1 a2 Hwf Hun Hni Hco Hsa Hev. dcase (atyp a1 E). case => n Hta1.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split.
-        * mytac. exact: (bv2z_Iadds_unsigned Hsize0 Hsize).
+        * mytac. exact: (bv2z_Iadds_unsigned _ _).
         * inversion_clear Hev. by prove_carry_constr.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by trivial.
-        mytac. exact: (bv2z_Iadds_signed Hsize0 Hsize Hsa).
+        mytac. exact: (bv2z_Iadds_signed _ _ Hsa).
     (* Iadc *)
     - move=> v a1 a2 ac Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst.
-      rewrite /=. split; last by done. mytac.
-      exact: (bv2z_Iadc Hsize0 Hsize1 Hsize Hsa).
+      rewrite /=. split; last by done. mytac. exact: (bv2z_Iadc _ _ _ Hsa).
     (* Iadcs *)
     - move=> c v a1 a2 ac Hwf Hun Hni Hco Hsa Hev. dcase (atyp a1 E). case=> n Hta1.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split.
-        * mytac. exact: (bv2z_Iadcs_unsigned Hsize1 Hsize0 Hsize).
+        * mytac. exact: (bv2z_Iadcs_unsigned _ _ _).
         * inversion_clear Hev. by prove_carry_constr.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by done.
-        mytac. exact: (bv2z_Iadcs_signed Hsize1 Hsize0 Hsize Hsa).
+        mytac. exact: (bv2z_Iadcs_signed _ _ _ Hsa).
     (* Isub *)
     - move=> v a1 a2 Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst.
-      rewrite /=. split; last by done. mytac. exact: (bv2z_Isub Hsize Hsize0 Hsa).
+      rewrite /=. split; last by done. mytac. exact: (bv2z_Isub _ _ Hsa).
     (* Isubc *)
     - move=> c v a1 a2 Hwf Hun Hni Hco Hsa Hev. dcase (atyp a1 E). case=> n Hta1.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split.
-        * mytac. exact: (bv2z_Isubc_unsigned Hsize0 Hsize).
+        * mytac. exact: (bv2z_Isubc_unsigned _ _).
         * inversion_clear Hev. by prove_carry_constr.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by done.
-        mytac. exact: (bv2z_Isubc_signed Hsize0 Hsize Hsa).
+        mytac. exact: (bv2z_Isubc_signed _ _ Hsa).
     (* Isubb *)
     - move=> c v a1 a2 Hwf Hun Hni Hco Hsa Hev. dcase (atyp a1 E). case=> n Hta1.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split.
-        * mytac. exact: (bv2z_Isubb_unsigned Hsize0 Hsize).
+        * mytac. exact: (bv2z_Isubb_unsigned _ _).
         * inversion_clear Hev. by prove_carry_constr.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by done.
-        mytac. exact: (bv2z_Isubb_signed Hsize0 Hsize Hsa).
+        mytac. exact: (bv2z_Isubb_signed _ _ Hsa).
     (* Isbc *)
     - move=> v a1 a2 ac Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst.
-      rewrite /=. split; last by done. mytac.
-      exact: (bv2z_Isbc Hsize0 Hsize1 Hsize Hsa).
+      rewrite /=. split; last by done. mytac. exact: (bv2z_Isbc _ _ _ Hsa).
     (* Isbcs *)
     - move=> c v a1 a2 ac Hwf Hun Hni Hco Hsa Hev. dcase (atyp a1 E). case=> n Hta1.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split.
-        * mytac. exact: (bv2z_Isbcs_unsigned Hsize1 Hsize0 Hsize).
+        * mytac. exact: (bv2z_Isbcs_unsigned _ _ _).
         * inversion_clear Hev. by prove_carry_constr.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by done.
-        mytac. exact: (bv2z_Isbcs_signed Hsize1 Hsize0 Hsize Hsa).
+        mytac. exact: (bv2z_Isbcs_signed _ _ _ Hsa).
     (* Isbb *)
     - move=> v a1 a2 ac Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst.
-      rewrite /=. split; last by done. mytac.
-      exact: (bv2z_Isbb Hsize0 Hsize1 Hsize Hsa).
+      rewrite /=. split; last by done. mytac. exact: (bv2z_Isbb _ _ _ Hsa).
     (* Isbbs *)
     - move=> c v a1 a2 ac Hwf Hun Hni Hco Hsa Hev. dcase (atyp a1 E). case=> n Hta1.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split.
-        * mytac. exact: (bv2z_Isbbs_unsigned Hsize1 Hsize0 Hsize).
+        * mytac. exact: (bv2z_Isbbs_unsigned _ _ _).
         * inversion_clear Hev. by prove_carry_constr.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by done.
-        mytac. exact: (bv2z_Isbbs_signed Hsize1 Hsize0 Hsize Hsa).
+        mytac. exact: (bv2z_Isbbs_signed _ _ _ Hsa).
     (* Imul *)
     - move=> v a1 a2 Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
-      split; last by trivial. mytac. exact: (bv2z_Imul Hsize Hsize0 Hsa).
+      split; last by trivial. mytac. exact: (bv2z_Imul _ _ Hsa).
     (* Imull *)
     - move=> vh vl a1 a2 Hwf Hni Hun Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
-      split; last by trivial. mytac. exact: (bv2z_Imull Hsize0 Hsize).
+      split; last by trivial. mytac. exact: (bv2z_Imull _ _).
     (* Imulj *)
     - move=> v a1 a2 Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
-      split; last by trivial. mytac. exact: (bv2z_Imulj Hsize Hsize0).
+      split; last by trivial. mytac. exact: (bv2z_Imulj _ _).
     (* Isplit *)
     - move=> vh vl a n Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
       split; last by trivial. mytac.
-      + exact: (bv2z_Isplit_unsigned _ H2 Hsize).
-      + exact: (bv2z_Isplit_signed _ H2 Hsize).
+      + exact: (bv2z_Isplit_unsigned _ _ _).
+      + exact: (bv2z_Isplit_signed _ _ _).
     (* Iand *)
     - move=> v t a1 a2 Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst. done.
     (* Ior *)
@@ -2496,7 +2496,7 @@ Section SplitSpec.
       split; last by trivial. mytac. exact: (bv2z_Ivpc Hsize Hsa).
     (* Ijoin *)
     - move=> v a1 a2 Hwf Hni Hun Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
-      split; last by trivial. mytac. exact: (bv2z_Ijoin H2 H3 H4 Hsize Hsize0).
+      split; last by trivial. mytac. exact: (bv2z_Ijoin _ _ _ Hsize Hsize0).
     (* Iassume *)
     - move=> [e r] /= Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst.
       mytac. rewrite are_defined_union /= in Hdef. move/andP: Hdef => [Hdef _].

@@ -4076,11 +4076,16 @@ Section MakeSSA.
       + by apply (ssa_well_typed_rbexp m).
   Qed.
 
-  Lemma ssa_well_sized_atomic m E a :
-    DSL.well_sized_atomic E a =
-    SSA.well_sized_atomic (ssa_typenv m E) (ssa_atomic m a).
+  Lemma ssa_size_matched_atomic m a :
+    DSL.size_matched_atomic a ->
+    SSA.size_matched_atomic (ssa_atomic m a).
+  Proof. by case: a. Qed.
+
+  Lemma ssa_well_sized_atomic_high m E a :
+    DSL.well_sized_atomic_high E a =
+    SSA.well_sized_atomic_high (ssa_typenv m E) (ssa_atomic m a).
   Proof.
-    rewrite /DSL.well_sized_atomic /SSA.well_sized_atomic.
+    rewrite /DSL.well_sized_atomic_high /SSA.well_sized_atomic_high.
     rewrite -ssa_atomic_atyp -ssa_atomic_asize. reflexivity.
   Qed.
 
@@ -4122,8 +4127,13 @@ Section MakeSSA.
              |- is_true (ssa_var (upd_index ?v1 (upd_index ?v2 ?m)) ?v1 !=
                                  ssa_var (upd_index ?v2 ?m) ?v2) =>
              exact: (pair_neq1 _ _ H)
-           | |- is_true (SSA.well_sized_atomic _ _) =>
-             rewrite -ssa_well_sized_atomic; tac
+           | |- is_true (SSA.well_sized_atomic_high _ _) =>
+             rewrite -ssa_well_sized_atomic_high; tac
+           | H : is_true (DSL.size_matched_atomic ?a) |-
+             context f [SSA.size_matched_atomic (ssa_atomic ?m ?a)] =>
+             rewrite (ssa_size_matched_atomic m H); tac
+           | |- context f [SSA.asize (ssa_atomic ?m ?a) (ssa_typenv ?m ?E)%N] =>
+             rewrite -(ssa_atomic_asize m a E); tac
            | |- is_true(true) => done
            | |- ?e => progress (auto)
            | |- ?e => idtac
