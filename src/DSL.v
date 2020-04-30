@@ -2395,6 +2395,84 @@ Module MakeDSL
                  in tac).
   Qed.
 
+  Lemma well_formed_rexp_unop E w op e :
+    well_formed_rexp E (Runop w op e) ->
+    well_formed_rexp E e /\ size_of_rexp e E = w.
+  Proof.
+    move/andP => /= [Hdef /andP [Hwt /eqP Hs]]. split; last assumption.
+    apply/andP; split; assumption.
+  Qed.
+
+  Lemma well_formed_rexp_binop E w op e1 e2 :
+    well_formed_rexp E (Rbinop w op e1 e2) ->
+    well_formed_rexp E e1 /\ well_formed_rexp E e2 /\
+    size_of_rexp e1 E = w /\ size_of_rexp e2 E = w.
+  Proof.
+    move/andP => /= [Hdef /andP [/andP [/andP [Hwt1 /eqP Hs1] Hwt2] /eqP Hs2]].
+    rewrite are_defined_union in Hdef. move/andP: Hdef => [Hdef1 Hdef2].
+    repeat split => //; (apply/andP; split; assumption).
+  Qed.
+
+  Lemma well_formed_rexp_uext E w e n :
+    well_formed_rexp E (Ruext w e n) ->
+    well_formed_rexp E e /\ size_of_rexp e E = w.
+  Proof.
+    move/andP=> /= [Hdef /andP [Hwt /eqP Hs]]. split; last assumption.
+    apply/andP; split; assumption.
+  Qed.
+
+  Lemma well_formed_rexp_sext E w e n :
+    well_formed_rexp E (Rsext w e n) ->
+    well_formed_rexp E e /\ size_of_rexp e E = w.
+  Proof.
+    move/andP=> /= [Hdef /andP [Hwt /eqP Hs]]. split; last assumption.
+    apply/andP; split; assumption.
+  Qed.
+
+  Lemma well_formed_rbexp_eq E w e1 e2 :
+    well_formed_rbexp E (Req w e1 e2) ->
+    well_formed_rexp E e1 /\ well_formed_rexp E e2 /\
+    size_of_rexp e1 E = w /\ size_of_rexp e2 E = w.
+  Proof.
+    move/andP => /= [Hdef /andP [/andP [/andP [Hwt1 /eqP Hs1] Hwt2] /eqP Hs2]].
+    rewrite are_defined_union in Hdef. move/andP: Hdef => [Hdef1 Hdef2].
+    repeat split => //; (apply/andP; split; assumption).
+  Qed.
+
+  Lemma well_formed_rbexp_cmp E w op e1 e2 :
+    well_formed_rbexp E (Rcmp w op e1 e2) ->
+    well_formed_rexp E e1 /\ well_formed_rexp E e2 /\
+    size_of_rexp e1 E = w /\ size_of_rexp e2 E = w.
+  Proof.
+    move/andP => /= [Hdef /andP [/andP [/andP [Hwt1 /eqP Hs1] Hwt2] /eqP Hs2]].
+    rewrite are_defined_union in Hdef. move/andP: Hdef => [Hdef1 Hdef2].
+    repeat split => //; (apply/andP; split; assumption).
+  Qed.
+
+  Lemma well_formed_rbexp_neg E e :
+    well_formed_rbexp E (Rneg e) -> well_formed_rbexp E e.
+  Proof.
+    move/andP=> /= [Hdef Hwt]. apply/andP; split; assumption.
+  Qed.
+
+  Lemma well_formed_rbexp_and E e1 e2 :
+    well_formed_rbexp E (Rand e1 e2) ->
+    well_formed_rbexp E e1 /\ well_formed_rbexp E e2.
+  Proof.
+    move/andP=> /= [Hdef /andP [Hwt1 Hwt2]].
+    rewrite are_defined_union in Hdef. move/andP: Hdef => [Hdef1 Hdef2].
+    split; apply/andP; split; assumption.
+  Qed.
+
+  Lemma well_formed_rbexp_or E e1 e2 :
+    well_formed_rbexp E (Ror e1 e2) ->
+    well_formed_rbexp E e1 /\ well_formed_rbexp E e2.
+  Proof.
+    move/andP=> /= [Hdef /andP [Hwt1 Hwt2]].
+    rewrite are_defined_union in Hdef. move/andP: Hdef => [Hdef1 Hdef2].
+    split; apply/andP; split; assumption.
+  Qed.
+
   Lemma submap_vtyp E1 E2 v :
     TELemmas.submap E1 E2 ->
     is_defined v E1 ->
@@ -3106,7 +3184,7 @@ Module MakeDSL
     S.conform s te -> size_matched_atomic a0 -> size_matched_atomic a1 ->
     VS.subset (vars_atomic a0) (vars_env te) ->
     VS.subset (vars_atomic a1) (vars_env te) ->
-    atyp a0 te = atyp a1 te ->
+    sizeof_typ (atyp a0 te) = sizeof_typ (atyp a1 te) ->
     size (eval_atomic a0 s) = size (eval_atomic a1 s) .
   Proof .
     move => Hcon Hsm0 Hsm1 Hsub0 Hsub1 Hatypeq .
