@@ -114,10 +114,12 @@ Section Safety.
     else saddB_safe bs1 bs2.
 
   Definition uadcB_safe bs1 bs2 c : bool :=
-    ~~ carry_addB bs1 bs2 && ~~ carry_addB (addB bs1 bs2) c.
+    ~~ carry_addB bs1 bs2 &&
+    ~~ carry_addB (addB bs1 bs2) (zext (size bs1 - 1) c).
 
   Definition sadcB_safe bs1 bs2 c : bool :=
-    ~~ Saddo bs1 bs2 && ~~ Saddo (addB bs1 bs2) c.
+    ~~ Saddo bs1 bs2 &&
+    ~~ Saddo (addB bs1 bs2) (zext (size bs1 - 1) c).
 
   Definition adcB_safe typ_a bs1 bs2 bsc : bool :=
     if Typ.is_unsigned typ_a then uadcB_safe bs1 bs2 bsc
@@ -144,10 +146,12 @@ Section Safety.
     else ssubB_safe bs1 bs2.
 
   Definition usbbB_safe bs1 bs2 c : bool :=
-    ~~ borrow_subB bs1 bs2 && ~~ borrow_subB (subB bs1 bs2) c.
+    ~~ borrow_subB bs1 bs2 &&
+    ~~ borrow_subB (subB bs1 bs2) (zext (size bs1 - 1) c).
 
   Definition ssbbB_safe bs1 bs2 c : bool :=
-    ~~ Ssubo bs1 bs2 && ~~ Ssubo (subB bs1 bs2) c.
+    ~~ Ssubo bs1 bs2 &&
+    ~~ Ssubo (subB bs1 bs2) (zext (size bs1 - 1) c).
 
   Definition sbbB_safe typ_a bs1 bs2 bsb : bool :=
     if Typ.is_unsigned typ_a then usbbB_safe bs1 bs2 bsb
@@ -158,10 +162,12 @@ Section Safety.
     else ssbbB_safe bs1 bs2 bsb.
 
   Definition usbcB_safe bs1 bs2 c : bool :=
-    ~~ borrow_subB bs1 bs2 && ~~ borrow_subB (subB bs1 bs2) (subB (ones 1) c).
+    ~~ borrow_subB bs1 bs2 &&
+    ~~ borrow_subB (subB bs1 bs2) (zext (size bs1 - 1) (subB (ones 1) c)).
 
   Definition ssbcB_safe bs1 bs2 c : bool :=
-    ~~ Ssubo bs1 bs2 && ~~ Ssubo (subB bs1 bs2) (subB (ones 1) c).
+    ~~ Ssubo bs1 bs2 &&
+    ~~ Ssubo (subB bs1 bs2) (zext (size bs1 - 1) (subB (ones 1) c)).
 
   Definition sbcB_safe typ_a bs1 bs2 bsc : bool :=
     if Typ.is_unsigned typ_a then usbcB_safe bs1 bs2 bsc
@@ -2169,8 +2175,7 @@ Section SplitSpec.
   Qed.
 
   Lemma bv2z_Ijoin th tl bsh bsl :
-    (is_unsigned th) || (0 < sizeof_typ th) ->
-    is_unsigned tl -> compatible th tl ->
+    (0 < sizeof_typ th) -> is_unsigned tl -> compatible th tl ->
     size bsh = sizeof_typ th -> size bsl = sizeof_typ tl ->
     (bv2z tl bsl + bv2z th bsh * Cryptoline.DSL.z2expn (Z.of_nat (size bsl)))%Z =
     bv2z (double_typ th) (bsl ++ bsh).
@@ -2278,6 +2283,10 @@ Section SplitSpec.
       rewrite /well_defined_instr in H; hyps_splitb
     | H : is_true (well_typed_instr _ _) |- _ =>
       rewrite /well_typed_instr in H; hyps_splitb
+    | H : is_true (well_typed_atomic _ _) |- _ =>
+      let H1 := fresh "Hwta" in
+      let H2 := fresh "Hwta" in
+      move/andP: H=> [H1 H2]
     end.
 
   (* For each are_defined vs E, introduce SSAVS.subset vs (vars_env E). *)
@@ -2393,7 +2402,7 @@ Section SplitSpec.
         mytac. exact: (bv2z_Inot_signed _ _).
     (* Iadd *)
     - move=> v a1 a2 Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
-      split; last by trivial. mytac. exact: (bv2z_Iadd Hsize _ Hsa).
+      split; last by trivial. mytac. exact: (bv2z_Iadd _ _ Hsa).
     (* Iadds *)
     - move=> y v a1 a2 Hwf Hun Hni Hco Hsa Hev. dcase (atyp a1 E). case => n Hta1.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split.
@@ -2496,7 +2505,7 @@ Section SplitSpec.
       split; last by trivial. mytac. exact: (bv2z_Ivpc Hsize Hsa).
     (* Ijoin *)
     - move=> v a1 a2 Hwf Hni Hun Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
-      split; last by trivial. mytac. exact: (bv2z_Ijoin _ _ _ Hsize Hsize0).
+      split; last by trivial. mytac. exact: (bv2z_Ijoin _ _ _ Hsize0 Hsize).
     (* Iassume *)
     - move=> [e r] /= Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst.
       mytac. rewrite are_defined_union /= in Hdef. move/andP: Hdef => [Hdef _].

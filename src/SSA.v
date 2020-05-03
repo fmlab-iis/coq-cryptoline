@@ -3526,6 +3526,11 @@ Section MakeSSA.
   Qed.
 
 
+  Lemma well_formed_ssa_empty E : well_formed_ssa_program E [::].
+  Proof.
+    apply/andP; split=> //=. exact: ssa_unchanged_program_empty.
+  Qed.
+
   Lemma well_formed_ssa_vars_unchanged_hd te hd tl :
     well_formed_ssa_program te (hd::tl) ->
     ssa_vars_unchanged_program (SSA.vars_instr hd) tl.
@@ -4077,16 +4082,24 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_size_matched_atomic m a :
-    DSL.size_matched_atomic a ->
+    DSL.size_matched_atomic a =
     SSA.size_matched_atomic (ssa_atomic m a).
   Proof. by case: a. Qed.
 
-  Lemma ssa_well_sized_atomic_high m E a :
-    DSL.well_sized_atomic_high E a =
-    SSA.well_sized_atomic_high (ssa_typenv m E) (ssa_atomic m a).
+  Lemma ssa_well_sized_atomic m E a :
+    DSL.well_sized_atomic E a =
+    SSA.well_sized_atomic (ssa_typenv m E) (ssa_atomic m a).
   Proof.
-    rewrite /DSL.well_sized_atomic_high /SSA.well_sized_atomic_high.
-    rewrite -ssa_atomic_atyp -ssa_atomic_asize. reflexivity.
+    rewrite /DSL.well_sized_atomic /SSA.well_sized_atomic.
+    rewrite -ssa_atomic_asize. reflexivity.
+  Qed.
+
+  Lemma ssa_well_typed_atomic m E a :
+    DSL.well_typed_atomic E a =
+    SSA.well_typed_atomic (ssa_typenv m E) (ssa_atomic m a).
+  Proof.
+    rewrite /DSL.well_typed_atomic /SSA.well_typed_atomic.
+    rewrite -ssa_size_matched_atomic -ssa_well_sized_atomic. reflexivity.
   Qed.
 
   Lemma ssa_instr_well_typed te m1 m2 i si :
@@ -4127,11 +4140,8 @@ Section MakeSSA.
              |- is_true (ssa_var (upd_index ?v1 (upd_index ?v2 ?m)) ?v1 !=
                                  ssa_var (upd_index ?v2 ?m) ?v2) =>
              exact: (pair_neq1 _ _ H)
-           | |- is_true (SSA.well_sized_atomic_high _ _) =>
-             rewrite -ssa_well_sized_atomic_high; tac
-           | H : is_true (DSL.size_matched_atomic ?a) |-
-             context f [SSA.size_matched_atomic (ssa_atomic ?m ?a)] =>
-             rewrite (ssa_size_matched_atomic m H); tac
+           | |- is_true (SSA.well_typed_atomic _ _) =>
+             rewrite -ssa_well_typed_atomic; tac
            | |- context f [SSA.asize (ssa_atomic ?m ?a) (ssa_typenv ?m ?E)%N] =>
              rewrite -(ssa_atomic_asize m a E); tac
            | |- is_true(true) => done

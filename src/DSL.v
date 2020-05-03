@@ -1795,6 +1795,9 @@ Module MakeDSL
   Definition well_typed_bexp (te : TE.env) (e : bexp) : bool :=
     (well_typed_ebexp te (eqn_bexp e)) && (well_typed_rbexp te (rng_bexp e)).
 
+  (* The size of an atomic must be larger than 0. *)
+  Definition well_sized_atomic E (a : atomic) : bool := 0 < asize a E.
+
   (*
    * If an atomic is a constant, size of the constant must match
    * the type of the atomic.
@@ -1805,64 +1808,59 @@ Module MakeDSL
     | Aconst t n => size n == sizeof_typ t
     end.
 
-  (*
-   * If an atomic represents the high part of a number, either the atomic
-   * is unsigned or the size of the atomic is greater than 0.
-   *)
-  Definition well_sized_atomic_high (E : TE.env) (a : atomic) : bool :=
-    is_unsigned (atyp a E) || (0 < asize a E).
+  Definition well_typed_atomic (E : TE.env) (a : atomic) : bool :=
+    well_sized_atomic E a && size_matched_atomic a.
 
   Definition well_typed_instr (E : TE.env) (i : instr) : bool :=
     match i with
-    | Imov v a => size_matched_atomic a
-    | Ishl v a n => (size_matched_atomic a) && (n < asize a E)
+    | Imov v a => well_typed_atomic E a
+    | Ishl v a n => (well_typed_atomic E a) && (n < asize a E)
     | Icshl v1 v2 a1 a2 n => is_unsigned (atyp a2 E) &&
                              compatible (atyp a1 E) (atyp a2 E) &&
-                             (size_matched_atomic a1) && (size_matched_atomic a2) &&
+                             (well_typed_atomic E a1) && (well_typed_atomic E a2) &&
                              (n < asize a2 E)
     | Inondet v t => true
     | Icmov v c a1 a2 => (atyp c E == Tbit) && (atyp a1 E == atyp a2 E) &&
-                         (size_matched_atomic a1) && (size_matched_atomic a2) &&
-                         (size_matched_atomic c)
+                         (well_typed_atomic E a1) && (well_typed_atomic E a2) &&
+                         (well_typed_atomic E c)
     | Inop => true
-    | Inot v t a => compatible t (atyp a E) && (size_matched_atomic a)
+    | Inot v t a => compatible t (atyp a E) && (well_typed_atomic E a)
     | Iadd v a1 a2
-    | Iadds _ v a1 a2 => (atyp a1 E == atyp a2 E) && (size_matched_atomic a1) &&
-                         (size_matched_atomic a2)
+    | Iadds _ v a1 a2 => (atyp a1 E == atyp a2 E) && (well_typed_atomic E a1) &&
+                         (well_typed_atomic E a2)
     | Iadc v a1 a2 y
     | Iadcs _ v a1 a2 y => (atyp a1 E == atyp a2 E) && (atyp y E == Tbit) &&
-                           (size_matched_atomic a1) && (size_matched_atomic a2) &&
-                           (size_matched_atomic y)
+                           (well_typed_atomic E a1) && (well_typed_atomic E a2) &&
+                           (well_typed_atomic E y)
     | Isub v a1 a2
     | Isubc _ v a1 a2
-    | Isubb _ v a1 a2 => (atyp a1 E == atyp a2 E) && (size_matched_atomic a1) &&
-                         (size_matched_atomic a2)
+    | Isubb _ v a1 a2 => (atyp a1 E == atyp a2 E) && (well_typed_atomic E a1) &&
+                         (well_typed_atomic E a2)
     | Isbc v a1 a2 y
     | Isbcs _ v a1 a2 y => (atyp a1 E == atyp a2 E) && (atyp y E == Tbit) &&
-                           (size_matched_atomic a1) && (size_matched_atomic a2) &&
-                           (size_matched_atomic y)
+                           (well_typed_atomic E a1) && (well_typed_atomic E a2) &&
+                           (well_typed_atomic E y)
     | Isbb v a1 a2 y
     | Isbbs _ v a1 a2 y => (atyp a1 E == atyp a2 E) && (atyp y E == Tbit) &&
-                           (size_matched_atomic a1) && (size_matched_atomic a2) &&
-                           (size_matched_atomic y)
+                           (well_typed_atomic E a1) && (well_typed_atomic E a2) &&
+                           (well_typed_atomic E y)
     | Imul v a1 a2 => (atyp a1 E == atyp a2 E) &&
-                      (size_matched_atomic a1) && (size_matched_atomic a2)
+                      (well_typed_atomic E a1) && (well_typed_atomic E a2)
     | Imull vh vl a1 a2 => (atyp a1 E == atyp a2 E) &&
-                           (size_matched_atomic a1) && (size_matched_atomic a2)
+                           (well_typed_atomic E a1) && (well_typed_atomic E a2)
     | Imulj v a1 a2 => (atyp a1 E == atyp a2 E) &&
-                       (size_matched_atomic a1) && (size_matched_atomic a2)
-    | Isplit vh vl a n => (size_matched_atomic a) && (n < asize a E)
+                       (well_typed_atomic E a1) && (well_typed_atomic E a2)
+    | Isplit vh vl a n => (well_typed_atomic E a) && (n < asize a E)
     | Iand v t a1 a2
     | Ior v t a1 a2
     | Ixor v t a1 a2 =>
       compatible t (atyp a1 E) && (atyp a1 E == atyp a2 E) &&
-      (size_matched_atomic a1) && (size_matched_atomic a2)
+      (well_typed_atomic E a1) && (well_typed_atomic E a2)
     | Icast v t a
-    | Ivpc v t a => (size_matched_atomic a)
+    | Ivpc v t a => (well_typed_atomic E a)
     | Ijoin v ah al =>
       is_unsigned (atyp al E) && compatible (atyp ah E) (atyp al E) &&
-      (size_matched_atomic ah) && (size_matched_atomic al) &&
-      (well_sized_atomic_high E ah)
+      (well_typed_atomic E ah) && (well_typed_atomic E al)
     | Iassume e => well_typed_bexp E e
     end.
 
@@ -1893,15 +1891,6 @@ Module MakeDSL
     - apply: ReflectT. by rewrite vars_env_mem.
     - apply: ReflectF. move/negP: Hmem. by rewrite vars_env_mem.
   Qed.
-
-  (* Use VS.mem v (vars_env te) to determine if v is defined *)
-  (*
-  Definition is_defined (v : var) (te : TE.env) :=
-    VS.mem v (vars_env te).
-
-  Definition are_defined (vs : VS.t) (te : TE.env) :=
-    VS.subset vs (vars_env te).
-   *)
 
   Definition well_defined_instr (te : TE.env) (i : instr) : bool :=
     match i with
@@ -2504,19 +2493,36 @@ Module MakeDSL
     move=> H1 H2. rewrite /asize (atyp_submap H1 H2). reflexivity.
   Qed.
 
-  Lemma well_sized_atomic_high_submap a E1 E2 :
+  Lemma well_typed_atomic_well_sized E a :
+    well_typed_atomic E a -> well_sized_atomic E a.
+  Proof. by move/andP=> [? ?]. Qed.
+
+  Lemma well_typed_atomic_size_matched E a :
+    well_typed_atomic E a -> size_matched_atomic a.
+  Proof. by move/andP=> [? ?]. Qed.
+
+  Lemma well_sized_atomic_submap a E1 E2 :
     TELemmas.submap E1 E2 ->
     are_defined (vars_atomic a) E1 ->
-    well_sized_atomic_high E1 a = well_sized_atomic_high E2 a.
+    well_sized_atomic E1 a = well_sized_atomic E2 a.
   Proof.
-    move=> Hsub Hdef. rewrite /well_sized_atomic_high. rewrite (atyp_submap Hsub Hdef).
-    rewrite (asize_submap Hsub Hdef). reflexivity.
+    move=> Hsub Hdef. rewrite /well_sized_atomic /asize.
+    rewrite (atyp_submap Hsub Hdef). reflexivity.
   Qed.
 
-  Lemma well_sized_atomic_high_atyp_eq E a1 a2 :
-    atyp a1 E = atyp a2 E -> well_sized_atomic_high E a1 = well_sized_atomic_high E a2.
+  Lemma well_typed_atomic_submap a E1 E2 :
+    TELemmas.submap E1 E2 ->
+    are_defined (vars_atomic a) E1 ->
+    well_typed_atomic E1 a = well_typed_atomic E2 a.
   Proof.
-    rewrite /well_sized_atomic_high /asize. by move=> ->.
+    move=> Hsub Hdef. rewrite /well_typed_atomic.
+    rewrite (well_sized_atomic_submap Hsub Hdef). reflexivity.
+  Qed.
+
+  Lemma well_sized_atomic_atyp_eq E a1 a2 :
+    atyp a1 E = atyp a2 E -> well_sized_atomic E a1 = well_sized_atomic E a2.
+  Proof.
+    rewrite /well_sized_atomic /asize. by move=> ->.
   Qed.
 
   Lemma submap_add_vtyp v t E1 E2 :
@@ -2800,8 +2806,8 @@ Module MakeDSL
              rewrite -(asize_submap Hsub Hwd); tac
            | Hsub : TELemmas.submap ?E1 ?E2,
                     Hdef : is_true (are_defined (vars_atomic ?a) ?E1)
-             |- is_true (well_sized_atomic_high ?E2 ?a) =>
-             rewrite -(well_sized_atomic_high_submap Hsub Hdef); tac
+             |- is_true (well_typed_atomic ?E2 ?a) =>
+             rewrite -(well_typed_atomic_submap Hsub Hdef); tac
            | |- _ => idtac
            end
        in tac).
@@ -3201,8 +3207,9 @@ Module MakeDSL
     S.conform s2 (instr_succ_typenv (Imov t a) te).
   Proof .
     move => Hcon /=; rewrite are_defined_subset_env => Hdef Hsm Hev.
-    inversion_clear Hev.
-    apply : (conform_Upd _ Hcon H). by rewrite (size_eval_atomic_asize Hdef Hcon Hsm).
+    inversion_clear Hev. apply : (conform_Upd _ Hcon H).
+      by rewrite (size_eval_atomic_asize
+                    Hdef Hcon (well_typed_atomic_size_matched Hsm)).
   Qed.
 
   Lemma conform_eval_succ_typenv_Ishl te t a n s1 s2 :
@@ -3212,10 +3219,12 @@ Module MakeDSL
     eval_instr te (Ishl t a n) s1 s2 ->
     S.conform s2 (instr_succ_typenv (Ishl t a n) te) .
   Proof .
-    move => Hcon /=; rewrite are_defined_subset_env => Hdef /andP [Hsm _] Hev .
-    inversion_clear Hev .
+    move => Hcon /=; rewrite are_defined_subset_env =>
+    Hdef /andP [Hsm _] Hev . inversion_clear Hev .
     apply : (conform_Upd _ Hcon H) .
-      by rewrite size_shlB (size_eval_atomic_asize Hdef Hcon Hsm) .
+      by rewrite size_shlB
+                 (size_eval_atomic_asize Hdef Hcon
+                                         (well_typed_atomic_size_matched Hsm)) .
   Qed .
 
   Lemma conform_eval_succ_typenv_Icshl te t t0 a a0 n s1 s2 :
@@ -3229,8 +3238,12 @@ Module MakeDSL
     /andP [/andP [Hneq Hdef0] Hdef1] /andP [/andP [/andP [_ Hsm0] Hsm1] _] Hev .
     inversion_clear Hev .
     apply : (conform_Upd2 Hneq _ _ H Hcon) .
-    + by rewrite size_high (size_eval_atomic_asize Hdef0 Hcon Hsm0) .
-    + by rewrite size_shrB size_low (size_eval_atomic_asize Hdef1 Hcon Hsm1) .
+    + by rewrite size_high
+                 (size_eval_atomic_asize Hdef0 Hcon
+                                         (well_typed_atomic_size_matched Hsm0)) .
+    + by rewrite size_shrB size_low
+                 (size_eval_atomic_asize Hdef1 Hcon
+                                         (well_typed_atomic_size_matched Hsm1)).
   Qed .
 
   Lemma conform_eval_succ_typenv_Inondet te t t0 s1 s2 :
@@ -3256,8 +3269,10 @@ Module MakeDSL
     /andP [/andP [Hdefc Hdef0] Hdef1]
      /andP [/andP [/andP [/andP [_ Hty] Hsm0] Hsm1] _] Hev.
     inversion_clear Hev; apply : (conform_Upd _ Hcon H0);
-      [ by rewrite (size_eval_atomic_asize Hdef0 Hcon Hsm0)
-      | rewrite (size_eval_atomic_asize Hdef1 Hcon Hsm1) //;
+      [ by rewrite (size_eval_atomic_asize Hdef0 Hcon
+                                           (well_typed_atomic_size_matched Hsm0))
+      | rewrite (size_eval_atomic_asize Hdef1 Hcon
+                                        (well_typed_atomic_size_matched Hsm1)) //;
         by rewrite (eqP Hty) ] .
   Qed .
 
@@ -3284,7 +3299,9 @@ Module MakeDSL
     rewrite /Typ.compatible in Hty . move/andP: Hty=> [Hty Hsm].
     inversion_clear Hev .
     apply : (conform_Upd _ Hcon H) => // .
-      by rewrite size_invB (eqP Hty) (size_eval_atomic_asize Hdef Hcon Hsm).
+      by rewrite size_invB (eqP Hty)
+                 (size_eval_atomic_asize
+                    Hdef Hcon (well_typed_atomic_size_matched Hsm)).
   Qed .
 
   Lemma conform_eval_succ_typenv_Iadd te t a a0 s1 s2 :
@@ -3297,9 +3314,12 @@ Module MakeDSL
     move => Hcon /=; rewrite 2!are_defined_subset_env =>
     /andP [Hdef0 Hdef1] /andP [/andP [Hty Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite size_addB (size_eval_atomic_asize Hdef0 Hcon Hsm0) // .
-    rewrite (size_eval_atomic_asize Hdef1 Hcon Hsm1) // .
-      by rewrite /asize !(eqP Hty) minnE subKn .
+    rewrite size_addB
+            (size_eval_atomic_asize Hdef0 Hcon
+                                    (well_typed_atomic_size_matched Hsm0)).
+    rewrite (size_eval_atomic_asize
+               Hdef1 Hcon (well_typed_atomic_size_matched Hsm1)).
+      by rewrite /asize !(eqP Hty) minnE subKn.
   Qed .
 
   Lemma conform_eval_succ_typenv_Iadds te t t0 a a0 s1 s2 :
@@ -3313,9 +3333,12 @@ Module MakeDSL
     /andP [/andP [Hneq Hdef0] Hdef1] /andP [/andP [Hty Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ H Hcon) .
     + done .
-    + rewrite size_addB (size_eval_atomic_asize Hdef0 Hcon Hsm0) //;
-              rewrite (size_eval_atomic_asize Hdef1 Hcon Hsm1) //;
-        by rewrite /asize !(eqP Hty) minnE subKn .
+    + (rewrite size_addB
+              (size_eval_atomic_asize
+                 Hdef0 Hcon (well_typed_atomic_size_matched Hsm0)));
+        (rewrite (size_eval_atomic_asize
+                    Hdef1 Hcon (well_typed_atomic_size_matched Hsm1)));
+          by rewrite /asize !(eqP Hty) minnE subKn .
   Qed .
 
   Lemma conform_eval_succ_typenv_Iadc te t a a0 a1 s1 s2 :
@@ -3330,8 +3353,10 @@ Module MakeDSL
      [/andP [/andP [/andP [Hty _] Hsm0] Hsm1] _] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
       by rewrite /adcB /full_adder size_full_adder_zip
-                 (size_eval_atomic_asize Hdef0 Hcon Hsm0) //
-                 (size_eval_atomic_asize Hdef1 Hcon Hsm1) //
+                 (size_eval_atomic_asize
+                    Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+                 (size_eval_atomic_asize
+                    Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
                  /asize !(eqP Hty) minnE subKn .
   Qed .
 
@@ -3348,8 +3373,10 @@ Module MakeDSL
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ H Hcon) .
     + done .
     + by rewrite /adcB /full_adder size_full_adder_zip
-                 (size_eval_atomic_asize Hdef0 Hcon Hsm0) //
-                 (size_eval_atomic_asize Hdef1 Hcon Hsm1) //
+                 (size_eval_atomic_asize
+                    Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+                 (size_eval_atomic_asize
+                    Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
                  /asize !(eqP Hty) minnE subKn .
   Qed .
 
@@ -3363,8 +3390,11 @@ Module MakeDSL
     move => Hcon /=; rewrite 2!are_defined_subset_env =>
     /andP [Hdef0 Hdef1] /andP [/andP [Hty Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-      by rewrite size_subB (size_eval_atomic_asize Hdef0 Hcon Hsm0) //
-                 (size_eval_atomic_asize Hdef1 Hcon Hsm1) //
+      by rewrite size_subB
+                 (size_eval_atomic_asize
+                    Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+                 (size_eval_atomic_asize
+                    Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
                  /asize !(eqP Hty) minnE subKn .
   Qed .
 
@@ -3379,10 +3409,11 @@ Module MakeDSL
     /andP [/andP [Hneq Hdef0] Hdef1] /andP [/andP [Hty Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ H Hcon) .
     + done .
-    + by rewrite size_addB size_negB
-                              (size_eval_atomic_asize Hdef0 Hcon Hsm0) //
-                              (size_eval_atomic_asize Hdef1 Hcon Hsm1) //
-                              /asize !(eqP Hty) minnE subKn .
+    + by rewrite
+           size_addB size_negB
+           (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+           (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+           /asize !(eqP Hty) minnE subKn .
   Qed .
 
   Lemma conform_eval_succ_typenv_Isubb te t t0 a a0 s1 s2 :
@@ -3396,10 +3427,11 @@ Module MakeDSL
     /andP [/andP [Hneq Hdef0] Hdef1] /andP [/andP [Hty Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ H Hcon) .
     + done .
-    + by rewrite size_subB
-                 (size_eval_atomic_asize Hdef0 Hcon Hsm0) //
-                 (size_eval_atomic_asize Hdef1 Hcon Hsm1) //
-                 /asize !(eqP Hty) minnE subKn .
+    + by rewrite
+           size_subB
+           (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+           (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+           /asize !(eqP Hty) minnE subKn .
   Qed .
 
   Lemma conform_eval_succ_typenv_Isbc te t a a0 a1 s1 s2 :
@@ -3415,8 +3447,8 @@ Module MakeDSL
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
       by rewrite /adcB /full_adder size_full_adder_zip
          size_invB
-            (size_eval_atomic_asize Hdef0 Hcon Hsm0) //
-            (size_eval_atomic_asize Hdef1 Hcon Hsm1) //
+            (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+            (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
             /asize !(eqP Hty) minnE subKn .
   Qed .
 
@@ -3434,8 +3466,8 @@ Module MakeDSL
     + done .
     + by rewrite /adcB /full_adder size_full_adder_zip
          size_invB
-            (size_eval_atomic_asize Hdef0 Hcon Hsm0) //
-            (size_eval_atomic_asize Hdef1 Hcon Hsm1) //
+            (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+            (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
             /asize !(eqP Hty) minnE subKn .
   Qed .
 
@@ -3450,10 +3482,11 @@ Module MakeDSL
     /andP [/andP [Hdef0 Hdef1] Hdefc] /andP
      [/andP [/andP [/andP [Hty _] Hsm0] Hsm1] _] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-      by rewrite size_sbbB
-                 (size_eval_atomic_asize Hdef0 Hcon Hsm0) //
-                 (size_eval_atomic_asize Hdef1 Hcon Hsm1) //
-                 /asize !(eqP Hty) minnE subKn .
+      by rewrite
+           size_sbbB
+           (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+           (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+           /asize !(eqP Hty) minnE subKn .
   Qed .
 
   Lemma conform_eval_succ_typenv_Isbbs te t t0 a a0 a1 s1 s2 :
@@ -3467,10 +3500,11 @@ Module MakeDSL
     /andP [/andP [/andP [Hneq Hdef0] Hdef1] Hdefc] /andP
           [/andP [/andP [/andP [Hty _] Hsm0] Hsm1] _] Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ H Hcon); first done .
-      by rewrite size_sbbB
-                 (size_eval_atomic_asize Hdef0 Hcon Hsm0) //
-                 (size_eval_atomic_asize Hdef1 Hcon Hsm1) //
-                 /asize !(eqP Hty) minnE subKn .
+      by rewrite
+           size_sbbB
+           (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+           (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+           /asize !(eqP Hty) minnE subKn .
   Qed .
 
   Lemma conform_eval_succ_typenv_Imul te t a a0 s1 s2 :
@@ -3483,8 +3517,9 @@ Module MakeDSL
     move => Hcon /=; rewrite 2!are_defined_subset_env =>
     /andP [Hdef0 Hdef1] /andP [/andP [Hty Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-      by rewrite size_mulB
-                 (size_eval_atomic_asize Hdef0 Hcon Hsm0) .
+      by rewrite
+           size_mulB
+           (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0)).
   Qed .
 
   Lemma conform_eval_succ_typenv_Imull te t t0 a a0 s1 s2 :
@@ -3497,10 +3532,12 @@ Module MakeDSL
     move => Hcon /=; rewrite 2!are_defined_subset_env =>
     /andP [/andP [Hneq Hdef0] Hdef1] /andP [/andP [Hty Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ H Hcon);
-      [ by rewrite size_high
-                   (size_eval_atomic_asize Hdef0 Hcon Hsm0)
-      | rewrite size_low
-                (size_eval_atomic_asize Hdef1 Hcon Hsm1) // ] .
+      [ by rewrite
+             size_high
+             (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+      | rewrite
+          size_low
+          (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))].
       by rewrite size_unsigned_typ .
   Qed .
 
@@ -3514,9 +3551,9 @@ Module MakeDSL
     move => Hcon /=; rewrite 2!are_defined_subset_env =>
     /andP [Hdef0 Hdef1] /andP [/andP [Hty Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-    rewrite size_full_mul //
-            (size_eval_atomic_asize Hdef0 Hcon Hsm0) //
-            (size_eval_atomic_asize Hdef1 Hcon Hsm1) //
+    rewrite size_full_mul
+            (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+            (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
             /asize -(eqP Hty) .
     rewrite /Typ.double_typ /= .
       by case (atyp a te) => /= // n;
@@ -3532,14 +3569,20 @@ Module MakeDSL
   Proof .
     move => Hcon /=; rewrite are_defined_subset_env =>
     /andP [Hneq Hdef] /andP [Hsm _] Hev .
-    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ H0 Hcon);
-      [ by rewrite size_shrB (size_eval_atomic_asize Hdef Hcon Hsm)
-      | by rewrite size_shrB size_shlB size_unsigned_typ
-                   (size_eval_atomic_asize Hdef Hcon Hsm)
-      | by rewrite size_sarB (size_eval_atomic_asize Hdef Hcon Hsm)
-      | by rewrite size_shrB size_shlB size_unsigned_typ
-                   (size_eval_atomic_asize Hdef Hcon Hsm) ] .
-  Qed .
+    inversion_clear Hev; apply: (conform_Upd2 Hneq _ _ H0 Hcon);
+      [ by rewrite
+             size_shrB
+             (size_eval_atomic_asize Hdef Hcon (well_typed_atomic_size_matched Hsm))
+      | by rewrite
+             size_shrB size_shlB size_unsigned_typ
+             (size_eval_atomic_asize Hdef Hcon (well_typed_atomic_size_matched Hsm))
+      | by rewrite
+             size_sarB
+             (size_eval_atomic_asize Hdef Hcon (well_typed_atomic_size_matched Hsm))
+      | by rewrite
+             size_shrB size_shlB size_unsigned_typ
+             (size_eval_atomic_asize Hdef Hcon (well_typed_atomic_size_matched Hsm)) ].
+  Qed.
 
   Lemma conform_eval_succ_typenv_Iand te t t0 a a0 s1 s2 :
     S.conform s1 te ->
@@ -3551,10 +3594,11 @@ Module MakeDSL
     move => Hcon /=; rewrite 2!are_defined_subset_env =>
     /andP [Hdef0 Hdef1] /andP [/andP [/andP [Htyc Hty] Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-      by rewrite size_lift
-                 (size_eval_atomic_asize Hdef0 Hcon Hsm0) //
-                 (size_eval_atomic_asize Hdef1 Hcon Hsm1) //
-                 /asize -(eqP Hty) maxnn (eqP Htyc) .
+      by rewrite
+           size_lift
+           (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+           (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+           /asize -(eqP Hty) maxnn (eqP Htyc) .
   Qed .
 
   Lemma conform_eval_succ_typenv_Ior te t t0 a a0 s1 s2 :
@@ -3567,10 +3611,11 @@ Module MakeDSL
     move => Hcon /=; rewrite 2!are_defined_subset_env =>
     /andP [Hdef0 Hdef1] /andP [/andP [/andP [Htyc Hty] Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-      by rewrite size_lift
-                 (size_eval_atomic_asize Hdef0 Hcon Hsm0) //
-                 (size_eval_atomic_asize Hdef1 Hcon Hsm1) //
-                 /asize -(eqP Hty) maxnn (eqP Htyc) .
+      by rewrite
+           size_lift
+           (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+           (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+           /asize -(eqP Hty) maxnn (eqP Htyc) .
   Qed .
 
   Lemma conform_eval_succ_typenv_Ixor te t t0 a a0 s1 s2 :
@@ -3583,10 +3628,11 @@ Module MakeDSL
     move => Hcon /=; rewrite 2!are_defined_subset_env =>
     /andP [Hdef0 Hdef1] /andP [/andP [/andP [Htyc Hty] Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
-      by rewrite size_lift
-                 (size_eval_atomic_asize Hdef0 Hcon Hsm0) //
-                 (size_eval_atomic_asize Hdef1 Hcon Hsm1) //
-                 /asize -(eqP Hty) maxnn (eqP Htyc) .
+      by rewrite
+           size_lift
+           (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+           (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+           /asize -(eqP Hty) maxnn (eqP Htyc) .
   Qed .
 
   Lemma conform_eval_succ_typenv_Icast te t t0 a s1 s2 :
@@ -3621,14 +3667,13 @@ Module MakeDSL
     S.conform s2 (instr_succ_typenv (Ijoin t a a0) te) .
   Proof .
     move => Hcon /=; rewrite 2!are_defined_subset_env =>
-    /andP [Hdef0 Hdef1] /andP [/andP [/andP [/andP [Hun Hty] Hsm0] Hsm1] _] Hev .
+    /andP [Hdef0 Hdef1] /andP [/andP [/andP [Hun Hty] Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite size_cat
-            (size_eval_atomic_asize Hdef0 Hcon Hsm0) //
-            (size_eval_atomic_asize Hdef1 Hcon Hsm1) //
+            (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+            (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
             /asize -(eqP Hty) /Typ.double_typ .
-      by case (atyp a te) => /= n;
-                               rewrite mul2n addnn .
+      by ((case (atyp a te) => /= n); rewrite mul2n addnn).
   Qed .
 
   Lemma conform_eval_succ_typenv_Iassume te b s1 s2 :
