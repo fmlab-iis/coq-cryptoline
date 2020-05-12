@@ -703,6 +703,11 @@ Definition bexp_of_rspec E (s : rspec) : bexp_spec :=
 Ltac rewrite_eval_exp_atomic :=
   repeat rewrite -> eval_exp_atomic in *.
 
+Lemma bexp_rng_instr E i : bexp_instr E (rng_instr i) = bexp_instr E i.
+Proof.
+  case: i => //=. move=> [e r] /=. reflexivity.
+Qed.
+
 Lemma bexp_instr_submap E1 E2 i :
   well_defined_instr E1 i -> TELemmas.submap E1 E2 ->
   bexp_instr E1 i = bexp_instr E2 i.
@@ -741,6 +746,23 @@ Lemma bexp_program_cat E p1 p2 :
   bexp_program E p1 ++ bexp_program (program_succ_typenv p1 E) p2.
 Proof.
   elim: p1 E p2 => [| hd tl IH] E p2 //=. rewrite -IH. reflexivity.
+Qed.
+
+Lemma bexp_rng_program E p :
+  bexp_program E (rng_program p) = bexp_program E p.
+Proof.
+  elim: p E => [| i p IH] E //=. rewrite bexp_rng_instr.
+  rewrite IH. rewrite rng_instr_succ_typenv. reflexivity.
+Qed.
+
+Lemma bexp_program_submap E1 E2 p :
+  well_formed_program E1 p -> TELemmas.submap E1 E2 ->
+  bexp_program E1 p = bexp_program E2 p.
+Proof.
+  elim: p E1 E2 => [| i p IH] E1 E2 //=. move/andP=> [Hwf_i Hwf_p] Hsub.
+  move: (well_formed_instr_succ_typenv_submap Hwf_i Hsub) => Hsub_succ.
+  move/andP: Hwf_i => [Hwd_i Hwt_i]. rewrite (bexp_instr_submap Hwd_i Hsub).
+  rewrite (IH _ _ Hwf_p Hsub_succ). reflexivity.
 Qed.
 
 Lemma eval_vars_unchanged_program_bexp_instr E i p s1 s2 :
@@ -3287,239 +3309,255 @@ End WellFormedBexpInstrSafe.
 
 (* Program safety - fixed typing environment - initial typing environment *)
 
-Fixpoint bexp_program_safe_at E p : QFBV.bexp :=
-  match p with
-  | [::] => qfbv_true
-  | hd::tl =>
-    qfbv_conj (bexp_instr_safe E hd)
-              (qfbv_disj
-                 (qfbv_lneg (bexp_instr E (rng_instr hd)))
-                 (bexp_program_safe_at (instr_succ_typenv hd E) tl))
-  end.
+Section SafetyFixed.
 
-(* Question: is (SSAStore.conform s E) too strong? *)
-Lemma eval_bexp_program_safe1 E pre p :
-  well_formed_rbexp E pre ->
-  ssa_vars_unchanged_program (vars_rbexp pre) p ->
-  well_formed_ssa_program E p ->
-  (forall s, SSAStore.conform s E ->
-             QFBV.eval_bexp (bexp_rbexp pre) s ->
-             QFBV.eval_bexp (bexp_program_safe_at E p) s) ->
-  (forall s, SSAStore.conform s E ->
-             eval_rbexp pre s ->
-             ssa_program_safe_at E p s).
-Proof.
-  move=> Hwf_pre Hun Hwf_p H s.
-  have: (forall t : SSAStore.t,
-            bvs_eqi E s t ->
-            SSAStore.conform t E ->
-            QFBV.eval_bexp (bexp_rbexp pre) t ->
-            QFBV.eval_bexp (bexp_program_safe_at E p) t).
-  { move=> t Heqi Hco Hpre. exact: (H _ Hco Hpre). }
-  move: {H} Hwf_pre Hun Hwf_p s.
+  Fixpoint bexp_program_safe_fixed E p : QFBV.bexp :=
+    match p with
+    | [::] => qfbv_true
+    | hd::tl =>
+      qfbv_conj (bexp_instr_safe E hd)
+                (qfbv_disj
+                   (qfbv_lneg (bexp_instr E (rng_instr hd)))
+                   (bexp_program_safe_fixed (instr_succ_typenv hd E) tl))
+    end.
 
-  elim: p E => [| i p IH] E /=.
-  - move=> *. exact: ssa_program_safe_at_nil.
-  - rewrite ssa_unchanged_program_cons /well_formed_ssa_program.
-    rewrite well_formed_program_cons ssa_single_assignment_cons.
-    rewrite ssa_unchanged_program_cons.
-    move=> Hwf_pre /andP [Hun_prei Hun_prep]
-            /andP [/andP [/andP
-                           [Hwf_i Hwf_p] /andP [Hun_Ei Hun_Ep]] /andP [Hun_ip Hssa]].
-    move=> s H Hco Hpre. apply: ssa_program_safe_at_cons.
-    + move/eval_bexp_rbexp: Hpre => Hpre. apply/(eval_bexp_instr_safe Hco Hwf_i).
-      move: (H s (bvs_eqi_refl s) Hco Hpre) => /andP [H1 _]. exact: H1.
-    + move=> t Hei. have Hssa_p: well_formed_ssa_program (instr_succ_typenv i E) p.
-      { repeat (apply/andP; split); try assumption.
-        apply: (ssa_unchanged_program_replace
-                  (SSAVS.Lemmas.P.equal_sym (vars_env_instr_succ_typenv i E))).
-        rewrite ssa_unchanged_program_union. rewrite Hun_Ep /=. exact: Hun_ip. }
+  Lemma eval_bexp_program_safe_fixed1 E pre p :
+    well_formed_rbexp E pre ->
+    ssa_vars_unchanged_program (vars_rbexp pre) p ->
+    well_formed_ssa_program E p ->
+    (forall s, SSAStore.conform s E ->
+               QFBV.eval_bexp (bexp_rbexp pre) s ->
+               QFBV.eval_bexp (bexp_program_safe_fixed E p) s) ->
+    (forall s, SSAStore.conform s E ->
+               eval_rbexp pre s ->
+               ssa_program_safe_at E p s).
+  Proof.
+    move=> Hwf_pre Hun Hwf_p H s.
+    have: (forall t : SSAStore.t,
+              bvs_eqi E s t ->
+              SSAStore.conform t E ->
+              QFBV.eval_bexp (bexp_rbexp pre) t ->
+              QFBV.eval_bexp (bexp_program_safe_fixed E p) t).
+    { move=> t Heqi Hco Hpre. exact: (H _ Hco Hpre). }
+    move: {H} Hwf_pre Hun Hwf_p s.
 
-      move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsubm.
-      rewrite -ssa_vars_unchanged_rng_instr in Hun_Ei.
-      move: (bvs_eqi_eval_instr Hun_Ei Hei) => Hei_st.
-      move: (well_formed_rbexp_submap Hsubm Hwf_pre) => Hwf_pre_succ.
+    elim: p E => [| i p IH] E /=.
+    - move=> *. exact: ssa_program_safe_at_nil.
+    - rewrite ssa_unchanged_program_cons /well_formed_ssa_program.
+      rewrite well_formed_program_cons ssa_single_assignment_cons.
+      rewrite ssa_unchanged_program_cons.
+      move=> Hwf_pre
+               /andP [Hun_prei Hun_prep] /andP [
+                 /andP [/andP [Hwf_i Hwf_p]
+                         /andP [Hun_Ei Hun_Ep]] /andP [Hun_ip Hssa]].
+      move=> s H Hco Hpre. apply: ssa_program_safe_at_cons.
+      + move/eval_bexp_rbexp: Hpre => Hpre.
+        apply/(eval_bexp_instr_safe Hco Hwf_i).
+        move: (H s (bvs_eqi_refl s) Hco Hpre) => /andP [H1 _].
+        exact: H1.
+      + move=> t Hei.
+        have Hssa_p: well_formed_ssa_program (instr_succ_typenv i E) p.
+        { repeat (apply/andP; split); try assumption.
+          apply: (ssa_unchanged_program_replace
+                    (SSAVS.Lemmas.P.equal_sym (vars_env_instr_succ_typenv i E))).
+          rewrite ssa_unchanged_program_union. rewrite Hun_Ep /=. exact: Hun_ip. }
 
-      apply: (IH (instr_succ_typenv i E) Hwf_pre_succ Hun_prep Hssa_p).
-      * move=> t' Heqi Hco' Hpre'.
-        have Heqi': bvs_eqi E s t'.
-        { move: (bvs_eqi_submap Hsubm Heqi) => Hei_st'.
-          exact: (bvs_eqi_trans Hei_st Hei_st'). }
-        move: (bvs_eqi_conform Heqi' Hco) => Hco'E.
-        move: (H _ Heqi' Hco'E Hpre') => /andP [H1 H2].
+        move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsubm.
+        rewrite -ssa_vars_unchanged_rng_instr in Hun_Ei.
+        move: (bvs_eqi_eval_instr Hun_Ei Hei) => Hei_st.
+        move: (well_formed_rbexp_submap Hsubm Hwf_pre) => Hwf_pre_succ.
 
-        move: (bexp_instr_eval (well_formed_rng_instr Hwf_i) Hco Hun_Ei Hei).
-        move/andP: Hwf_i => [Hwd_i Hwt_i].
-        rewrite -rng_instr_succ_typenv in Heqi.
-        rewrite (bvs_eqi_qfbv_eval_bexp
-                 (bexp_instr_are_defined (well_defined_rng_instr Hwd_i)) Heqi).
-        move=> Heb. rewrite Heb /= in H2. exact: H2.
-      * rewrite -rng_instr_succ_typenv.
-        exact: (conform_instr_succ_typenv (well_formed_rng_instr Hwf_i) Hco Hei).
-      * rewrite -ssa_vars_unchanged_rng_instr in Hun_prei.
-        apply/(ssa_unchanged_instr_eval_rbexp Hun_prei Hei). exact: Hpre.
-Qed.
+        apply: (IH (instr_succ_typenv i E) Hwf_pre_succ Hun_prep Hssa_p).
+        * move=> t' Heqi Hco' Hpre'.
+          have Heqi': bvs_eqi E s t'.
+          { move: (bvs_eqi_submap Hsubm Heqi) => Hei_st'.
+            exact: (bvs_eqi_trans Hei_st Hei_st'). }
+          move: (bvs_eqi_conform Heqi' Hco) => Hco'E.
+          move: (H _ Heqi' Hco'E Hpre') => /andP [H1 H2].
 
-(* Evaluate safety conditions one by one.
+          move: (bexp_instr_eval (well_formed_rng_instr Hwf_i) Hco Hun_Ei Hei).
+          move/andP: Hwf_i => [Hwd_i Hwt_i].
+          rewrite -rng_instr_succ_typenv in Heqi.
+          rewrite (bvs_eqi_qfbv_eval_bexp
+                     (bexp_instr_are_defined (well_defined_rng_instr Hwd_i)) Heqi).
+          move=> Heb. rewrite Heb /= in H2. exact: H2.
+        * rewrite -rng_instr_succ_typenv.
+          exact: (conform_instr_succ_typenv (well_formed_rng_instr Hwf_i) Hco Hei).
+        * rewrite -ssa_vars_unchanged_rng_instr in Hun_prei.
+          apply/(ssa_unchanged_instr_eval_rbexp Hun_prei Hei). exact: Hpre.
+  Qed.
+
+
+  (* Soundness of bexp_program_safe_fixed. *)
+
+  Definition ssa_spec_safe_qfbv_fixed sp : Prop :=
+    forall s,
+      SSAStore.conform s (sinputs sp) ->
+      QFBV.eval_bexp (bexp_rbexp (rng_bexp (spre sp))) s ->
+      QFBV.eval_bexp (bexp_program_safe_fixed (sinputs sp) (sprog sp)) s.
+
+  Lemma ssa_spec_safe_qfbv_sound sp :
+    well_formed_ssa_spec sp -> ssa_spec_safe_qfbv_fixed sp -> ssa_spec_safe sp.
+  Proof.
+    move=> Hwf. move: Hwf (well_formed_ssa_spec_program Hwf).
+    case: sp => E f p g. rewrite /well_formed_ssa_spec /well_formed_spec
+                                 /ssa_spec_safe_qfbv_fixed /ssa_spec_safe /=.
+    move=> /andP [/andP [/andP [/andP [Hwf_f Hwf_p] Hwf_g] Hun_Ep] Hssa]
+            Hwf_ssa_p Hbv s Hco Hf.
+
+    move: (well_formed_rng_bexp Hwf_f) => Hwf_f_rng.
+    move: (Hwf_f_rng). move/andP=> [Hdef_f_rng Hwt_f_rng].
+    move/defsubP: Hdef_f_rng => Hsub_f_rng.
+    move: (ssa_unchanged_program_subset Hun_Ep Hsub_f_rng) => Hun_f_rng.
+
+    apply: (eval_bexp_program_safe_fixed1 Hwf_f_rng Hun_f_rng Hwf_ssa_p _ Hco Hf).
+    exact: Hbv.
+  Qed.
+
+End SafetyFixed.
+
+
+(* Program safety - varying typing environment *)
+
+Section SafetyVarying.
+
+  (* Evaluate safety conditions one by one.
    Typing environments are different for the safety conditions of
    different instructions. *)
-Fixpoint bexp_program_safe_steps E p s : Prop :=
-  SSAStore.conform s E ->
-  match p with
-  | [::] => True
-  | hd::tl =>
-    QFBV.eval_bexp (bexp_instr_safe E hd) s /\
-    ((QFBV.eval_bexp (bexp_instr E (rng_instr hd)) s) ->
-     (bexp_program_safe_steps (instr_succ_typenv hd E) tl s))
-  end.
+  Fixpoint bexp_program_safe_steps E p s : Prop :=
+    SSAStore.conform s E ->
+    match p with
+    | [::] => True
+    | hd::tl =>
+      QFBV.eval_bexp (bexp_instr_safe E hd) s /\
+      ((QFBV.eval_bexp (bexp_instr E (rng_instr hd)) s) ->
+       (bexp_program_safe_steps (instr_succ_typenv hd E) tl s))
+    end.
 
-Lemma eval_bexp_program_safe_steps E pre p :
-  well_formed_rbexp E pre ->
-  ssa_vars_unchanged_program (vars_rbexp pre) p ->
-  well_formed_ssa_program E p ->
-  (forall s, QFBV.eval_bexp (bexp_rbexp pre) s ->
-             bexp_program_safe_steps E p s) ->
-  (forall s, SSAStore.conform s E ->
-             eval_rbexp pre s ->
-             ssa_program_safe_at E p s).
-Proof.
-  move=> Hwf_pre Hun Hwf_p H s.
-  have: (forall t : SSAStore.t,
-            bvs_eqi E s t ->
-            QFBV.eval_bexp (bexp_rbexp pre) t ->
-            bexp_program_safe_steps E p t).
-  { move=> t Heqi Hpre. exact: (H _ Hpre). }
-  move: {H} Hwf_pre Hun Hwf_p s.
+  Lemma eval_bexp_program_safe_steps E pre p :
+    well_formed_rbexp E pre ->
+    ssa_vars_unchanged_program (vars_rbexp pre) p ->
+    well_formed_ssa_program E p ->
+    (forall s, QFBV.eval_bexp (bexp_rbexp pre) s ->
+               bexp_program_safe_steps E p s) ->
+    (forall s, SSAStore.conform s E ->
+               eval_rbexp pre s ->
+               ssa_program_safe_at E p s).
+  Proof.
+    move=> Hwf_pre Hun Hwf_p H s.
+    have: (forall t : SSAStore.t,
+              bvs_eqi E s t ->
+              QFBV.eval_bexp (bexp_rbexp pre) t ->
+              bexp_program_safe_steps E p t).
+    { move=> t Heqi Hpre. exact: (H _ Hpre). }
+    move: {H} Hwf_pre Hun Hwf_p s.
 
-  elim: p E => [| i p IH] E /=.
-  - move=> *. exact: ssa_program_safe_at_nil.
-  - rewrite ssa_unchanged_program_cons /well_formed_ssa_program.
-    rewrite well_formed_program_cons ssa_single_assignment_cons.
-    rewrite ssa_unchanged_program_cons.
-    move=> Hwf_pre /andP [Hun_prei Hun_prep]
-            /andP [/andP [/andP
-                           [Hwf_i Hwf_p] /andP [Hun_Ei Hun_Ep]] /andP [Hun_ip Hssa]].
-    move=> s H Hco Hpre. apply: ssa_program_safe_at_cons.
-    + move/eval_bexp_rbexp: Hpre => Hpre. apply/(eval_bexp_instr_safe Hco Hwf_i).
-      move: (H s (bvs_eqi_refl s) Hpre Hco) => [H1 _]. exact: H1.
-    + move=> t Hei. have Hssa_p: well_formed_ssa_program (instr_succ_typenv i E) p.
-      { repeat (apply/andP; split); try assumption.
-        apply: (ssa_unchanged_program_replace
+    elim: p E => [| i p IH] E /=.
+    - move=> *. exact: ssa_program_safe_at_nil.
+    - rewrite ssa_unchanged_program_cons /well_formed_ssa_program.
+      rewrite well_formed_program_cons ssa_single_assignment_cons.
+      rewrite ssa_unchanged_program_cons.
+      move=> Hwf_pre /andP [Hun_prei Hun_prep] /andP [
+                       /andP [/andP [Hwf_i Hwf_p] /andP
+                               [Hun_Ei Hun_Ep]] /andP [Hun_ip Hssa]].
+      move=> s H Hco Hpre. apply: ssa_program_safe_at_cons.
+      + move/eval_bexp_rbexp: Hpre => Hpre. apply/(eval_bexp_instr_safe Hco Hwf_i).
+        move: (H s (bvs_eqi_refl s) Hpre Hco) => [H1 _]. exact: H1.
+      + move=> t Hei. have Hssa_p: well_formed_ssa_program (instr_succ_typenv i E) p.
+        { repeat (apply/andP; split); try assumption.
+          apply: (ssa_unchanged_program_replace
+                    (SSAVS.Lemmas.P.equal_sym (vars_env_instr_succ_typenv i E))).
+          rewrite ssa_unchanged_program_union. rewrite Hun_Ep /=. exact: Hun_ip. }
+
+        move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsubm.
+        rewrite -ssa_vars_unchanged_rng_instr in Hun_Ei.
+        move: (bvs_eqi_eval_instr Hun_Ei Hei) => Hei_st.
+        move: (well_formed_rbexp_submap Hsubm Hwf_pre) => Hwf_pre_succ.
+
+        apply: (IH (instr_succ_typenv i E) Hwf_pre_succ Hun_prep Hssa_p).
+        * move=> t' Heqi Hpre'.
+          have Heqi': bvs_eqi E s t'.
+          { move: (bvs_eqi_submap Hsubm Heqi) => Hei_st'.
+            exact: (bvs_eqi_trans Hei_st Hei_st'). }
+          move: (bvs_eqi_conform Heqi' Hco) => Hco'E.
+          move: (H _ Heqi' Hpre' Hco'E) => [H1 H2].
+
+          move: (bexp_instr_eval (well_formed_rng_instr Hwf_i) Hco Hun_Ei Hei).
+          move/andP: Hwf_i => [Hwd_i Hwt_i].
+          rewrite -rng_instr_succ_typenv in Heqi.
+          rewrite (bvs_eqi_qfbv_eval_bexp
+                     (bexp_instr_are_defined (well_defined_rng_instr Hwd_i)) Heqi).
+          move=> Heb. rewrite Heb /= in H2. by apply: H2.
+        * rewrite -rng_instr_succ_typenv.
+          exact: (conform_instr_succ_typenv (well_formed_rng_instr Hwf_i) Hco Hei).
+        * rewrite -ssa_vars_unchanged_rng_instr in Hun_prei.
+          apply/(ssa_unchanged_instr_eval_rbexp Hun_prei Hei). exact: Hpre.
+  Qed.
+
+
+  (* Soundness and completeness of bexp_program_safe_steps. *)
+
+  Definition ssa_spec_safe_qfbv_steps sp : Prop :=
+    forall s, QFBV.eval_bexp (bexp_rbexp (rng_bexp (spre sp))) s ->
+              bexp_program_safe_steps (sinputs sp) (sprog sp) s.
+
+  Lemma ssa_spec_safe_qfbv_steps_sound sp :
+    well_formed_ssa_spec sp -> ssa_spec_safe_qfbv_steps sp -> ssa_spec_safe sp.
+  Proof.
+    move=> Hwf. move: Hwf (well_formed_ssa_spec_program Hwf).
+    case: sp => E f p g. rewrite /well_formed_ssa_spec /well_formed_spec
+                                 /ssa_spec_safe /ssa_spec_safe_qfbv_steps /=.
+    move=> /andP [/andP [/andP [/andP [Hwf_f Hwf_p] Hwf_g] Hun_Ep] Hssa]
+            Hwf_ssa_p /= Hbv s Hco Hf.
+
+    move: (well_formed_rng_bexp Hwf_f) => Hwf_f_rng.
+    move: (Hwf_f_rng). move/andP=> [Hdef_f_rng Hwt_f_rng].
+    move/defsubP: Hdef_f_rng => Hsub_f_rng.
+    move: (ssa_unchanged_program_subset Hun_Ep Hsub_f_rng) => Hun_f_rng.
+
+    apply: (eval_bexp_program_safe_steps Hwf_f_rng Hun_f_rng Hwf_ssa_p _ Hco Hf).
+    exact: Hbv.
+  Qed.
+
+  Lemma ssa_spec_safe_qfbv_steps_complete sp :
+    well_formed_ssa_spec sp -> ssa_spec_safe sp -> ssa_spec_safe_qfbv_steps sp.
+  Proof.
+    case: sp => E f p g.
+    rewrite /well_formed_ssa_spec /well_formed_spec
+            /ssa_spec_safe /ssa_spec_safe_qfbv_steps /=.
+    move=> /andP [/andP [/andP [/andP [Hwf_f Hwf_p] Hwf_g] Hun_Ep] Hssa]
+            Hsafe s Hf.
+    case: f Hwf_f Hsafe Hf => [ef rf] => /=.
+    rewrite well_formed_bexp_split => /andP [/= Hwf_ef Hwf_rf] Hsafe Hf.
+    clear ef Hwf_ef g Hwf_g. move: (Hsafe s) => {Hsafe} Hsafe.
+    elim: p E rf Hwf_rf Hwf_p Hun_Ep Hssa s Hsafe Hf => [| i p IH] //=.
+    move=> E f Hwf /andP [Hwf_i Hwf_p] Hun_Eip /andP [Hun_ip Hssa_p]
+             s Hsafe Hf Hco.
+    rewrite ssa_unchanged_program_cons in Hun_Eip.
+    move/andP: Hun_Eip => [Hun_Ei Hun_Ep].
+    move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsubm.
+    move/eval_bexp_rbexp: Hf=> Hf. move: (Hsafe Hco Hf) => Hsafe_at.
+    inversion_clear Hsafe_at. split.
+    - apply/(eval_bexp_instr_safe Hco Hwf_i). assumption.
+    - move=> His. apply: (IH (instr_succ_typenv i E) f
+                             (well_formed_rbexp_submap Hsubm Hwf) Hwf_p
+                             _ Hssa_p).
+      + apply: (ssa_unchanged_program_replace
                   (SSAVS.Lemmas.P.equal_sym (vars_env_instr_succ_typenv i E))).
-        rewrite ssa_unchanged_program_union. rewrite Hun_Ep /=. exact: Hun_ip. }
+        rewrite ssa_unchanged_program_union Hun_Ep Hun_ip. exact: is_true_true.
+      + move=> Hco_s Hf_s. apply: H0.
+        exact: (eval_bexp_instr Hwf_i Hco Hco_s His).
+      + apply/eval_bexp_rbexp. exact: Hf.
+  Qed.
 
-      move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsubm.
-      rewrite -ssa_vars_unchanged_rng_instr in Hun_Ei.
-      move: (bvs_eqi_eval_instr Hun_Ei Hei) => Hei_st.
-      move: (well_formed_rbexp_submap Hsubm Hwf_pre) => Hwf_pre_succ.
-
-      apply: (IH (instr_succ_typenv i E) Hwf_pre_succ Hun_prep Hssa_p).
-      * move=> t' Heqi Hpre'.
-        have Heqi': bvs_eqi E s t'.
-        { move: (bvs_eqi_submap Hsubm Heqi) => Hei_st'.
-          exact: (bvs_eqi_trans Hei_st Hei_st'). }
-        move: (bvs_eqi_conform Heqi' Hco) => Hco'E.
-        move: (H _ Heqi' Hpre' Hco'E) => [H1 H2].
-
-        move: (bexp_instr_eval (well_formed_rng_instr Hwf_i) Hco Hun_Ei Hei).
-        move/andP: Hwf_i => [Hwd_i Hwt_i].
-        rewrite -rng_instr_succ_typenv in Heqi.
-        rewrite (bvs_eqi_qfbv_eval_bexp
-                   (bexp_instr_are_defined (well_defined_rng_instr Hwd_i)) Heqi).
-        move=> Heb. rewrite Heb /= in H2. by apply: H2.
-      * rewrite -rng_instr_succ_typenv.
-        exact: (conform_instr_succ_typenv (well_formed_rng_instr Hwf_i) Hco Hei).
-      * rewrite -ssa_vars_unchanged_rng_instr in Hun_prei.
-        apply/(ssa_unchanged_instr_eval_rbexp Hun_prei Hei). exact: Hpre.
-Qed.
-
-
-(* Soundness of safety check. *)
-
-Definition ssa_spec_safe_qfbv sp : Prop :=
-  forall s,
-    SSAStore.conform s (sinputs sp) ->
-    QFBV.eval_bexp (bexp_rbexp (rng_bexp (spre sp))) s ->
-    QFBV.eval_bexp (bexp_program_safe_at (sinputs sp) (sprog sp)) s.
-
-Lemma ssa_spec_safe_qfbv_sound sp :
-  well_formed_ssa_spec sp -> ssa_spec_safe_qfbv sp -> ssa_spec_safe sp.
-Proof.
-  move=> Hwf. move: Hwf (well_formed_ssa_spec_program Hwf).
-  case: sp => E f p g. rewrite /well_formed_ssa_spec /well_formed_spec
-                               /ssa_spec_safe_qfbv /ssa_spec_safe /=.
-  move=> /andP [/andP [/andP [/andP [Hwf_f Hwf_p] Hwf_g] Hun_Ep] Hssa]
-          Hwf_ssa_p Hbv s Hco Hf.
-
-  move: (well_formed_rng_bexp Hwf_f) => Hwf_f_rng.
-  move: (Hwf_f_rng). move/andP=> [Hdef_f_rng Hwt_f_rng].
-  move/defsubP: Hdef_f_rng => Hsub_f_rng.
-  move: (ssa_unchanged_program_subset Hun_Ep Hsub_f_rng) => Hun_f_rng.
-
-  apply: (eval_bexp_program_safe1 Hwf_f_rng Hun_f_rng Hwf_ssa_p _ Hco Hf).
-  exact: Hbv.
-Qed.
-
-
-Definition ssa_spec_safe_qfbv_steps sp : Prop :=
-  forall s, QFBV.eval_bexp (bexp_rbexp (rng_bexp (spre sp))) s ->
-            bexp_program_safe_steps (sinputs sp) (sprog sp) s.
-
-Lemma ssa_spec_safe_qfbv_steps_sound sp :
-  well_formed_ssa_spec sp -> ssa_spec_safe_qfbv_steps sp -> ssa_spec_safe sp.
-Proof.
-  move=> Hwf. move: Hwf (well_formed_ssa_spec_program Hwf). case: sp => E f p g.
-  rewrite /well_formed_ssa_spec /well_formed_spec /ssa_spec_safe_qfbv
-          /ssa_spec_safe /ssa_spec_safe_qfbv_steps /=.
-  move=> /andP [/andP [/andP [/andP [Hwf_f Hwf_p] Hwf_g] Hun_Ep] Hssa]
-          Hwf_ssa_p /= Hbv s Hco Hf.
-
-  move: (well_formed_rng_bexp Hwf_f) => Hwf_f_rng.
-  move: (Hwf_f_rng). move/andP=> [Hdef_f_rng Hwt_f_rng].
-  move/defsubP: Hdef_f_rng => Hsub_f_rng.
-  move: (ssa_unchanged_program_subset Hun_Ep Hsub_f_rng) => Hun_f_rng.
-
-  apply: (eval_bexp_program_safe_steps Hwf_f_rng Hun_f_rng Hwf_ssa_p _ Hco Hf).
-  exact: Hbv.
-Qed.
-
-Lemma ssa_spec_safe_qfbv_steps_complete sp :
-  well_formed_ssa_spec sp -> ssa_spec_safe sp -> ssa_spec_safe_qfbv_steps sp.
-Proof.
-  case: sp => E f p g.
-  rewrite /well_formed_ssa_spec /well_formed_spec /ssa_spec_safe_qfbv
-          /ssa_spec_safe /ssa_spec_safe_qfbv_steps /=.
-  move=> /andP [/andP [/andP [/andP [Hwf_f Hwf_p] Hwf_g] Hun_Ep] Hssa]
-          Hsafe s Hf.
-  case: f Hwf_f Hsafe Hf => [ef rf] => /=.
-  rewrite well_formed_bexp_split => /andP [/= Hwf_ef Hwf_rf] Hsafe Hf.
-  clear ef Hwf_ef g Hwf_g. move: (Hsafe s) => {Hsafe} Hsafe.
-  elim: p E rf Hwf_rf Hwf_p Hun_Ep Hssa s Hsafe Hf => [| i p IH] //=.
-  move=> E f Hwf /andP [Hwf_i Hwf_p] Hun_Eip /andP [Hun_ip Hssa_p]
-           s Hsafe Hf Hco.
-  rewrite ssa_unchanged_program_cons in Hun_Eip.
-  move/andP: Hun_Eip => [Hun_Ei Hun_Ep].
-  move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsubm.
-  move/eval_bexp_rbexp: Hf=> Hf. move: (Hsafe Hco Hf) => Hsafe_at.
-  inversion_clear Hsafe_at. split.
-  - apply/(eval_bexp_instr_safe Hco Hwf_i). assumption.
-  - move=> His. apply: (IH (instr_succ_typenv i E) f
-                           (well_formed_rbexp_submap Hsubm Hwf) Hwf_p
-                           _ Hssa_p).
-    + apply: (ssa_unchanged_program_replace
-                (SSAVS.Lemmas.P.equal_sym (vars_env_instr_succ_typenv i E))).
-      rewrite ssa_unchanged_program_union Hun_Ep Hun_ip. exact: is_true_true.
-    + move=> Hco_s Hf_s. apply: H0.
-      exact: (eval_bexp_instr Hwf_i Hco Hco_s His).
-    + apply/eval_bexp_rbexp. exact: Hf.
-Qed.
+End SafetyVarying.
 
 
 Section SplitConditions.
 
   Import QFBV.
 
-  (* Construct safety conditions with full prefix information. *)
+  (* Construct safety conditions (full prefix information). *)
 
   (*
    * E: the typing environment after pre_is and before p
@@ -3527,23 +3565,23 @@ Section SplitConditions.
    * pre_es: the QFBV expressions encoding the prefix of instructions
    * p: the remaining program to be converted
    *)
-  Fixpoint bexp_program_safe_split_rec_full E pre_is (pre_es : seq QFBV.bexp) p :=
+  Fixpoint bexp_program_safe_split_full_rec E pre_is (pre_es : seq QFBV.bexp) p :=
     match p with
     | [::] => [::]
     | hd::tl =>
       (E, pre_is, pre_es, hd, tl, bexp_instr_safe E hd)
-        ::(bexp_program_safe_split_rec_full
+        ::(bexp_program_safe_split_full_rec
              (instr_succ_typenv hd E) (rcons pre_is hd)
              (rcons pre_es (bexp_instr E (rng_instr hd))) tl)
     end.
 
   Definition bexp_program_safe_split_full E p :=
-    bexp_program_safe_split_rec_full E [::] [::] p.
+    bexp_program_safe_split_full_rec E [::] [::] p.
 
-  Lemma bexp_program_safe_split_rec_full_env E pre_is pre_es p :
+  Lemma bexp_program_safe_split_full_rec_env E pre_is pre_es p :
     forall E' pre_is' pre_es' hd tl safe,
       List.In (E', pre_is', pre_es', hd, tl, safe)
-              (bexp_program_safe_split_rec_full E pre_is pre_es p) ->
+              (bexp_program_safe_split_full_rec E pre_is pre_es p) ->
       forall Einit,
         E = program_succ_typenv pre_is Einit ->
         E' = program_succ_typenv pre_is' Einit.
@@ -3555,10 +3593,32 @@ Section SplitConditions.
       rewrite program_succ_typenv_rcons. rewrite -H. reflexivity.
   Qed.
 
-  Lemma bexp_program_safe_split_rec_full_is E pre_is pre_es p :
+  Lemma bexp_program_safe_split_full_rec_submap E pre_is pre_es p :
+    ssa_vars_unchanged_program (vars_env E) p ->
+    ssa_single_assignment p ->
     forall E' pre_is' pre_es' hd tl safe,
       List.In (E', pre_is', pre_es', hd, tl, safe)
-              (bexp_program_safe_split_rec_full E pre_is pre_es p) ->
+              (bexp_program_safe_split_full_rec E pre_is pre_es p) ->
+      TELemmas.submap E E'.
+  Proof.
+    elim: p E pre_is pre_es => [| i p IH] E pre_is pre_es //=.
+    rewrite ssa_unchanged_program_cons.
+    move=> /andP [Hun_i Hun_p] /andP [Hun_ip Hssa_p] E' pre_is' pre_es' hd tl safe.
+    case.
+    - case=> ? ? ? ? ?; subst. move=> _. exact: TELemmas.submap_refl.
+    - move=> Hin. apply: (TELemmas.submap_trans
+                            (ssa_unchanged_instr_succ_typenv_submap Hun_i)).
+      apply: (IH _ _ _ _ Hssa_p _ _ _ _ _ _ Hin).
+      apply: (ssa_unchanged_program_replace
+                (SSAVS.Lemmas.P.equal_sym (vars_env_instr_succ_typenv i E))).
+      rewrite ssa_unchanged_program_union. rewrite Hun_p Hun_ip /=.
+      exact: is_true_true.
+  Qed.
+
+  Lemma bexp_program_safe_split_full_rec_is E pre_is pre_es p :
+    forall E' pre_is' pre_es' hd tl safe,
+      List.In (E', pre_is', pre_es', hd, tl, safe)
+              (bexp_program_safe_split_full_rec E pre_is pre_es p) ->
       pre_is' ++ hd::tl = pre_is ++ p.
   Proof.
     elim: p E pre_is pre_es => [| i p IH] E pre_is pre_es //=.
@@ -3567,10 +3627,10 @@ Section SplitConditions.
     - move=> Hin. rewrite -(cat_rcons i). apply: IH. exact: Hin.
   Qed.
 
-  Lemma bexp_program_safe_split_rec_full_is_prefix E pre_is pre_es p :
+  Lemma bexp_program_safe_split_full_rec_is_prefix E pre_is pre_es p :
     forall E' pre_is' pre_es' hd tl safe,
       List.In (E', pre_is', pre_es', hd, tl, safe)
-              (bexp_program_safe_split_rec_full E pre_is pre_es p) ->
+              (bexp_program_safe_split_full_rec E pre_is pre_es p) ->
       exists suf, pre_is' = pre_is ++ suf.
   Proof.
     elim: p E pre_is pre_es => [| i p IH] E pre_is pre_es //=.
@@ -3580,10 +3640,10 @@ Section SplitConditions.
       rewrite -(cat_rcons). assumption.
   Qed.
 
-  Lemma bexp_program_safe_split_rec_full_es E pre_is pre_es p :
+  Lemma bexp_program_safe_split_full_rec_es E pre_is pre_es p :
     forall E' pre_is' pre_es' hd tl safe,
       List.In (E', pre_is', pre_es', hd, tl, safe)
-              (bexp_program_safe_split_rec_full E pre_is pre_es p) ->
+              (bexp_program_safe_split_full_rec E pre_is pre_es p) ->
       forall Einit,
         E = program_succ_typenv pre_is Einit ->
         pre_es = bexp_program Einit (rng_program pre_is) ->
@@ -3598,43 +3658,13 @@ Section SplitConditions.
         rewrite -H. rewrite rng_program_succ_typenv. rewrite -Hinit. reflexivity.
   Qed.
 
-  Lemma bexp_program_safe_split_full_env E p :
-    forall E' pre_is' pre_es' hd tl safe,
-      List.In (E', pre_is', pre_es', hd, tl, safe)
-              (bexp_program_safe_split_full E p) ->
-      E' = program_succ_typenv pre_is' E.
-  Proof.
-    move=> E' pre_is' pre_es' hd tl safe Hin.
-    apply: (bexp_program_safe_split_rec_full_env Hin). reflexivity.
-  Qed.
-
-  Lemma bexp_program_safe_split_full_is E p :
-    forall E' pre_is' pre_es' hd tl safe,
-      List.In (E', pre_is', pre_es', hd, tl, safe)
-              (bexp_program_safe_split_full E p) ->
-      pre_is' ++ (hd::tl) = p.
-  Proof.
-    move=> E' pre_is' pre_es' hd tl safe Hin.
-    exact: (bexp_program_safe_split_rec_full_is Hin).
-  Qed.
-
-  Lemma bexp_program_safe_split_full_es E p :
-    forall E' pre_is' pre_es' hd tl safe,
-      List.In (E', pre_is', pre_es', hd, tl, safe)
-              (bexp_program_safe_split_full E p) ->
-      pre_es' = bexp_program E (rng_program pre_is').
-  Proof.
-    move=> E' pre_is' pre_es' hd tl safe Hin.
-      by apply: (bexp_program_safe_split_rec_full_es Hin).
-  Qed.
-
-  Lemma bexp_program_safe_split_rec_full_complete E pre_is pre_es p :
+  Lemma bexp_program_safe_split_full_rec_cover E pre_is pre_es p :
     forall pre_is' hd tl suf,
       pre_is' = pre_is ++ suf ->
       pre_is' ++ (hd :: tl) = pre_is ++ p ->
       exists E' pre_es' safe,
         List.In (E', pre_is', pre_es', hd, tl, safe)
-                (bexp_program_safe_split_rec_full E pre_is pre_es p).
+                (bexp_program_safe_split_full_rec E pre_is pre_es p).
   Proof.
     elim: p E pre_is pre_es => [| i1 p IH] E pre_is pre_es /=.
     - move=> pre_is' hd tl suf Heq1 Heq2. rewrite Heq1 in Heq2.
@@ -3657,14 +3687,56 @@ Section SplitConditions.
         exists E'. exists pre_es'. exists safe'. right. exact: Hin.
   Qed.
 
-  Lemma bexp_program_safe_split_full_complete E p :
+  Lemma bexp_program_safe_split_full_env E p :
+    forall E' pre_is' pre_es' hd tl safe,
+      List.In (E', pre_is', pre_es', hd, tl, safe)
+              (bexp_program_safe_split_full E p) ->
+      E' = program_succ_typenv pre_is' E.
+  Proof.
+    move=> E' pre_is' pre_es' hd tl safe Hin.
+    apply: (bexp_program_safe_split_full_rec_env Hin). reflexivity.
+  Qed.
+
+  Lemma bexp_program_safe_split_full_submap E p :
+    ssa_vars_unchanged_program (vars_env E) p ->
+    ssa_single_assignment p ->
+    forall E' pre_is' pre_es' hd tl safe,
+      List.In (E', pre_is', pre_es', hd, tl, safe)
+              (bexp_program_safe_split_full E p) ->
+      TELemmas.submap E E'.
+  Proof.
+    move=> Hun Hssa E' pre_is' pre_es' hd tl safe Hin.
+    exact: (bexp_program_safe_split_full_rec_submap Hun Hssa Hin).
+  Qed.
+
+  Lemma bexp_program_safe_split_full_is E p :
+    forall E' pre_is' pre_es' hd tl safe,
+      List.In (E', pre_is', pre_es', hd, tl, safe)
+              (bexp_program_safe_split_full E p) ->
+      pre_is' ++ (hd::tl) = p.
+  Proof.
+    move=> E' pre_is' pre_es' hd tl safe Hin.
+    exact: (bexp_program_safe_split_full_rec_is Hin).
+  Qed.
+
+  Lemma bexp_program_safe_split_full_es E p :
+    forall E' pre_is' pre_es' hd tl safe,
+      List.In (E', pre_is', pre_es', hd, tl, safe)
+              (bexp_program_safe_split_full E p) ->
+      pre_es' = bexp_program E (rng_program pre_is').
+  Proof.
+    move=> E' pre_is' pre_es' hd tl safe Hin.
+      by apply: (bexp_program_safe_split_full_rec_es Hin).
+  Qed.
+
+  Lemma bexp_program_safe_split_full_cover E p :
     forall pre_is' hd tl,
       pre_is' ++ (hd :: tl) = p ->
       exists E' pre_es' safe,
         List.In (E', pre_is', pre_es', hd, tl, safe)
                 (bexp_program_safe_split_full E p).
   Proof.
-    move=> pre_is' hd tl Heq. apply: bexp_program_safe_split_rec_full_complete.
+    move=> pre_is' hd tl Heq. apply: bexp_program_safe_split_full_rec_cover.
     - rewrite cat0s. reflexivity.
     - rewrite cat0s. assumption.
   Qed.
@@ -3701,6 +3773,190 @@ Section SplitConditions.
       + exact: Hf.
   Qed.
 
+  Lemma bexp_program_safe_steps_split_full E f p :
+    well_formed_ssa_program E p ->
+    (forall s, QFBV.eval_bexp (bexp_rbexp f) s ->
+               bexp_program_safe_steps E p s) ->
+    (forall Ee pre_is pre_es hd tl safe,
+        List.In (Ee, pre_is, pre_es, hd, tl, safe)
+                (bexp_program_safe_split_full E p) ->
+        forall s,
+          SSAStore.conform s Ee ->
+          QFBV.eval_bexp (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs pre_es))
+                                   safe) s).
+  Proof.
+    rewrite /bexp_program_safe_split_full. move=> Hwf Hsteps.
+    move=> Ee pre_is pre_es hd tl safe Hin s Hco /=.
+    case Hf: (eval_bexp (bexp_rbexp f) s) => //=.
+    case Hpre_es: (eval_bexp (qfbv_conjs pre_es) s) => //=.
+    (* Make the precondition weaker. *)
+    have: forall t : SSAStore.t,
+        bvs_eqi E s t ->
+        eval_bexp (qfbv_conjs (bexp_program E [::])) t ->
+        eval_bexp (bexp_rbexp f) t -> bexp_program_safe_steps E p t
+        by intros; apply: Hsteps.
+    move: Ee pre_is pre_es hd tl safe Hin s Hco Hf Hpre_es.
+    have: E = program_succ_typenv [::] E by done.
+    have: [::] = bexp_program E (rng_program [::]) by done.
+    have: (well_formed_ssa_program E ([::] ++ p)) by rewrite cat0s.
+    move: {1 2 4}E => Einit. move: {Hsteps} Hwf.
+    move: [::]. move: [::].
+    elim: p E f => [| i p IH] E f pre_es pre_is //= Hwf Hwf_init Hpre HE.
+    move=> E' pre_is' pre_es' hd tl safe Hin s Hco Hf Hpre_es' He.
+
+    move/andP: (Hwf_init). rewrite well_formed_program_cat.
+    rewrite ssa_unchanged_program_cat. rewrite ssa_single_assignment_cat.
+    move=> [/andP [/andP [Hwf_Einit_pre_is' Hwf_Einit_ip]
+                    /andP [Hun_Einit_pre_is' _]]
+             /andP [/andP [Hssa_pre_is' _] _]].
+    move: (ssa_unchanged_program_succ_typenv_submap
+             Hun_Einit_pre_is' Hssa_pre_is') => Hsub_Einit.
+
+    case: Hin.
+
+    - case=> H1 H2 H3 H4 H5 H6. move: Hpre HE. subst => Hpre HE.
+      apply: (proj1 (He s (bvs_eqi_refl s) _ Hf Hco)).
+      rewrite Hpre in Hpre_es'. rewrite HE.
+      rewrite -(bexp_program_submap Hwf_Einit_pre_is' Hsub_Einit).
+      rewrite bexp_rng_program in Hpre_es'. exact: Hpre_es'.
+    - move=> Hin. rewrite bexp_rng_instr in Hin.
+      apply: (IH (instr_succ_typenv i E) f
+                 (rcons pre_es (bexp_instr E i))
+                 (rcons pre_is i) _ _ _ _ _ _ _ _ _ _ Hin _ Hco Hf Hpre_es').
+      + exact: (well_formed_ssa_tl Hwf).
+      + rewrite cat_rcons. exact: Hwf_init.
+      + rewrite !bexp_rng_program in Hpre *. rewrite bexp_program_rcons.
+        rewrite -Hpre -HE. reflexivity.
+      + rewrite HE. rewrite program_succ_typenv_rcons. reflexivity.
+      + move=> t Heqi Ht_pre_is_i Ht_f.
+        move/andP: Hwf. rewrite well_formed_program_cons.
+        rewrite ssa_unchanged_program_cons. rewrite ssa_single_assignment_cons.
+        move=> [/andP [/andP [Hwf_i _] /andP [Hun_Ei Hun_Ep]]
+                 /andP [Hun_ip Hssa_p]].
+        move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsub_E.
+
+        rewrite bexp_program_rcons in Ht_pre_is_i.
+        rewrite eval_qfbv_conjs_rcons in Ht_pre_is_i.
+        move/andP: Ht_pre_is_i => [Heval_pre_is_t Heval_i_t].
+
+        rewrite -HE in Hwf_Einit_ip Hsub_Einit.
+        move: (well_formed_program_submap
+                 Hwf_Einit_pre_is' Hsub_Einit) => Hwf_E_pre_is.
+        rewrite -(bexp_program_submap
+                    Hwf_E_pre_is Hsub_E) in Heval_pre_is_t => {Hwf_E_pre_is}.
+
+        have HiE: instr_succ_typenv i E = program_succ_typenv (rcons pre_is i) Einit.
+        { rewrite HE. rewrite program_succ_typenv_rcons. reflexivity. }
+
+        move: (bexp_program_safe_split_full_rec_env Hin HiE) => {HiE} HE'.
+        move: (bvs_eqi_submap Hsub_E Heqi) => Heqi_Est.
+
+        have Hsub_iEE': TELemmas.submap (instr_succ_typenv i E) E'.
+        { apply: (bexp_program_safe_split_full_rec_submap _ Hssa_p Hin).
+          apply: (ssa_unchanged_program_replace
+                    (SSAVS.Lemmas.P.equal_sym (vars_env_instr_succ_typenv i E))).
+          rewrite ssa_unchanged_program_union. by rewrite Hun_Ep Hun_ip. }
+
+        have Hco_t: (SSAStore.conform t E).
+        { move: (TELemmas.submap_trans Hsub_E Hsub_iEE') => Hsub_EE'.
+          apply: (bvs_eqi_conform Heqi_Est).
+          exact: (SSAStore.conform_submap Hsub_EE' Hco). }
+
+        move: (He t Heqi_Est Heval_pre_is_t Ht_f Hco_t) => [H1 H2].
+        apply: H2. rewrite bexp_rng_instr. rewrite HE.
+
+        move: (TELemmas.submap_trans Hsub_Einit Hsub_E) => Hsub_Einit_iE.
+        move: (same_program_succ_typenv_submap
+                 Hwf_Einit_pre_is' Hsub_Einit_iE) => Hsub_succ.
+        move/andP: Hwf_i => [Hwd_i Hwt_i]. rewrite HE in Hwd_i.
+        rewrite (bexp_instr_submap Hwd_i Hsub_succ). exact: Heval_i_t.
+  Qed.
+
+
+  (* Verify safety conditions one by one (full prefix information). *)
+
+  Fixpoint bexp_program_safe_split_full_checker_rec
+           bexp_f
+           (rs : seq (SSATE.env * seq SSA.instr * seq QFBV.bexp *
+                      SSA.instr * SSA.program * QFBV.bexp)) :=
+    match rs with
+    | [::] => True
+    | r::rs =>
+      let '(Ee, pre_is, pre_es, hd, tl, safe) := r in
+      (forall s,
+          SSAStore.conform s Ee ->
+          QFBV.eval_bexp (qfbv_imp (qfbv_conj bexp_f (qfbv_conjs pre_es))
+                                   safe) s) /\
+      bexp_program_safe_split_full_checker_rec bexp_f rs
+    end.
+
+  Definition bexp_program_safe_split_full_checker E f p :=
+    bexp_program_safe_split_full_checker_rec (bexp_rbexp f)
+                                             (bexp_program_safe_split_full E p).
+
+  Lemma bexp_program_safe_split_full_checker_split_full E f p :
+    bexp_program_safe_split_full_checker E f p ->
+    (forall Ee pre_is pre_es hd tl safe,
+        List.In (Ee, pre_is, pre_es, hd, tl, safe)
+                (bexp_program_safe_split_full E p) ->
+        forall s,
+          SSAStore.conform s Ee ->
+          QFBV.eval_bexp (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs pre_es))
+                                   safe) s).
+  Proof.
+    rewrite /bexp_program_safe_split_full_checker.
+    rewrite /bexp_program_safe_split_full.
+    move: [::]. move: [::].
+    elim: p f E => [| i p IH] //= f E pre_is pre_es [Hch1 Hch2]
+                              E' pre_is' pre_es' hd tl safe Hin s Hco.
+    case Hf: (eval_bexp (bexp_rbexp f) s) => //=.
+    case Hpre_es': (eval_bexp (qfbv_conjs pre_es') s) => //=.
+    case: Hin => Hin.
+    - case: Hin=> ? ? ? ? ? ?; subst. move: (Hch1 s Hco).
+      rewrite Hf Hpre_es' /=. by apply.
+    - move: (IH f (instr_succ_typenv i E) _ _ Hch2 E' pre_is' pre_es' hd tl safe
+                Hin s Hco) => /=. rewrite Hf Hpre_es' /=. by apply.
+  Qed.
+
+  Lemma bexp_program_safe_split_full_split_full_checker E f p :
+    (forall Ee pre_is pre_es hd tl safe,
+        List.In (Ee, pre_is, pre_es, hd, tl, safe)
+                (bexp_program_safe_split_full E p) ->
+        forall s,
+          SSAStore.conform s Ee ->
+          QFBV.eval_bexp (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs pre_es))
+                                   safe) s) ->
+    bexp_program_safe_split_full_checker E f p.
+  Proof.
+    rewrite /bexp_program_safe_split_full_checker.
+    rewrite /bexp_program_safe_split_full.
+    move: [::]. move: [::].
+    elim: p f E => [| i p IH] //= f E pre_es pre_is H. split.
+    - move=> s Hco. apply: (H _ _ _ _ _ _ _ s Hco). left. reflexivity.
+    - apply: IH. move=> E' pre_is' pre_es' hd tl safe Hin s Hco.
+      apply: (H _ _ _ _ _ _ _ s Hco). right. exact: Hin.
+  Qed.
+
+  Lemma bexp_program_safe_split_full_checker_steps E f p :
+    well_formed_ssa_program E p ->
+    bexp_program_safe_split_full_checker E f p ->
+    (forall s, QFBV.eval_bexp (bexp_rbexp f) s ->
+               bexp_program_safe_steps E p s).
+  Proof.
+    move=> Hwf Hch. apply: (bexp_program_safe_split_full_steps Hwf).
+    exact: (bexp_program_safe_split_full_checker_split_full Hch).
+  Qed.
+
+  Lemma bexp_program_safe_steps_split_full_checker E f p :
+    well_formed_ssa_program E p ->
+    (forall s, QFBV.eval_bexp (bexp_rbexp f) s ->
+               bexp_program_safe_steps E p s) ->
+    bexp_program_safe_split_full_checker E f p.
+  Proof.
+    move=> Hwf H. apply: bexp_program_safe_split_full_split_full_checker.
+    exact: (bexp_program_safe_steps_split_full Hwf H).
+  Qed.
+
 
   (* Construct safety conditions with less prefix information. *)
 
@@ -3718,7 +3974,7 @@ Section SplitConditions.
   Lemma bexp_program_safe_split_rec_full_partial E pre_is pre_es p :
     forall E' pre_is' pre_es' hd tl safe,
       List.In (E', pre_is', pre_es', hd, tl, safe)
-              (bexp_program_safe_split_rec_full E pre_is pre_es p) ->
+              (bexp_program_safe_split_full_rec E pre_is pre_es p) ->
       List.In (E', pre_es', safe) (bexp_program_safe_split_rec E pre_es p).
   Proof.
     elim: p E pre_is pre_es => [| i p IH] E pre_is pre_es //=.
@@ -3734,7 +3990,7 @@ Section SplitConditions.
       pre_es = bexp_program Einit (rng_program pre_is) ->
     exists pre_is' hd tl,
       List.In (E', pre_is', pre_es', hd, tl, safe)
-              (bexp_program_safe_split_rec_full E pre_is pre_es p) /\
+              (bexp_program_safe_split_full_rec E pre_is pre_es p) /\
       (pre_is' ++ (hd :: tl) = pre_is ++ p) /\
       (pre_es' = bexp_program Einit (rng_program pre_is')).
   Proof.
@@ -3795,6 +4051,106 @@ Section SplitConditions.
     exact: (bexp_program_safe_split_full_partial Hin).
   Qed.
 
+  Lemma bexp_program_safe_steps_split E f p :
+    well_formed_ssa_program E p ->
+    (forall s, QFBV.eval_bexp (bexp_rbexp f) s ->
+               bexp_program_safe_steps E p s) ->
+    (forall Ee pre_es safe,
+        List.In (Ee, pre_es, safe) (bexp_program_safe_split E p) ->
+        forall s,
+          SSAStore.conform s Ee ->
+          QFBV.eval_bexp (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs pre_es))
+                                   safe) s).
+  Proof.
+    move=> Hwf H. move=> Ee pre_es safe Hin s Hco.
+    move: (bexp_program_safe_split_partial_full Hin) =>
+    [pre_is [hd [tl [Hin_full [Hpre_is Hpre_es]]]]].
+    exact: (bexp_program_safe_steps_split_full Hwf H Hin_full Hco).
+  Qed.
+
+
+  (* Verify safety conditions one by one (less prefix information). *)
+
+  Fixpoint bexp_program_safe_split_checker_rec
+           bexp_f
+           (rs : seq (SSATE.env * seq QFBV.bexp * QFBV.bexp)) :=
+    match rs with
+    | [::] => True
+    | r::rs =>
+      let '(Ee, pre_es, safe) := r in
+      (forall s,
+          SSAStore.conform s Ee ->
+          QFBV.eval_bexp (qfbv_imp (qfbv_conj bexp_f (qfbv_conjs pre_es))
+                                   safe) s) /\
+      bexp_program_safe_split_checker_rec bexp_f rs
+    end.
+
+  Definition bexp_program_safe_split_checker E f p :=
+    bexp_program_safe_split_checker_rec (bexp_rbexp f)
+                                        (bexp_program_safe_split E p).
+
+  Lemma bexp_program_safe_split_checker_split E f p :
+    bexp_program_safe_split_checker E f p ->
+    (forall Ee pre_es safe,
+        List.In (Ee, pre_es, safe)
+                (bexp_program_safe_split E p) ->
+        forall s,
+          SSAStore.conform s Ee ->
+          QFBV.eval_bexp (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs pre_es))
+                                   safe) s).
+  Proof.
+    rewrite /bexp_program_safe_split_checker.
+    rewrite /bexp_program_safe_split. move: [::].
+    elim: p f E => [| i p IH] //= f E pre_es [Hch1 Hch2] E' pre_es' safe Hin s Hco.
+    case Hf: (eval_bexp (bexp_rbexp f) s) => //=.
+    case Hpre_es': (eval_bexp (qfbv_conjs pre_es') s) => //=.
+    case: Hin => Hin.
+    - case: Hin=> ? ? ?; subst. move: (Hch1 s Hco).
+      rewrite Hf Hpre_es' /=. by apply.
+    - move: (IH f (instr_succ_typenv i E) _ Hch2 E' pre_es' safe
+                Hin s Hco) => /=. rewrite Hf Hpre_es' /=. by apply.
+  Qed.
+
+  Lemma bexp_program_safe_split_split_checker E f p :
+    (forall Ee pre_es safe,
+        List.In (Ee, pre_es, safe)
+                (bexp_program_safe_split E p) ->
+        forall s,
+          SSAStore.conform s Ee ->
+          QFBV.eval_bexp (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs pre_es))
+                                   safe) s) ->
+    bexp_program_safe_split_checker E f p.
+  Proof.
+    rewrite /bexp_program_safe_split_checker.
+    rewrite /bexp_program_safe_split. move: [::].
+    elim: p f E => [| i p IH] //= f E pre_es H. split.
+    - move=> s Hco. apply: (H _ _ _ _ s Hco). left. reflexivity.
+    - apply: IH. move=> E' pre_es' safe Hin s Hco.
+      apply: (H _ _ _ _ s Hco). right. exact: Hin.
+  Qed.
+
+  Lemma bexp_program_safe_split_checker_steps E f p :
+    well_formed_ssa_program E p ->
+    bexp_program_safe_split_checker E f p ->
+    (forall s, QFBV.eval_bexp (bexp_rbexp f) s ->
+               bexp_program_safe_steps E p s).
+  Proof.
+    move=> Hwf Hch. apply: (bexp_program_safe_split_steps Hwf).
+    exact: (bexp_program_safe_split_checker_split Hch).
+  Qed.
+
+  Lemma bexp_program_safe_steps_split_checker E f p :
+    well_formed_ssa_program E p ->
+    (forall s, QFBV.eval_bexp (bexp_rbexp f) s ->
+               bexp_program_safe_steps E p s) ->
+    bexp_program_safe_split_checker E f p.
+  Proof.
+    move=> Hwf H. apply: bexp_program_safe_split_split_checker.
+    exact: (bexp_program_safe_steps_split Hwf H).
+  Qed.
+
+
+  (** Soundness and completeness *)
 
   Definition ssa_spec_safe_split (sp : spec) :=
     let E := sinputs sp in
@@ -3806,12 +4162,43 @@ Section SplitConditions.
           SSAStore.conform s Ee ->
           QFBV.eval_bexp (qfbv_imp (qfbv_conj f (qfbv_conjs pre_es)) safe) s).
 
-  Lemma ssa_spec_safe_split_sound sp :
+  Theorem ssa_spec_safe_split_sound sp :
     well_formed_ssa_spec sp -> ssa_spec_safe_split sp -> ssa_spec_safe sp.
   Proof.
     move=> Hwf Hsp. apply: (ssa_spec_safe_qfbv_steps_sound Hwf).
     move: (well_formed_ssa_spec_program Hwf) => Hwfp.
     apply: (bexp_program_safe_split_steps Hwfp). exact: Hsp.
+  Qed.
+
+  Theorem ssa_spec_safe_split_complete sp :
+    well_formed_ssa_spec sp -> ssa_spec_safe sp -> ssa_spec_safe_split sp.
+  Proof.
+    move=> Hwf Hsp. move: (well_formed_ssa_spec_program Hwf) => Hwfp.
+    apply: (bexp_program_safe_steps_split Hwfp).
+    exact: (ssa_spec_safe_qfbv_steps_complete Hwf Hsp).
+  Qed.
+
+  Definition ssa_spec_safe_split_checker (sp : spec) :=
+    let E := sinputs sp in
+    let f := bexp_rbexp (rng_bexp (spre sp)) in
+    let p := sprog sp in
+    bexp_program_safe_split_checker_rec f
+                                        (bexp_program_safe_split E p).
+
+  Theorem ssa_spec_safe_split_checker_sound sp :
+    well_formed_ssa_spec sp ->
+    ssa_spec_safe_split_checker sp -> ssa_spec_safe sp.
+  Proof.
+    move=> Hwf Hsp. apply: (ssa_spec_safe_split_sound Hwf).
+    exact: (bexp_program_safe_split_checker_split Hsp).
+  Qed.
+
+  Theorem ssa_spec_safe_split_checker_complete sp :
+    well_formed_ssa_spec sp ->
+    ssa_spec_safe sp -> ssa_spec_safe_split_checker sp.
+  Proof.
+    move=> Hwf Hsp. apply: (bexp_program_safe_split_split_checker ).
+    exact: (ssa_spec_safe_split_complete Hwf Hsp).
   Qed.
 
 End SplitConditions.

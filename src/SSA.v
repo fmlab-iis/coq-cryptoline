@@ -2604,7 +2604,7 @@ Section MakeSSA.
       exact: (ssa_var_unchanged_program_cons1 Hcons).
   Qed.
 
-  Lemma ssa_var_unchanged_program_concat1 v p1 p2 :
+  Lemma ssa_var_unchanged_program_cat1 v p1 p2 :
     ssa_unchanged_program_var (p1 ++ p2) v ->
     ssa_unchanged_program_var p1 v /\ ssa_unchanged_program_var p2 v .
   Proof.
@@ -2615,7 +2615,7 @@ Section MakeSSA.
       rewrite /= Hhd Htl Hp2 // .
   Qed .
 
-  Lemma ssa_var_unchanged_program_concat2 v p1 p2 :
+  Lemma ssa_var_unchanged_program_cat2 v p1 p2 :
     ssa_unchanged_program_var p1 v ->
     ssa_unchanged_program_var p2 v ->
     ssa_unchanged_program_var (p1 ++ p2) v .
@@ -2642,7 +2642,7 @@ Section MakeSSA.
     split; reflexivity .
   Qed .
 
-  Lemma acc_unchanged_program_concat te v p1 p2 s1 s2 s3 :
+  Lemma acc_unchanged_program_cat te v p1 p2 s1 s2 s3 :
     ssa_unchanged_program_var (p1 ++ p2) v ->
     SSA.eval_program te p1 s1 s2 ->
     SSA.eval_program te p2 s2 s3 ->
@@ -2650,7 +2650,7 @@ Section MakeSSA.
     SSAStore.acc v s3 = SSAStore.acc v s1 .
   Proof .
     move=> Hun12 Hep1 Hep2.
-    move: (ssa_var_unchanged_program_concat1 Hun12) => {Hun12} [Hun1 Hun2] .
+    move: (ssa_var_unchanged_program_cat1 Hun12) => {Hun12} [Hun1 Hun2] .
     rewrite -(acc_unchanged_program Hun2 Hep2) -(acc_unchanged_program Hun1 Hep1) .
     split; reflexivity .
   Qed.
@@ -2783,26 +2783,36 @@ Section MakeSSA.
       exact: (ssa_unchanged_program_cons1 Hcons).
   Qed.
 
-  Lemma ssa_unchanged_program_concat1 vs p1 p2 :
+  Lemma ssa_unchanged_program_cat1 vs p1 p2 :
     ssa_vars_unchanged_program vs (p1 ++ p2) ->
     ssa_vars_unchanged_program vs p1 /\ ssa_vars_unchanged_program vs p2.
   Proof.
     move=> H; split; apply: ssa_unchanged_program_global => v Hmem.
-    - exact: (proj1 (ssa_var_unchanged_program_concat1
+    - exact: (proj1 (ssa_var_unchanged_program_cat1
                        (ssa_unchanged_program_local H Hmem))).
-    - exact: (proj2 (ssa_var_unchanged_program_concat1
+    - exact: (proj2 (ssa_var_unchanged_program_cat1
                        (ssa_unchanged_program_local H Hmem))).
   Qed.
 
-  Lemma ssa_unchanged_program_concat2 vs p1 p2 :
+  Lemma ssa_unchanged_program_cat2 vs p1 p2 :
     ssa_vars_unchanged_program vs p1 ->
     ssa_vars_unchanged_program vs p2 ->
     ssa_vars_unchanged_program vs (p1 ++ p2).
   Proof.
     move=> Hp1 Hp2. apply: ssa_unchanged_program_global => v Hmem.
-    apply: ssa_var_unchanged_program_concat2.
+    apply: ssa_var_unchanged_program_cat2.
     - exact: (ssa_unchanged_program_local Hp1 Hmem).
     - exact: (ssa_unchanged_program_local Hp2 Hmem).
+  Qed.
+
+  Lemma ssa_unchanged_program_cat vs p1 p2 :
+    ssa_vars_unchanged_program vs (p1 ++ p2) =
+    (ssa_vars_unchanged_program vs p1) && (ssa_vars_unchanged_program vs p2).
+  Proof.
+    case H: ((ssa_vars_unchanged_program vs p1) && (ssa_vars_unchanged_program vs p2)).
+    - move/andP: H=> [H1 H2]. by apply: ssa_unchanged_program_cat2.
+    - apply/negP=> Hcat. move/idP/negP: H.
+      by move: (ssa_unchanged_program_cat1 Hcat) => [-> ->].
   Qed.
 
   Lemma ssa_unchanged_program_hd vs hd tl :
@@ -3435,7 +3445,7 @@ Section MakeSSA.
       + move/negP: H; apply. exact: (proj2 (ssa_single_assignment_cons1 Hcons)).
   Qed.
 
-  Lemma ssa_single_assignment_concat1 p1 p2 :
+  Lemma ssa_single_assignment_cat1 p1 p2 :
     ssa_single_assignment (p1 ++ p2) ->
     ssa_single_assignment p1 /\ ssa_single_assignment p2 /\
     (ssa_vars_unchanged_program (SSA.lvs_program p1) p2).
@@ -3444,14 +3454,14 @@ Section MakeSSA.
     - move=> Hp2; repeat split. exact: Hp2.
     - move=> i p1 IH /andP [Hun12 Hssa12].
       move: (IH Hssa12) => [Hssa1 [Hssa2 Hun2]] => {Hssa12 IH}. repeat split.
-      + by rewrite (proj1 (ssa_unchanged_program_concat1 Hun12)) Hssa1.
+      + by rewrite (proj1 (ssa_unchanged_program_cat1 Hun12)) Hssa1.
       + exact: Hssa2.
       + apply: ssa_unchanged_program_union2.
-        * exact: (proj2 (ssa_unchanged_program_concat1 Hun12)).
+        * exact: (proj2 (ssa_unchanged_program_cat1 Hun12)).
         * exact: Hun2.
   Qed.
 
-  Lemma ssa_single_assignment_concat2 p1 p2 :
+  Lemma ssa_single_assignment_cat2 p1 p2 :
     ssa_single_assignment p1 -> ssa_single_assignment p2 ->
     (ssa_vars_unchanged_program (SSA.lvs_program p1) p2) ->
     ssa_single_assignment (p1 ++ p2).
@@ -3460,12 +3470,24 @@ Section MakeSSA.
     - move=> _ Hssa2 _. exact: Hssa2.
     - move=> i p1 IH /andP [Hun1 Hssa1] Hssa2 Hun12.
       apply/andP; split.
-      + apply: ssa_unchanged_program_concat2.
+      + apply: ssa_unchanged_program_cat2.
         * exact: Hun1.
         * apply: (ssa_unchanged_program_subset Hun12).
           apply: SSA.VSLemmas.subset_union1. exact: SSA.VSLemmas.subset_refl.
       + apply: (IH Hssa1 Hssa2). apply: (ssa_unchanged_program_subset Hun12).
         apply: SSA.VSLemmas.subset_union2. exact: SSA.VSLemmas.subset_refl.
+  Qed.
+
+  Lemma ssa_single_assignment_cat p1 p2 :
+    ssa_single_assignment (p1 ++ p2) =
+    (ssa_single_assignment p1 && ssa_single_assignment p2 &&
+     (ssa_vars_unchanged_program (SSA.lvs_program p1) p2)).
+  Proof.
+    case H: (ssa_single_assignment p1 && ssa_single_assignment p2 &&
+             ssa_vars_unchanged_program (SSA.lvs_program p1) p2).
+    - move/andP: H=> [/andP [H1 H2] H3]. by apply: ssa_single_assignment_cat2.
+    - apply/negP=> Hcat. move/idP/negP: H.
+      by move: (ssa_single_assignment_cat1 Hcat) => [-> [-> ->]].
   Qed.
 
   Lemma ssa_single_assignment_rng_program p :
@@ -3547,6 +3569,24 @@ Section MakeSSA.
         * exact: (ssa_unchanged_program_tl Huc).
           apply SSA.well_formed_instr_subset_rvs.
           exact: (SSA.well_formed_program_cons1 Hwf).
+  Qed.
+
+  Lemma well_formed_ssa_well_formed E p :
+    well_formed_ssa_program E p -> SSA.well_formed_program E p.
+  Proof.
+    move/andP=> [/andP [H1 H2] H3]. assumption.
+  Qed.
+
+  Lemma well_formed_ssa_unchanged E p :
+    well_formed_ssa_program E p -> ssa_vars_unchanged_program (SSA.vars_env E) p.
+  Proof.
+    move/andP=> [/andP [H1 H2] H3]. assumption.
+  Qed.
+
+  Lemma well_formed_ssa_single_assignment E p :
+    well_formed_ssa_program E p -> ssa_single_assignment p.
+  Proof.
+    move/andP=> [/andP [H1 H2] H3]. assumption.
   Qed.
 
   Lemma well_formed_ssa_tl te hd tl :
