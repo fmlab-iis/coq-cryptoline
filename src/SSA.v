@@ -3589,6 +3589,13 @@ Section MakeSSA.
     move/andP=> [/andP [H1 H2] H3]. assumption.
   Qed.
 
+  Lemma well_formed_ssa_hd E hd tl :
+    well_formed_ssa_program E (hd::tl) -> SSA.well_formed_instr E hd.
+  Proof.
+    move/andP=> [/andP [H _] _]. rewrite SSA.well_formed_program_cons in H.
+    by move/andP: H => [-> _].
+  Qed.
+
   Lemma well_formed_ssa_tl te hd tl :
     well_formed_ssa_program te (hd::tl) ->
     well_formed_ssa_program (SSA.instr_succ_typenv hd te) tl.

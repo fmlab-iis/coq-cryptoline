@@ -367,6 +367,16 @@ Fixpoint qfbv_conjs es :=
   | [::] => QFBV.Btrue
   | hd::tl => qfbv_conj hd (qfbv_conjs tl)
   end.
+Print Module List.
+
+Lemma well_formed_bexp_qfbv_conjs_rcons E es e :
+  QFBV.well_formed_bexp (qfbv_conjs (rcons es e)) E =
+  QFBV.well_formed_bexp (qfbv_conjs es) E && QFBV.well_formed_bexp e E.
+Proof.
+  elim: es => [| hd tl IH] /=.
+  - rewrite andbT. reflexivity.
+  - rewrite -andbA. rewrite -IH. reflexivity.
+Qed.
 
 Lemma eval_qfbv_conjs_rcons es e s :
   QFBV.eval_bexp (qfbv_conjs (rcons es e)) s =
@@ -2531,6 +2541,14 @@ Ltac unfold_well_formed :=
       let H1 := fresh "Hwf" in
       let H2 := fresh "Hwf" in
       move/andP: H => /= [H1 H2]
+    | H : is_true (well_formed_program _ _) |- _ =>
+      let H1 := fresh "Hwf" in
+      let H2 := fresh "Hwf" in
+      move/andP: H => /= [H1 H2]
+    | H : is_true (well_formed_ssa_program _ _) |- _ =>
+      let H1 := fresh "Hwf" in
+      let H2 := fresh "Hwf" in
+      move/andP: H => /= [H1 H2]
     | H : is_true (well_typed_atomic _ _) |- _ =>
       let H1 := fresh "Hwta" in
       let H2 := fresh "Hwtqa" in
@@ -3873,6 +3891,49 @@ Section SplitConditions.
   Qed.
 
 
+  (* Well-formedness of bexp_program_safe_split_full *)
+
+  Lemma bexp_program_safe_split_full_safe_well_formed E p :
+    well_formed_ssa_program E p ->
+    forall Ee pre_is pre_es hd tl safe,
+      List.In (Ee, pre_is, pre_es, hd, tl, safe)
+              (bexp_program_safe_split_full E p) ->
+      QFBV.well_formed_bexp safe Ee.
+  Proof.
+    rewrite /bexp_program_safe_split_full. move: [::]. move: [::].
+    elim: p E => [| i p IH] E //= pre_es pre_is Hwf E' pre_is' pre_es' hd tl safe.
+    case => Hin.
+    - case: Hin=> ? ? ? ? ? ?; subst. apply: bexp_instr_safe_well_formed.
+      exact: (well_formed_ssa_hd Hwf).
+    - exact: (IH _ _ _ (well_formed_ssa_tl Hwf) _ _ _ _ _ _ Hin).
+  Qed.
+
+  Lemma bexp_program_safe_split_full_pre_es_well_formed E p :
+    well_formed_ssa_program E p ->
+    forall Ee pre_is pre_es hd tl safe,
+      List.In (Ee, pre_is, pre_es, hd, tl, safe)
+              (bexp_program_safe_split_full E p) ->
+      QFBV.well_formed_bexp (qfbv_conjs pre_es) Ee.
+  Proof.
+    rewrite /bexp_program_safe_split_full.
+    have: QFBV.well_formed_bexp (qfbv_conjs [::]) E by done.
+    move: [::]. move: [::].
+    elim: p E => [| i p IH] E //= pre_es pre_is Hwf_pre_es
+                            Hwf E' pre_is' pre_es' hd tl safe.
+    case=> Hin.
+    - case: Hin => ? ? ? ? ? ?; subst. exact: Hwf_pre_es.
+    - apply: (IH _ _ _ _ (well_formed_ssa_tl Hwf) _ _ _ _ _ _ Hin).
+      rewrite bexp_rng_instr. rewrite well_formed_bexp_qfbv_conjs_rcons.
+      move/andP: Hwf. rewrite well_formed_program_cons.
+      rewrite ssa_unchanged_program_cons. rewrite ssa_single_assignment_cons.
+      move=> [/andP [/andP [Hwf_i Hwf_iEp] /andP [Hun_Ei Hun_Ep]]
+               /andP [Hun_ip Hssa_p]]. apply/andP; split.
+      + apply: (well_formed_bexp_submap _ Hwf_pre_es).
+        exact: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei).
+      + exact: (well_formed_bexp_instr Hun_Ei).
+  Qed.
+
+
   (* Verify safety conditions one by one (full prefix information). *)
 
   Fixpoint bexp_program_safe_split_full_checker_rec
@@ -4066,6 +4127,52 @@ Section SplitConditions.
     move: (bexp_program_safe_split_partial_full Hin) =>
     [pre_is [hd [tl [Hin_full [Hpre_is Hpre_es]]]]].
     exact: (bexp_program_safe_steps_split_full Hwf H Hin_full Hco).
+  Qed.
+
+
+  (* Well-formedness of bexp_program_safe_split *)
+
+  Lemma bexp_program_safe_split_safe_well_formed E p :
+    well_formed_ssa_program E p ->
+    forall Ee pre_es safe,
+      List.In (Ee, pre_es, safe) (bexp_program_safe_split E p) ->
+      QFBV.well_formed_bexp safe Ee.
+  Proof.
+    move=> Hwf Ee pre_es safe Hin.
+    move: (bexp_program_safe_split_partial_full Hin) =>
+    [pre_is [hd [tl [Hin' [Hpre_is Hpre_es]]]]].
+    exact: (bexp_program_safe_split_full_safe_well_formed Hwf Hin').
+  Qed.
+
+  Lemma bexp_program_safe_split_pre_es_well_formed E p :
+    well_formed_ssa_program E p ->
+    forall Ee pre_es safe,
+      List.In (Ee, pre_es, safe) (bexp_program_safe_split E p) ->
+      QFBV.well_formed_bexp (qfbv_conjs pre_es) Ee.
+  Proof.
+    move=> Hwf Ee pre_es safe Hin.
+    move: (bexp_program_safe_split_partial_full Hin) =>
+    [pre_is [hd [tl [Hin' [Hpre_is Hpre_es]]]]].
+    exact: (bexp_program_safe_split_full_pre_es_well_formed Hwf Hin').
+  Qed.
+
+  Theorem bexp_program_safe_split_cond_well_formed E f p :
+    well_formed_rbexp E f ->
+    well_formed_ssa_program E p ->
+    forall Ee pre_es safe,
+      List.In (Ee, pre_es, safe) (bexp_program_safe_split E p) ->
+      QFBV.well_formed_bexp
+        (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs pre_es)) safe) Ee.
+  Proof.
+    move=> Hwf_f Hwf_p Ee pre_es safe Hin /=.
+    move: (bexp_program_safe_split_partial_full Hin) =>
+    [pre_is [hd [tl [Hin' [Hpre_is Hpre_es]]]]].
+    move/andP: (Hwf_p) => [/andP [Hwf Hun] Hssa].
+    move: (bexp_program_safe_split_full_submap Hun Hssa Hin') => Hsub.
+    move: (well_formed_bexp_rbexp Hwf_f) => Hwf_Ee.
+    rewrite (well_formed_bexp_submap Hsub Hwf_Ee) andTb.
+    rewrite (bexp_program_safe_split_full_pre_es_well_formed Hwf_p Hin') andTb.
+    exact: (bexp_program_safe_split_full_safe_well_formed Hwf_p Hin').
   Qed.
 
 
