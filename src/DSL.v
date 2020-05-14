@@ -1437,9 +1437,9 @@ Module MakeDSL
       S.Upd v (subB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
       eval_instr te (Isub v a1 a2) s t
   | EIsubc c v a1 a2 s t :
-      S.Upd2 v (addB (eval_atomic a1 s) (negB (eval_atomic a2 s)))
+      S.Upd2 v ((adcB true (eval_atomic a1 s) (invB (eval_atomic a2 s))).2)
              c (1-bits of bool
-                       (carry_addB (eval_atomic a1 s) (negB (eval_atomic a2 s))))
+                       ((adcB true (eval_atomic a1 s) (invB (eval_atomic a2 s))).1))
              s t ->
       eval_instr te (Isubc c v a1 a2) s t
   | EIsubb b v a1 a2 s t :
@@ -1796,7 +1796,9 @@ Module MakeDSL
     (well_typed_ebexp te (eqn_bexp e)) && (well_typed_rbexp te (rng_bexp e)).
 
   (* The size of an atomic must be larger than 0. *)
-  Definition well_sized_atomic E (a : atomic) : bool := 0 < asize a E.
+  Definition well_sized_atomic E (a : atomic) : bool :=
+    if is_unsigned (atyp a E) then 0 < asize a E
+    else 1 < asize a E.
 
   (*
    * If an atomic is a constant, size of the constant must match
@@ -2500,6 +2502,26 @@ Module MakeDSL
   Lemma well_typed_atomic_size_matched E a :
     well_typed_atomic E a -> size_matched_atomic a.
   Proof. by move/andP=> [? ?]. Qed.
+
+  Lemma well_sized_atomic_unsigned E a :
+    is_unsigned (atyp a E) -> well_sized_atomic E a ->
+    0 < asize a E.
+  Proof. rewrite /well_sized_atomic => ->. by apply. Qed.
+
+  Lemma well_sized_atomic_signed E a :
+    is_signed (atyp a E) -> well_sized_atomic E a ->
+    1 < asize a E.
+  Proof.
+    rewrite /well_sized_atomic -not_unsigned_is_signed. move/negPf => ->.
+      by apply.
+  Qed.
+
+  Lemma well_sized_atomic_gt0 E a : well_sized_atomic E a -> 0 < asize a E.
+  Proof.
+    rewrite /well_sized_atomic. case: (is_unsigned (atyp a E)).
+    - by apply.
+    - move=> H. have H01: (0 < 1) by done. exact: (ltn_trans H01 H).
+  Qed.
 
   Lemma well_sized_atomic_submap a E1 E2 :
     TELemmas.submap E1 E2 ->
@@ -3410,7 +3432,7 @@ Module MakeDSL
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ H Hcon) .
     + done .
     + by rewrite
-           size_addB size_negB
+           size_adcB size_invB
            (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
            (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
            /asize !(eqP Hty) minnE subKn .

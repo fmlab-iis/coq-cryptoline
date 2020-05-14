@@ -367,7 +367,6 @@ Fixpoint qfbv_conjs es :=
   | [::] => QFBV.Btrue
   | hd::tl => qfbv_conj hd (qfbv_conjs tl)
   end.
-Print Module List.
 
 Lemma well_formed_bexp_qfbv_conjs_rcons E es e :
   QFBV.well_formed_bexp (qfbv_conjs (rcons es e)) E =
@@ -539,8 +538,9 @@ Definition bexp_instr (E : SSATE.env) (i : SSA.instr) : QFBV.bexp :=
   | SSA.Isubc c v a1 a2 =>
     let 'a_size := asize a1 E in
     let 'qe1ext := qfbv_zext 1 (qfbv_atomic a1) in
-    let 'qe2negext := qfbv_zext 1 (qfbv_neg (qfbv_atomic a2)) in
-    let 'qerext := qfbv_add qe1ext qe2negext in
+    let 'qe2notext := qfbv_zext 1 (qfbv_not (qfbv_atomic a2)) in
+    let 'qe1 := qfbv_zext a_size (qfbv_const 1 1) in
+    let 'qerext := qfbv_add (qfbv_add qe1ext qe2notext) qe1 in
     qfbv_conj (qfbv_eq (qfbv_var c)
                        (qfbv_high 1 qerext))
               (qfbv_eq (qfbv_var v)
@@ -1335,11 +1335,11 @@ Proof.
   repeat eval_exp_exp_atomic_to_pred_state.
   inversion_clear Hinst; repeat qfbv_store_acc.
   intro_same_size a a0. move=> Hsize.
-  have Hszneg: (size (eval_atomic a s1) = size (-# eval_atomic a0 s1)%bits).
-  { by rewrite size_negB -Hsize. }
+  have Hszneg: (size (eval_atomic a s1) = size (~~# eval_atomic a0 s1)%bits).
+  { by rewrite size_invB -Hsize. }
   rewrite /asize. to_size_eval_atomic a.
-  rewrite (addB_zext1_high1 Hszneg) eqxx andTb.
-  rewrite (addB_zext1_lown Hszneg) eqxx. exact: is_true_true.
+  rewrite (adcB_zext1_high1 _ Hszneg) eqxx andTb.
+  rewrite (adcB_zext1_lown _ Hszneg) eqxx. exact: is_true_true.
 Qed.
 
 Lemma bexp_instr_eval_Isubb E t t0 a a0 s1 s2 :
@@ -1939,9 +1939,9 @@ Lemma eval_bexp_instr_Isubc E s :
     eval_instr E (Isubc t t0 a a0) s s.
 Proof.
   move=> /= c v a1 a2 Hwf Hco1 Hco2 Hev. apply: EIsubc. norm_tac.
-  have Hs: (size (eval_atomic a1 s) = size (-# eval_atomic a2 s)%bits) by
-      by rewrite size_negB Hsize Hsize0 (eqP H0). of_asize.
-  rewrite (addB_zext1_high1 Hs) in H1. rewrite (addB_zext1_lown Hs) in H4.
+  have Hs: (size (eval_atomic a1 s) = size (~~# eval_atomic a2 s)%bits) by
+      by rewrite size_invB Hsize Hsize0 (eqP H0). of_asize.
+  rewrite (adcB_zext1_high1 _ Hs) in H1. rewrite (adcB_zext1_lown _ Hs) in H4.
     by solve_tac.
 Qed.
 
@@ -3295,7 +3295,7 @@ Section WellFormedBexpInstrSafe.
       | |- context f [?n + (_ - ?n)] => rewrite subnKC
       | H : is_true (well_sized_atomic ?E ?a)
         |- is_true (0 < Typ.sizeof_typ (atyp ?a ?E)) =>
-        exact: H
+        exact: (well_sized_atomic_gt0 H)
       | H : (?n <= ?m) = false |- is_true (?m <= ?n) =>
         move/idP/negP: H; rewrite -ltnNge => H; exact: (ltnW H)
       end.

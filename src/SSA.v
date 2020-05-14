@@ -4138,7 +4138,7 @@ Section MakeSSA.
     SSA.well_sized_atomic (ssa_typenv m E) (ssa_atomic m a).
   Proof.
     rewrite /DSL.well_sized_atomic /SSA.well_sized_atomic.
-    rewrite -ssa_atomic_asize. reflexivity.
+    rewrite -ssa_atomic_asize -ssa_atomic_atyp. reflexivity.
   Qed.
 
   Lemma ssa_well_typed_atomic m E a :
