@@ -497,7 +497,7 @@ Section SSA2Algebra.
       let za1 := bv2z_atomic a1 in
       let za2 := bv2z_atomic a2 in
       let zy := bv2z_atomic y in
-      (g, [:: bv2z_assign v (esub (esub za1 za2) (esub (econst Z.one) zy))])
+      (g, [:: bv2z_assign v (esub (esub za1 za2) zy)])
     | Isbbs c v a1 a2 y =>
       let za1 := bv2z_atomic a1 in
       let za2 := bv2z_atomic a2 in
@@ -1932,16 +1932,17 @@ Section SplitSpec.
     exact: bv2z_sbcs_signed.
   Qed.
 
+  (* Wait for the correction of bv2z_sbb_unsigned and bv2z_sbb_signed in NBitsOp. *)
   Lemma bv2z_Isbb t bs1 bs2 bsc :
     size bs1 = sizeof_typ t -> size bs2 = sizeof_typ t -> size bsc = 1 ->
     sbbB_safe t bs1 bs2 bsc ->
     bv2z t (sbbB (to_bool bsc) bs1 bs2).2 =
-    (bv2z t bs1 - bv2z t bs2 - (1 - bv2z Tbit bsc))%Z.
+    (bv2z t bs1 - bv2z t bs2 - bv2z Tbit bsc)%Z.
   Proof.
     rewrite /sbbB_safe /usbbB_safe /ssbbB_safe. case: t => /=.
-    - move=> n H1 H2 Hc. rewrite -H2 in H1. exact: bv2z_sbb_unsigned.
-    - move=> n H1 H2 Hc. rewrite -H2 in H1. exact: bv2z_sbb_signed.
-  Qed.
+    - move=> n H1 H2 Hc. rewrite -H2 in H1. (*exact: bv2z_sbb_unsigned.
+    - move=> n H1 H2 Hc. rewrite -H2 in H1. exact: bv2z_sbb_signed.*)
+  Admitted.
 
   Lemma bv2z_Isbbs_unsigned bs1 bs2 bsc n :
     size bs1 = n -> size bs2 = n -> size bsc = 1 ->
