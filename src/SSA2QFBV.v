@@ -1210,7 +1210,7 @@ Proof.
   intro_size1 a. move=> Hszc.
   inversion_clear Hinst; repeat qfbv_store_acc.
   + by rewrite (to_bool_bit_is_true Hszc H) //.
-  + move : (not_to_bool_bit_is_false Hszc H). by case => /eqP <- //.
+  + move : (not_to_bool_bit_is_false Hszc H). by move=> /eqP <- //.
 Qed.
 
 Lemma bexp_instr_eval_Inop E s1 s2 :

@@ -293,6 +293,87 @@ Section Safety.
     ssa_instr_safe_at E i s -> ssa_instr_safe_at E (eqn_instr i) s.
   Proof. case: i => //=. move=> [] e r _ /=. by trivial. Qed.
 
+  Ltac rewrite_bvs_eqi_eval_atomic :=
+    repeat
+    match goal with
+    | H : is_true (_ && _) |- _ =>
+      let H1 := fresh in
+      let H2 := fresh in
+      move/andP: H => [H1 H2]
+    | H1 : bvs_eqi ?E ?s1 ?s2,
+      H2 : is_true (are_defined (vars_atomic ?a) ?E) |-
+      context f [eval_atomic ?a ?s2] =>
+      rewrite -(bvs_eqi_eval_atomic H1 H2)
+    end.
+
+  Lemma bvs_eqi_ssa_instr_safe_at E i s1 s2 :
+    bvs_eqi E s1 s2 -> well_defined_instr E i -> ssa_instr_safe_at E i s1 ->
+    ssa_instr_safe_at E i s2.
+  Proof.
+    move=> Heqi. case: i => //=; by (move=> *; rewrite_bvs_eqi_eval_atomic).
+  Qed.
+
+  Lemma bvs_eqi_ssa_program_safe_at E p s1 s2 :
+    bvs_eqi E s1 s2 -> well_formed_ssa_program E p ->
+    ssa_program_safe_at E p s1 -> ssa_program_safe_at E p s2.
+  Proof.
+    elim: p E s1 s2 => [| i p IH] /= E s1 s2 Heqi Hwf Hsafe.
+    - exact: ssa_program_safe_at_nil.
+    - inversion_clear Hsafe. move: (well_formed_ssa_tl Hwf) => Hwf_ssa_p.
+      move/andP: Hwf. rewrite well_formed_program_cons ssa_unchanged_program_cons.
+      rewrite ssa_single_assignment_cons.
+      move=> [/andP [/andP [Hwf_Ei Hwf_iEp] /andP [Hun_Ei Hun_Ep]]
+               /andP [Hun_ip Hssa]].
+      move/andP: Hwf_Ei => [Hwd_Ei Hwt_Ei].
+      apply: ssa_program_safe_at_cons.
+      + exact: (bvs_eqi_ssa_instr_safe_at Heqi Hwd_Ei H).
+      + move=> t2 Hev2.
+        move: (well_defined_rng_instr Hwd_Ei) => Hwd_Eri.
+        move: (bvs_eqi_eval_instr_eqi Hwd_Eri (bvs_eqi_sym Heqi) Hev2) =>
+        [t1 [Hev1 Heqi_t]]. move: (bvs_eqi_sym Heqi_t) => {Heqi_t} Heqi_t.
+        rewrite rng_instr_succ_typenv in Heqi_t.
+        apply: (IH (instr_succ_typenv i E) t1 t2 Heqi_t Hwf_ssa_p).
+        exact: (H0 _ Hev1).
+  Qed.
+
+
+
+  (* Use the final typing environment *)
+
+  Definition ssa_spec_safe_final sp :=
+    forall s, SSAStore.conform s (program_succ_typenv (sprog sp) (sinputs sp)) ->
+              eval_rbexp (rng_bexp (spre sp)) s ->
+              ssa_program_safe_at (sinputs sp) (sprog sp) s.
+
+  Lemma ssa_spec_safe_init_final sp :
+    well_formed_ssa_spec sp ->
+    ssa_spec_safe sp -> ssa_spec_safe_final sp.
+  Proof.
+    rewrite /well_formed_ssa_spec /ssa_spec_safe /ssa_spec_safe_final.
+    case: sp => [E f p g] /=. rewrite /well_formed_spec /=.
+    move=> /andP [/andP [/andP [/andP [Hwf_Ef Hwf_Ep] Hwf_pEg] Hun_Ep] Hssa].
+    move=> H s Hco Hf. apply: (H _ _ Hf). apply: (conform_submap _ Hco).
+    exact: (ssa_unchanged_program_succ_typenv_submap Hun_Ep Hssa).
+  Qed.
+
+  Lemma ssa_spec_safe_final_init sp :
+    well_formed_ssa_spec sp ->
+    ssa_spec_safe_final sp -> ssa_spec_safe sp.
+  Proof.
+    rewrite /well_formed_ssa_spec /ssa_spec_safe /ssa_spec_safe_final.
+    case: sp => [E f p g] /=. rewrite /well_formed_spec /=.
+    move=> /andP [/andP [/andP [/andP [Hwf_Ef Hwf_Ep] Hwf_pEg] Hun_Ep] Hssa].
+    move=> H s Hco Hf.
+    move: (ssa_unchanged_program_succ_typenv_submap Hun_Ep Hssa) => Hsub.
+    move: (force_conform_conform Hsub Hco) => Hco_succ.
+    move: (well_formed_rng_bexp Hwf_Ef) => /andP [Hwd_Erf Hwt_Erf].
+    move/(force_conform_eval_rbexp s Hsub Hwd_Erf): Hf => Hwf.
+    move: (H (force_conform E (program_succ_typenv p E) s) Hco_succ Hwf).
+    apply: bvs_eqi_ssa_program_safe_at.
+    - apply: bvs_eqi_sym. exact: (force_conform_bvs_eqi _ Hsub).
+    - apply/andP. by rewrite Hwf_Ep Hun_Ep Hssa.
+  Qed.
+
 End Safety.
 
 

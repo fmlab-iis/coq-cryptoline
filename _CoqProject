@@ -1,6 +1,7 @@
 -Q lib/coq-bitblasting/lib/coq-ssrlib/src ssrlib
 -Q lib/coq-bitblasting/lib/coq-nbits/src nbits
 -Q lib/coq-bitblasting/src BitBlasting
+-Q lib/coq-bitblasting/src/bbcache BBCache
 -Q src Cryptoline
 src/DSL.v
 src/SSA.v

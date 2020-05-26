@@ -556,7 +556,7 @@ Module MakeDSL
   Local Open Scope dsl.
   Local Open Scope bits.
 
-  Module VSLemmas := FSetLemmas VS.
+  Module VSLemmas := SsrFSetLemmas VS.
   Module TELemmas := FMapLemmas TE.
 
   (* Variables *)
@@ -2475,6 +2475,15 @@ Module MakeDSL
     rewrite (TE.find_some_vtyp Hfind2). reflexivity.
   Qed.
 
+  Lemma submap_vsize E1 E2 v :
+    TELemmas.submap E1 E2 ->
+    is_defined v E1 ->
+    TE.vsize v E1 = TE.vsize v E2.
+  Proof.
+    move=> Hsub Hdef. rewrite (TE.vtyp_vsize (submap_vtyp Hsub Hdef)).
+    rewrite (TE.vtyp_vsize (Logic.eq_refl (TE.vtyp v E2))). reflexivity.
+  Qed.
+
   Lemma atyp_submap a te1 te2:
     TELemmas.submap te1 te2 ->
     are_defined (vars_atomic a) te1 ->
@@ -3760,6 +3769,384 @@ Module MakeDSL
       move/andP: Hwf => [Hwf_i Hwf_p]. apply: (IH _ _ _ Hwf_p _ H0).
       exact: (conform_instr_succ_typenv Hwf_i Hco H).
   Qed.
+
+
+  Section BvsEqi.
+
+    Definition bvs_eqi (E : TE.env) (s1 s2 : S.t) :=
+      forall x, TE.mem x E -> S.acc x s1 = S.acc x s2.
+
+    Lemma bvs_eqi_refl E s : bvs_eqi E s s.
+    Proof. move=> *; reflexivity. Qed.
+
+    Lemma bvs_eqi_sym E s1 s2 : bvs_eqi E s1 s2 -> bvs_eqi E s2 s1.
+    Proof. move=> Heqi x Hx. exact: (Logic.eq_sym (Heqi x Hx)). Qed.
+
+    Lemma bvs_eqi_trans E s1 s2 s3 :
+      bvs_eqi E s1 s2 -> bvs_eqi E s2 s3 -> bvs_eqi E s1 s3.
+    Proof.
+      move=> H12 H23 x Hx. rewrite (H12 x Hx) (H23 x Hx). reflexivity.
+    Qed.
+
+    Lemma bvs_eqi_submap E1 E2 s1 s2 :
+      TELemmas.submap E1 E2 -> bvs_eqi E2 s1 s2 -> bvs_eqi E1 s1 s2.
+    Proof.
+      move=> Hsubm Heqi x Hx. exact: (Heqi x (TELemmas.submap_mem Hsubm Hx)).
+    Qed.
+
+    Lemma bvs_eqi_conform E s1 s2 :
+      bvs_eqi E s1 s2 -> S.conform s1 E -> S.conform s2 E.
+    Proof.
+      move=> Heqi Hco. apply: S.conform_def. move=> x Hmem.
+      rewrite (S.conform_mem Hco Hmem). rewrite (Heqi x Hmem). reflexivity.
+    Qed.
+
+    Lemma bvs_eqi_acc2z E s1 s2 x :
+      bvs_eqi E s1 s2 -> TE.mem x E -> acc2z E x s1 = acc2z E x s2.
+    Proof.
+      move=> Heqi Hmem. rewrite /acc2z. rewrite (Heqi x Hmem). reflexivity.
+    Qed.
+
+    Lemma bvs_eqi_eval_atomic E s1 s2 a :
+      bvs_eqi E s1 s2 -> are_defined (vars_atomic a) E ->
+      eval_atomic a s1 = eval_atomic a s2.
+    Proof.
+      move=> Heqi. case: a => //=. move=> x. rewrite are_defined_singleton => Hdef.
+      exact: (Heqi x Hdef).
+    Qed.
+
+    Lemma bvs_eqi_Upd_eqi E s1 s2 t1 t2 x v :
+      bvs_eqi E s1 t1 -> S.Upd x v s1 s2 -> S.Upd x v t1 t2 ->
+      bvs_eqi E s2 t2.
+    Proof.
+      move=> Heqi Hupd1 Hupd2 y Hmemy. case Hyx: (y == x).
+      - rewrite (S.acc_Upd_eq Hyx Hupd1) (S.acc_Upd_eq Hyx Hupd2). reflexivity.
+      - move/idP/negP: Hyx => Hyx.
+        rewrite (S.acc_Upd_neq Hyx Hupd1) (S.acc_Upd_neq Hyx Hupd2).
+        exact: (Heqi y Hmemy).
+    Qed.
+
+    Lemma bvs_eqi_Upd2_eqi E s1 s2 t1 t2 x1 v1 x2 v2 :
+      bvs_eqi E s1 t1 -> S.Upd2 x1 v1 x2 v2 s1 s2 -> S.Upd2 x1 v1 x2 v2 t1 t2 ->
+      bvs_eqi E s2 t2.
+    Proof.
+      move=> Heqi Hupd1 Hupd2 y Hmemy. case Hyx2: (y == x2).
+      - rewrite (S.acc_Upd2_eq2 Hyx2 Hupd1) (S.acc_Upd2_eq2 Hyx2 Hupd2).
+        reflexivity.
+      - move/idP/negP: Hyx2 => Hyx2. case Hyx1: (y == x1).
+        + rewrite (S.acc_Upd2_eq1 Hyx1 Hyx2 Hupd1) (S.acc_Upd2_eq1 Hyx1 Hyx2 Hupd2).
+          reflexivity.
+        + move/idP/negP: Hyx1 => Hyx1.
+          rewrite (S.acc_Upd2_neq Hyx1 Hyx2 Hupd1) (S.acc_Upd2_neq Hyx1 Hyx2 Hupd2).
+          exact: (Heqi y Hmemy).
+    Qed.
+
+    Lemma bvs_eqi_add_Upd_eqi E s1 s2 t1 t2 x v ty :
+      bvs_eqi E s1 t1 -> S.Upd x v s1 s2 -> S.Upd x v t1 t2 ->
+      bvs_eqi (TE.add x ty E) s2 t2.
+    Proof.
+      move=> Heqi Hupd1 Hupd2 y Hmemy. case Hyx: (y == x).
+      - rewrite (S.acc_Upd_eq Hyx Hupd1) (S.acc_Upd_eq Hyx Hupd2). reflexivity.
+      - move/idP/negP: Hyx => Hyx.
+        rewrite (S.acc_Upd_neq Hyx Hupd1) (S.acc_Upd_neq Hyx Hupd2).
+        move/negPn: Hyx => Hyx. rewrite (TELemmas.mem_add_neq Hyx) in Hmemy.
+        exact: (Heqi y Hmemy).
+    Qed.
+
+    Lemma bvs_eqi_add_Upd2_eqi E s1 s2 t1 t2 x1 v1 ty1 x2 v2 ty2 :
+      bvs_eqi E s1 t1 -> S.Upd2 x1 v1 x2 v2 s1 s2 -> S.Upd2 x1 v1 x2 v2 t1 t2 ->
+      bvs_eqi (TE.add x2 ty2 (TE.add x1 ty1 E)) s2 t2.
+    Proof.
+      move=> Heqi Hupd1 Hupd2 y Hmemy. case Hyx2: (y == x2).
+      - rewrite (S.acc_Upd2_eq2 Hyx2 Hupd1) (S.acc_Upd2_eq2 Hyx2 Hupd2).
+        reflexivity.
+      - move/idP/negP: Hyx2 => Hyx2. case Hyx1: (y == x1).
+        + rewrite (S.acc_Upd2_eq1 Hyx1 Hyx2 Hupd1) (S.acc_Upd2_eq1 Hyx1 Hyx2 Hupd2).
+          reflexivity.
+        + move/idP/negP: Hyx1 => Hyx1.
+          rewrite (S.acc_Upd2_neq Hyx1 Hyx2 Hupd1) (S.acc_Upd2_neq Hyx1 Hyx2 Hupd2).
+          move/negPn: Hyx1 => Hyx1. move/negPn: Hyx2 => Hyx2.
+          rewrite (TELemmas.mem_add_neq Hyx2) (TELemmas.mem_add_neq Hyx1) in Hmemy.
+          exact: (Heqi y Hmemy).
+    Qed.
+
+    Lemma bvs_eqi_eval_eexp E e s1 s2 :
+      are_defined (vars_eexp e) E -> bvs_eqi E s1 s2 ->
+      eval_eexp e E s1 = eval_eexp e E s2.
+    Proof.
+      elim: e => //=.
+      - move=> v Hdef Heqi. rewrite are_defined_singleton in Hdef.
+        move/memdefP: Hdef => Hmem. exact: (bvs_eqi_acc2z Heqi Hmem).
+      - move=> op e IH Hdef Heqi. rewrite (IH Hdef Heqi). reflexivity.
+      - move=> op e1 IH1 e2 IH2 Hdef Heqi. rewrite are_defined_union in Hdef.
+        move/andP: Hdef => [Hdef1 Hdef2].
+        rewrite (IH1 Hdef1 Heqi) (IH2 Hdef2 Heqi). reflexivity.
+    Qed.
+
+    Lemma bvs_eqi_eval_ebexp E e s1 s2 :
+      are_defined (vars_ebexp e) E -> bvs_eqi E s1 s2 ->
+      eval_ebexp e E s1 <-> eval_ebexp e E s2.
+    Proof.
+      elim: e => //=.
+      - move=> e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
+        move/andP: Hdef => [Hdef1 Hdef2].
+        rewrite (bvs_eqi_eval_eexp Hdef1 Heqi) (bvs_eqi_eval_eexp Hdef2 Heqi). done.
+      - move=> e1 e2 e3 Hdef Heqi. repeat rewrite are_defined_union in Hdef.
+        move/andP: Hdef => [Hdef1 /andP [Hdef2 Hdef3]].
+        rewrite (bvs_eqi_eval_eexp Hdef1 Heqi) (bvs_eqi_eval_eexp Hdef2 Heqi)
+                (bvs_eqi_eval_eexp Hdef3 Heqi). done.
+      - move=> e1 IH1 e2 IH2 Hdef Heqi. rewrite are_defined_union in Hdef.
+        move/andP: Hdef => [Hdef1 Hdef2]. move: (IH1 Hdef1 Heqi) (IH2 Hdef2 Heqi).
+        tauto.
+    Qed.
+
+    Lemma bvs_eqi_eval_rexp E e s1 s2 :
+      are_defined (vars_rexp e) E -> bvs_eqi E s1 s2 ->
+      eval_rexp e s1 = eval_rexp e s2.
+    Proof.
+      elim: e => //=.
+      - move=> x Hdef Heqi. rewrite are_defined_singleton in Hdef.
+        move/memdefP: Hdef => Hmem. exact: (Heqi x Hmem).
+      - move=> _ op e IH Hdef Heqi. rewrite (IH Hdef Heqi). reflexivity.
+      - move=> _ op e1 IH1 e2 IH2 Hdef Heqi. rewrite are_defined_union in Hdef.
+        move/andP: Hdef => [Hdef1 Hdef2]. rewrite (IH1 Hdef1 Heqi) (IH2 Hdef2 Heqi).
+        reflexivity.
+      - move=> _ e IH n Hdef Heqi. rewrite (IH Hdef Heqi). reflexivity.
+      - move=> _ e IH n Hdef Heqi. rewrite (IH Hdef Heqi). reflexivity.
+    Qed.
+
+    Lemma bvs_eqi_eval_rbexp E e s1 s2 :
+      are_defined (vars_rbexp e) E -> bvs_eqi E s1 s2 ->
+      eval_rbexp e s1 <-> eval_rbexp e s2.
+    Proof.
+      elim: e => //=.
+      - move=> _ e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
+        move/andP: Hdef => [Hdef1 Hdef2].
+        rewrite (bvs_eqi_eval_rexp Hdef1 Heqi) (bvs_eqi_eval_rexp Hdef2 Heqi). done.
+      - move=> _ op e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
+        move/andP: Hdef => [Hdef1 Hdef2].
+        rewrite (bvs_eqi_eval_rexp Hdef1 Heqi) (bvs_eqi_eval_rexp Hdef2 Heqi). done.
+      - move=> e IH Hdef Heqi. move: (IH Hdef Heqi). tauto.
+      - move=> e1 IH1 e2 IH2 Hdef Heqi. rewrite are_defined_union in Hdef.
+        move/andP: Hdef => [Hdef1 Hdef2]. move: (IH1 Hdef1 Heqi) (IH2 Hdef2 Heqi).
+        tauto.
+      - move=> e1 IH1 e2 IH2 Hdef Heqi. rewrite are_defined_union in Hdef.
+        move/andP: Hdef => [Hdef1 Hdef2]. move: (IH1 Hdef1 Heqi) (IH2 Hdef2 Heqi).
+        tauto.
+    Qed.
+
+    Lemma bvs_eqi_eval_bexp E e s1 s2 :
+      are_defined (vars_bexp e) E -> bvs_eqi E s1 s2 ->
+      eval_bexp e E s1 <-> eval_bexp e E s2.
+    Proof.
+      case: e => [e r]. rewrite /vars_bexp /=.
+      rewrite are_defined_union => /andP [Hdefe Hdefr] Heqi.
+      rewrite /eval_bexp /=.
+      move: (bvs_eqi_eval_ebexp Hdefe Heqi) => He.
+      move: (bvs_eqi_eval_rbexp Hdefr Heqi) => Hr. tauto.
+    Qed.
+
+    Ltac mytac :=
+      repeat
+        match goal with
+        | H : is_true (_ && _) |- _ =>
+          let H1 := fresh in
+          let H2 := fresh in
+          move/andP: H => [H1 H2]
+        | Heqi : bvs_eqi _ ?s1 _,
+          Hev : eval_instr _ _ ?s1 _ |- _ =>
+          let H := fresh "Heqi" in
+          move: Heqi; inversion_clear Hev; move=> H
+        | Hdef : is_true (are_defined (vars_atomic ?a) ?E),
+          Heqi : bvs_eqi ?E ?s1 ?s2
+          |- context f [eval_atomic ?a ?s1] =>
+          rewrite (bvs_eqi_eval_atomic Heqi Hdef)
+        | Hdef : is_true (are_defined (vars_atomic ?a) ?E),
+          Heqi : bvs_eqi ?E ?s1 ?s2,
+          H : context f [eval_atomic ?a ?s1] |- _ =>
+          rewrite (bvs_eqi_eval_atomic Heqi Hdef) in H
+        | Heqi : bvs_eqi ?E ?s1 ?t1,
+          Hupd : S.Upd ?x ?v ?s1 ?s2
+          |- exists _ : S.t, _ =>
+          exists (S.upd x v t1)
+        | Heqi : bvs_eqi ?E ?s1 ?t1,
+          Hupd : S.Upd2 ?x1 ?v1 ?x2 ?v2 ?s1 ?s2
+          |- exists _ : S.t, _ =>
+          exists (S.upd2 x1 v1 x2 v2 t1)
+        | |- _ /\ _ => split
+        | Heqi : bvs_eqi ?E ?s1 ?t1,
+          Hupd : S.Upd ?x ?v ?s1 ?s2
+          |- bvs_eqi (TE.add ?x ?ty ?E) ?s2 (S.upd ?x ?v ?t1) =>
+          exact: (bvs_eqi_add_Upd_eqi Heqi Hupd (S.Upd_upd x v t1))
+        | Heqi : bvs_eqi ?E ?s1 ?t1,
+          Hupd : S.Upd2 ?x1 ?v1 ?x2 ?v2 ?s1 ?s2
+          |- bvs_eqi (TE.add ?x2 ?ty2 (TE.add ?x1 ?ty1 ?E)) ?s2
+                     (S.upd2 ?x1 ?v1 ?x2 ?v2 ?t1) =>
+          exact: (bvs_eqi_add_Upd2_eqi Heqi Hupd (S.Upd2_upd2 x1 v1 x2 v2 t1))
+        end.
+
+    Hint Constructors eval_instr : dsl.
+    Hint Immediate S.Upd_upd S.Upd2_upd2 : dsl.
+
+    Lemma bvs_eqi_eval_instr_eqi E i s1 s2 t1 :
+      well_defined_instr E i -> bvs_eqi E s1 t1 -> eval_instr E i s1 s2 ->
+      exists t2, eval_instr E i t1 t2 /\ bvs_eqi (instr_succ_typenv i E) s2 t2.
+    Proof.
+      case: i => /=; try (move=> *; mytac; by eauto with dsl).
+      (* Iassume *)
+      move=> e Hdef Heqi Hev. move: Heqi. inversion_clear Hev => Heqi.
+      exists t1. split; last assumption. apply: EIassume.
+      apply/(bvs_eqi_eval_bexp Hdef Heqi). assumption.
+    Qed.
+
+  End BvsEqi.
+
+
+  (* Update state values according to an environment such that
+     it conforms to the environment*)
+  Section ForceConform.
+
+    Fixpoint force_conform_rec E vs s :=
+      match vs with
+      | [::] => s
+      | v::vs => S.upd v (zeros (TE.vsize v E)) (force_conform_rec E vs s)
+      end.
+
+    Definition force_conform (E1 E2 : TE.env) (s : S.t) : S.t :=
+      force_conform_rec E2 (VS.elements (VS.diff (vars_env E2) (vars_env E1))) s.
+
+    Lemma force_conform_acc_mem1 E1 E2 s v :
+      is_defined v E1 -> S.acc v (force_conform E1 E2 s) = S.acc v s.
+    Proof.
+      rewrite /is_defined /force_conform. move=> Hmem1.
+      move: (VSLemmas.diff_b (vars_env E2) (vars_env E1) v).
+      rewrite -(vars_env_mem v E1) Hmem1 andbF => Hmem_diff.
+      have: ~~ (v \in (VS.elements (VS.diff (vars_env E2) (vars_env E1)))).
+      { apply/negP => H. move/negP: Hmem_diff; apply.
+        exact: (VSLemmas.in_elements_mem H). }
+      move=> {Hmem_diff Hmem1}.
+      move: {E1} (VS.elements (VS.diff (vars_env E2) (vars_env E1))).
+      elim => [| hd tl IH] //=.
+      rewrite in_cons negb_or. move/andP=> [Hhd Htl].
+      rewrite (S.acc_upd_neq Hhd). exact: (IH Htl).
+    Qed.
+
+    Lemma force_conform_acc_mem2 E1 E2 s v :
+      ~~ is_defined v E1 -> is_defined v E2 ->
+      S.acc v (force_conform E1 E2 s) = zeros (TE.vsize v E2).
+    Proof.
+      rewrite /is_defined /force_conform. move=> /negPf Hmem1 Hmem2.
+      move: (VSLemmas.diff_b (vars_env E2) (vars_env E1) v).
+      rewrite -!vars_env_mem Hmem1 Hmem2 /=.
+      move=> {Hmem1 Hmem2} Hmem. move: (VSLemmas.mem_in_elements Hmem).
+      move: {Hmem E1} (VS.elements (VS.diff (vars_env E2) (vars_env E1))).
+      elim => [| hd tl IH] //=. rewrite in_cons. case Hvhd: (v == hd) => /=.
+      - move=> _. rewrite (S.acc_upd_eq Hvhd). rewrite (eqP Hvhd). reflexivity.
+      - move=> Htl. move/idP/negP: Hvhd => Hvhd. rewrite (S.acc_upd_neq Hvhd).
+        exact: (IH Htl).
+    Qed.
+
+    Lemma force_conform_acc_not_mem E1 E2 s v :
+      ~~ is_defined v E1 -> ~~ is_defined v E2 ->
+      S.acc v (force_conform E1 E2 s) = S.acc v s.
+    Proof.
+      rewrite /is_defined /force_conform. move=> /negPf Hmem1 /negPf Hmem2.
+      move: (VSLemmas.diff_b (vars_env E2) (vars_env E1) v).
+      rewrite -!vars_env_mem Hmem1 Hmem2 /=. move=> Hmem.
+      have: ~~ (v \in (VS.elements (VS.diff (vars_env E2) (vars_env E1)))).
+      { apply/negP => H. move/negP: Hmem; apply.
+        exact: (VSLemmas.in_elements_mem H). }
+      move=> {Hmem Hmem1 Hmem2}.
+      move: {E1} (VS.elements (VS.diff (vars_env E2) (vars_env E1))).
+      elim => [| hd tl IH] //=.
+      rewrite in_cons negb_or. move/andP=> [Hhd Htl].
+      rewrite (S.acc_upd_neq Hhd). exact: (IH Htl).
+    Qed.
+
+    Lemma force_conform_conform E1 E2 s :
+      TELemmas.submap E1 E2 -> S.conform s E1 ->
+      S.conform (force_conform E1 E2 s) E2.
+    Proof.
+      move=> Hsub Hco. apply: S.conform_def. move=> x Hmem2.
+      case Hmem1: (TE.mem x E1).
+      - rewrite (force_conform_acc_mem1 _ _ Hmem1).
+        rewrite -(submap_vsize Hsub Hmem1). exact: (S.conform_mem Hco Hmem1).
+      - move/idP/negP: Hmem1 => Hmem1.
+        rewrite (force_conform_acc_mem2 s Hmem1 Hmem2).
+        rewrite size_zeros. reflexivity.
+    Qed.
+
+    Lemma force_conform_eval_eexp E1 E2 e s :
+       TELemmas.submap E1 E2 -> are_defined (vars_eexp e) E1 ->
+      eval_eexp e E2 (force_conform E1 E2 s) = eval_eexp e E1 s.
+    Proof.
+      move=> Hsub Hdef. rewrite -(submap_eval_eexp Hsub Hdef).
+      elim: e Hdef => //=.
+      - move=> v. rewrite are_defined_singleton => Hdef.
+        rewrite /acc2z. rewrite (force_conform_acc_mem1 _ _ Hdef). reflexivity.
+      - move=> op e IH Hdef. rewrite (IH Hdef). reflexivity.
+      - move=> op e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
+        rewrite (IH1 Hdef1) (IH2 Hdef2). reflexivity.
+    Qed.
+
+    Lemma force_conform_eval_ebexp E1 E2 e s :
+      TELemmas.submap E1 E2 -> are_defined (vars_ebexp e) E1 ->
+      eval_ebexp e E2 (force_conform E1 E2 s) <-> eval_ebexp e E1 s.
+    Proof.
+      move=> Hsub. elim: e => //=.
+      - move=> e1 e2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
+        rewrite (force_conform_eval_eexp _ Hsub Hdef1)
+                (force_conform_eval_eexp _ Hsub Hdef2).
+        done.
+      - move=> e1 e2 e3.
+        rewrite !are_defined_union => /andP [Hdef1 /andP [Hdef2 Hdef3]].
+        rewrite (force_conform_eval_eexp _ Hsub Hdef1)
+                (force_conform_eval_eexp _ Hsub Hdef2)
+                (force_conform_eval_eexp _ Hsub Hdef3). done.
+      - move=> e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
+        move: (IH1 Hdef1) (IH2 Hdef2) => [H1 H2] [H3 H4]. tauto.
+    Qed.
+
+    Lemma force_conform_eval_rexp E1 E2 e s :
+      TELemmas.submap E1 E2 -> are_defined (vars_rexp e) E1 ->
+      eval_rexp e (force_conform E1 E2 s) = eval_rexp e s.
+    Proof.
+      move=> Hsub. elim: e => //=.
+      - move=> v. rewrite are_defined_singleton => Hdef.
+        exact: (force_conform_acc_mem1 _ _ Hdef).
+      - move=> _ op e IH Hdef. rewrite (IH Hdef). reflexivity.
+      - move=> _ op e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
+        rewrite (IH1 Hdef1) (IH2 Hdef2). reflexivity.
+      - move=> _ e IH n Hdef. rewrite (IH Hdef). reflexivity.
+      - move=> _ e IH n Hdef. rewrite (IH Hdef). reflexivity.
+    Qed.
+
+    Lemma force_conform_eval_rbexp E1 E2 e s :
+      TELemmas.submap E1 E2 -> are_defined (vars_rbexp e) E1 ->
+      eval_rbexp e (force_conform E1 E2 s) <-> eval_rbexp e s.
+    Proof.
+      move=> Hsub. elim: e => //=.
+      - move=> _ e1 e2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
+        rewrite (force_conform_eval_rexp _ Hsub Hdef1)
+                (force_conform_eval_rexp _ Hsub Hdef2). done.
+      - move=> _ op e1 e2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
+        rewrite (force_conform_eval_rexp _ Hsub Hdef1)
+                (force_conform_eval_rexp _ Hsub Hdef2). done.
+      - move=> e IH Hdef. move: (IH Hdef). tauto.
+      - move=> e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
+        move: (IH1 Hdef1) (IH2 Hdef2). tauto.
+      - move=> e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
+        move: (IH1 Hdef1) (IH2 Hdef2). tauto.
+    Qed.
+
+    Lemma force_conform_bvs_eqi E1 E2 s :
+      TELemmas.submap E1 E2 -> bvs_eqi E1 s (force_conform E1 E2 s).
+    Proof.
+      move=> Hsub. move=> x Hmemx. rewrite (force_conform_acc_mem1 _ _ Hmemx).
+      reflexivity.
+    Qed.
+
+  End ForceConform.
 
 End MakeDSL.
 
