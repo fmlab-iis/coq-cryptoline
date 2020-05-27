@@ -4441,7 +4441,7 @@ Section MakeSSA.
       rewrite /=.
       move: (IH _ _ _ _ _ Hwf_tl Hwf_bexp Hsp_tl).
       apply SSA.are_defined_submap.
-      apply SSA.same_program_succ_typenv_submap.
+      apply SSA.submap_program_succ_typenv.
       move: (ssa_program_well_formed Hwf_tl Hsp_tl) => /andP [/andP [Hwell Hvs] Hsingle].
       exact: Hwell.
       exact: ssa_instr_succ_typenv_submap.
@@ -4469,7 +4469,7 @@ Section MakeSSA.
       rewrite /=.
       move: (IH _ _ _ _ _ Hwf_tl Hwf_bexp Hsp_tl).
       apply SSA.well_typed_bexp_submap.
-      apply SSA.same_program_succ_typenv_submap.
+      apply SSA.submap_program_succ_typenv.
       move: (ssa_program_well_formed Hwf_tl Hsp_tl) => /andP [/andP [Hwell Hvs] Hsingle].
       exact: Hwell.
       exact: ssa_instr_succ_typenv_submap.

@@ -558,6 +558,7 @@ Module MakeDSL
 
   Module VSLemmas := SsrFSetLemmas VS.
   Module TELemmas := FMapLemmas TE.
+  Hint Immediate S.Upd_upd S.Upd2_upd2 : dsl.
 
   (* Variables *)
 
@@ -1527,6 +1528,8 @@ Module MakeDSL
       eval_bexp e te s -> eval_instr te (Iassume e) s s
   .
 
+  Hint Constructors eval_instr : dsl.
+
   Inductive eval_instrs (te : TE.env) : seq instr -> state -> state -> Prop :=
   | Enil s : eval_instrs te [::] s s
   | Econs hd tl s t u : eval_instr te hd s t ->
@@ -2356,9 +2359,16 @@ Module MakeDSL
     exact: (are_defined_trans Hdef1 Hsubset).
   Qed.
 
-  Lemma well_formed_instr_well_defined te1 te2 i :
-    well_formed_instr te1 i ->
-    TELemmas.submap te1 te2 ->
+  Lemma well_formed_instr_well_defined E i :
+    well_formed_instr E i -> well_defined_instr E i.
+  Proof. by move/andP => [H1 H2]. Qed.
+
+  Lemma well_formed_instr_well_typed E i :
+    well_formed_instr E i -> well_typed_instr E i.
+  Proof. by move/andP => [H1 H2]. Qed.
+
+  Lemma well_defined_instr_submap te1 te2 i :
+    well_defined_instr te1 i -> TELemmas.submap te1 te2 ->
     well_defined_instr te2 i.
   Proof.
     elim: i te1 te2 => /=; intros;
@@ -2368,9 +2378,6 @@ Module MakeDSL
                      | H : ?l \/ ?r |- _ => case: H => H; tac
                      | |- ?l /\ ?r => split; tac
                      | |- is_true (_ && _) => apply /andP; tac
-                     | H : is_true(well_formed_instr ?te ?i) |- _  =>
-                       let Hwd := fresh "Hwd" in let Hwt := fresh "Hwt" in
-                                                 move/andP: H => [Hwd Hwt]; tac
                      | Hwd: is_true (well_defined_instr ?te ?i) |- _ =>
                        (rewrite /= in Hwd); tac
                      | H : is_true (_ && _) |- _ =>
@@ -2554,66 +2561,6 @@ Module MakeDSL
     atyp a1 E = atyp a2 E -> well_sized_atomic E a1 = well_sized_atomic E a2.
   Proof.
     rewrite /well_sized_atomic /asize. by move=> ->.
-  Qed.
-
-  Lemma submap_add_vtyp v t E1 E2 :
-    TELemmas.submap (TE.add v t E1) E2 ->
-    TE.vtyp v E2 = t.
-  Proof.
-    move=> Hsub. apply: TE.find_some_vtyp. apply: Hsub.
-    apply: TELemmas.find_add_eq. reflexivity.
-  Qed.
-
-  Lemma submap_add_atyp a v t E1 E2 :
-    TELemmas.submap (TE.add v t E1) E2 ->
-    are_defined (vars_atomic a) E1 ->
-    ~~ VS.mem v (vars_atomic a) ->
-    atyp a E1 = atyp a E2.
-  Proof.
-    case: a => /=.
-    - move=> x. rewrite are_defined_singleton=> Hsub Hdef Hmem.
-      move: (VSLemmas.not_mem_singleton1 Hmem) => {Hmem} /negP Hne.
-      rewrite eq_sym in Hne. move: (is_defined_add_neq t E1 Hne). rewrite Hdef.
-      move=> Hdefadd. rewrite -(submap_vtyp Hsub Hdefadd).
-      rewrite (TE.vtyp_add_neq Hne). reflexivity.
-    - reflexivity.
-  Qed.
-
-  Lemma submap_acc2z {E1 E2 v s} :
-    TELemmas.submap E1 E2 ->
-    is_defined v E1 ->
-    acc2z E1 v s = acc2z E2 v s.
-  Proof.
-    move=> Hsub Hdef. rewrite /acc2z. rewrite (submap_vtyp Hsub Hdef). reflexivity.
-  Qed.
-
-  Lemma submap_eval_eexp {E1 E2 e s} :
-    TELemmas.submap E1 E2 ->
-    are_defined (vars_eexp e) E1 ->
-    eval_eexp e E1 s = eval_eexp e E2 s.
-  Proof.
-    move=> Hsub. elim: e => //=.
-    - move=> v. rewrite are_defined_singleton=> Hdef. exact: (submap_acc2z Hsub Hdef).
-    - move=> op e IH Hdef. rewrite (IH Hdef). reflexivity.
-    - move=> op e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
-      rewrite (IH1 Hdef1) (IH2 Hdef2). reflexivity.
-  Qed.
-
-  Lemma submap_eval_ebexp {E1 E2 e s} :
-    TELemmas.submap E1 E2 ->
-    are_defined (vars_ebexp e) E1 ->
-    eval_ebexp e E1 s <-> eval_ebexp e E2 s.
-  Proof.
-    move=> Hsub. elim: e => //=.
-    - move=> e1 e2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
-      rewrite (submap_eval_eexp Hsub Hdef1) (submap_eval_eexp Hsub Hdef2). done.
-    - move=> e1 e2 em. rewrite !are_defined_union => /andP [Hdef1 /andP [Hdef2 Hdefm]].
-      rewrite (submap_eval_eexp Hsub Hdef1) (submap_eval_eexp Hsub Hdef2)
-              (submap_eval_eexp Hsub Hdefm). done.
-    - move=> e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
-      move: (IH1 Hdef1) (IH2 Hdef2) => [H1 H2] [H3 H4]. split; move => [H5 H6].
-      + exact: (conj (H1 H5) (H3 H6)).
-      + exact: (conj (H2 H5) (H4 H6)).
   Qed.
 
   Lemma well_typed_eexp_submap e te1 te2:
@@ -2805,7 +2752,7 @@ Module MakeDSL
             (well_typed_rbexp_submap Hsubm Hdef1 Hwt1). done.
   Qed.
 
-  Lemma well_formed_instr_well_typed te1 te2 i :
+  Lemma well_typed_instr_submap te1 te2 i :
     well_formed_instr te1 i ->
     TELemmas.submap te1 te2 ->
     well_typed_instr te2 i.
@@ -2845,15 +2792,14 @@ Module MakeDSL
     exact: (well_typed_bexp_submap H0 Hwd Hwt).
   Qed.
 
-  Lemma well_formed_instr_well_formed te1 te2 i :
+  Lemma well_formed_instr_submap te1 te2 i :
     well_formed_instr te1 i ->
     TELemmas.submap te1 te2 ->
     well_formed_instr te2 i.
   Proof.
-    move=> Hwf Hsm.
-    rewrite /well_formed_instr.
-      by rewrite (well_formed_instr_well_defined Hwf Hsm)
-                 (well_formed_instr_well_typed Hwf Hsm).
+    move=> Hwf Hsm. rewrite /well_formed_instr.
+      by rewrite (well_defined_instr_submap (well_formed_instr_well_defined Hwf) Hsm)
+                 (well_typed_instr_submap Hwf Hsm).
   Qed.
 
   Lemma well_formed_instr_replace te1 te2 i :
@@ -2862,7 +2808,7 @@ Module MakeDSL
     well_formed_instr te2 i.
   Proof.
     move=> Hwell Heq.
-    apply: (well_formed_instr_well_formed Hwell).
+    apply: (well_formed_instr_submap Hwell).
     intros x v Hfind.
     rewrite /TE.Equal in Heq.
     by rewrite -(Heq x).
@@ -2884,7 +2830,7 @@ Module MakeDSL
 
   Local Hint Resolve submap_add.
 
-  Lemma well_formed_instr_succ_typenv_submap i te1 te2:
+  Lemma submap_instr_succ_typenv i te1 te2:
     well_formed_instr te1 i ->
     TELemmas.submap te1 te2 ->
     TELemmas.submap (instr_succ_typenv i te1) (instr_succ_typenv i te2).
@@ -2897,8 +2843,9 @@ Module MakeDSL
            | |- ?l /\ ?r => split; tac
            | |- is_true (_ && _) => apply /andP; tac
            | H : is_true(well_formed_instr ?te ?i) |- _  =>
-             let Hwd := fresh "Hwd" in let Hwt := fresh "Hwt" in
-                                       move/andP: H => [Hwd Hwt]; tac
+             let Hwd := fresh "Hwd" in
+             let Hwt := fresh "Hwt" in
+             move/andP: H => [Hwd Hwt]; tac
            | Hwd: is_true (well_defined_instr ?te ?i) |- _ =>
              (rewrite /= in Hwd); tac
            | H : is_true(well_typed_instr ?te ?i) |- _  =>
@@ -2908,7 +2855,8 @@ Module MakeDSL
            | Hsub: TELemmas.submap ?te1 ?te2, Hwd: is_true (are_defined ?vs ?te1)
              |- is_true (are_defined ?vs ?te2) =>
              exact: (are_defined_submap Hsub Hwd); tac
-           | Hsub: TELemmas.submap ?te1 ?te2, Hwd: is_true (are_defined (vars_atomic ?a) ?te1)
+           | Hsub: TELemmas.submap ?te1 ?te2,
+             Hwd: is_true (are_defined (vars_atomic ?a) ?te1)
              |- context [atyp ?a ?te2] =>
              rewrite -(atyp_submap Hsub Hwd); tac
            | |- ?e => progress (auto)
@@ -2925,9 +2873,9 @@ Module MakeDSL
     elim: p te1 te2 => //=.
     move=> hd tl IH te1 te2 /andP [Hhd Htl] Hsub.
     apply/andP; split.
-    - exact: (well_formed_instr_well_formed Hhd Hsub).
+    - exact: (well_formed_instr_submap Hhd Hsub).
     - apply: (IH _ _ Htl).
-      exact: (well_formed_instr_succ_typenv_submap Hhd Hsub).
+      exact: (submap_instr_succ_typenv Hhd Hsub).
   Qed.
 
   Lemma well_formed_program_replace te1 te2 p :
@@ -2942,7 +2890,7 @@ Module MakeDSL
     by rewrite -(Heq x).
   Qed.
 
-  Lemma same_program_succ_typenv_submap p te1 te2:
+  Lemma submap_program_succ_typenv p te1 te2:
     well_formed_program te1 p ->
     TELemmas.submap te1 te2 ->
     TELemmas.submap (program_succ_typenv p te1)
@@ -2953,7 +2901,7 @@ Module MakeDSL
     - move=> hd tl IH te1 te2 /= /andP [Hwf_hd Hwf_tl] Hsub /=.
       apply IH.
       exact: Hwf_tl.
-      exact: well_formed_instr_succ_typenv_submap.
+      exact: submap_instr_succ_typenv.
   Qed.
 
   Lemma vars_env_add_union te t ty:
@@ -3083,6 +3031,138 @@ Module MakeDSL
     elim: p E => [| i p IH] E Hwf //=. rewrite well_formed_program_cons in Hwf.
     move/andP: Hwf => [Hwf_i Hwf_p]. rewrite (well_formed_rng_instr Hwf_i) andTb.
     rewrite rng_instr_succ_typenv. exact: (IH _ Hwf_p).
+  Qed.
+
+
+
+  Lemma submap_add_vtyp v t E1 E2 :
+    TELemmas.submap (TE.add v t E1) E2 ->
+    TE.vtyp v E2 = t.
+  Proof.
+    move=> Hsub. apply: TE.find_some_vtyp. apply: Hsub.
+    apply: TELemmas.find_add_eq. reflexivity.
+  Qed.
+
+  Lemma submap_add_atyp a v t E1 E2 :
+    TELemmas.submap (TE.add v t E1) E2 ->
+    are_defined (vars_atomic a) E1 ->
+    ~~ VS.mem v (vars_atomic a) ->
+    atyp a E1 = atyp a E2.
+  Proof.
+    case: a => /=.
+    - move=> x. rewrite are_defined_singleton=> Hsub Hdef Hmem.
+      move: (VSLemmas.not_mem_singleton1 Hmem) => {Hmem} /negP Hne.
+      rewrite eq_sym in Hne. move: (is_defined_add_neq t E1 Hne). rewrite Hdef.
+      move=> Hdefadd. rewrite -(submap_vtyp Hsub Hdefadd).
+      rewrite (TE.vtyp_add_neq Hne). reflexivity.
+    - reflexivity.
+  Qed.
+
+  Lemma submap_acc2z {E1 E2 v s} :
+    TELemmas.submap E1 E2 ->
+    is_defined v E1 ->
+    acc2z E1 v s = acc2z E2 v s.
+  Proof.
+    move=> Hsub Hdef. rewrite /acc2z. rewrite (submap_vtyp Hsub Hdef). reflexivity.
+  Qed.
+
+  Lemma submap_eval_eexp {E1 E2 e s} :
+    TELemmas.submap E1 E2 ->
+    are_defined (vars_eexp e) E1 ->
+    eval_eexp e E1 s = eval_eexp e E2 s.
+  Proof.
+    move=> Hsub. elim: e => //=.
+    - move=> v. rewrite are_defined_singleton=> Hdef. exact: (submap_acc2z Hsub Hdef).
+    - move=> op e IH Hdef. rewrite (IH Hdef). reflexivity.
+    - move=> op e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
+      rewrite (IH1 Hdef1) (IH2 Hdef2). reflexivity.
+  Qed.
+
+  Lemma submap_eval_ebexp {E1 E2 e s} :
+    TELemmas.submap E1 E2 ->
+    are_defined (vars_ebexp e) E1 ->
+    eval_ebexp e E1 s <-> eval_ebexp e E2 s.
+  Proof.
+    move=> Hsub. elim: e => //=.
+    - move=> e1 e2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
+      rewrite (submap_eval_eexp Hsub Hdef1) (submap_eval_eexp Hsub Hdef2). done.
+    - move=> e1 e2 em. rewrite !are_defined_union => /andP [Hdef1 /andP [Hdef2 Hdefm]].
+      rewrite (submap_eval_eexp Hsub Hdef1) (submap_eval_eexp Hsub Hdef2)
+              (submap_eval_eexp Hsub Hdefm). done.
+    - move=> e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
+      move: (IH1 Hdef1) (IH2 Hdef2) => [H1 H2] [H3 H4]. split; move => [H5 H6].
+      + exact: (conj (H1 H5) (H3 H6)).
+      + exact: (conj (H2 H5) (H4 H6)).
+  Qed.
+
+  Lemma submap_eval_bexp {E1 E2 e s} :
+    TELemmas.submap E1 E2 ->
+    are_defined (vars_bexp e) E1 ->
+    eval_bexp e E1 s <-> eval_bexp e E2 s.
+  Proof.
+    case: e => [e r]. rewrite /vars_bexp are_defined_union /=.
+    move=> Hsub /andP [Hdefe Hdefr]. rewrite /eval_bexp /=.
+    split; move=> [H1 H2]; move/(submap_eval_ebexp Hsub Hdefe) : H1; tauto.
+  Qed.
+
+  Lemma submap_eval_instr E1 E2 i s t :
+    TELemmas.submap E1 E2 -> well_defined_instr E1 i ->
+    eval_instr E1 i s t <-> eval_instr E2 i s t.
+  Proof.
+    move=> Hsub. (case: i => //=); intros;
+                   repeat match goal with
+                          | H : is_true (_ && _) |- _ =>
+                            let H1 := fresh in
+                            let H2 := fresh in
+                            move/andP: H => [H1 H2]
+                          | |- _ <-> _ => let H := fresh in split; move=> H
+                          | H : eval_instr _ _ _ _ |- _ =>
+                            inversion_clear H
+                          end; try eauto with dsl.
+    Ltac mytac :=
+      repeat
+        match goal with
+        | Hsub : TELemmas.submap ?E1 ?E2,
+          Hdef : is_true (are_defined (vars_atomic ?a) ?E1)
+          |- context f [atyp ?a ?E2] =>
+          rewrite -(atyp_submap Hsub Hdef)
+        | Hsub : TELemmas.submap ?E1 ?E2,
+          Hdef : is_true (are_defined (vars_atomic ?a) ?E1),
+          H : context f [atyp ?a ?E2] |- _ =>
+          rewrite -(atyp_submap Hsub Hdef) in H
+        | H : ?p |- ?p => assumption
+      end.
+    - apply: EIsplitU; last assumption. by mytac.
+    - apply: EIsplitS; last assumption. by mytac.
+    - apply: EIsplitU; last assumption. by mytac.
+    - apply: EIsplitS; last assumption. by mytac.
+    - apply: EIcast. by mytac.
+    - apply: EIcast. by mytac.
+    - apply: EIvpc. by mytac.
+    - apply: EIvpc. by mytac.
+    - apply: EIassume. apply/(submap_eval_bexp Hsub H). assumption.
+    - apply: EIassume. apply/(submap_eval_bexp Hsub H). assumption.
+  Qed.
+
+  Lemma submap_eval_program E1 E2 p s t :
+    TELemmas.submap E1 E2 -> well_formed_program E1 p ->
+    eval_program E1 p s t <-> eval_program E2 p s t.
+  Proof.
+    elim: p E1 E2 s t => [| i p IH] E1 E2 s t /=.
+    - move=> _ _. split; move=> Hev; inversion_clear Hev; exact: Enil.
+    - move=> Hsub /andP [Hwf_Ei Hwf_iEp].
+      move: (well_formed_instr_well_defined Hwf_Ei) => Hwd_Ei.
+      split; move=> Hev; inversion_clear Hev.
+      + apply: (@Econs _ _ _ _ t0).
+        * apply/(submap_eval_instr s t0 Hsub Hwd_Ei). assumption.
+        * apply/(IH (instr_succ_typenv i E1) _ _ _
+                    (submap_instr_succ_typenv Hwf_Ei Hsub) Hwf_iEp).
+          assumption.
+      + apply: (@Econs _ _ _ _ t0).
+        * apply/(submap_eval_instr s t0 Hsub Hwd_Ei). assumption.
+        * apply/(IH (instr_succ_typenv i E1) _ _ _
+                    (submap_instr_succ_typenv Hwf_Ei Hsub) Hwf_iEp).
+          assumption.
   Qed.
 
 
@@ -3984,9 +4064,6 @@ Module MakeDSL
                      (S.upd2 ?x1 ?v1 ?x2 ?v2 ?t1) =>
           exact: (bvs_eqi_add_Upd2_eqi Heqi Hupd (S.Upd2_upd2 x1 v1 x2 v2 t1))
         end.
-
-    Hint Constructors eval_instr : dsl.
-    Hint Immediate S.Upd_upd S.Upd2_upd2 : dsl.
 
     Lemma bvs_eqi_eval_instr_eqi E i s1 s2 t1 :
       well_defined_instr E i -> bvs_eqi E s1 t1 -> eval_instr E i s1 s2 ->

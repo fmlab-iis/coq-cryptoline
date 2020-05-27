@@ -710,6 +710,85 @@ Definition bexp_of_rspec E (s : rspec) : bexp_spec :=
 
 (* Properties of the conversion from programs to QFBV.bexp *)
 
+Lemma vars_exp_rexp e : QFBV.vars_exp (exp_rexp e) = vars_rexp e.
+Proof.
+  elim: e => //=.
+  - move=> _ op e IH. case: op => /=; assumption.
+  - move=> _ op e1 IH1 e2 IH2. case: op => /=; rewrite IH1 IH2; reflexivity.
+Qed.
+
+Lemma vars_bexp_rbexp e : QFBV.vars_bexp (bexp_rbexp e) = vars_rbexp e.
+Proof.
+  elim: e => //=.
+  - move=> _ e1 e2. rewrite !vars_exp_rexp. reflexivity.
+  - move=> _ op e1 e2. case: op => /=; rewrite !vars_exp_rexp; reflexivity.
+  - move=> e1 IH1 e2 IH2. rewrite IH1 IH2. reflexivity.
+  - move=> e1 IH1 e2 IH2. rewrite IH1 IH2. reflexivity.
+Qed.
+
+Lemma size_exp_rexp E e :
+  well_formed_rexp E e ->
+  QFBV.exp_size (exp_rexp e) E = size_of_rexp e E.
+Proof.
+  elim: e => //=.
+  - move=> n bs /andP /= [Hdef Hs]. apply/eqP. exact: Hs.
+  - move=> w op e IH Hwf. move: (well_formed_rexp_unop Hwf) => {Hwf} [Hwfe Hse].
+    move: (IH Hwfe) => {IH} IH. case: op => /=; rewrite IH; exact: Hse.
+  - move=> w op e1 IH1 e2 IH2 Hwf.
+    move: (well_formed_rexp_binop Hwf) => {Hwf} [Hwf1 [Hwf2 [Hs1 Hs2]]].
+    move: (IH1 Hwf1) (IH2 Hwf2) => {IH1 IH2} IH1 IH2.
+    case: op => /=; rewrite ?IH1 ?IH2 ?Hs1 ?Hs2 ?minnn ?maxnn; reflexivity.
+  - move=> w e IH n Hwf. move: (well_formed_rexp_uext Hwf) => {Hwf} [Hwfe Hse].
+    move: (IH Hwfe) => {IH} IH. rewrite IH Hse. reflexivity.
+  - move=> w e IH n Hwf. move: (well_formed_rexp_sext Hwf) => {Hwf} [Hwfe Hse].
+    move: (IH Hwfe) => {IH} IH. rewrite IH Hse. reflexivity.
+Qed.
+
+
+Ltac are_defined_dec :=
+  match goal with
+  | H : is_true (_ && _) |- _ => caseb H; intros; are_defined_dec
+  | H : is_true (are_defined (SSAVS.singleton _) _) |- _ =>
+    rewrite are_defined_singleton in H; are_defined_dec
+  | H : is_true (are_defined (SSAVS.union _ _) _) |- _ =>
+    let H1 := fresh in
+    let H2 := fresh in
+    rewrite are_defined_union in H; move/andP: H => [H1 H2]; are_defined_dec
+  | |- is_true (are_defined (SSAVS.singleton _) _) =>
+    rewrite are_defined_singleton; are_defined_dec
+  | |- is_true (are_defined (SSAVS.union _ _) _) =>
+    rewrite are_defined_union; apply/andP; split; are_defined_dec
+  | |- context f [QFBV.vars_exp (qfbv_atomic _)] =>
+    rewrite vars_exp_atomic; are_defined_dec
+  | H : is_true (?x != ?y) |- is_true (is_defined ?y (SSATE.add ?x _ _)) =>
+    rewrite eq_sym in H; rewrite (is_defined_add_neq _ _ H); are_defined_dec
+  | |- context f [if ?b then _ else _] => case: b; simpl; are_defined_dec
+  | |- is_true (is_defined ?v (SSATE.add ?v _ _)) =>
+    exact: is_defined_add_eq
+  | |- is_true (are_defined SSAVS.empty _) => exact: are_defined_empty
+  | H : is_true (are_defined ?vs ?E) |-
+    is_true (are_defined ?vs (SSATE.add _ _ ?E)) =>
+    apply: are_defined_addr; assumption
+  | H : is_true (are_defined ?vs ?E) |-
+    is_true (are_defined ?vs (SSATE.add _ _ (SSATE.add _ _  ?E))) =>
+    apply: are_defined_addr; apply: are_defined_addr; assumption
+  | |- _ => idtac
+  end.
+
+Lemma bexp_instr_are_defined E i :
+  well_defined_instr E i ->
+  are_defined (QFBV.vars_bexp (bexp_instr E i)) (instr_succ_typenv i E).
+Proof.
+  case: i => //=; try (move=> *; are_defined_dec).
+  match goal with
+  | b : bexp, H : is_true (are_defined (vars_bexp ?b) _)
+    |- context f [let (_, _) := ?b in _] =>
+    case: b H => eb rb H
+  end.
+  rewrite vars_bexp_rbexp. move: (vars_rbexp_subset (eb, rb)) => /= Hsub.
+  apply: (are_defined_subset Hsub). assumption.
+Qed.
+
 Ltac rewrite_eval_exp_atomic :=
   repeat rewrite -> eval_exp_atomic in *.
 
@@ -770,7 +849,7 @@ Lemma bexp_program_submap E1 E2 p :
   bexp_program E1 p = bexp_program E2 p.
 Proof.
   elim: p E1 E2 => [| i p IH] E1 E2 //=. move/andP=> [Hwf_i Hwf_p] Hsub.
-  move: (well_formed_instr_succ_typenv_submap Hwf_i Hsub) => Hsub_succ.
+  move: (submap_instr_succ_typenv Hwf_i Hsub) => Hsub_succ.
   move/andP: Hwf_i => [Hwd_i Hwt_i]. rewrite (bexp_instr_submap Hwd_i Hsub).
   rewrite (IH _ _ Hwf_p Hsub_succ). reflexivity.
 Qed.
@@ -2303,85 +2382,6 @@ Proof.
     exact: is_true_true.
 Qed.
 
-Lemma vars_exp_rexp e : QFBV.vars_exp (exp_rexp e) = vars_rexp e.
-Proof.
-  elim: e => //=.
-  - move=> _ op e IH. case: op => /=; assumption.
-  - move=> _ op e1 IH1 e2 IH2. case: op => /=; rewrite IH1 IH2; reflexivity.
-Qed.
-
-Lemma vars_bexp_rbexp e : QFBV.vars_bexp (bexp_rbexp e) = vars_rbexp e.
-Proof.
-  elim: e => //=.
-  - move=> _ e1 e2. rewrite !vars_exp_rexp. reflexivity.
-  - move=> _ op e1 e2. case: op => /=; rewrite !vars_exp_rexp; reflexivity.
-  - move=> e1 IH1 e2 IH2. rewrite IH1 IH2. reflexivity.
-  - move=> e1 IH1 e2 IH2. rewrite IH1 IH2. reflexivity.
-Qed.
-
-Lemma size_exp_rexp E e :
-  well_formed_rexp E e ->
-  QFBV.exp_size (exp_rexp e) E = size_of_rexp e E.
-Proof.
-  elim: e => //=.
-  - move=> n bs /andP /= [Hdef Hs]. apply/eqP. exact: Hs.
-  - move=> w op e IH Hwf. move: (well_formed_rexp_unop Hwf) => {Hwf} [Hwfe Hse].
-    move: (IH Hwfe) => {IH} IH. case: op => /=; rewrite IH; exact: Hse.
-  - move=> w op e1 IH1 e2 IH2 Hwf.
-    move: (well_formed_rexp_binop Hwf) => {Hwf} [Hwf1 [Hwf2 [Hs1 Hs2]]].
-    move: (IH1 Hwf1) (IH2 Hwf2) => {IH1 IH2} IH1 IH2.
-    case: op => /=; rewrite ?IH1 ?IH2 ?Hs1 ?Hs2 ?minnn ?maxnn; reflexivity.
-  - move=> w e IH n Hwf. move: (well_formed_rexp_uext Hwf) => {Hwf} [Hwfe Hse].
-    move: (IH Hwfe) => {IH} IH. rewrite IH Hse. reflexivity.
-  - move=> w e IH n Hwf. move: (well_formed_rexp_sext Hwf) => {Hwf} [Hwfe Hse].
-    move: (IH Hwfe) => {IH} IH. rewrite IH Hse. reflexivity.
-Qed.
-
-
-Ltac are_defined_dec :=
-  match goal with
-  | H : is_true (_ && _) |- _ => caseb H; intros; are_defined_dec
-  | H : is_true (are_defined (SSAVS.singleton _) _) |- _ =>
-    rewrite are_defined_singleton in H; are_defined_dec
-  | H : is_true (are_defined (SSAVS.union _ _) _) |- _ =>
-    let H1 := fresh in
-    let H2 := fresh in
-    rewrite are_defined_union in H; move/andP: H => [H1 H2]; are_defined_dec
-  | |- is_true (are_defined (SSAVS.singleton _) _) =>
-    rewrite are_defined_singleton; are_defined_dec
-  | |- is_true (are_defined (SSAVS.union _ _) _) =>
-    rewrite are_defined_union; apply/andP; split; are_defined_dec
-  | |- context f [QFBV.vars_exp (qfbv_atomic _)] =>
-    rewrite vars_exp_atomic; are_defined_dec
-  | H : is_true (?x != ?y) |- is_true (is_defined ?y (SSATE.add ?x _ _)) =>
-    rewrite eq_sym in H; rewrite (is_defined_add_neq _ _ H); are_defined_dec
-  | |- context f [if ?b then _ else _] => case: b; simpl; are_defined_dec
-  | |- is_true (is_defined ?v (SSATE.add ?v _ _)) =>
-    exact: is_defined_add_eq
-  | |- is_true (are_defined SSAVS.empty _) => exact: are_defined_empty
-  | H : is_true (are_defined ?vs ?E) |-
-    is_true (are_defined ?vs (SSATE.add _ _ ?E)) =>
-    apply: are_defined_addr; assumption
-  | H : is_true (are_defined ?vs ?E) |-
-    is_true (are_defined ?vs (SSATE.add _ _ (SSATE.add _ _  ?E))) =>
-    apply: are_defined_addr; apply: are_defined_addr; assumption
-  | |- _ => idtac
-  end.
-
-Lemma bexp_instr_are_defined E i :
-  well_defined_instr E i ->
-  are_defined (QFBV.vars_bexp (bexp_instr E i)) (instr_succ_typenv i E).
-Proof.
-  case: i => //=; try (move=> *; are_defined_dec).
-  match goal with
-  | b : bexp, H : is_true (are_defined (vars_bexp ?b) _)
-    |- context f [let (_, _) := ?b in _] =>
-    case: b H => eb rb H
-  end.
-  rewrite vars_bexp_rbexp. move: (vars_rbexp_subset (eb, rb)) => /= Hsub.
-  apply: (are_defined_subset Hsub). assumption.
-Qed.
-
 
 (* Connect premises by implication. *)
 
@@ -3260,6 +3260,42 @@ Proof.
   - move=> v t a Hwf. exact: eval_bexp_atomic_vpc_safe.
 Qed.
 
+Lemma bexp_instr_safe_submap E1 E2 i :
+  well_defined_instr E1 i -> TELemmas.submap E1 E2 ->
+  bexp_instr_safe E1 i = bexp_instr_safe E2 i.
+Proof.
+  rewrite /bexp_instr_safe.
+  rewrite /bexp_atomic_shl_safe /bexp_atomic_cshl_safe
+          /bexp_atomic_addB_safe /bexp_atomic_adds_safe
+          /bexp_atomic_adcB_safe/bexp_atomic_adcs_safe
+          /bexp_atomic_subB_safe /bexp_atomic_subc_safe /bexp_atomic_subb_safe
+          /bexp_atomic_sbcB_safe /bexp_atomic_sbcs_safe
+          /bexp_atomic_sbbB_safe /bexp_atomic_sbbs_safe
+          /bexp_atomic_mulB_safe /bexp_atomic_vpc_safe
+          /bexp_atomic_uaddB_safe /bexp_atomic_saddB_safe
+          /bexp_atomic_uadcB_safe /bexp_atomic_sadcB_safe
+          /bexp_atomic_usubB_safe /bexp_atomic_ssubB_safe
+          /bexp_atomic_usbcB_safe /bexp_atomic_sbcB_safe
+          /bexp_atomic_ssbcB_safe
+          /bexp_atomic_usbbB_safe /bexp_atomic_ssbbB_safe.
+    by (case: i => //=); (move=> * );
+      repeat (match goal with
+              | H : is_true (_ && _) |- _ =>
+                let H1 := fresh in
+                let H2 := fresh in
+                move/andP: H => [H1 H2]
+              | H1 : TELemmas.submap ?E1 ?E2,
+                H2 : is_true (are_defined (vars_atomic ?a) ?E1) |-
+                context f [asize ?a ?E2] =>
+                rewrite -(asize_submap H1 H2)
+              | H1 : TELemmas.submap ?E1 ?E2,
+                H2 : is_true (are_defined (vars_atomic ?a) ?E1) |-
+                context f [atyp ?a ?E2] =>
+                rewrite -(atyp_submap H1 H2)
+              | |- ?e = ?e => reflexivity
+              end).
+Qed.
+
 
 (* Well-formedness of bexp_instr_safe *)
 
@@ -3884,7 +3920,7 @@ Section SplitConditions.
         apply: H2. rewrite bexp_rng_instr. rewrite HE.
 
         move: (TELemmas.submap_trans Hsub_Einit Hsub_E) => Hsub_Einit_iE.
-        move: (same_program_succ_typenv_submap
+        move: (submap_program_succ_typenv
                  Hwf_Einit_pre_is' Hsub_Einit_iE) => Hsub_succ.
         move/andP: Hwf_i => [Hwd_i Hwt_i]. rewrite HE in Hwd_i.
         rewrite (bexp_instr_submap Hwd_i Hsub_succ). exact: Heval_i_t.
