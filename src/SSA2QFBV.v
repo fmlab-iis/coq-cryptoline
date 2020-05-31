@@ -589,8 +589,12 @@ Definition bexp_instr (E : SSATE.env) (i : SSA.instr) : QFBV.bexp :=
   | SSA.Imull vh vl a1 a2 =>
     let 'a1_size := asize a1 E in
     let 'a2_size := asize a2 E in
-    let 'qe1ext := qfbv_sext a1_size (qfbv_atomic a1) in
-    let 'qe2ext := qfbv_sext a1_size (qfbv_atomic a2) in
+    let 'qe1ext := 
+        if Typ.is_unsigned (atyp a1 E) then qfbv_zext a1_size (qfbv_atomic a1)
+        else qfbv_sext a1_size (qfbv_atomic a1) in
+    let 'qe2ext := 
+        if Typ.is_unsigned (atyp a1 E) then qfbv_zext a1_size (qfbv_atomic a2)
+        else qfbv_sext a1_size (qfbv_atomic a2) in
     let 'qerext := qfbv_mul qe1ext qe2ext in
     qfbv_conj (qfbv_eq (qfbv_var vh)
                        (qfbv_high a1_size qerext))
@@ -600,8 +604,12 @@ Definition bexp_instr (E : SSATE.env) (i : SSA.instr) : QFBV.bexp :=
      to Iumull (vh, vl, a1, a2); Join (r, vh, vl) *)
   | SSA.Imulj v a1 a2 =>
     let 'a_size := asize a1 E  in
-    let 'qe1ext := qfbv_sext a_size (qfbv_atomic a1) in
-    let 'qe2ext := qfbv_sext a_size (qfbv_atomic a2) in
+    let 'qe1ext := 
+        if Typ.is_unsigned (atyp a1 E) then qfbv_zext a_size (qfbv_atomic a1)
+        else qfbv_sext a_size (qfbv_atomic a1) in
+    let 'qe2ext := 
+        if Typ.is_unsigned (atyp a1 E) then qfbv_zext a_size (qfbv_atomic a2)
+        else qfbv_sext a_size (qfbv_atomic a2) in
     let 'qerext := qfbv_mul qe1ext qe2ext in
     qfbv_eq (qfbv_var v) qerext
   (* Ishl (v, a, n): v = a * 2^n, overflow is forbidden *)
@@ -883,6 +891,26 @@ Proof.
        rewrite -(ssa_unchanged_program_eval_atomic H2 H1); tac
      | _ => by assumption
      end in tac || idtac).
+  - (* mull *)
+    move : H1; case (Typ.is_unsigned (atyp a E)) => /=;
+    move: (ssa_unchanged_program_add1 H) => {H} [H1 H2];
+    move: (ssa_unchanged_program_add1 H2) => {H2} [H2 H3]; 
+    move: (ssa_unchanged_program_union1 H3) => {H3} [H3 H4]; 
+    rewrite -!(acc_unchanged_program H2 H0)
+            -!(acc_unchanged_program H1 H0);
+    rewrite_eval_exp_atomic;
+    rewrite -!(ssa_unchanged_program_eval_atomic H4 H0)
+            -!(ssa_unchanged_program_eval_atomic H3 H0);
+    move => /andP [Hhi Hlo];
+              apply /andP; split; done.
+  - (* mulj *)
+    move : H1; case (Typ.is_unsigned (atyp a E)) => /=;
+    move: (ssa_unchanged_program_add1 H) => {H} [H1 H2];
+    move: (ssa_unchanged_program_union1 H2) => {H2} [H2 H3]; 
+    rewrite -!(acc_unchanged_program H1 H0);
+    rewrite_eval_exp_atomic;
+    rewrite -!(ssa_unchanged_program_eval_atomic H3 H0)
+            -!(ssa_unchanged_program_eval_atomic H2 H0); done.
   - (* split *)
     move : H1; case (Typ.is_unsigned (atyp a E)) => /=;
     move: (ssa_unchanged_program_add1 H) => {H} [H1 H2];
@@ -1545,10 +1573,18 @@ Proof.
   well_defined_to_vs_subset.
   unfold_well_typed.
   repeat eval_exp_exp_atomic_to_pred_state.
-  inversion_clear Hinst; repeat qfbv_store_acc.
+  have Hinst' : eval_instr E (Imull t t0 a a0) s1 s2 by assumption.
+  inversion_clear Hinst'; repeat qfbv_store_acc.
+  - rewrite H /=. to_size_atyp a; to_size_atyp a0. 
+    apply/andP; split; by repeat eval_exp_exp_atomic_to_pred_state.
+  - rewrite -Typ.not_signed_is_unsigned H /=.
+    to_size_atyp a; to_size_atyp a0. 
+    apply/andP; split; by repeat eval_exp_exp_atomic_to_pred_state.
+  (*
   rewrite (eqP (mul_sext (eval_atomic a s1) (eval_atomic a0 s1))).
   to_size_atyp a. to_size_atyp a0.
   apply/andP; split; done.
+   *)
 Qed.
 
 Lemma bexp_instr_eval_Imulj E t a a0 s1 s2 :
@@ -1562,9 +1598,15 @@ Proof.
   well_defined_to_vs_subset.
   unfold_well_typed.
   repeat eval_exp_exp_atomic_to_pred_state.
-  inversion_clear Hinst; repeat qfbv_store_acc.
+  have Hinst' : eval_instr E (Imulj t a a0) s1 s2 by assumption.
+  inversion_clear Hinst'; repeat qfbv_store_acc.
+  - rewrite H /=. to_size_atyp a. by repeat eval_exp_exp_atomic_to_pred_state.
+  - rewrite -Typ.not_signed_is_unsigned H /=.
+    to_size_atyp a. by repeat eval_exp_exp_atomic_to_pred_state.
+  (*
   rewrite (eqP (mul_sext (eval_atomic a s1) (eval_atomic a0 s1))).
   to_size_atyp a. exact: eqxx.
+   *)
 Qed.
 
 Lemma bexp_instr_eval_Isplit E t t0 a n s1 s2 :
@@ -2112,8 +2154,17 @@ Lemma eval_bexp_instr_Imull E s :
     QFBV.eval_bexp (bexp_instr E (Imull t t0 a a0)) s ->
     eval_instr E (Imull t t0 a a0) s s.
 Proof.
-  move=> /= vh vl a1 a2 Hwf Hco1 Hco2 Hev. apply: EImull. norm_tac.
+  move=> /= vh vl a1 a2 Hwf Hco1 Hco2 Hev. dcase (atyp a1 E). case => wa1 Htyp.
+  - have Hun: Typ.is_unsigned (atyp a1 E) by rewrite Htyp.
+    rewrite Htyp /= in Hev. move/andP: Hev => [Hev1 Hev2].
+    apply: (EImullU Hun). norm_tac. by solve_tac.
+  - have Hsn: Typ.is_signed (atyp a1 E) by rewrite Htyp.
+    rewrite Htyp /= in Hev. move/andP: Hev => [Hev1 Hev2].
+    apply: (EImullS Hsn). norm_tac. by solve_tac.
+  (*
+  apply: EImull. norm_tac.
   rewrite (eqP (mul_sext _ _)). to_asize. by solve_tac.
+   *)
 Qed.
 
 Lemma eval_bexp_instr_Imulj E s :
@@ -2124,8 +2175,17 @@ Lemma eval_bexp_instr_Imulj E s :
     QFBV.eval_bexp (bexp_instr E (Imulj t a a0)) s ->
     eval_instr E (Imulj t a a0) s s.
 Proof.
-  move=> /= v a1 a2 Hwf Hco1 Hco2 Hev. apply: EImulj. norm_tac.
+  move=> /= v a1 a2 Hwf Hco1 Hco2 Hev. dcase (atyp a1 E). case => wa1 Htyp.
+  - have Hun: Typ.is_unsigned (atyp a1 E) by rewrite Htyp.
+    rewrite Htyp /= in Hev.
+    apply: (EImuljU Hun). norm_tac. by solve_tac.
+  - have Hsn: Typ.is_signed (atyp a1 E) by rewrite Htyp.
+    rewrite Htyp /= in Hev. 
+    apply: (EImuljS Hsn). norm_tac. by solve_tac.
+  (*
+  apply: EImulj. norm_tac.
   rewrite (eqP (mul_sext _ _)). to_asize. by solve_tac.
+   *)
 Qed.
 
 Lemma eval_bexp_instr_Isplit E s :
@@ -2724,6 +2784,12 @@ Section WellFormedRange.
       | H : (?x == _) = true
         |- context f [?x] =>
         rewrite (eqP H) /=
+      | Heq : is_true (?x == _),
+        H : context f [?x] |- _ =>
+        rewrite (eqP Heq) /= in H
+      | Heq : (?x == _) = true,
+        H : context f [?x] |- _ =>
+        rewrite (eqP Heq) /= in H
       | |- context f [?n + 1 == 1 + ?n] =>
         rewrite (@addnC n 1) (@eqxx _ (1 + n))
       | |- context f [maxn ?n ?n] => rewrite maxnn

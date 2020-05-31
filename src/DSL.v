@@ -1484,6 +1484,7 @@ Module MakeDSL
   | EImul v a1 a2 s t :
       S.Upd v (mulB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
       eval_instr te (Imul v a1 a2) s t
+  (*
   | EImull vh vl a1 a2 s t :
       S.Upd2 vl (low (size (eval_atomic a2 s))
                      (full_mul (eval_atomic a1 s) (eval_atomic a2 s)))
@@ -1491,8 +1492,43 @@ Module MakeDSL
                       (full_mul (eval_atomic a1 s) (eval_atomic a2 s)))
              s t ->
       eval_instr te (Imull vh vl a1 a2) s t
+   *)
+  | EImullU vh vl a1 a2 s t :
+      is_unsigned (atyp a1 te) ->      
+      S.Upd2 vl (low (size (eval_atomic a2 s))
+                     (mulB (zext (size (eval_atomic a1 s)) (eval_atomic a1 s))
+                           (zext (size (eval_atomic a1 s)) (eval_atomic a2 s))))
+             vh (high (size (eval_atomic a1 s))
+                      (mulB (zext (size (eval_atomic a1 s)) (eval_atomic a1 s))
+                            (zext (size (eval_atomic a1 s)) (eval_atomic a2 s))))
+             s t ->
+      eval_instr te (Imull vh vl a1 a2) s t
+  | EImullS vh vl a1 a2 s t :
+      is_signed (atyp a1 te) ->
+      S.Upd2 vl (low (size (eval_atomic a2 s))
+                     (mulB (sext (size (eval_atomic a1 s)) (eval_atomic a1 s))
+                           (sext (size (eval_atomic a1 s)) (eval_atomic a2 s))))
+             vh (high (size (eval_atomic a1 s))
+                      (mulB (sext (size (eval_atomic a1 s)) (eval_atomic a1 s))
+                            (sext (size (eval_atomic a1 s)) (eval_atomic a2 s))))
+             s t ->
+      eval_instr te (Imull vh vl a1 a2) s t
+  (*
   | EImulj v a1 a2 s t :
       S.Upd v (full_mul (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
+      eval_instr te (Imulj v a1 a2) s t
+   *)
+  | EImuljU v a1 a2 s t :
+      is_unsigned (atyp a1 te) ->
+      S.Upd v (mulB (zext (size (eval_atomic a1 s)) (eval_atomic a1 s))
+                    (zext (size (eval_atomic a1 s)) (eval_atomic a2 s)))
+            s t ->
+      eval_instr te (Imulj v a1 a2) s t
+  | EImuljS v a1 a2 s t :
+      is_signed (atyp a1 te) ->
+      S.Upd v (mulB (sext (size (eval_atomic a1 s)) (eval_atomic a1 s))
+                    (sext (size (eval_atomic a1 s)) (eval_atomic a2 s)))
+            s t ->
       eval_instr te (Imulj v a1 a2) s t
   | EIsplitU vh vl a n s t :
       is_unsigned (atyp a te) ->
@@ -3205,8 +3241,14 @@ Module MakeDSL
     - (* Isbb *) move=> ? ? ? ? _. eexists. apply: EIsbb. exact: S.Upd_upd.
     - (* Isbbs *) move=> ? ? ? ? ? _. eexists. apply: EIsbbs. exact: S.Upd2_upd2.
     - (* Imul *) move=> ? ? ? _. eexists. apply: EImul. exact: S.Upd_upd.
-    - (* Imull *) move=> ? ? ? ? _. eexists. apply: EImull. exact: S.Upd2_upd2.
-    - (* Imulj *) move=> ? ? ? _. eexists. apply: EImulj. exact: S.Upd_upd.
+    - (* Imull *) move=> vh vl a1 a2 _. case H: (is_signed (atyp a1 te)).
+      + eexists. apply: (EImullS H). exact: S.Upd2_upd2.
+      + move/idP/negP: H=> H. rewrite not_signed_is_unsigned in H. eexists.
+        apply: (EImullU H). exact: S.Upd2_upd2.
+    - (* Imulj *) move=> v a1 a2 _. case H: (is_signed (atyp a1 te)).
+      + eexists. apply: (EImuljS H). exact: S.Upd_upd.
+      + move/idP/negP: H=> H. rewrite not_signed_is_unsigned in H. eexists.
+        apply: (EImuljU H). exact: S.Upd_upd.
     - (* Isplit *) move=> vh vl a n _. case H: (is_signed (atyp a te)).
       + eexists. apply: (EIsplitS H). exact: S.Upd2_upd2.
       + move/idP/negP: H=> H. rewrite not_signed_is_unsigned in H. eexists.
@@ -3642,13 +3684,19 @@ Module MakeDSL
   Proof .
     move => Hcon /=; rewrite 2!are_defined_subset_env =>
     /andP [/andP [Hneq Hdef0] Hdef1] /andP [/andP [Hty Hsm0] Hsm1] Hev .
-    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ H Hcon);
+    inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ H0 Hcon);
       [ by rewrite
              size_high
              (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
       | rewrite
           size_low
-          (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))].
+          (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+      | by rewrite
+             size_high
+             (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+      | rewrite
+          size_low
+          (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))];
       by rewrite size_unsigned_typ .
   Qed .
 
@@ -3661,7 +3709,12 @@ Module MakeDSL
   Proof .
     move => Hcon /=; rewrite 2!are_defined_subset_env =>
     /andP [Hdef0 Hdef1] /andP [/andP [Hty Hsm0] Hsm1] Hev .
-    inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    inversion_clear Hev; apply : (conform_Upd _ Hcon H0);
+      rewrite size_mulB ?size_zext ?size_sext
+              (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+              /asize /Typ.double_typ;
+      by case (atyp a te) => /= // n; rewrite mul2n addnn // .
+    (*
     rewrite size_full_mul
             (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
             (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
@@ -3669,6 +3722,7 @@ Module MakeDSL
     rewrite /Typ.double_typ /= .
       by case (atyp a te) => /= // n;
                                rewrite mul2n addnn // .
+     *)
   Qed .
 
   Lemma conform_eval_succ_typenv_Isplit te t t0 a n s1 s2 :

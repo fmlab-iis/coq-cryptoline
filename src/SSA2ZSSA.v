@@ -2113,6 +2113,7 @@ Section SplitSpec.
     - move=> n H1 H2. rewrite -H2 in H1. exact: bv2z_mul_signed.
   Qed.
 
+  (* = TO BE REMOVED =
   Lemma bv2z_Imull t bs1 bs2 :
     size bs1 = sizeof_typ t ->
     size bs2 = sizeof_typ t ->
@@ -2125,7 +2126,59 @@ Section SplitSpec.
     - move=> n H1 H2. rewrite -H2 in H1. exact: bv2z_mull_unsigned.
     - move=> n H1 H2. rewrite -H2 in H1. exact: bv2z_mull_signed.
   Qed.
+   *)
 
+  (* The following lemma will be proved in coq-nbits.
+     Remove it when updating coq-nbits *)
+  Lemma bv2z_mull_unsigned bs1 bs2 :
+    size bs1 = size bs2 ->
+    (to_Zpos (low (size bs2) (zext (size bs1) bs1 *# zext (size bs1) bs2)%bits) +
+     to_Zpos (high (size bs1) (zext (size bs1) bs1 *# zext (size bs1) bs2)%bits) *
+     2 ^ Z.of_nat (size bs2))%Z = 
+    (to_Zpos bs1 * to_Zpos bs2)%Z.
+  Proof.
+  Admitted.
+
+  (* The following lemma will be proved in coq-nbits.
+     Remove it when updating coq-nbits *)
+  Lemma bv2z_mull_signed bs1 bs2 :
+    size bs1 = size bs2 ->
+    (to_Zpos (low (size bs2) (sext (size bs1) bs1 *# sext (size bs1) bs2)%bits) +
+     to_Z (high (size bs1) (sext (size bs1) bs1 *# sext (size bs1) bs2)%bits) *
+     2 ^ Z.of_nat (size bs2))%Z = 
+    (to_Z bs1 * to_Z bs2)%Z.
+  Proof.
+  Admitted.
+
+  Lemma bv2z_Imull_unsigned t bs1 bs2 :
+    is_unsigned t ->
+    size bs1 = sizeof_typ t ->
+    size bs2 = sizeof_typ t ->
+    (bv2z (unsigned_typ t) 
+          (low (size bs2) (zext (size bs1) bs1 *# zext (size bs1) bs2)%bits) +
+     bv2z t (high (size bs1) (zext (size bs1) bs1 *# zext (size bs1) bs2)%bits) *
+     Cryptoline.DSL.z2expn (Z.of_nat (size bs2)))%Z =
+    (bv2z t bs1 * bv2z t bs2)%Z.
+  Proof.
+    rewrite /Cryptoline.DSL.z2expn /=. case: t => //=.
+    move=> n _ H1 H2. rewrite -H2 in H1. exact: bv2z_mull_unsigned.
+  Qed.
+
+  Lemma bv2z_Imull_signed t bs1 bs2 :
+    is_signed t ->
+    size bs1 = sizeof_typ t ->
+    size bs2 = sizeof_typ t ->
+    (bv2z (unsigned_typ t) 
+          (low (size bs2) (sext (size bs1) bs1 *# sext (size bs1) bs2)%bits) +
+     bv2z t (high (size bs1) (sext (size bs1) bs1 *# sext (size bs1) bs2)%bits) *
+     Cryptoline.DSL.z2expn (Z.of_nat (size bs2)))%Z =
+    (bv2z t bs1 * bv2z t bs2)%Z.
+  Proof.
+    rewrite /Cryptoline.DSL.z2expn /=. case: t => //=.
+    move=> n _ H1 H2. rewrite -H2 in H1. exact: bv2z_mull_signed.
+  Qed.
+
+  (* = TO BE REMOVED =
   Lemma bv2z_Imulj t bs1 bs2 :
     size bs1 = sizeof_typ t ->
     size bs2 = sizeof_typ t ->
@@ -2134,6 +2187,44 @@ Section SplitSpec.
     case: t => /=.
     - move=> n H1 H2. rewrite -H2 in H1. exact: bv2z_mulj_unsigned.
     - move=> n H1 H2. rewrite -H2 in H1. exact: bv2z_mulj_signed.
+  Qed.
+   *)
+
+  (* The following lemma will be proved in coq-nbits.
+     Remove it when updating coq-nbits *)
+  Lemma bv2z_mulj_unsigned bs1 bs2 :
+    size bs1 = size bs2 ->    
+    to_Zpos (zext (size bs1) bs1 *# zext (size bs1) bs2)%bits =
+    (to_Zpos bs1 * to_Zpos bs2)%Z.
+  Proof.
+  Admitted.
+
+  (* The following lemma will be proved in coq-nbits.
+     Remove it when updating coq-nbits *)
+  Lemma bv2z_mulj_signed bs1 bs2 :
+    size bs1 = size bs2 ->
+    to_Z (sext (size bs1) bs1 *# sext (size bs1) bs2)%bits = (to_Z bs1 * to_Z bs2)%Z.
+  Proof.
+  Admitted.
+
+  Lemma bv2z_Imulj_unsigned t bs1 bs2 :
+    is_unsigned t ->
+    size bs1 = sizeof_typ t ->
+    size bs2 = sizeof_typ t ->
+    bv2z (double_typ t) (zext (size bs1) bs1 *# zext (size bs1) bs2)%bits =
+    (bv2z t bs1 * bv2z t bs2)%Z.
+  Proof.
+    case: t => //=. move=> n _ H1 H2. rewrite -H2 in H1. exact: bv2z_mulj_unsigned.
+  Qed.
+
+  Lemma bv2z_Imulj_signed t bs1 bs2 :
+    is_signed t ->
+    size bs1 = sizeof_typ t ->
+    size bs2 = sizeof_typ t ->
+    bv2z (double_typ t) (sext (size bs1) bs1 *# sext (size bs1) bs2)%bits =
+    (bv2z t bs1 * bv2z t bs2)%Z.
+  Proof.
+    case: t => //=. move=> n _ H1 H2. rewrite -H2 in H1. exact: bv2z_mulj_signed.
   Qed.
 
   Lemma bv2z_Isplit_unsigned t bs n :
@@ -2612,11 +2703,15 @@ Section SplitSpec.
     - move=> v a1 a2 Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
       split; last by trivial. mytac. exact: (bv2z_Imul _ _ Hsa).
     (* Imull *)
-    - move=> vh vl a1 a2 Hwf Hni Hun Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
-      split; last by trivial. mytac. exact: (bv2z_Imull _ _).
+    - move=> vh vl a1 a2 Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
+      split; last by trivial. mytac.
+      + exact: (bv2z_Imull_unsigned _ _ _).
+      + exact: (bv2z_Imull_signed _ _ _).
     (* Imulj *)
     - move=> v a1 a2 Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
-      split; last by trivial. mytac. exact: (bv2z_Imulj _ _).
+      split; last by trivial. mytac. 
+      + exact: (bv2z_Imulj_unsigned _ _).
+      + exact: (bv2z_Imulj_signed _ _).
     (* Isplit *)
     - move=> vh vl a n Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
       split; last by trivial. mytac.
