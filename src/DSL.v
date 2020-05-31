@@ -3168,6 +3168,14 @@ Module MakeDSL
           rewrite -(atyp_submap Hsub Hdef) in H
         | H : ?p |- ?p => assumption
       end.
+    - apply: EImullU; last assumption. by mytac.
+    - apply: EImullS; last assumption. by mytac.
+    - apply: EImullU; last assumption. by mytac.
+    - apply: EImullS; last assumption. by mytac.
+    - apply: EImuljU; last assumption. by mytac.
+    - apply: EImuljS; last assumption. by mytac.
+    - apply: EImuljU; last assumption. by mytac.
+    - apply: EImuljS; last assumption. by mytac.
     - apply: EIsplitU; last assumption. by mytac.
     - apply: EIsplitS; last assumption. by mytac.
     - apply: EIsplitU; last assumption. by mytac.
