@@ -2044,8 +2044,40 @@ Section MakeSSA.
     - repeat ssa_eval_instr_succ_tac.
     - repeat ssa_eval_instr_succ_tac.
     - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
+    - ssa_eval_instr_succ_tac.
+      rewrite /= in H3.
+      inversion H2; subst;clear H2.
+      + ssa_eval_instr_succ_tac.
+        ssa_eval_instr_succ_tac.
+        ssa_eval_instr_succ_tac.
+        eapply SSA.EImullU.
+        repeat ssa_eval_instr_succ_tac.
+        repeat ssa_eval_instr_succ_tac.
+        repeat ssa_eval_instr_succ_tac.
+      + ssa_eval_instr_succ_tac.
+        ssa_eval_instr_succ_tac.
+        ssa_eval_instr_succ_tac.
+        eapply SSA.EImullS.
+        repeat ssa_eval_instr_succ_tac.
+        repeat ssa_eval_instr_succ_tac.
+        repeat ssa_eval_instr_succ_tac.
+    - ssa_eval_instr_succ_tac.
+      rewrite /= in H3.
+      inversion H2; subst;clear H2.
+      + ssa_eval_instr_succ_tac.
+        ssa_eval_instr_succ_tac.
+        ssa_eval_instr_succ_tac.
+        eapply SSA.EImuljU.
+        repeat ssa_eval_instr_succ_tac.
+        repeat ssa_eval_instr_succ_tac.
+        repeat ssa_eval_instr_succ_tac.
+      + ssa_eval_instr_succ_tac.
+        ssa_eval_instr_succ_tac.
+        ssa_eval_instr_succ_tac.
+        eapply SSA.EImuljS.
+        repeat ssa_eval_instr_succ_tac.
+        repeat ssa_eval_instr_succ_tac.
+        repeat ssa_eval_instr_succ_tac.
     - ssa_eval_instr_succ_tac.
       rewrite /= in H3.
       inversion H2; subst;clear H2.
@@ -2247,8 +2279,26 @@ Section MakeSSA.
     - repeat dessa_eval_instr_succ_tac.
     - repeat dessa_eval_instr_succ_tac.
     - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
+    - dessa_eval_instr_succ_tac.
+      inversion H2; subst;clear H2.
+      + repeat dessa_eval_instr_succ_tac.
+      + dessa_eval_instr_succ_tac.
+        dessa_eval_instr_succ_tac.
+        dessa_eval_instr_succ_tac.
+        eapply DSL.EImullS.
+        repeat dessa_eval_instr_succ_tac.
+        repeat dessa_eval_instr_succ_tac.
+        repeat dessa_eval_instr_succ_tac.
+    - dessa_eval_instr_succ_tac.
+      inversion H2; subst;clear H2.
+      + repeat dessa_eval_instr_succ_tac.
+      + dessa_eval_instr_succ_tac.
+        dessa_eval_instr_succ_tac.
+        dessa_eval_instr_succ_tac.
+        eapply DSL.EImuljS.
+        repeat dessa_eval_instr_succ_tac.
+        repeat dessa_eval_instr_succ_tac.
+        repeat dessa_eval_instr_succ_tac.
     - dessa_eval_instr_succ_tac.
       (* rewrite /= in H3. *)
       inversion H2; subst;clear H2.
