@@ -1590,6 +1590,50 @@ Module MakeDSL
     program_succ_typenv p2 (program_succ_typenv p1 E).
   Proof. by elim: p1 E => [| hd1 tl1 IH] //=. Qed.
 
+  Lemma atyp_equal E1 E2 a: TE.Equal E1 E2 -> atyp a E1 = atyp a E2.
+  Proof.
+    move=> Heq. case: a => //=. move=> v.
+    move: (TELemmas.find_m (eqxx v) Heq) => Hfind2.
+    move: (Logic.eq_sym Hfind2) => {Hfind2} Hfind2.
+    case Hfind1: (TE.find v E1).
+    - rewrite Hfind1 in Hfind2.
+      rewrite (TE.find_some_vtyp Hfind1) (TE.find_some_vtyp Hfind2).
+      reflexivity.
+    - rewrite Hfind1 in Hfind2.
+      rewrite (TE.find_none_vtyp Hfind1) (TE.find_none_vtyp Hfind2).
+      reflexivity.
+  Qed.
+
+  Lemma asize_equal E1 E2 a : TE.Equal E1 E2 -> asize a E1 = asize a E2.
+  Proof.
+    rewrite /asize. move=> Heq. rewrite (atyp_equal _ Heq). reflexivity.
+  Qed.
+
+  Lemma instr_succ_typenv_equal E1 E2 i :
+    TE.Equal E1 E2 -> TE.Equal (instr_succ_typenv i E1) (instr_succ_typenv i E2).
+  Proof.
+    move=> Heq.
+    (case: i => //=); intros;
+      by repeat
+        match goal with
+        | H : TE.Equal ?E1 ?E2 |- context f [atyp ?a ?E1] =>
+          rewrite (atyp_equal a Heq)
+        | |- TE.Equal (TE.add _ _ _) (TE.add _ _ _) =>
+          apply: TELemmas.F.add_m
+        | |- TE.SE.eq ?x ?x =>
+          exact: eqxx
+        | |- ?e = ?e => reflexivity
+        | H : ?p |- ?p => assumption
+        end.
+  Qed.
+
+  Lemma program_succ_typenv_equal E1 E2 p :
+    TE.Equal E1 E2 -> TE.Equal (program_succ_typenv p E1) (program_succ_typenv p E2).
+  Proof.
+    elim: p E1 E2 => [| i p IH] E1 E2 //= Heq.
+    move: (instr_succ_typenv_equal i Heq) => {Heq} Heq. exact: (IH _ _ Heq).
+  Qed.
+
   Lemma eval_ebexp_split e te s :
     eval_ebexp e te s -> (forall se, se \in split_eand e -> eval_ebexp se te s).
   Proof.
@@ -2970,7 +3014,8 @@ Module MakeDSL
            | |- is_true (_ && _) => apply /andP; tac
            | H : is_true (_ && _) |- _ =>
              let H1 := fresh in let H2 := fresh in move/andP: H => [H1 H2]; tac
-           | |- VS.Equal (vars_env (TE.add ?t ?ty ?te)) (VS.union (vars_env ?te) (VS.singleton ?t))
+           | |- VS.Equal (vars_env (TE.add ?t ?ty ?te))
+                         (VS.union (vars_env ?te) (VS.singleton ?t))
              => exact: vars_env_add_union
            | |-     VS.Equal (vars_env (TE.add ?x ?xty (TE.add ?y ?yty ?te)))
                              (VS.union (vars_env ?te) (VS.add ?x (VS.singleton ?y)))
@@ -2999,6 +3044,54 @@ Module MakeDSL
     move/memenvP => H. apply/memenvP/VSLemmas.memP.
     move: (@vars_env_instr_succ_typenv i E x) => [_ Himp]. apply: Himp.
     apply/VSLemmas.memP. rewrite VSLemmas.mem_union H. reflexivity.
+  Qed.
+
+  Lemma mem_program_succ_typenv x p E :
+    TE.mem x E -> TE.mem x (program_succ_typenv p E).
+  Proof.
+    move/memenvP => H. apply/memenvP/VSLemmas.memP.
+    move: (@vars_env_program_succ_typenv p E x) => [_ Himp]. apply: Himp.
+    apply/VSLemmas.memP. rewrite VSLemmas.mem_union H. reflexivity.
+  Qed.
+
+  Lemma is_defined_instr_succ_typenv E i v :
+    is_defined v E -> is_defined v (instr_succ_typenv i E).
+  Proof.
+    move/memdefP => Hmem. apply/memdefP. exact: (mem_instr_succ_typenv i Hmem).
+  Qed.
+
+  Lemma are_defined_lvs_instr_succ_typenv E i :
+    are_defined (lvs_instr i) (instr_succ_typenv i E).
+  Proof.
+    apply/defsubP. rewrite vars_env_instr_succ_typenv.
+    apply: VSLemmas.subset_union2. exact: VSLemmas.subset_refl.
+  Qed.
+
+  Lemma are_defined_lvs_program_succ_typenv E p :
+    are_defined (lvs_program p) (program_succ_typenv p E).
+  Proof.
+    apply/defsubP. rewrite vars_env_program_succ_typenv.
+    apply: VSLemmas.subset_union2. exact: VSLemmas.subset_refl.
+  Qed.
+
+  Lemma are_defined_instr_succ_typenv E i vs :
+    are_defined vs E -> are_defined vs (instr_succ_typenv i E).
+  Proof.
+    move/defsubP=> H. apply/defsubP. rewrite vars_env_instr_succ_typenv.
+    apply: VSLemmas.subset_union1. assumption.
+  Qed.
+
+  Lemma is_defined_program_succ_typenv E p v :
+    is_defined v E -> is_defined v (program_succ_typenv p E).
+  Proof.
+    move/memdefP => Hmem. apply/memdefP. exact: (mem_program_succ_typenv p Hmem).
+  Qed.
+
+  Lemma are_defined_program_succ_typenv E p vs :
+    are_defined vs E -> are_defined vs (program_succ_typenv p E).
+  Proof.
+    move/defsubP=> H. apply/defsubP. rewrite vars_env_program_succ_typenv.
+    apply: VSLemmas.subset_union1. assumption.
   Qed.
 
 
