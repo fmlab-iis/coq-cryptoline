@@ -3429,25 +3429,25 @@ End WellFormedBexpInstrSafe.
 
 (* Program safety - fixed typing environment - initial typing environment *)
 
-Section SafetyFixed.
+Section SafetyFixedInit.
 
-  Fixpoint bexp_program_safe_fixed E p : QFBV.bexp :=
+  Fixpoint bexp_program_safe_fixed_init E p : QFBV.bexp :=
     match p with
     | [::] => qfbv_true
     | hd::tl =>
       qfbv_conj (bexp_instr_safe E hd)
                 (qfbv_disj
                    (qfbv_lneg (bexp_instr E (rng_instr hd)))
-                   (bexp_program_safe_fixed (instr_succ_typenv hd E) tl))
+                   (bexp_program_safe_fixed_init (instr_succ_typenv hd E) tl))
     end.
 
-  Lemma eval_bexp_program_safe_fixed1 E pre p :
+  Lemma eval_bexp_program_safe_fixed_init1 E pre p :
     well_formed_rbexp E pre ->
     ssa_vars_unchanged_program (vars_rbexp pre) p ->
     well_formed_ssa_program E p ->
     (forall s, SSAStore.conform s E ->
                QFBV.eval_bexp (bexp_rbexp pre) s ->
-               QFBV.eval_bexp (bexp_program_safe_fixed E p) s) ->
+               QFBV.eval_bexp (bexp_program_safe_fixed_init E p) s) ->
     (forall s, SSAStore.conform s E ->
                eval_rbexp pre s ->
                ssa_program_safe_at E p s).
@@ -3457,7 +3457,7 @@ Section SafetyFixed.
               bvs_eqi E s t ->
               SSAStore.conform t E ->
               QFBV.eval_bexp (bexp_rbexp pre) t ->
-              QFBV.eval_bexp (bexp_program_safe_fixed E p) t).
+              QFBV.eval_bexp (bexp_program_safe_fixed_init E p) t).
     { move=> t Heqi Hco Hpre. exact: (H _ Hco Hpre). }
     move: {H} Hwf_pre Hun Hwf_p s.
 
@@ -3510,18 +3510,19 @@ Section SafetyFixed.
 
   (* Soundness of bexp_program_safe_fixed. *)
 
-  Definition ssa_spec_safe_qfbv_fixed sp : Prop :=
+  Definition ssa_spec_safe_qfbv_fixed_init sp : Prop :=
     forall s,
       SSAStore.conform s (sinputs sp) ->
       QFBV.eval_bexp (bexp_rbexp (rng_bexp (spre sp))) s ->
-      QFBV.eval_bexp (bexp_program_safe_fixed (sinputs sp) (sprog sp)) s.
+      QFBV.eval_bexp (bexp_program_safe_fixed_init (sinputs sp) (sprog sp)) s.
 
   Lemma ssa_spec_safe_qfbv_sound sp :
-    well_formed_ssa_spec sp -> ssa_spec_safe_qfbv_fixed sp -> ssa_spec_safe sp.
+    well_formed_ssa_spec sp -> ssa_spec_safe_qfbv_fixed_init sp ->
+    ssa_spec_safe sp.
   Proof.
     move=> Hwf. move: Hwf (well_formed_ssa_spec_program Hwf).
     case: sp => E f p g. rewrite /well_formed_ssa_spec /well_formed_spec
-                                 /ssa_spec_safe_qfbv_fixed /ssa_spec_safe /=.
+                                 /ssa_spec_safe_qfbv_fixed_init /ssa_spec_safe /=.
     move=> /andP [/andP [/andP [/andP [Hwf_f Hwf_p] Hwf_g] Hun_Ep] Hssa]
             Hwf_ssa_p Hbv s Hco Hf.
 
@@ -3530,11 +3531,12 @@ Section SafetyFixed.
     move/defsubP: Hdef_f_rng => Hsub_f_rng.
     move: (ssa_unchanged_program_subset Hun_Ep Hsub_f_rng) => Hun_f_rng.
 
-    apply: (eval_bexp_program_safe_fixed1 Hwf_f_rng Hun_f_rng Hwf_ssa_p _ Hco Hf).
+    apply: (eval_bexp_program_safe_fixed_init1
+              Hwf_f_rng Hun_f_rng Hwf_ssa_p _ Hco Hf).
     exact: Hbv.
   Qed.
 
-End SafetyFixed.
+End SafetyFixedInit.
 
 
 (* Program safety - varying typing environment *)
@@ -3673,7 +3675,7 @@ Section SafetyVarying.
 End SafetyVarying.
 
 
-Section SplitConditions.
+Section SplitConditionsVarying.
 
   Import QFBV.
 
@@ -4410,4 +4412,250 @@ Section SplitConditions.
     exact: (ssa_spec_safe_split_complete Hwf Hsp).
   Qed.
 
-End SplitConditions.
+End SplitConditionsVarying.
+
+
+(* Program safety - fixed typing environment - final typing environment *)
+
+Section SafetyFixedFinal.
+
+  (* use the final typing environment *)
+  Fixpoint bexp_program_safe_fixed_final E p : QFBV.bexp :=
+    match p with
+    | [::] => qfbv_true
+    | hd::tl =>
+      qfbv_conj (bexp_instr_safe E hd)
+                (qfbv_imp
+                   (bexp_instr E (rng_instr hd))
+                   (bexp_program_safe_fixed_final E tl))
+    end.
+
+  Lemma eval_bexp_program_safe_fixed_final1 E pre p :
+    let fE := (program_succ_typenv p E) in
+    well_formed_rbexp E pre ->
+    ssa_vars_unchanged_program (vars_rbexp pre) p ->
+    well_formed_ssa_program E p ->
+    (forall s, SSAStore.conform s fE ->
+               QFBV.eval_bexp (bexp_rbexp pre) s ->
+               QFBV.eval_bexp (bexp_program_safe_fixed_final fE p) s) ->
+    (forall s, SSAStore.conform s fE ->
+               eval_rbexp pre s ->
+               ssa_program_safe_at fE p s).
+  Proof.
+    move=> fE Hwf_pre Hun Hwf_p H s.
+    have: (forall t : SSAStore.t,
+              bvs_eqi E s t ->
+              SSAStore.conform t fE ->
+              QFBV.eval_bexp (bexp_rbexp pre) t ->
+              QFBV.eval_bexp (bexp_program_safe_fixed_final fE p) t).
+    { move=> t Heqi Hco Hpre. exact: (H _ Hco Hpre). }
+    move: {H} Hwf_pre Hun Hwf_p s. rewrite /fE. clear fE.
+    elim: p E => [| i p IH] E /=.
+    - move=> *. exact: ssa_program_safe_at_nil.
+    - rewrite ssa_unchanged_program_cons /well_formed_ssa_program.
+      rewrite well_formed_program_cons ssa_single_assignment_cons.
+      rewrite ssa_unchanged_program_cons.
+      move=> Hwf_pre
+               /andP [Hun_prei Hun_prep] /andP [
+                 /andP [/andP [Hwf_i Hwf_p]
+                         /andP [Hun_Ei Hun_Ep]] /andP [Hun_ip Hssa]].
+      move: (well_formed_rng_instr Hwf_i) => Hwf_rng_Ei.
+      move: (well_formed_instr_well_defined Hwf_i) => Hwd_Ei.
+      move: (well_defined_rng_instr Hwd_Ei) => Hwd_rng_Ei.
+      move=> s H Hco Hpre.
+      move: (ssa_unchanged_program_succ_typenv_submap Hun_Ep Hssa) => Hsub_EpE.
+      have Hun_iEp: ssa_vars_unchanged_program (vars_env (instr_succ_typenv i E)) p.
+      { apply: (ssa_unchanged_program_replace
+                  (SSAVS.Lemmas.P.equal_sym (vars_env_instr_succ_typenv i E))).
+        rewrite ssa_unchanged_program_union. rewrite Hun_Ep Hun_ip.
+        exact: is_true_true. }
+      move: (ssa_unchanged_program_succ_typenv_submap Hun_iEp Hssa) => Hsub_iEpiE.
+      move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsub_EiE.
+      move: (TELemmas.submap_trans Hsub_EiE Hsub_iEpiE) => Hsub_EpiE.
+      move: (conform_submap Hsub_iEpiE Hco) => Hco_iE.
+      move: (conform_submap Hsub_EiE Hco_iE) => Hco_E.
+      apply: ssa_program_safe_at_cons.
+      + move/eval_bexp_rbexp: Hpre => Hpre.
+        apply/(eval_bexp_instr_safe
+                 Hco (well_formed_instr_submap Hwf_i Hsub_EpiE)).
+        move: (H s (bvs_eqi_refl s) Hco Hpre) => /andP [H1 _].
+        move/andP: Hwf_i => [Hwd_i Hwt_i]. exact: H1.
+      + move=> t Hei.
+        have Hssa_p: well_formed_ssa_program (instr_succ_typenv i E) p.
+        { repeat (apply/andP; split); by assumption. }
+        have Heq: SSATE.Equal
+                    (program_succ_typenv p (instr_succ_typenv i E))
+                    (instr_succ_typenv
+                       i (program_succ_typenv p (instr_succ_typenv i E))).
+        { symmetry. move: (are_defined_lvs_instr_succ_typenv E i) => Hdef.
+          apply: env_unchanged_instr_succ_equal.
+          - exact: (are_defined_submap Hsub_iEpiE Hdef).
+          - apply: (env_unchanged_instr_submap Hsub_iEpiE Hdef).
+            + apply: well_formed_instr_well_defined.
+              exact: (well_formed_instr_submap Hwf_i Hsub_EiE).
+            + exact: (env_unchanged_instr_succ Hwd_Ei Hun_Ei). }
+        move: (TELemmas.Equal_submap Heq) => Hsub.
+        apply/(ssa_program_safe_at_submap
+                 _ Hsub (well_formed_program_submap Hwf_p Hsub_iEpiE)).
+        rewrite -ssa_vars_unchanged_rng_instr in Hun_Ei.
+          move/(submap_eval_instr _ _ Hsub_EpiE Hwd_rng_Ei): (Hei) => Hei_Est.
+          move: (bvs_eqi_eval_instr Hun_Ei Hei_Est) => Heqi_Est.
+        apply: (IH _ (well_formed_rbexp_submap Hsub_EiE Hwf_pre) Hun_prep Hssa_p).
+        * move=> t' Heqi_tt' Hco_t' Hpre_t'.
+          move: (bvs_eqi_submap Hsub_EiE Heqi_tt') => Heqi_Ett'.
+          move: (H _ (bvs_eqi_trans Heqi_Est Heqi_Ett') Hco_t' Hpre_t').
+          move/andP=> [_ Hevb].
+          move: (bexp_instr_eval Hwf_rng_Ei Hco_E Hun_Ei Hei_Est) => Hevb_t.
+          rewrite -rng_instr_succ_typenv in Heqi_tt'.
+          rewrite (bvs_eqi_qfbv_eval_bexp
+                     (bexp_instr_are_defined Hwd_rng_Ei) Heqi_tt') in Hevb_t.
+          rewrite (bexp_instr_submap Hwd_rng_Ei Hsub_EpiE) in Hevb_t.
+          rewrite Hevb_t /= in Hevb. exact: Hevb.
+        * move: (well_formed_instr_submap Hwf_rng_Ei Hsub_EpiE) => Hwf_rng_piEi.
+          move: (conform_instr_succ_typenv Hwf_rng_piEi Hco Hei).
+          rewrite rng_instr_succ_typenv. apply: SSAStore.conform_submap.
+          exact: (SSATE.Lemmas.Equal_submap Heq).
+        * move: (bvs_eqi_sym Heqi_Est) => Heqi_Ets.
+          move/andP: Hwf_pre => [Hwd_pre Hwt_pre].
+          apply/(bvs_eqi_eval_rbexp Hwd_pre Heqi_Ets). exact: Hpre.
+  Qed.
+
+  Lemma eval_bexp_program_safe_fixed_final2 E pre p :
+    let fE := (program_succ_typenv p E) in
+    well_formed_rbexp E pre ->
+    ssa_vars_unchanged_program (vars_rbexp pre) p ->
+    well_formed_ssa_program E p ->
+    (forall s, SSAStore.conform s fE ->
+               eval_rbexp pre s ->
+               ssa_program_safe_at fE p s) ->
+    (forall s, SSAStore.conform s fE ->
+               QFBV.eval_bexp (bexp_rbexp pre) s ->
+               QFBV.eval_bexp (bexp_program_safe_fixed_final fE p) s).
+  Proof.
+    move=> fE. rewrite /fE. clear fE.
+    move=> Hwf_Epre Hun_prep Hwf_ssa_Ep Hsafe s.
+    have: (forall t,
+              bvs_eqi (program_succ_typenv p E) s t ->
+              SSAStore.conform t (program_succ_typenv p E) ->
+              eval_rbexp pre t -> ssa_program_safe_at (program_succ_typenv p E) p t).
+    { move=> t Heqi. by apply: Hsafe. }
+    move: {Hsafe} Hwf_Epre Hun_prep Hwf_ssa_Ep s.
+    elim: p E pre => [| i p IH] E pre //=.
+
+    move=> Hwf_Epre.
+    rewrite ssa_unchanged_program_cons. move/andP=> [Hnu_prei Hun_prep].
+    move=> Hwf_ssa. move: (well_formed_ssa_tl Hwf_ssa) => Hwf_ssa_p. move: Hwf_ssa.
+    rewrite /well_formed_ssa_program /=. rewrite ssa_unchanged_program_cons.
+    move=> /andP [/andP [/andP [Hwf_Ei Hwf_iEp]
+                          /andP [Hun_Ei Hun_Ep]] /andP [Hun_ip Hssa_p]].
+    move: (well_formed_instr_well_defined Hwf_Ei) => Hwd_Ei.
+    move=> s Hsafe Hco Hpre_s.
+
+    move: (ssa_unchanged_program_succ_typenv_submap Hun_Ep Hssa_p) => Hsub_EpE.
+    have Hun_iEp: ssa_vars_unchanged_program (vars_env (instr_succ_typenv i E)) p.
+    { apply: (ssa_unchanged_program_replace
+                (SSAVS.Lemmas.P.equal_sym (vars_env_instr_succ_typenv i E))).
+      rewrite ssa_unchanged_program_union. rewrite Hun_Ep Hun_ip.
+      exact: is_true_true. }
+    move: (ssa_unchanged_program_succ_typenv_submap Hun_iEp Hssa_p) => Hsub_iEpiE.
+    move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsub_EiE.
+    move: (TELemmas.submap_trans Hsub_EiE Hsub_iEpiE) => Hsub_EpiE.
+    move: (conform_submap Hsub_iEpiE Hco) => Hco_iE.
+    move: (conform_submap Hsub_EiE Hco_iE) => Hco_E.
+
+    have Heq: SSATE.Equal
+                (program_succ_typenv p (instr_succ_typenv i E))
+                (instr_succ_typenv
+                   i (program_succ_typenv p (instr_succ_typenv i E))).
+    { symmetry. move: (are_defined_lvs_instr_succ_typenv E i) => Hdef.
+      apply: env_unchanged_instr_succ_equal.
+      - exact: (are_defined_submap Hsub_iEpiE Hdef).
+      - apply: (env_unchanged_instr_submap Hsub_iEpiE Hdef).
+        + apply: well_formed_instr_well_defined.
+          exact: (well_formed_instr_submap Hwf_Ei Hsub_EiE).
+        + exact: (env_unchanged_instr_succ Hwd_Ei Hun_Ei). }
+    move: (TELemmas.Equal_submap Heq) => Hsub.
+
+    move/eval_bexp_rbexp: Hpre_s => Hpre_s.
+    move: (Hsafe s (bvs_eqi_refl s) Hco Hpre_s) => {Hsafe} Hsafe.
+    inversion_clear Hsafe.
+    apply/andP; split.
+    - apply/(eval_bexp_instr_safe Hco (well_formed_instr_submap Hwf_Ei Hsub_EpiE)).
+      assumption.
+    - case Hsafe_i:
+        (QFBV.eval_bexp
+           (bexp_instr
+              (program_succ_typenv p (instr_succ_typenv i E)) (rng_instr i)) s) => //=.
+      apply: (IH (instr_succ_typenv i E) pre).
+      + exact: (well_formed_rbexp_submap Hsub_EiE Hwf_Epre).
+      + exact: Hun_prep.
+      + exact: Hwf_ssa_p.
+      + move=> t Heqi_ts Hco_t Hpre_t.
+        move: (well_formed_program_submap Hwf_iEp Hsub_iEpiE) => Hwf_piEp.
+        apply: (bvs_eqi_ssa_program_safe_at Heqi_ts Hwf_piEp).
+        apply/(ssa_program_safe_at_submap
+                 _ Hsub (well_formed_program_submap Hwf_iEp Hsub_iEpiE)).
+        apply: H0.
+        apply: (eval_bexp_instr
+                  (well_formed_instr_submap Hwf_Ei Hsub_EpiE) Hco _ Hsafe_i).
+        apply: (SSAStore.conform_submap _ Hco).
+        apply: TELemmas.Equal_submap. symmetry. exact: Heq.
+      + exact: Hco.
+      + apply/eval_bexp_rbexp. exact: Hpre_s.
+  Qed.
+
+  (* Soundness and completeness of bexp_program_safe_fixed_final. *)
+
+  Definition ssa_spec_safe_qfbv_fixed_final sp : Prop :=
+    let fE := program_succ_typenv (sprog sp) (sinputs sp) in
+    forall s, SSAStore.conform s fE ->
+              QFBV.eval_bexp
+                (qfbv_imp
+                   (bexp_rbexp (rng_bexp (spre sp)))
+                   (bexp_program_safe_fixed_final fE (sprog sp)))
+                s.
+
+  Lemma ssa_spec_safe_qfbv_fixed_final_sound sp :
+    well_formed_ssa_spec sp -> ssa_spec_safe_qfbv_fixed_final sp ->
+    ssa_spec_safe_final sp.
+  Proof.
+    move=> Hwf. move: Hwf (well_formed_ssa_spec_program Hwf).
+    case: sp => E f p g.
+    rewrite /well_formed_ssa_spec /well_formed_spec
+            /ssa_spec_safe_final /ssa_spec_safe_qfbv_fixed_final /=.
+    move=> /andP [/andP [/andP [/andP [Hwf_f Hwf_p] Hwf_g] Hun_Ep] Hssa]
+            Hwf_ssa_p /= Hbv s Hco Hf.
+
+    move: (well_formed_rng_bexp Hwf_f) => Hwf_f_rng.
+    move: (Hwf_f_rng). move/andP=> [Hdef_f_rng Hwt_f_rng].
+    move/defsubP: Hdef_f_rng => Hsub_f_rng.
+    move: (ssa_unchanged_program_subset Hun_Ep Hsub_f_rng) => Hun_f_rng.
+
+    apply: (eval_bexp_program_safe_fixed_final1
+              Hwf_f_rng Hun_f_rng Hwf_ssa_p _ Hco Hf).
+    move=> t Hco_t Hf_t. move: (Hbv _ Hco_t). rewrite Hf_t /=. by apply.
+  Qed.
+
+  Lemma ssa_spec_safe_qfbv_fixed_final_complete sp :
+    well_formed_ssa_spec sp -> ssa_spec_safe_final sp ->
+    ssa_spec_safe_qfbv_fixed_final sp.
+  Proof.
+    move=> Hwf. move: Hwf (well_formed_ssa_spec_program Hwf).
+    case: sp => E f p g.
+    rewrite /well_formed_ssa_spec /well_formed_spec
+            /ssa_spec_safe_final /ssa_spec_safe_qfbv_fixed_final /=.
+    move=> /andP [/andP [/andP [/andP [Hwf_f Hwf_p] Hwf_g] Hun_Ep] Hssa]
+            Hwf_ssa_p /= Hsafe s Hco.
+
+    move: (well_formed_rng_bexp Hwf_f) => Hwf_f_rng.
+    move: (Hwf_f_rng). move/andP=> [Hdef_f_rng Hwt_f_rng].
+    move/defsubP: Hdef_f_rng => Hsub_f_rng.
+    move: (ssa_unchanged_program_subset Hun_Ep Hsub_f_rng) => Hun_f_rng.
+    case Hf: (QFBV.eval_bexp (bexp_rbexp (rng_bexp f)) s) => //=.
+
+    apply: (eval_bexp_program_safe_fixed_final2
+              Hwf_f_rng Hun_f_rng Hwf_ssa_p _ Hco Hf).
+    exact: Hsafe.
+  Qed.
+
+End SafetyFixedFinal.
