@@ -3910,6 +3910,23 @@ Section MakeSSA.
                   && (env_unchanged_program E tl)
       end.
 
+    Lemma env_unchanged_program_rcons E p i :
+      env_unchanged_program E (rcons p i) =
+      env_unchanged_program E p && env_unchanged_instr E i.
+    Proof.
+      elim: p => [| hd tl IH] //=.
+      - by rewrite andbT.
+      - rewrite -andb_assoc. rewrite -IH. reflexivity.
+    Qed.
+
+    Lemma env_unchanged_program_cat E p1 p2 :
+      env_unchanged_program E (p1 ++ p2) =
+      env_unchanged_program E p1 && env_unchanged_program E p2.
+    Proof.
+      elim: p1 p2 => [| hd tl IH] p2 //=.
+      rewrite -andb_assoc. rewrite -IH. reflexivity.
+    Qed.
+
     Lemma env_unchanged_instr_equal E1 E2 i :
       SSATE.Equal E1 E2 -> env_unchanged_instr E1 i ->
       env_unchanged_instr E2 i.
