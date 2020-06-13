@@ -2532,12 +2532,14 @@ Qed.
 
 (* Construct a single QFBV expression for bit-blasting *)
 
-Definition qfbv_bexp_spec (s : bexp_spec) :=
-  qfbv_imp (qfbv_conj (bpre s) (qfbv_conjs (bprog s)))
-           (bpost s).
+Definition qfbv_bexp_spec (s : spec) : QFBV.bexp :=
+  let bs := bexp_of_rspec (sinputs s) (rspec_of_spec s) in
+  qfbv_imp (qfbv_conj (bpre bs) (qfbv_conjs (bprog bs)))
+           (bpost bs).
 
-Definition valid_qfbv_bexp_spec (s : bexp_spec) :=
-  forall st, SSAStore.conform st (binputs s) ->
+Definition valid_qfbv_bexp_spec (s : spec) :=
+  let fE := program_succ_typenv (sprog s) (sinputs s) in
+  forall st, SSAStore.conform st fE ->
              QFBV.eval_bexp (qfbv_bexp_spec s) st.
 
 Lemma eval_bexps_conj_qfbv_conj es s :
@@ -2549,20 +2551,22 @@ Proof.
 Qed.
 
 Lemma valid_qfbv_bexp_spec_conj s :
-  valid_qfbv_bexp_spec s <-> valid_bexp_spec_conj s.
+  valid_qfbv_bexp_spec s <-> valid_bexp_spec_conj (bexp_of_rspec (sinputs s) s).
 Proof.
   case: s => E f p g. rewrite /valid_qfbv_bexp_spec /valid_bexp_spec_conj /=.
   split.
-  - move=> H s Hco Hf Hp. move: (H s Hco). rewrite Hf.
-    move/eval_bexps_conj_qfbv_conj: Hp => -> /=. by apply.
-  - move=> H s Hco. move: (H s Hco) => {H}. case Hf: (QFBV.eval_bexp f s) => //=.
-    case Hp: (QFBV.eval_bexp (qfbv_conjs p) s) => //=.
+  - move=> H s Hco Hf Hp. rewrite rng_program_succ_typenv in Hco.
+    move: (H s Hco). rewrite Hf. move/eval_bexps_conj_qfbv_conj: Hp => -> /=.
+      by apply.
+  - move=> H s Hco. rewrite -rng_program_succ_typenv in Hco. move: (H s Hco) => {H}.
+    case Hf: (QFBV.eval_bexp (bexp_rbexp (rng_bexp f)) s) => //=.
+    case Hp: (QFBV.eval_bexp (qfbv_conjs (bexp_program E (rng_program p))) s) => //=.
     move/eval_bexps_conj_qfbv_conj: Hp => Hp. by apply.
 Qed.
 
 Theorem qfbv_bexp_spec_sound s :
   well_formed_ssa_spec s ->
-  valid_qfbv_bexp_spec (bexp_of_rspec (sinputs s) (rspec_of_spec s)) ->
+  valid_qfbv_bexp_spec s ->
   valid_rspec (rspec_of_spec s).
 Proof.
   move=> Hwf Hv. apply: (bexp_spec_sound_conj Hwf).
@@ -2572,7 +2576,7 @@ Qed.
 Theorem qfbv_bexp_spec_complete s :
   well_formed_ssa_spec s ->
   valid_rspec (rspec_of_spec s) ->
-  valid_qfbv_bexp_spec (bexp_of_rspec (sinputs s) (rspec_of_spec s)).
+  valid_qfbv_bexp_spec s.
 Proof.
   move=> Hwf Hv. apply/valid_qfbv_bexp_spec_conj.
   apply: (bexp_spec_complete_conj Hwf). assumption.
@@ -2849,24 +2853,22 @@ Section WellFormedRange.
   Qed.
 
   Theorem well_formed_qfbv_bexp_rspec s :
-    let bs := bexp_of_rspec (sinputs s) (rspec_of_spec s) in
+    let fE := program_succ_typenv (sprog s) (sinputs s) in
     well_formed_ssa_spec s ->
-    QFBV.well_formed_bexp (qfbv_bexp_spec bs) (binputs bs).
+    QFBV.well_formed_bexp (qfbv_bexp_spec s) fE.
   Proof.
-    dcase (bexp_of_rspec (sinputs s) s). case s => E f p g /=.
-    move=> bs <- /=. move=> Hwf.
+    case s => E f p g /=. move=> Hwf.
     move/andP: Hwf => /= [/andP [Hwf Hun] Hssa].
     move/andP: Hwf => /= [/andP [Hwf_f Hwf_p] Hwf_g].
     move: (ssa_unchanged_program_succ_typenv_submap Hun Hssa) => Hsubm.
     apply/andP; split; first (apply/andP; split).
     - apply: well_formed_bexp_rbexp. move: (well_formed_rng_bexp Hwf_f) => H.
-      rewrite rng_program_succ_typenv. exact: (well_formed_rbexp_submap Hsubm H).
-    - apply: well_formed_bexp_program.
+      exact: (well_formed_rbexp_submap Hsubm H).
+    - rewrite -rng_program_succ_typenv. apply: well_formed_bexp_program.
       + rewrite ssa_vars_unchanged_rng_program. exact: Hun.
       + exact: (ssa_single_assignment_rng_program Hssa).
       + exact: (well_formed_rng_program Hwf_p).
-    - apply: well_formed_bexp_rbexp. move: (well_formed_rng_bexp Hwf_g) => H.
-      rewrite rng_program_succ_typenv. exact: H.
+    - apply: well_formed_bexp_rbexp. exact: (well_formed_rng_bexp Hwf_g).
   Qed.
 
 End WellFormedRange.

@@ -4238,14 +4238,64 @@ Module MakeDSL
      it conforms to the environment*)
   Section ForceConform.
 
-    Fixpoint force_conform_rec E vs s :=
+    Fixpoint force_conform_vars E vs s :=
       match vs with
       | [::] => s
-      | v::vs => S.upd v (zeros (TE.vsize v E)) (force_conform_rec E vs s)
+      | v::vs => S.upd v (zeros (TE.vsize v E)) (force_conform_vars E vs s)
       end.
 
+    Lemma force_conform_vars_notin E vs s v :
+      v \notin vs -> S.acc v (force_conform_vars E vs s) = S.acc v s.
+    Proof.
+      elim: vs => [| x xs IH] //=. rewrite in_cons negb_or.
+      move/andP=> [Hne Hnotin]. rewrite (S.acc_upd_neq Hne). rewrite (IH Hnotin).
+      reflexivity.
+    Qed.
+
+    Lemma force_conform_vars_in E vs s v :
+      v \in vs -> S.acc v (force_conform_vars E vs s) = zeros (TE.vsize v E).
+    Proof.
+      elim: vs => [| x xs IH] //=. rewrite in_cons. case H: (v == x) => //=.
+      - move=> _. rewrite (S.acc_upd_eq H). rewrite (eqP H). reflexivity.
+      - move=> Hin. move/idP/negP: H => H. rewrite (S.acc_upd_neq H).
+        exact: (IH Hin).
+    Qed.
+
+    Lemma force_conform_vars_incl E vs1 vs2 s :
+      incl vs1 vs2 -> incl vs2 vs1 ->
+      S.Equal (force_conform_vars E vs1 s) (force_conform_vars E vs2 s).
+    Proof.
+      move=> H12 H21. apply/S.Equal_def. move=> v. case H1: (v \in vs1).
+      - rewrite (force_conform_vars_in E s H1). move/Seqs.in_In: H1 => H1.
+        move: (H12 _ H1). move/Seqs.in_In => H2.
+        rewrite (force_conform_vars_in E s H2). reflexivity.
+      - move/idP/negP: H1 => H1. rewrite (force_conform_vars_notin E s H1).
+        have H2: (v \notin vs2).
+        { apply/negP => H2. move/negP: H1; apply. apply/Seqs.in_In.
+          apply: H21. apply/Seqs.in_In. exact: H2. }
+        rewrite (force_conform_vars_notin E s H2). reflexivity.
+    Qed.
+
+    Lemma force_conform_vars_set_equal E vs1 vs2 s :
+      VS.Equal vs1 vs2 ->
+      S.Equal (force_conform_vars E (VS.elements vs1) s)
+              (force_conform_vars E (VS.elements vs2) s).
+    Proof.
+      move=> Heq. move/(VSLemmas.P.double_inclusion _ _): Heq. move=> [Hsub1 Hsub2].
+      move: (VSLemmas.Subset_incl Hsub1) (VSLemmas.Subset_incl Hsub2).
+      exact: force_conform_vars_incl.
+    Qed.
+
+    Lemma force_conform_vars_env E s :
+      S.conform (force_conform_vars E (VS.elements (vars_env E)) s) E.
+    Proof.
+      apply: S.conform_def. move=> x Hmem. rewrite force_conform_vars_in.
+      - rewrite size_zeros. reflexivity.
+      - rewrite vars_env_mem in Hmem. exact: (VSLemmas.mem_in_elements Hmem).
+    Qed.
+
     Definition force_conform (E1 E2 : TE.env) (s : S.t) : S.t :=
-      force_conform_rec E2 (VS.elements (VS.diff (vars_env E2) (vars_env E1))) s.
+      force_conform_vars E2 (VS.elements (VS.diff (vars_env E2) (vars_env E1))) s.
 
     Lemma force_conform_acc_mem1 E1 E2 s v :
       is_defined v E1 -> S.acc v (force_conform E1 E2 s) = S.acc v s.
