@@ -3114,6 +3114,14 @@ Module MakeDSL
     rewrite (Bool.andb_comm (well_typed_rbexp te (rng_bexp (e, r)))). reflexivity.
   Qed.
 
+  Lemma well_formed_bexp_submap E1 E2 e :
+    TELemmas.submap E1 E2 -> well_formed_bexp E1 e -> well_formed_bexp E2 e.
+  Proof.
+    move=> Hsub. rewrite !well_formed_bexp_split => /andP [He Hr].
+    rewrite (well_formed_ebexp_submap Hsub He) (well_formed_rbexp_submap Hsub Hr).
+    exact: is_true_true.
+  Qed.
+
   Lemma well_typed_eqn_bexp te e :
     well_typed_bexp te e -> well_typed_ebexp te (eqn_bexp e).
   Proof. rewrite well_typed_bexp_split. by move/andP=> [? ?]. Qed.
