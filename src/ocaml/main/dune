@@ -1,0 +1,5 @@
+(library
+  (name        main)
+  (libraries   ast parsers options extraction translator)
+  (flags       (:standard -w -3))
+)

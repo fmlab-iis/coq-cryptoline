@@ -1,0 +1,6 @@
+(executables
+ (names coqcryptoline)
+ (libraries lwt.unix options ast parsers extraction translator main)
+ (public_names coqcryptoline)
+ (package coqcryptoline)
+)
