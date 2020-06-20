@@ -113,8 +113,10 @@ let coq_output_dimacs ch cs =
   let _ = flush ch in
   ()
 
+
+
 let coq_cnf_unsat ?timeout:timeout (id, cnf) =
-  let _ = vprint ("\tRange property #" ^ string_of_int id ^ ":\t\t") in
+  let _ = vprint ("\t CNF #" ^ string_of_int id ^ ":\t\t\t") in
   let ifile = Filename.temp_file "inputcnf_" "" in
   let ofile = Filename.temp_file "outputcnf_" "" in
   let errfile = Filename.temp_file "errorcnf_" "" in
@@ -142,21 +144,98 @@ let coq_cnf_unsat ?timeout:timeout (id, cnf) =
 		(read_cryptominisat_output ofile == Unsat) in
   let t2 = Unix.gettimeofday() in
   let _ =
-	if res then vprintln ("[OK]\t\t" ^ string_of_running_time t1 t2)
-	else vprintln ("[FAILED]\t" ^ string_of_running_time t1 t2) in
+	if res then vprintln ("[UNSAT]\t\t" ^ string_of_running_time t1 t2)
+	else vprintln ("[SAT]\t\t" ^ string_of_running_time t1 t2) in
   let _ = Unix.unlink ifile in
   let _ = Unix.unlink ofile in
   let _ = Unix.unlink errfile in
   res
 
+let coq_all_unsat id_cnf_pairs =
+  List.for_all coq_cnf_unsat id_cnf_pairs
+
+
+
+let coq_cnf_unsat_lwt ?timeout:timeout header cnf : bool Lwt.t =
+  let ifile = Filename.temp_file "inputcnf_" "" in
+  let ofile = Filename.temp_file "outputcnf_" "" in
+  let errfile = Filename.temp_file "errorcnf_" "" in
+  let res =
+	match !smt_solver with
+	| Minisat ->
+		let ch = open_out ifile in
+		let _ = coq_output_dimacs ch cnf in
+		let%lwt _ =
+          match timeout with
+          | None -> Qfbv.WithLwt.run_minisat header ifile ofile errfile
+          | Some ti -> Qfbv.WithLwt.run_minisat ~timeout:ti header ifile ofile errfile in
+        let%lwt res = Qfbv.WithLwt.read_minisat_output ofile in
+		let%lwt _ = Lwt_unix.unlink ifile in
+		let%lwt _ = Lwt_unix.unlink ofile in
+		let%lwt _ = Lwt_unix.unlink errfile in
+		Lwt.return (res == Unsat)
+	| Cryptominisat ->
+		let ch = open_out ifile in
+		let _ = coq_output_dimacs ch cnf in
+		let%lwt _ =
+          match timeout with
+          | None -> Qfbv.WithLwt.run_cryptominisat header ifile ofile errfile
+          | Some ti -> Qfbv.WithLwt.run_cryptominisat ~timeout:ti header ifile ofile errfile in
+        let%lwt res = Qfbv.WithLwt.read_cryptominisat_output ofile in
+		let%lwt _ = Lwt_unix.unlink ifile in
+		let%lwt _ = Lwt_unix.unlink ofile in
+		let%lwt _ = Lwt_unix.unlink errfile in
+		Lwt.return (res == Unsat) in
+  res
+
+let work_on_pending delivered_helper res pending =
+  let (delivered, promised) = Lwt_main.run (Lwt.nchoose_split pending) in
+  let res' = List.fold_left delivered_helper res delivered in
+  (res', promised)
+
+let rec finish_pending delivered_helper res pending =
+  match pending with
+  | [] -> res
+  | _ -> let (res', pending') = work_on_pending delivered_helper res pending in
+         finish_pending delivered_helper res' pending'
+
+let coq_all_unsat_lwt id_cnf_pairs =
+  let mk_promise (id, cnf) : (int * bool) Lwt.t =
+    let header = ["= Verifying CNF formula #" ^ string_of_int id ^ "="] in
+    let unsat = coq_cnf_unsat_lwt header cnf in
+	let%lwt unsat = unsat in
+	Lwt.return (id, unsat) in
+  let delivered_helper all_unsat (id, unsat) =
+    let _ = vprint ("\t CNF #" ^ string_of_int id ^ ":\t\t\t") in
+    let _ = vprintln (if unsat then "[UNSAT]" else "[SAT]") in
+	all_unsat && unsat in
+  let fold_fun (all_unsat, pending) (id, cnf) =
+	if all_unsat then
+       if List.length pending < !jobs then
+         let promise = mk_promise (id, cnf) in
+         (all_unsat, promise::pending)
+       else
+         let (all_unsat', pending') = work_on_pending delivered_helper all_unsat pending in
+         let promise = mk_promise (id, cnf) in
+         (all_unsat', promise::pending')
+	else
+       (finish_pending delivered_helper all_unsat pending, []) in
+  let (res, pending) = List.fold_left fold_fun (true, []) id_cnf_pairs in
+  finish_pending delivered_helper res pending
+
+
+
 let ext_all_unsat_impl cnfs =
-  let _ = vprintln ("Verifying range properties (" ^ string_of_int (List.length cnfs) ^ "):") in
+  let _ = vprintln ("Checking CNF formulas (" ^ string_of_int (List.length cnfs) ^ "):") in
   let t1 = Unix.gettimeofday() in
-  let res = List.for_all coq_cnf_unsat (List.mapi (fun i cnf -> (i, cnf)) cnfs) in
+  let res =
+	let id_cnf_pairs = List.mapi (fun i cnf -> (i, cnf)) cnfs in
+	if !jobs > 1 then coq_all_unsat_lwt id_cnf_pairs
+	else coq_all_unsat id_cnf_pairs in
   let t2 = Unix.gettimeofday() in
   let _ =
-	if res then vprintln ("Results of verifying range properties:\t[OK]\t\t" ^ string_of_running_time t1 t2)
-	else vprintln ("Results of verifying range properties:\t[FAILED]\t" ^ string_of_running_time t1 t2) in
+	if res then vprintln ("Results of checking CNF formulas:\t[OK]\t\t" ^ string_of_running_time t1 t2)
+	else vprintln ("Results of checking CNF formulas:\t[FAILED]\t" ^ string_of_running_time t1 t2) in
   res
 
 
@@ -428,7 +507,7 @@ let ext_find_coefficients_impl gs p m =
 	let coefs = coq_compute_coefficients_by_lift (vars, p, (m::gs)) in
 	(List.hd coefs, List.tl coefs) in
   let t2 = Unix.gettimeofday() in
-  let _ = vprintln ("[DONE]\t\t" ^ string_of_running_time t1 t2) in
+  let _ = vprintln ("[OK]\t\t" ^ string_of_running_time t1 t2) in
   let _ = Unix.unlink ifile in
   let _ = Unix.unlink ofile in
   (cs_gs, c_m)
