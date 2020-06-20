@@ -106,34 +106,38 @@ let anon file =
   let _ = Random.self_init() in
   match !action with
   | Verify ->
-     let (_vs, _s, coq_spec) = parse_and_check file in
-     let coq_ssa_spec = Extraction.SSA.ssa_spec coq_spec in
-     let coq_ssa_rspec = Extraction.DSL.DSL.rspec_of_spec coq_ssa_spec in
-     let coq_bexp_spec = Extraction.SSA2QFBV.bexp_of_rspec coq_ssa_rspec in
-     let _coq_qfbv = Extraction.SSA2QFBV.qfbv_bexp_spec coq_bexp_spec in
-     let res = failwith "Main.Std.HERE" in
-     (* let res = Verify.Std.verify_spec s in *)
-     let t2 = Unix.gettimeofday() in
-     let _ = print_endline ("Verification result:\t\t\t"
-                            ^ (if res then "[OK]\t" else "[FAILED]") ^ "\t"
-                            ^ string_of_running_time t1 t2) in
-     if res then exit 0 else exit 1
+      let (_vs, _s, coq_spec) = parse_and_check file in
+	  (* options : bool, true to add carry constraints *)
+	  let o = false in
+	  let res = Extraction.Verify.verify_dsl o coq_spec in
+	  (*
+      let coq_ssa_spec = Extraction.SSA.ssa_spec coq_spec in
+      let coq_ssa_rspec = Extraction.DSL.DSL.rspec_of_spec coq_ssa_spec in
+      let coq_bexp_spec = Extraction.SSA2QFBV.bexp_of_rspec coq_ssa_rspec in
+      let _coq_qfbv = Extraction.SSA2QFBV.qfbv_bexp_spec coq_bexp_spec in
+      let res = failwith "Main.Std.HERE" in
+	   *)
+      let t2 = Unix.gettimeofday() in
+      let _ = print_endline ("Verification result:\t\t\t"
+                             ^ (if res then "[OK]\t" else "[FAILED]") ^ "\t"
+                             ^ string_of_running_time t1 t2) in
+      if res then exit 0 else exit 1
   | Parse ->
-     let (vs, s, _) = parse_and_check file in
-     print_endline ("proc main(" ^ string_of_inputs vs ^ ") =");
-     print_endline (string_of_spec s)
+      let (vs, s, _) = parse_and_check file in
+      print_endline ("proc main(" ^ string_of_inputs vs ^ ") =");
+      print_endline (string_of_spec s)
   | PrintSSA ->
-     let (vs, s, _) = parse_and_check file in
-     let vs = VS.of_list (List.map (ssa_var VM.empty) (VS.elements vs)) in
-     let s = ssa_spec s in
-     print_endline ("proc main(" ^ string_of_inputs vs ^ ") =");
-     print_endline (string_of_spec s)
+      let (vs, s, _) = parse_and_check file in
+      let vs = VS.of_list (List.map (ssa_var VM.empty) (VS.elements vs)) in
+      let s = ssa_spec s in
+      print_endline ("proc main(" ^ string_of_inputs vs ^ ") =");
+      print_endline (string_of_spec s)
   | PrintESpec ->
-     let s = espec_from_file file in
-     print_endline (string_of_espec s)
+      let s = espec_from_file file in
+      print_endline (string_of_espec s)
   | PrintRSpec ->
-     let s = rspec_from_file file in
-     print_endline (string_of_rspec s)
+      let s = rspec_from_file file in
+      print_endline (string_of_rspec s)
 (*
 let _ =
   parse args anon usage

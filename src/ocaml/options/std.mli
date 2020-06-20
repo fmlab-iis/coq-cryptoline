@@ -1,5 +1,5 @@
 
-type smt_solver = Z3 | Boolector | MathSAT | STP | Minisat | Cryptominisat
+type smt_solver = Minisat | Cryptominisat
 
 type algebra_system =
   | Singular
@@ -69,6 +69,7 @@ val unix : string -> unit
 val logfile : string ref
 
 val trace : string -> unit
+val trace_file : string -> unit
 
 val fail : string -> 'a
 

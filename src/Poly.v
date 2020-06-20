@@ -1657,8 +1657,9 @@ End PExpr.
 
 Section Checker.
 
-  Definition combine_coefficients (cs : seq Z) (ps : seq (PExpr Z)) : seq (PExpr Z) :=
-    map (fun '(c, p) => PEmul (PEc c) p) (zip cs ps).
+  Definition combine_coefficients (cs : seq (PExpr Z)) (ps : seq (PExpr Z))
+  : seq (PExpr Z) :=
+    map (fun '(c, p) => PEmul c p) (zip cs ps).
 
   Fixpoint sum_polys (ps : seq (PExpr Z)) : PExpr Z :=
     match ps with
@@ -1673,12 +1674,12 @@ Section Checker.
   (* Check if q = cs * ps + c * m *)
   Definition coefficients_checker ps m q cs c : bool :=
     (size ps == size cs) &&
-    zpexpr_eqb q (PEadd (sum_polys (combine_coefficients cs ps)) (PEmul (PEc c) m)).
+    zpexpr_eqb q (PEadd (sum_polys (combine_coefficients cs ps)) (PEmul c m)).
 
   (* If q = cs * ps + c * m and for each p \in ps, p = 0, then q = c * m *)
   Lemma checker_imply_eq ps m q cs c :
     coefficients_checker ps m q cs c ->
-    zpimply_eq ps q (PEmul (PEc c) m).
+    zpimply_eq ps q (PEmul c m).
   Proof.
     move/andP=> [Hs Heq] l Heq0. rewrite /ZPEeval.
     (* Convert the syntactical equality in the hypotheses to semantic equality *)
@@ -1707,13 +1708,13 @@ Section Checker.
   Qed.
 
   Lemma zimply_eq_valid_pspec sp g t ps m q c :
-    zpexprs_of_pspec sp = (g, t, ps, m, q) -> zpimply_eq ps q (PEmul (PEc c) m) ->
+    zpexprs_of_pspec sp = (g, t, ps, m, q) -> zpimply_eq ps q (PEmul c m) ->
     valid_pspec sp.
   Proof.
     move=> Hpoly Himp st Hzpre. move: (Himp (vl_of_store st sp)) => {Himp} Himp.
     move: (vl_of_store_premises Hpoly Hzpre) => Hall0.
     move: (Himp Hall0) => Hqcm. apply: (vl_of_store_conseq Hpoly).
-    exists (ZPEeval (vl_of_store st sp) (PEc c)). exact: Hqcm.
+    exists (ZPEeval (vl_of_store st sp) c). exact: Hqcm.
   Qed.
 
   (* If the coefficients are verified by the checker, the pspec is valid *)

@@ -1,5 +1,5 @@
 
-type smt_solver = Z3 | Boolector | MathSAT | STP | Minisat | Cryptominisat
+type smt_solver = Minisat | Cryptominisat
 
 type algebra_system =
   | Singular
@@ -14,7 +14,7 @@ type variable_order =
   | RevLexOrder
   | RevAppearingOrder
 
-let default_solver = Boolector
+let default_solver = Minisat
 
 let default_algebra = Singular
 
@@ -31,10 +31,6 @@ let smt_solver = ref default_solver
 let smt_args = ref ""
 let string_of_smt_solver s =
   match s with
-  | Boolector -> "boolector"
-  | Z3 -> "z3"
-  | MathSAT -> "mathsat"
-  | STP -> "stp"
   | Minisat -> "minisat"
   | Cryptominisat -> "cryptominisat"
 
@@ -95,12 +91,18 @@ let unix cmd =
 
 let logfile = ref "cryptoline.log"
 
+let debug = ref true
+
 let trace msg =
   let ch = open_out_gen [Open_append; Open_creat; Open_text] 0o640 !logfile in
   let _ = output_string ch msg in
   let _ = output_string ch "\n" in
   let _ = close_out ch in
   ()
+
+let trace_file file =
+  if !debug then
+    unix ("cat " ^ file ^ " >>  " ^ !logfile)
 
 let fail s = trace s; failwith s
 

@@ -42,7 +42,8 @@ Section Verification.
   (* This is the external coefficients finder.
      The correctness is guaranteed by coefficients_checker.
      ps -> q -> m -> (cs, c) *)
-  Parameter ext_find_coefficients : seq (PExpr Z) -> PExpr Z -> PExpr Z -> seq Z * Z.
+  Parameter ext_find_coefficients :
+    seq (PExpr Z) -> PExpr Z -> PExpr Z -> seq (PExpr Z) * (PExpr Z).
 
   Fixpoint verify_pspecs (pss : seq pspec) : bool :=
     match pss with

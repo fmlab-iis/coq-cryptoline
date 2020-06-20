@@ -2,4 +2,8 @@
 *.glob
 *.vo
 *.aux
+.merlin
 src/ocaml/extraction/*
+src/ocaml/_build
+!src/ocaml/extraction/External.mli
+!src/ocaml/extraction/External.ml

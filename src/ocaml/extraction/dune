@@ -1,4 +1,5 @@
 (library
   (name        extraction)
   (flags :standard -w -32-33-34-39)
+  (libraries   options qfbv overify)
 )
