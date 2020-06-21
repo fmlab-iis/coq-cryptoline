@@ -9,13 +9,13 @@ open ZAriths
 open FSets
 
 open Options.Std
-open Qfbv.Common
-open Qfbv.Std
-open Overify.Std
 
 exception ParseError of string
 
-(* Basic numbers conversion *)
+let keep_temp_files = ref false
+
+
+(** Basic numbers conversion *)
 
 let string_of_bits bs =
   String.concat "" (List.map (fun b -> if b then "1" else "0") (List.rev bs))
@@ -65,7 +65,7 @@ let pos_of_z z =
   let str = String.sub str 1 (String.length str - 1) in
   List.fold_left (
   fun p c ->
-	if c == '1' then Coq_xI p
+	if c = '1' then Coq_xI p
 	else Coq_xO p) Coq_xH (explode str)
 
 let rec z_of_pos n =
@@ -87,7 +87,9 @@ let z_of_coq_z n =
 
 
 
-(* Verify a sequence of Coq CNFs *)
+(** Verify a sequence of Coq CNFs *)
+
+(* ===== Output to DIMACS ===== *)
 
 let coq_string_of_literal l =
   match l with
@@ -114,79 +116,245 @@ let coq_output_dimacs ch cs =
   ()
 
 
+(* ===== Single-thread solving ===== *)
 
-let coq_cnf_unsat ?timeout:timeout (id, cnf) =
-  let _ = vprint ("\t CNF #" ^ string_of_int id ^ ":\t\t\t") in
-  let ifile = Filename.temp_file "inputcnf_" "" in
-  let ofile = Filename.temp_file "outputcnf_" "" in
-  let errfile = Filename.temp_file "errorcnf_" "" in
-  let _ = trace ("CNF input file: " ^ ifile) in
-  let _ = trace ("CNF output file: " ^ ofile) in
-  let _ = trace ("CNF error file: " ^ errfile) in
+let cleanup files =
+  if not !keep_temp_files then List.iter Unix.unlink files
+
+let run_sat_solver ifile ofile errfile dratfile =
   let t1 = Unix.gettimeofday() in
-  let res =
-	match !smt_solver with
-	| Minisat ->
-		let ch = open_out ifile in
-		let _ = coq_output_dimacs ch cnf in
-		let _ =
-          match timeout with
-          | None -> run_minisat ifile ofile errfile
-          | Some ti -> run_minisat ~timeout:ti ifile ofile errfile in
-		(read_minisat_output ofile == Unsat)
-	| Cryptominisat ->
-		let ch = open_out ifile in
-		let _ = coq_output_dimacs ch cnf in
-		let _ =
-          match timeout with
-          | None -> run_cryptominisat ifile ofile errfile
-          | Some ti -> run_cryptominisat ~timeout:ti ifile ofile errfile in
-		(read_cryptominisat_output ofile == Unsat) in
+  let cmd =
+    match !sat_solver with
+    | Cryptominisat ->
+       !cryptominisat_path ^ " "
+       ^ !sat_args ^ " "
+       ^ " --drat=" ^ dratfile ^ " "
+       ^ " --verb=0 "
+       ^ "\"" ^ ifile ^ "\" "
+       ^ "| grep 's UNSATISFIABLE' 1> \"" ^ ofile ^ "\" 2> \"" ^ errfile ^ "\""
+    | Cadical ->
+       !cadical_path ^ " "
+       ^ !sat_args ^ " "
+       ^ "\"" ^ ifile ^ "\" "
+       ^ "\"" ^ dratfile ^ "\" "
+       ^ "| grep 's UNSATISFIABLE' 1> \"" ^ ofile ^ "\" 2> \"" ^ errfile ^ "\" "
+    | Glucose ->
+       !glucose_path ^ " "
+       ^ !sat_args ^ " "
+       ^ " -certified -certified-output=\"" ^ dratfile ^ "\" "
+       ^ "\"" ^ ifile ^ "\" "
+       ^ "| grep 's UNSATISFIABLE' 1> \"" ^ ofile ^ "\" 2> \"" ^ errfile ^ "\" "
+  in
+  let res = unix cmd in
   let t2 = Unix.gettimeofday() in
   let _ =
-	if res then vprintln ("[UNSAT]\t\t" ^ string_of_running_time t1 t2)
+    let _ = trace ("Execution time of SAT SOLVER: " ^ string_of_float (t2 -. t1) ^ " seconds") in
+    let _ = trace "OUTPUT FROM SAT SOLVER:" in
+    let _ = unix ("cat " ^ ofile ^ " >>  " ^ !logfile) in
+    let _ = unix ("cat " ^ errfile ^ " >>  " ^ !logfile) in
+    () in
+  res = Unix.WEXITED 0
+
+let run_sat_certifier ifile dratfile =
+  let res =
+    match !sat_certificate with
+    | Drat ->
+       unix (!Options.Std.drat_trim_path ^ " " ^ ifile ^ " "
+             ^ dratfile ^ " | grep 's VERIFIED'"
+             ^ " 2>& 1 > /dev/null")
+    | Grat ->
+       let base_file = Filename.basename ifile in
+       let gratl_file = Filename.temp_file base_file ".gratl" in
+       let gratp_file = Filename.temp_file base_file ".gratp" in
+       let _ = unix (!Options.Std.gratgen_path ^ " " ^ ifile ^ " "
+                     ^ dratfile ^ " -b -l " ^ gratl_file
+                     ^ " -o " ^ gratp_file
+                     ^ " 2>& 1 | grep -v '^c.*' >  /dev/null") in
+       let res = unix (!Options.Std.gratchk_path ^ " unsat " ^ ifile ^ " "
+                       ^ gratl_file ^ " " ^ gratp_file
+                       ^ " | grep 'VERIFIED UNSAT'"
+                       ^ " 2>& 1 > /dev/null") in
+       let _ = cleanup [gratl_file; gratp_file] in
+       res
+    | Lrat ->
+       let base_file = Filename.basename ifile in
+       let lrat_file = Filename.temp_file base_file ".lrat" in
+       let tmp_file = Filename.temp_file base_file ".tmp" in
+       let _ = unix (!Options.Std.drat_trim_path ^ " " ^ ifile ^ " "
+                     ^ dratfile ^ " -L " ^ tmp_file ^ " > /dev/null") in
+       let _ = unix ("grep -v \"^[0-9]* 0\" " ^ tmp_file
+                     ^ " | sort -n > " ^ lrat_file) in
+       let _ = unix ("tail " ^ tmp_file ^ " | grep \"^[0-9]* 0\" >> "
+                     ^ lrat_file) in
+       let ret = unix (!Options.Std.lrat_checker_path ^ " " ^ ifile ^ " "
+                       ^ lrat_file ^ " | grep -v '^c.*' "
+                       ^ " 2>& 1 > /dev/null") in
+       let _ = cleanup [lrat_file; tmp_file] in
+       ret
+  in
+  match res with
+  | Unix.WEXITED 0 -> true
+  | _ -> false
+
+let coq_cnf_unsat (id, cnf) =
+  let _ = vprint ("\t CNF #" ^ string_of_int id ^ ":\t\t\t") in
+  let ifile = Filename.temp_file "coqcryptoline" ".cnf" in
+  let ofile = Filename.temp_file "coqcryptoline" ".out" in
+  let errfile = Filename.temp_file "coqcryptoline" ".err" in
+  let dratfile = Filename.temp_file "coqcryptoline" ".drat" in
+  let _ =
+    let _ = trace ("CNF input file: " ^ ifile) in
+    let _ = trace ("CNF output file: " ^ ofile) in
+    let _ = trace ("CNF error file: " ^ errfile) in
+    let _ = trace ("CNF drat file: " ^ dratfile) in
+    () in
+  let t1 = Unix.gettimeofday() in
+  let unsat =
+    let ch = open_out ifile in
+    let _ = coq_output_dimacs ch cnf in
+    run_sat_solver ifile ofile errfile dratfile in
+  let t2 = Unix.gettimeofday() in
+  let _ =
+	if unsat then vprintln ("[UNSAT]\t\t" ^ string_of_running_time t1 t2)
 	else vprintln ("[SAT]\t\t" ^ string_of_running_time t1 t2) in
-  let _ = Unix.unlink ifile in
-  let _ = Unix.unlink ofile in
-  let _ = Unix.unlink errfile in
-  res
+  let certified =
+    if unsat then
+      let t1 = Unix.gettimeofday() in
+      let certified = run_sat_certifier ifile dratfile in
+      let t2 = Unix.gettimeofday() in
+      let _ = if certified then
+                let _ = trace ("Certified successfully") in
+                let _ = vprintln("\t\t\t\t\t[CERTIFIED]\t" ^ string_of_running_time t1 t2) in
+                ()
+              else
+                let _ = trace ("Failed to certify") in
+                let _ = vprintln("\t\t\t\t\t[NOT CERTIFIED]\t" ^ string_of_running_time t1 t2) in
+                () in
+      certified
+    else
+      false in
+  let _ = cleanup [ifile; ofile; errfile; dratfile] in
+  certified
 
 let coq_all_unsat id_cnf_pairs =
   List.for_all coq_cnf_unsat id_cnf_pairs
 
 
+(* ===== Multi-thread solving ===== *)
 
-let coq_cnf_unsat_lwt ?timeout:timeout header cnf : bool Lwt.t =
-  let ifile = Filename.temp_file "inputcnf_" "" in
-  let ofile = Filename.temp_file "outputcnf_" "" in
-  let errfile = Filename.temp_file "errorcnf_" "" in
-  let res =
-	match !smt_solver with
-	| Minisat ->
-		let ch = open_out ifile in
-		let _ = coq_output_dimacs ch cnf in
-		let%lwt _ =
-          match timeout with
-          | None -> Qfbv.WithLwt.run_minisat header ifile ofile errfile
-          | Some ti -> Qfbv.WithLwt.run_minisat ~timeout:ti header ifile ofile errfile in
-        let%lwt res = Qfbv.WithLwt.read_minisat_output ofile in
-		let%lwt _ = Lwt_unix.unlink ifile in
-		let%lwt _ = Lwt_unix.unlink ofile in
-		let%lwt _ = Lwt_unix.unlink errfile in
-		Lwt.return (res == Unsat)
-	| Cryptominisat ->
-		let ch = open_out ifile in
-		let _ = coq_output_dimacs ch cnf in
-		let%lwt _ =
-          match timeout with
-          | None -> Qfbv.WithLwt.run_cryptominisat header ifile ofile errfile
-          | Some ti -> Qfbv.WithLwt.run_cryptominisat ~timeout:ti header ifile ofile errfile in
-        let%lwt res = Qfbv.WithLwt.read_cryptominisat_output ofile in
-		let%lwt _ = Lwt_unix.unlink ifile in
-		let%lwt _ = Lwt_unix.unlink ofile in
-		let%lwt _ = Lwt_unix.unlink errfile in
-		Lwt.return (res == Unsat) in
-  res
+let cleanup_lwt files =
+  if not !keep_temp_files then Lwt_list.iter_p Lwt_unix.unlink files
+  else Lwt.return_unit
+
+let run_sat_solver_lwt header ifile ofile errfile dratfile =
+  let t1 = Unix.gettimeofday() in
+  let cmd =
+    match !sat_solver with
+    | Cryptominisat ->
+       !cryptominisat_path ^ " "
+       ^ !sat_args ^ " "
+       ^ " --drat=" ^ dratfile ^ " "
+       ^ " --verb=0 "
+       ^ "\"" ^ ifile ^ "\" "
+       ^ "| grep 's UNSATISFIABLE' 1> \"" ^ ofile ^ "\" 2> \"" ^ errfile ^ "\""
+    | Cadical ->
+       !cadical_path ^ " "
+       ^ !sat_args ^ " "
+       ^ "\"" ^ ifile ^ "\" "
+       ^ "\"" ^ dratfile ^ "\" "
+       ^ "| grep 's UNSATISFIABLE' 1> \"" ^ ofile ^ "\" 2> \"" ^ errfile ^ "\" "
+    | Glucose ->
+       !glucose_path ^ " "
+       ^ !sat_args ^ " "
+       ^ " -certified -certified-output=\"" ^ dratfile ^ "\" "
+       ^ "\"" ^ ifile ^ "\" "
+       ^ "| grep 's UNSATISFIABLE' 1> \"" ^ ofile ^ "\" 2> \"" ^ errfile ^ "\" "
+  in
+  let%lwt res = Options.WithLwt.unix cmd in
+  let t2 = Unix.gettimeofday() in
+  let%lwt _ = Options.WithLwt.lock_log () in
+  let%lwt _ = Lwt_list.iter_s (fun h ->
+                  let%lwt _ = Options.WithLwt.trace h in
+                  Lwt.return_unit) header in
+  let%lwt _ = Options.WithLwt.trace ("Run SAT solver with command: " ^ cmd) in
+  let%lwt _ = Options.WithLwt.trace ("Execution time of SAT solver: " ^ string_of_float (t2 -. t1) ^ " seconds") in
+  let%lwt _ = Options.WithLwt.trace "OUTPUT FROM SAT solver:" in
+  let%lwt _ = Options.WithLwt.unix ("cat " ^ ofile ^ " >>  " ^ !logfile) in
+  let%lwt _ = Options.WithLwt.unix ("cat " ^ errfile ^ " >>  " ^ !logfile) in
+  let%lwt _ = Options.WithLwt.trace "" in
+  let _ = Options.WithLwt.unlock_log () in
+  Lwt.return (res = Unix.WEXITED 0)
+
+let run_sat_certifier_lwt ifile dratfile =
+  let%lwt res =
+    match !sat_certificate with
+    | Drat ->
+       Options.WithLwt.unix (!Options.Std.drat_trim_path ^ " " ^ ifile ^ " "
+                             ^ dratfile ^ " | grep 's VERIFIED'"
+                             ^ " 2>& 1 > /dev/null")
+    | Grat ->
+       let base_file = Filename.basename ifile in
+       let gratl_file = Filename.temp_file base_file ".gratl" in
+       let gratp_file = Filename.temp_file base_file ".gratp" in
+       let%lwt _ = Options.WithLwt.unix (!Options.Std.gratgen_path ^ " " ^ ifile ^ " "
+                                     ^ dratfile ^ " -b -l " ^ gratl_file
+                                     ^ " -o " ^ gratp_file
+                                     ^ " 2>& 1 | grep -v '^c.*' >  /dev/null") in
+       let%lwt res = Options.WithLwt.unix (!Options.Std.gratchk_path ^ " unsat " ^ ifile ^ " "
+                                           ^ gratl_file ^ " " ^ gratp_file
+                                           ^ " | grep 'VERIFIED UNSAT'"
+                                           ^ " 2>& 1 > /dev/null") in
+       let%lwt _ = cleanup_lwt [gratl_file; gratp_file] in
+       Lwt.return res
+    | Lrat ->
+       let base_file = Filename.basename ifile in
+       let lrat_file = Filename.temp_file base_file ".lrat" in
+       let tmp_file = Filename.temp_file base_file ".tmp" in
+       let%lwt _ = Options.WithLwt.unix (!Options.Std.drat_trim_path ^ " " ^ ifile ^ " "
+                                         ^ dratfile ^ " -L " ^ tmp_file ^ " > /dev/null") in
+       let%lwt _ = Options.WithLwt.unix ("grep -v \"^[0-9]* 0\" " ^ tmp_file
+                                         ^ " | sort -n > " ^ lrat_file) in
+       let%lwt _ = Options.WithLwt.unix ("tail " ^ tmp_file ^ " | grep \"^[0-9]* 0\" >> "
+                                         ^ lrat_file) in
+       let%lwt ret = Options.WithLwt.unix (!Options.Std.lrat_checker_path ^ " " ^ ifile ^ " "
+                                           ^ lrat_file ^ " | grep -v '^c.*' "
+                                           ^ " 2>& 1 > /dev/null") in
+       let%lwt _ = cleanup_lwt [lrat_file; tmp_file] in
+       Lwt.return ret
+  in
+  match res with
+  | Unix.WEXITED 0 -> Lwt.return true
+  | _ -> Lwt.return false
+(*
+  let%lwt res =
+    match res with
+    | Unix.WEXITED 0 -> Lwt.return true
+    | _ -> Lwt.return false in
+  Lwt.return res
+ *)
+
+let coq_cnf_unsat_lwt header cnf : (bool * string * bool * string) Lwt.t =
+  let ifile = Filename.temp_file "coqcryptoline" ".cnf" in
+  let ofile = Filename.temp_file "coqcryptoline" ".out" in
+  let errfile = Filename.temp_file "coqcryptoline" ".err" in
+  let dratfile = Filename.temp_file "coqcryptoline" ".drat" in
+  let ch = open_out ifile in
+  let _ = coq_output_dimacs ch cnf in
+  let%lwt (unsat, unsat_time) =
+    let t1 = Unix.gettimeofday() in
+    let%lwt res = run_sat_solver_lwt header ifile ofile errfile dratfile in
+    let t2 = Unix.gettimeofday() in
+    Lwt.return (res, string_of_running_time t1 t2) in
+  let%lwt (certified, certified_time) =
+    if unsat then
+      let t1 = Unix.gettimeofday() in
+      let%lwt certified = run_sat_certifier_lwt ifile dratfile in
+      let t2 = Unix.gettimeofday() in
+      Lwt.return (certified, string_of_running_time t1 t2)
+    else
+      Lwt.return (false, "N/A") in
+  let%lwt _ = cleanup_lwt [ifile; ofile; errfile; dratfile] in
+  Lwt.return (unsat, unsat_time, certified, certified_time)
 
 let work_on_pending delivered_helper res pending =
   let (delivered, promised) = Lwt_main.run (Lwt.nchoose_split pending) in
@@ -200,15 +368,15 @@ let rec finish_pending delivered_helper res pending =
          finish_pending delivered_helper res' pending'
 
 let coq_all_unsat_lwt id_cnf_pairs =
-  let mk_promise (id, cnf) : (int * bool) Lwt.t =
+  let mk_promise (id, cnf) =
     let header = ["= Verifying CNF formula #" ^ string_of_int id ^ "="] in
-    let unsat = coq_cnf_unsat_lwt header cnf in
-	let%lwt unsat = unsat in
-	Lwt.return (id, unsat) in
-  let delivered_helper all_unsat (id, unsat) =
+    let%lwt (unsat, unsat_time, certified, certified_time) = coq_cnf_unsat_lwt header cnf in
+	Lwt.return (id, unsat, unsat_time, certified, certified_time) in
+  let delivered_helper all_unsat (id, unsat, unsat_time, certified, certified_time) =
     let _ = vprint ("\t CNF #" ^ string_of_int id ^ ":\t\t\t") in
-    let _ = vprintln (if unsat then "[UNSAT]" else "[SAT]") in
-	all_unsat && unsat in
+    let _ = vprintln ((if unsat then "[UNSAT]\t\t" else "[SAT]\t\t") ^ unsat_time) in
+    let _ = if unsat then vprintln ("\t\t\t\t\t" ^ (if certified then "[CERTIFIED]\t" else "[NOT CERTIFIED]\t\t") ^ certified_time) in
+	all_unsat && certified in
   let fold_fun (all_unsat, pending) (id, cnf) =
 	if all_unsat then
        if List.length pending < !jobs then
@@ -224,6 +392,7 @@ let coq_all_unsat_lwt id_cnf_pairs =
   finish_pending delivered_helper res pending
 
 
+(* ===== Implementation of ext_all_unsat ===== *)
 
 let ext_all_unsat_impl cnfs =
   let _ = vprintln ("Checking CNF formulas (" ^ string_of_int (List.length cnfs) ^ "):") in
@@ -240,7 +409,7 @@ let ext_all_unsat_impl cnfs =
 
 
 
-(* Find coefficients using Singular *)
+(** Find coefficients using Singular *)
 
 let vname = "x"
 
@@ -316,7 +485,7 @@ let coq_write_singular_input ifile vars gen p =
   let ch = open_out ifile in
   let _ = output_string ch input_text; close_out ch in
   trace "INPUT TO SINGULAR:";
-  unix ("cat " ^ ifile ^ " >>  " ^ !logfile);
+  ignore(unix ("cat " ^ ifile ^ " >>  " ^ !logfile));
   trace ""
 
 module PosOrder = struct

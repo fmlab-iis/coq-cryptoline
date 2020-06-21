@@ -23,30 +23,53 @@ let args =
      "\n\t     Specify the algebra solver (default is singular)\n");
     ("-br", Set use_binary_repr, "       Always use binary representation in SMTLIB outputs. Otherwise,\n\t     hexadecimal representation is used if applicable.\n");
     ("-btor", Set use_btor, "     Output btor format to Boolector\n");
-    ("-cryptominisat", String (fun str -> cryptominisat_path := str; smt_solver := Cryptominisat), "PATH\n\t     Use Cryptominisat at the specified path\n");
+    ("-sat_cert", Symbol ([Options.Std.string_of_sat_certificate Options.Std.Drat;
+                           Options.Std.string_of_sat_certificate Options.Std.Grat;
+                           Options.Std.string_of_sat_certificate Options.Std.Lrat],
+                          (fun str -> if str = Options.Std.string_of_sat_certificate Options.Std.Drat then sat_certificate := Options.Std.Drat
+                                      else if str = Options.Std.string_of_sat_certificate Options.Std.Grat then sat_certificate := Options.Std.Grat
+                                      else if str = Options.Std.string_of_sat_certificate Options.Std.Lrat then sat_certificate := Options.Std.Lrat
+                                      else failwith ("Unknown format of SAT certification: " ^ str))),
+     "\t\t Specify the format of SAT certification");
+    ("-cadical", String (fun str -> cadical_path := str; sat_solver := Cadical), "PATH\n\t     Use Cadical at the specified path\n");
+    ("-cryptominisat", String (fun str -> cryptominisat_path := str; sat_solver := Cryptominisat), "PATH\n\t     Use Cryptominisat at the specified path\n");
     ("-disable_rewriting", Clear apply_rewriting, "\n\t     Disable rewriting of assignments (at program level) and equalities\n\t     (at polynomial level)\n");
+    ("-drat-trim", String (fun str -> Options.Std.drat_trim_path := str),
+     "\t\t Set the path to drat-trim (default: " ^
+       !Options.Std.drat_trim_path ^ ")");
+    ("-glucose", String (fun str -> glucose_path := str; sat_solver := Glucose), "PATH\n\t     Use Glucose at the specified path\n");
+    ("-gratchk", String (fun str -> Options.Std.gratchk_path := str),
+     "\t\t Set the path to gratchk (default: " ^
+       !Options.Std.gratchk_path ^ ")");
+    ("-gratgen", String (fun str -> Options.Std.gratgen_path := str),
+     "\t\t Set the path to gratgen (default: " ^
+       !Options.Std.gratgen_path ^ ")");
     ("-isafety", Set incremental_safety, "  Verify program safety incrementally\n");
     ("-isafety_timeout", Int (fun i -> incremental_safety_timeout := i), "INT\n\t     Set initial timeout for incremental verification of program safety\n");
     ("-legacy", Set use_legacy_parser, "   Use the legacy parser\n");
+    ("-lrat", String (fun str -> Options.Std.lrat_checker_path := str),
+     "\t\t Set the path to lrat-checker\n\t\t\t (default: " ^
+       !Options.Std.lrat_checker_path ^ ")");
     ("-macaulay2", String (fun str -> macaulay2_path := str; algebra_system := Macaulay2),
      "PATH\n\t     Use Macaulay2 at the specified path\n");
     ("-magma", String (fun str -> magma_path := str; algebra_system := Magma),
      "PATH\n\t     Use Magma at the specified path (not tested)\n");
     ("-mathematica", String (fun str -> mathematica_path := str; algebra_system := Mathematica),
      "PATH\n\t     Use Mathematica command-line script interpreter at the specified\n\t     path\n");
-    ("-minisat", String (fun str -> minisat_path := str; smt_solver := Minisat), "PATH\n\t     Use Minisat at the specified path\n");
     ("-no_carry_constraint", Clear carry_constraint, "\n\t     Do not add carry constraints\n");
     ("-o", String (fun str -> logfile := str),
      "FILE    Save log messages to the specified file (default is " ^ !logfile ^ ")\n");
-    ("-qfbv_args", String (fun str -> smt_args := str),
-     "ARGS\n\t     Specify additional arguments passed to the QF_BV solver\n");
-    ("-qfbv_solver", Symbol ([Options.Std.string_of_smt_solver Options.Std.Minisat;
-                              Options.Std.string_of_smt_solver Options.Std.Cryptominisat],
+    ("-sat_args", String (fun str -> sat_args := str),
+     "ARGS\n\t     Specify additional arguments passed to the SAT solver\n");
+   ("-sat_solver", Symbol ([Options.Std.string_of_sat_solver Options.Std.Cryptominisat;
+							Options.Std.string_of_sat_solver Options.Std.Cadical;
+							Options.Std.string_of_sat_solver Options.Std.Glucose],
                              (fun str ->
-                               if str = Options.Std.string_of_smt_solver Options.Std.Minisat then smt_solver := Minisat
-                               else if str = Options.Std.string_of_smt_solver Options.Std.Cryptominisat then smt_solver := Cryptominisat
-                               else failwith ("Unknown QF_BV solver: " ^ str))),
-     "\n\t     Specify the QF_BV solver (default is boolector)\n");
+                               if str = Options.Std.string_of_sat_solver Options.Std.Cryptominisat then sat_solver := Cryptominisat
+                               else if str = Options.Std.string_of_sat_solver Options.Std.Cadical then sat_solver := Cadical
+                               else if str = Options.Std.string_of_sat_solver Options.Std.Glucose then sat_solver := Glucose
+                               else failwith ("Unknown SAT solver: " ^ str))),
+     "\n\t     Specify the SAT solver (default is " ^ Options.Std.string_of_sat_solver Options.Std.default_solver ^ ")\n");
     ("-re", Set polys_rewrite_replace_eexp, "\t     Replace expressions rather than variables in the rewriting of\n\t     polynomials (experimental)\n");
     ("-rename_local", Set rename_local, "\n\t     Rename local variables when inlining a call to a procedure\n");
     ("-sage", String (fun str -> sage_path := str; algebra_system := Sage),

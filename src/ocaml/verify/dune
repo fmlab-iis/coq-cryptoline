@@ -1,6 +1,0 @@
-(library
-  (name        overify)
-  (preprocess  (pps lwt_ppx))
-  (libraries   options ast qfbv)
-  (flags       (:standard -w -3))
-)

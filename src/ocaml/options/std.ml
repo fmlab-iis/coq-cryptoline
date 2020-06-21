@@ -1,5 +1,5 @@
 
-type smt_solver = Minisat | Cryptominisat
+type sat_solver = Cryptominisat | Cadical | Glucose
 
 type algebra_system =
   | Singular
@@ -14,7 +14,7 @@ type variable_order =
   | RevLexOrder
   | RevAppearingOrder
 
-let default_solver = Minisat
+let default_solver = Cryptominisat
 
 let default_algebra = Singular
 
@@ -24,15 +24,19 @@ let z3_path = ref "z3"
 let boolector_path = ref "boolector"
 let mathsat_path = ref "mathsat"
 let stp_path = ref "stp"
-let minisat_path = ref "minisat"
-let cryptominisat_path = ref "cryptominisat5"
 
-let smt_solver = ref default_solver
-let smt_args = ref ""
-let string_of_smt_solver s =
+let minisat_path = ref "minisat"
+let cryptominisat_path = ref "cryptominisat5_simple"
+let cadical_path = ref "cadical"
+let glucose_path = ref "glucose"
+
+let sat_solver = ref default_solver
+let sat_args = ref ""
+let string_of_sat_solver s =
   match s with
-  | Minisat -> "minisat"
   | Cryptominisat -> "cryptominisat"
+  | Cadical -> "cadical"
+  | Glucose -> "glucose"
 
 let use_btor = ref false
 
@@ -86,8 +90,8 @@ let verbose = ref false
 
 let unix cmd =
   let r = Unix.system cmd in
-  if r = r then ()
-  else ()
+  if r = r then r
+  else r
 
 let logfile = ref "cryptoline.log"
 
@@ -102,7 +106,7 @@ let trace msg =
 
 let trace_file file =
   if !debug then
-    unix ("cat " ^ file ^ " >>  " ^ !logfile)
+    ignore(unix ("cat " ^ file ^ " >>  " ^ !logfile))
 
 let fail s = trace s; failwith s
 
@@ -128,3 +132,18 @@ let auto_cast = ref false
 let auto_cast_preserve_value = ref false
 let typing_file = ref None
 let use_binary_repr = ref false
+
+
+type sat_certificate = Drat | Lrat | Grat
+let string_of_sat_certificate c =
+  match c with
+  | Drat -> "drat"
+  | Lrat -> "lrat"
+  | Grat -> "grat"
+let default_sat_certificate = Drat
+let sat_certificate = ref Drat
+let drat_trim_path = ref "drat-trim"
+let gratgen_path = ref "gratgen"
+let gratchk_path = ref "gratchk"
+(*let lrat_checker_path = ref "PracticalInterface"*)
+let lrat_checker_path = ref "/Users/mht208/.git/sat_proof_checker/rat_checker/Interface.native"

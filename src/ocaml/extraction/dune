@@ -2,5 +2,5 @@
   (name        extraction)
   (flags :standard -w -32-33-34-39)
   (preprocess  (pps lwt_ppx))
-  (libraries   options qfbv overify)
+  (libraries   options zarith)
 )

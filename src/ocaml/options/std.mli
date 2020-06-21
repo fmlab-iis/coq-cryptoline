@@ -1,5 +1,5 @@
 
-type smt_solver = Minisat | Cryptominisat
+type sat_solver = Cryptominisat | Cadical | Glucose
 
 type algebra_system =
   | Singular
@@ -14,7 +14,7 @@ type variable_order =
   | RevLexOrder
   | RevAppearingOrder
 
-val default_solver : smt_solver
+val default_solver : sat_solver
 val default_algebra : algebra_system
 
 val wordsize : int ref
@@ -23,12 +23,15 @@ val boolector_path : string ref
 val z3_path : string ref
 val mathsat_path : string ref
 val stp_path : string ref
+
 val minisat_path : string ref
 val cryptominisat_path : string ref
+val cadical_path : string ref
+val glucose_path : string ref
 
-val smt_solver : smt_solver ref
-val smt_args : string ref
-val string_of_smt_solver : smt_solver -> string
+val sat_solver : sat_solver ref
+val sat_args : string ref
+val string_of_sat_solver : sat_solver -> string
 
 val use_btor : bool ref
 
@@ -64,7 +67,7 @@ val carry_constraint : bool ref
 
 val verbose : bool ref
 
-val unix : string -> unit
+val unix : string -> Unix.process_status
 
 val logfile : string ref
 
@@ -95,3 +98,11 @@ val auto_cast_preserve_value : bool ref
 val typing_file : (string option) ref
 val use_binary_repr : bool ref
 
+type sat_certificate = Drat | Lrat | Grat
+val string_of_sat_certificate : sat_certificate -> string
+val default_sat_certificate : sat_certificate
+val sat_certificate : sat_certificate ref
+val drat_trim_path : string ref
+val gratgen_path : string ref
+val gratchk_path : string ref
+val lrat_checker_path : string ref
