@@ -96,6 +96,241 @@ End PSpec.
 
 
 
+From Coq Require Import Recdef.
+
+(* Simplification of pspec *)
+Section PSpecSimpl.
+
+  Import SSA ZSSA.
+
+  Local Notation var := SSAVarOrder.t.
+
+  Fixpoint zexp_subst (p : ZSSA.zexp) (r : ZSSA.zexp) (e : ZSSA.zexp) :=
+    if e == p then r
+    else match e with
+         | Eunop op e => Eunop op (zexp_subst p r e)
+         | Ebinop op e1 e2 => Ebinop op  (zexp_subst p r e1) (zexp_subst p r e2)
+         | _ => e
+         end.
+
+  Definition szbexp_subst (p : ZSSA.zexp) (r : ZSSA.zexp) (e : szbexp) :=
+    match e with
+    | Seq e1 e2 => Seq (zexp_subst p r e1) (zexp_subst p r e2)
+    | Seqmod e1 e2 e3 => Seqmod (zexp_subst p r e1) (zexp_subst p r e2)
+                                (zexp_subst p r e3)
+    end.
+
+  Definition subst_szbexps (p r : zexp) (es : seq szbexp) : seq szbexp :=
+    map (szbexp_subst p r) es.
+
+  Lemma zexp_subst_valid (e p r : ZSSA.zexp) s :
+    eval_zexp p s = eval_zexp r s ->
+    eval_zexp e s = eval_zexp (zexp_subst p r e) s.
+  Proof.
+    elim: e => /=.
+    - move=> v Hev. case H: (@Evar SSAVarOrder.T v == p).
+      + rewrite -(eqP H) /= in Hev. exact: Hev.
+      + reflexivity.
+    - move=> n Hev. case H: (Econst SSAVarOrder.T n == p).
+      + rewrite -(eqP H) /= in Hev. exact: Hev.
+      + reflexivity.
+    - move=> op e IH Hev. case H: (Eunop op e == p).
+      + rewrite -(eqP H) /= in Hev. exact: Hev.
+      + rewrite /=. rewrite (IH Hev). reflexivity.
+    - move=> op e1 IH1 e2 IH2 Hev. case H: (Ebinop op e1 e2 == p).
+      + rewrite -(eqP H) /= in Hev. exact: Hev.
+      + rewrite /=. rewrite (IH1 Hev) (IH2 Hev). reflexivity.
+  Qed.
+
+  Lemma szbexp_subst_valid e p r s :
+    eval_zexp p s = eval_zexp r s ->
+    eval_szbexp e s <-> eval_szbexp (szbexp_subst p r e) s.
+  Proof.
+    case: e.
+    - move=> e1 e2 /= Hev. rewrite -!(zexp_subst_valid _ Hev). tauto.
+    - move=> e1 e2 e3 /= Hev. rewrite -!(zexp_subst_valid _ Hev). tauto.
+  Qed.
+
+  Lemma subst_szbexps_cat es1 es2 p r :
+    subst_szbexps p r (es1 ++ es2) = subst_szbexps p r es1 ++ subst_szbexps p r es2.
+  Proof. rewrite /subst_szbexps. exact: map_cat. Qed.
+
+  Lemma subst_szbexps_valid es p r s :
+    eval_zexp p s = eval_zexp r s ->
+    (forall e, e \in es -> eval_szbexp e s) <->
+    (forall e, e \in (subst_szbexps p r es) -> eval_szbexp e s).
+  Proof.
+    move=> Hpr. elim: es => [| e es IH] //=. split.
+    - move=> Hev f Hin_f. rewrite in_cons in Hin_f. case/orP: Hin_f => Hin_f.
+      + rewrite (eqP Hin_f). apply/(szbexp_subst_valid e Hpr). apply: Hev.
+        rewrite in_cons eqxx orTb. exact: is_true_true.
+      + have Hev': (forall e : szbexp, e \in es -> eval_szbexp e s).
+        { move=> g Hin_g; apply: Hev. rewrite in_cons Hin_g orbT.
+          exact: is_true_true. }
+        case: IH => IH1 IH2. exact: (IH1 Hev' _ Hin_f).
+    - move=> Hev f Hin_f. rewrite in_cons in Hin_f. case/orP: Hin_f => Hin_f.
+      + rewrite (eqP Hin_f). apply/(szbexp_subst_valid e Hpr). apply: Hev.
+        rewrite in_cons eqxx orTb. exact: is_true_true.
+      + have Hev': (forall e : szbexp_eqType, e \in subst_szbexps p r es ->
+                                                    eval_szbexp e s).
+        { move=> g Hin_g; apply: Hev. rewrite in_cons Hin_g orbT.
+          exact: is_true_true. }
+        case: IH => IH1 IH2. exact: (IH2 Hev' _ Hin_f).
+  Qed.
+
+
+
+  Definition is_assignment (e : szbexp) : option (ZSSA.zexp * ZSSA.zexp) :=
+    match e with
+    | Seq (Evar v) e => Some (Evar v, e)
+    | Seq e (Evar v) => Some (Evar v, e)
+    | Seq (Ebinop Eadd (Evar v) el) er => Some (Evar v, Ebinop Esub er el)
+    | Seq el (Ebinop Eadd (Evar v) er) => Some (Evar v, Ebinop Esub el er)
+    | Seq _ _ => None
+    | Seqmod _ _ _ => None
+    end.
+
+  Ltac mytac :=
+    repeat match goal with
+           | H : Some (_, _) = Some (_, _) |- _ =>
+             case: H => ? ?; subst => /=
+           | H : match ?e with | Evar _ => _ | _ => _ end = _ |- _ =>
+             repeat match goal with
+                    | H1 : context f [e] |- _ => move: H1
+                    end;
+             case: e => //=; intros
+           | H : match ?e with | Eadd => _ | _ => _ end = _ |- _ =>
+             repeat match goal with
+                    | H1 : context f [e] |- _ => move: H1
+                    end;
+             case: e => //=; intros
+           | H : ?l = ?r |- ?r = ?l => symmetry; assumption
+           | H : ?l = ?r |- ?l = ?r => assumption
+           | |- ?e = ?e => reflexivity
+           | |- context f [(?n + ?m - ?m)%Z] => rewrite Z.add_simpl_r
+           | H : ?l = ?r |- context f [?l] => rewrite H /=; clear H
+           | H : ?l = ?r |- context f [?r] => rewrite -H /=; clear H
+           end.
+
+  Lemma is_assignment_equal e p r s :
+    is_assignment e = Some (p, r) ->
+    eval_szbexp e s -> eval_zexp p s = eval_zexp r s.
+  Proof.
+    case: e => //=. move=> left right.
+    (case: left; case: right => //=); intros; by mytac.
+  Qed.
+
+  Corollary subst_assignment_valid e p r e' s :
+    is_assignment e = Some (p, r) -> eval_szbexp e s ->
+    eval_szbexp e' s <-> eval_szbexp (szbexp_subst p r e') s.
+  Proof.
+    move=> His Hev. exact: (szbexp_subst_valid _ (is_assignment_equal His Hev)).
+  Qed.
+
+
+
+  Definition size_lt (es1 es2 : seq szbexp) : Prop :=
+    (size es1 < size es2)%coq_nat.
+
+  Function simplify_pspec_rec
+          (visited : seq szbexp) (premises : seq szbexp) (conseq : szbexp)
+          {wf size_lt premises} :=
+    match premises with
+    | [::] => (visited, conseq)
+    | e::es =>
+      match is_assignment e with
+      | None => simplify_pspec_rec (e::visited) es conseq
+      | Some (p, r) => simplify_pspec_rec (subst_szbexps p r visited)
+                                          (subst_szbexps p r es)
+                                          (szbexp_subst p r conseq)
+      end
+    end.
+  Proof.
+    - move=> _ premises _ e es ? [p' r'] p r [] ? ? Ha.
+      rewrite /size_lt /subst_szbexps size_map /=. exact: Nat.lt_succ_diag_r.
+    - move=> _ premises _ e es ? Ha. rewrite /size_lt /=. exact: Nat.lt_succ_diag_r.
+    - exact: (well_founded_ltof (seq szbexp) size).
+  Defined.
+
+  Lemma simplify_pspec_rec_cons_is_assignment visited e es q p r :
+    is_assignment e = Some (p, r) ->
+    simplify_pspec_rec visited (e::es) q =
+    simplify_pspec_rec (subst_szbexps p r visited)
+                       (subst_szbexps p r es)
+                       (szbexp_subst p r q).
+  Proof.
+    move=> Ha.
+    dcase (simplify_pspec_rec (subst_szbexps p r visited) (subst_szbexps p r es)
+                              (szbexp_subst p r q)) => [[visited' q'] Hs].
+    move: (Logic.eq_sym Hs) => {Hs} Hs.
+    move: (R_simplify_pspec_rec_correct Hs) => {Hs} H.
+    symmetry. apply: R_simplify_pspec_rec_complete.
+    apply: (R_simplify_pspec_rec_2 _ _ _ _ _ _ _ _ Ha _ H). reflexivity.
+  Qed.
+
+  Lemma simplify_pspec_rec_cons_not_assignment visited e es q :
+    is_assignment e = None ->
+    simplify_pspec_rec visited (e::es) q =
+    simplify_pspec_rec (e::visited) es q.
+  Proof.
+    move=> Ha. dcase (simplify_pspec_rec (e :: visited) es q) => [[visited' q'] Hs].
+    move: (Logic.eq_sym Hs) => {Hs} Hs.
+    move: (R_simplify_pspec_rec_correct Hs) => {Hs} H.
+    symmetry. apply: R_simplify_pspec_rec_complete.
+    apply: (R_simplify_pspec_rec_1 _ _ _ _ _ _ Ha _ H). reflexivity.
+  Qed.
+
+  Lemma simplify_pspec_rec_empty visited q :
+    simplify_pspec_rec visited [::] q = (visited, q).
+  Proof. reflexivity. Qed.
+
+  Lemma simplify_pspec_rec_sound pre ps q ps' q' :
+    simplify_pspec_rec pre ps q = (ps', q') ->
+    (forall s,
+        (forall e : szbexp, e \in ps' -> eval_szbexp e s) ->
+        eval_szbexp q' s) ->
+    (forall s,
+        (forall e : szbexp, e \in pre ++ ps -> eval_szbexp e s) ->
+        eval_szbexp q s).
+  Proof.
+    have ->: ps' = (ps', q').1 by reflexivity.
+    have ->: q' = (ps', q').2 by reflexivity.
+    move: (ps', q'). clear ps' q'. eapply simplify_pspec_rec_ind.
+    - move=> {pre ps q} pre ps q Hps [ps' q'] [] ? ?; subst => /=.
+      move=> Hs s Hev. rewrite cats0 in Hev. exact: (Hs _ Hev).
+    - move=> {pre ps q} pre ps q e es Hps Ha IH [ps' q']  /= Hrec Hs s He.
+      apply: (IH _ Hrec Hs). move=> f Hin. apply: He. rewrite mem_cat in_cons.
+      rewrite mem_cat in_cons in Hin. (case/orP: Hin; [case/orP|] => -> //=);
+                                        rewrite !orbT; exact: is_true_true.
+    - move=> {pre ps q} pre ps q e es Hps pat rep Ha IH [ps' q'] /= Hrec Hs s He.
+      have Hes: eval_szbexp e s.
+      { apply: He. rewrite mem_cat in_cons eqxx /=. by rewrite orbT. }
+      move: (is_assignment_equal Ha Hes) => Hpr.
+      apply/(subst_assignment_valid q Ha Hes). apply: (IH _ Hrec Hs).
+      move=> f. rewrite -subst_szbexps_cat. move: f.
+      apply/(subst_szbexps_valid (pre++es) Hpr). move=> f Hin.
+      apply: He. rewrite mem_cat in_cons. rewrite mem_cat in Hin.
+      case/orP: Hin => -> //=; rewrite !orbT; exact: is_true_true.
+  Qed.
+
+
+
+  Definition simplify_pspec (s : pspec) : pspec :=
+    let (ps, q) := simplify_pspec_rec [::] (ppremises s) (pconseq s) in
+    {| ppremises := ps; pconseq := q |}.
+
+  Lemma simplify_pspec_sound (s : pspec) :
+    valid_pspec (simplify_pspec s) -> valid_pspec s.
+  Proof.
+    rewrite /valid_pspec. case: s => ps q /=. rewrite /simplify_pspec /=.
+    dcase (simplify_pspec_rec [::] ps q) => [[ps' q'] Hs] /=.
+    rewrite -(cat0s ps). exact: (simplify_pspec_rec_sound Hs).
+  Qed.
+
+End PSpecSimpl.
+
+
+
 (* Convert zspec to pspec *)
 
 Section ZSpec2Spec.
@@ -112,6 +347,9 @@ Section ZSpec2Spec.
     let premises := split_zbexp (ZSSA.zspre s) in
     let conseqs := split_zbexp (ZSSA.zspost s) in
     map (fun conseq => {| ppremises := premises; pconseq := conseq |}) conseqs.
+
+  Definition pspecs_of_zspec_simplified (s : ZSSA.zspec) : seq pspec :=
+    map simplify_pspec (pspecs_of_zspec s).
 
   Lemma split_zbexp_mem ze s :
     ZSSA.eval_zbexp ze s ->
@@ -158,6 +396,15 @@ Section ZSpec2Spec.
         rewrite map_cat mem_cat. apply/orP; left. assumption.
       + apply: (IH2 zf _ s Hzf) => /=. move=> ps Hin. apply: Hps.
         rewrite map_cat mem_cat. apply/orP; right. assumption.
+  Qed.
+
+  Theorem pspecs_of_zspec_simplified_sound zs :
+    (forall ps, ps \in pspecs_of_zspec_simplified zs -> valid_pspec ps) ->
+    ZSSA.valid_zspec zs.
+  Proof.
+    move=> H. apply: pspecs_of_zspec_sound. move=> ps Hin.
+    apply: simplify_pspec_sound. apply: H. rewrite /pspecs_of_zspec_simplified.
+    apply: map_f. exact: Hin.
   Qed.
 
 End ZSpec2Spec.

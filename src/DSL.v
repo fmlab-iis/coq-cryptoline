@@ -595,6 +595,12 @@ Module MakeDSL
     | Ebinop op e1 e2 => VS.union (vars_eexp e1) (vars_eexp e2)
     end.
 
+  Definition eexp_eqP (e1 e2 : eexp) : reflect (e1 = e2) (eexp_eqn e1 e2) :=
+    eexp_eqP e1 e2.
+
+  Definition eexp_eqMixin := EqMixin eexp_eqP.
+  Canonical eexp_eqType := Eval hnf in EqType eexp eexp_eqMixin.
+
 
 
   (* Limbs *)
@@ -651,6 +657,12 @@ Module MakeDSL
     | Rsext w e i => vars_rexp e
     end.
 
+  Definition rexp_eqP (e1 e2 : rexp) : reflect (e1 = e2) (rexp_eqn e1 e2) :=
+    rexp_eqP e1 e2.
+
+  Definition rexp_eqMixin := EqMixin rexp_eqP.
+  Canonical rexp_eqType := Eval hnf in EqType rexp rexp_eqMixin.
+
 
 
   (* Algebraic Predicates *)
@@ -674,6 +686,12 @@ Module MakeDSL
       VS.union (vars_eexp e1) (VS.union (vars_eexp e2) (vars_eexp m))
     | Eand e1 e2 => VS.union (vars_ebexp e1) (vars_ebexp e2)
     end.
+
+  Definition ebexp_eqP (e1 e2 : ebexp) : reflect (e1 = e2) (ebexp_eqn e1 e2) :=
+    ebexp_eqP e1 e2.
+
+  Definition ebexp_eqMixin := EqMixin ebexp_eqP.
+  Canonical ebexp_eqType := Eval hnf in EqType ebexp ebexp_eqMixin.
 
   Lemma vars_eands_cons e es :
     VS.Equal (vars_ebexp (eands (e::es)))
@@ -732,6 +750,12 @@ Module MakeDSL
     | Rand e1 e2
     | Ror e1 e2 => VS.union (vars_rbexp e1) (vars_rbexp e2)
     end.
+
+  Definition rbexp_eqP (e1 e2 : rbexp) : reflect (e1 = e2) (rbexp_eqn e1 e2) :=
+    rbexp_eqP e1 e2.
+
+  Definition rbexp_eqMixin := EqMixin rbexp_eqP.
+  Canonical rbexp_eqType := Eval hnf in EqType rbexp rbexp_eqMixin.
 
 
 

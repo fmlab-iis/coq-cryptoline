@@ -17,9 +17,9 @@ Module ZSSA.
 
   (* Syntax *)
 
-  Definition zexp := SSA.eexp.
+  Notation zexp := SSA.eexp.
 
-  Definition zbexp := SSA.ebexp.
+  Notation zbexp := SSA.ebexp.
 
   Notation vars_zexp := SSA.vars_eexp.
 

@@ -56,12 +56,13 @@ Section Verification.
     end.
 
   Definition verify_zspec (zs : ZSSA.zspec) : bool :=
-    verify_pspecs (pspecs_of_zspec zs).
+    verify_pspecs (pspecs_of_zspec_simplified zs).
 
   Lemma verify_zspec_sound (zs : ZSSA.zspec) : verify_zspec zs -> ZSSA.valid_zspec zs.
   Proof.
-    rewrite /verify_zspec=> Hv. apply: pspecs_of_zspec_sound => ps Hin.
-    move: (pspecs_of_zspec zs) Hv Hin => {zs} pss. elim: pss => [| hd tl IH] //=.
+    rewrite /verify_zspec=> Hv. apply: pspecs_of_zspec_simplified_sound => ps Hin.
+    move: (pspecs_of_zspec_simplified zs) Hv Hin => {zs} pss.
+    elim: pss => [| hd tl IH] //=.
     dcase (zpexprs_of_pspec hd) => [[[[[g t] zps] zm] zq] Hzp].
     dcase (ext_find_coefficients zps zq zm) => [[cs c] Hco].
     case Hch: (coefficients_checker zps zm zq cs c) => //=.
