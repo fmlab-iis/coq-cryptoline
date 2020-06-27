@@ -12,21 +12,24 @@ Import Prenex Implicits.
 
 Section Verification.
 
+  Import CNF.
 
   (* This is the external SAT solver.
      The correctness is guaranteed by external checker. *)
-  Parameter ext_all_unsat : seq CNF.cnf -> bool.
+  Parameter ext_all_unsat : seq cnf -> bool.
 
   Axiom all_unsat_sound :
-    forall css : seq CNF.cnf,
+    forall css : seq cnf,
       ext_all_unsat css ->
-      forall cs, List.In cs css -> ~ CNF.sat cs.
+      forall cs, cs \in css -> ~ sat cs.
 
   Definition verify_rspec_safety (s : SSA.spec) : bool :=
     let fE := SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s) in
     let es := bb_range_safety s in
     let '(_, _, _, cnfs) := bb_bexps_cache fE es in
-    ext_all_unsat cnfs.
+    (* rev is not necessary, it is used for grat *)
+    let cnfs_rev := map rev cnfs in
+    ext_all_unsat cnfs_rev.
 
   Lemma verify_rspec_safety_sound (s : SSA.spec) :
     well_formed_ssa_spec s ->
@@ -35,7 +38,12 @@ Section Verification.
   Proof.
     move=> Hwf Hv. apply: (bb_range_safety_sound Hwf).
     move=> m c g cnfs cnf Hbb Hin. rewrite /verify_rspec_safety in Hv.
-    rewrite Hbb in Hv. exact: (all_unsat_sound Hv Hin).
+    rewrite Hbb in Hv. move: (all_unsat_sound Hv) => Hsat.
+    have Hmem: rev cnf \in [seq rev i | i <- cnfs].
+    { apply: map_f. apply/in_In. exact: Hin. }
+    move: (Hsat (rev cnf) Hmem) => {Hsat} Hsat.
+    move=> Hsat'; apply: Hsat. move/rev_cnf_eqsat : Hsat' => Hsat'.
+    exact: Hsat'.
   Qed.
 
 

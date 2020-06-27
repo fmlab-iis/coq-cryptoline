@@ -125,8 +125,8 @@ let coq_output_dimacs_reorder ch cs =
   ()
 
 let coq_output_dimacs ch cs =
-  if !sat_certificate = Grat then coq_output_dimacs_reorder ch cs
-  else coq_output_dimacs ch cs
+  (*if !sat_certificate = Grat then coq_output_dimacs_reorder ch cs
+  else*) coq_output_dimacs ch cs
 
 
 
