@@ -1949,15 +1949,26 @@ Section SplitSpec.
     exact: bv2z_adds_signed.
   Qed.
 
-  Lemma bv2z_Iadc t bs1 bs2 bsc :
-    size bs1 = sizeof_typ t -> size bs2 = sizeof_typ t -> size bsc = 1 ->
-    adcB_safe t bs1 bs2 bsc ->
-    bv2z t (adcB (to_bool bsc) bs1 bs2).2 =
-    (bv2z t bs1 + bv2z t bs2 + bv2z Tbit bsc)%Z.
+  Lemma bv2z_Iadc_unsigned bs1 bs2 bsc n :
+    0 < size bs1 ->
+    size bs1 = n -> size bs2 = n -> size bsc = 1 ->
+    adcB_safe (Tuint n) bs1 bs2 bsc ->
+    bv2z (Tuint n) (adcB (to_bool bsc) bs1 bs2).2 =
+    (bv2z (Tuint n) bs1 + bv2z (Tuint n) bs2 + bv2z Tbit bsc)%Z.
   Proof.
-    rewrite /adcB_safe /uadcB_safe /sadcB_safe. case: t => /=.
-    - move=> n H1 H2 Hc. rewrite -H2 in H1. exact: bv2z_adc_unsigned.
-    - move=> n H1 H2 Hc. rewrite -H2 in H1. exact: bv2z_adc_signed.
+    rewrite /adcB_safe /uadcB_safe /=.
+    move=> Hs1 H1 H2 Hc. rewrite -H2 in H1. exact: bv2z_adc_unsigned.
+  Qed.
+
+  Lemma bv2z_Iadc_signed bs1 bs2 bsc n :
+    1 < size bs1 ->
+    size bs1 = n -> size bs2 = n -> size bsc = 1 ->
+    adcB_safe (Tsint n) bs1 bs2 bsc ->
+    bv2z (Tsint n) (adcB (to_bool bsc) bs1 bs2).2 =
+    (bv2z (Tsint n) bs1 + bv2z (Tsint n) bs2 + bv2z Tbit bsc)%Z.
+  Proof.
+    rewrite /adcB_safe /sadcB_safe /=.
+    move=> Hs1 H1 H2 Hc. rewrite -H2 in H1. exact: bv2z_adc_signed.
   Qed.
 
   Lemma bv2z_Iadcs_unsigned bs1 bs2 bsc n :
@@ -1974,12 +1985,13 @@ Section SplitSpec.
   Qed.
 
   Lemma bv2z_Iadcs_signed bs1 bs2 bsc n :
+    1 < size bs1 ->
     size bs1 = n -> size bs2 = n -> size bsc = 1 ->
     adcs_safe (Tsint n) bs1 bs2 bsc ->
     bv2z (Tsint n) (adcB (to_bool bsc) bs1 bs2).2 =
     (bv2z (Tsint n) bs1 + bv2z (Tsint n) bs2 + bv2z Tbit bsc)%Z.
   Proof.
-    rewrite /adcs_safe /sadcB_safe /=. move=> H1 H2 Hc. rewrite -H2 in H1.
+    rewrite /adcs_safe /sadcB_safe /=. move=> Hs H1 H2 Hc. rewrite -H2 in H1.
     exact: bv2z_adcs_signed.
   Qed.
 
@@ -1993,7 +2005,6 @@ Section SplitSpec.
     - move=> n H1 H2. rewrite -H2 in H1. exact: bv2z_sub_signed.
   Qed.
 
-  (* Wait for the correction of bv2z_subc_unsigned in NBitsOp. *)
   Lemma bv2z_Isubc_unsigned bs1 bs2 n :
     size bs1 = n -> size bs2 = n ->
     (bv2z (Tuint n) bs1 - bv2z (Tuint n) bs2 +
@@ -2003,10 +2014,9 @@ Section SplitSpec.
     bv2z (Tuint n) (adcB true bs1 (~~# bs2)%bits).2.
   Proof.
     rewrite /Cryptoline.DSL.z2expn /=. rewrite Z.add_0_r. move=> H1 H2.
-    rewrite -H1. rewrite -H2 in H1. (* exact: bv2z_subc_unsigned. *)
-  Admitted.
+    rewrite -H1. rewrite -H2 in H1. exact: bv2z_subc_unsigned.
+  Qed.
 
-  (* Wait for the correction of bv2z_subc_signed in NBitsOp. *)
   Lemma bv2z_Isubc_signed bs1 bs2 n :
     size bs1 = n -> size bs2 = n ->
     subc_safe (Tsint n) bs1 bs2 ->
@@ -2014,8 +2024,8 @@ Section SplitSpec.
     (bv2z (Tsint n) bs1 - bv2z (Tsint n) bs2)%Z.
   Proof.
     rewrite /subc_safe /ssubB_safe /=. move=> H1 H2. rewrite -H2 in H1.
-    (* exact: bv2z_subc_signed. *)
-  Admitted.
+    exact: bv2z_subc_signed.
+  Qed.
 
   Lemma bv2z_Isubb_unsigned bs1 bs2 n :
     size bs1 = n -> size bs2 = n ->
@@ -2037,15 +2047,26 @@ Section SplitSpec.
     exact: bv2z_subb_signed.
   Qed.
 
-  Lemma bv2z_Isbc t bs1 bs2 bsc :
-    size bs1 = sizeof_typ t -> size bs2 = sizeof_typ t -> size bsc = 1 ->
-    sbcB_safe t bs1 bs2 bsc ->
-    bv2z t (adcB (to_bool bsc) bs1 (~~# bs2)%bits).2 =
-    (bv2z t bs1 - bv2z t bs2 - (1 - bv2z Tbit bsc))%Z.
+  Lemma bv2z_Isbc_unsigned bs1 bs2 bsc n :
+    0 < size bs1 ->
+    size bs1 = n -> size bs2 = n -> size bsc = 1 ->
+    sbcB_safe (Tuint n) bs1 bs2 bsc ->
+    bv2z (Tuint n) (adcB (to_bool bsc) bs1 (~~# bs2)%bits).2 =
+    (bv2z (Tuint n) bs1 - bv2z (Tuint n) bs2 - (1 - bv2z Tbit bsc))%Z.
   Proof.
-    rewrite /sbcB_safe /usbcB_safe /ssbcB_safe. case: t => /=.
-    - move=> n H1 H2 Hc. rewrite -H2 in H1. exact: bv2z_sbc_unsigned.
-    - move=> n H1 H2 Hc. rewrite -H2 in H1. exact: bv2z_sbc_signed.
+    rewrite /sbcB_safe /usbcB_safe /=.
+    move=> Hs H1 H2 Hc. rewrite -H2 in H1. exact: bv2z_sbc_unsigned.
+  Qed.
+
+  Lemma bv2z_Isbc_signed bs1 bs2 bsc n :
+    1 < size bs1 ->
+    size bs1 = n -> size bs2 = n -> size bsc = 1 ->
+    sbcB_safe (Tsint n) bs1 bs2 bsc ->
+    bv2z (Tsint n) (adcB (to_bool bsc) bs1 (~~# bs2)%bits).2 =
+    (bv2z (Tsint n) bs1 - bv2z (Tsint n) bs2 - (1 - bv2z Tbit bsc))%Z.
+  Proof.
+    rewrite /sbcB_safe /ssbcB_safe /=.
+    move=> Hs H1 H2 Hc. rewrite -H2 in H1. exact: bv2z_sbc_signed.
   Qed.
 
   Lemma bv2z_Isbcs_unsigned bs1 bs2 bsc n :
@@ -2061,26 +2082,37 @@ Section SplitSpec.
   Qed.
 
   Lemma bv2z_Isbcs_signed bs1 bs2 bsc n :
+    1 < size bs1 ->
     size bs1 = n -> size bs2 = n -> size bsc = 1 ->
     sbcs_safe (Tsint n) bs1 bs2 bsc ->
     bv2z (Tsint n) (adcB (to_bool bsc) bs1 (~~# bs2)%bits).2 =
     (bv2z (Tsint n) bs1 - bv2z (Tsint n) bs2 - (1 - bv2z Tbit bsc))%Z.
   Proof.
-    rewrite /sbcs_safe /ssbcB_safe /=. move=> H1 H2 Hc. rewrite -H2 in H1.
+    rewrite /sbcs_safe /ssbcB_safe /=. move=> Hs H1 H2 Hc. rewrite -H2 in H1.
     exact: bv2z_sbcs_signed.
   Qed.
 
-  (* Wait for the correction of bv2z_sbb_unsigned and bv2z_sbb_signed in NBitsOp. *)
-  Lemma bv2z_Isbb t bs1 bs2 bsc :
-    size bs1 = sizeof_typ t -> size bs2 = sizeof_typ t -> size bsc = 1 ->
-    sbbB_safe t bs1 bs2 bsc ->
-    bv2z t (sbbB (to_bool bsc) bs1 bs2).2 =
-    (bv2z t bs1 - bv2z t bs2 - bv2z Tbit bsc)%Z.
+  Lemma bv2z_Isbb_unsigned bs1 bs2 bsc n :
+    0 < size bs1 ->
+    size bs1 = n -> size bs2 = n -> size bsc = 1 ->
+    sbbB_safe (Tuint n) bs1 bs2 bsc ->
+    bv2z (Tuint n) (sbbB (to_bool bsc) bs1 bs2).2 =
+    (bv2z (Tuint n) bs1 - bv2z (Tuint n) bs2 - bv2z Tbit bsc)%Z.
   Proof.
-    rewrite /sbbB_safe /usbbB_safe /ssbbB_safe. case: t => /=.
-    - move=> n H1 H2 Hc. rewrite -H2 in H1. (*exact: bv2z_sbb_unsigned.
-    - move=> n H1 H2 Hc. rewrite -H2 in H1. exact: bv2z_sbb_signed.*)
-  Admitted.
+    rewrite /sbbB_safe /usbbB_safe /=.
+    move=> Hs H1 H2 Hc. rewrite -H2 in H1. exact: bv2z_sbb_unsigned.
+  Qed.
+
+  Lemma bv2z_Isbb_signed bs1 bs2 bsc n :
+    1 < size bs1 ->
+    size bs1 = n -> size bs2 = n -> size bsc = 1 ->
+    sbbB_safe (Tsint n) bs1 bs2 bsc ->
+    bv2z (Tsint n) (sbbB (to_bool bsc) bs1 bs2).2 =
+    (bv2z (Tsint n) bs1 - bv2z (Tsint n) bs2 - bv2z Tbit bsc)%Z.
+  Proof.
+    rewrite /sbbB_safe /ssbbB_safe /=.
+    move=> Hs H1 H2 Hc. rewrite -H2 in H1. exact: bv2z_sbb_signed.
+  Qed.
 
   Lemma bv2z_Isbbs_unsigned bs1 bs2 bsc n :
     size bs1 = n -> size bs2 = n -> size bsc = 1 ->
@@ -2094,12 +2126,13 @@ Section SplitSpec.
   Qed.
 
   Lemma bv2z_Isbbs_signed bs1 bs2 bsc n :
+    1 < size bs1 ->
     size bs1 = n -> size bs2 = n -> size bsc = 1 ->
     sbbs_safe (Tsint n) bs1 bs2 bsc ->
     bv2z (Tsint n) (sbbB (to_bool bsc) bs1 bs2).2 =
     (bv2z (Tsint n) bs1 - bv2z (Tsint n) bs2 - bv2z Tbit bsc)%Z.
   Proof.
-    rewrite /sbbs_safe /ssbbB_safe /=. move=> H1 H2 Hc. rewrite -H2 in H1.
+    rewrite /sbbs_safe /ssbbB_safe /=. move=> Hs H1 H2 Hc. rewrite -H2 in H1.
     exact: bv2z_sbbs_signed.
   Qed.
 
@@ -2113,48 +2146,11 @@ Section SplitSpec.
     - move=> n H1 H2. rewrite -H2 in H1. exact: bv2z_mul_signed.
   Qed.
 
-  (* = TO BE REMOVED =
-  Lemma bv2z_Imull t bs1 bs2 :
-    size bs1 = sizeof_typ t ->
-    size bs2 = sizeof_typ t ->
-    (bv2z (unsigned_typ t) (low (size bs2) (full_mul bs1 bs2)) +
-     bv2z t (high (size bs1) (full_mul bs1 bs2)) *
-     Cryptoline.DSL.z2expn (Z.of_nat (size bs2)))%Z =
-    (bv2z t bs1 * bv2z t bs2)%Z.
-  Proof.
-    rewrite /Cryptoline.DSL.z2expn /=. case: t => /=.
-    - move=> n H1 H2. rewrite -H2 in H1. exact: bv2z_mull_unsigned.
-    - move=> n H1 H2. rewrite -H2 in H1. exact: bv2z_mull_signed.
-  Qed.
-   *)
-
-  (* The following lemma will be proved in coq-nbits.
-     Remove it when updating coq-nbits *)
-  Lemma bv2z_mull_unsigned bs1 bs2 :
-    size bs1 = size bs2 ->
-    (to_Zpos (low (size bs2) (zext (size bs1) bs1 *# zext (size bs1) bs2)%bits) +
-     to_Zpos (high (size bs1) (zext (size bs1) bs1 *# zext (size bs1) bs2)%bits) *
-     2 ^ Z.of_nat (size bs2))%Z = 
-    (to_Zpos bs1 * to_Zpos bs2)%Z.
-  Proof.
-  Admitted.
-
-  (* The following lemma will be proved in coq-nbits.
-     Remove it when updating coq-nbits *)
-  Lemma bv2z_mull_signed bs1 bs2 :
-    size bs1 = size bs2 ->
-    (to_Zpos (low (size bs2) (sext (size bs1) bs1 *# sext (size bs1) bs2)%bits) +
-     to_Z (high (size bs1) (sext (size bs1) bs1 *# sext (size bs1) bs2)%bits) *
-     2 ^ Z.of_nat (size bs2))%Z = 
-    (to_Z bs1 * to_Z bs2)%Z.
-  Proof.
-  Admitted.
-
   Lemma bv2z_Imull_unsigned t bs1 bs2 :
     is_unsigned t ->
     size bs1 = sizeof_typ t ->
     size bs2 = sizeof_typ t ->
-    (bv2z (unsigned_typ t) 
+    (bv2z (unsigned_typ t)
           (low (size bs2) (zext (size bs1) bs1 *# zext (size bs1) bs2)%bits) +
      bv2z t (high (size bs1) (zext (size bs1) bs1 *# zext (size bs1) bs2)%bits) *
      Cryptoline.DSL.z2expn (Z.of_nat (size bs2)))%Z =
@@ -2166,46 +2162,18 @@ Section SplitSpec.
 
   Lemma bv2z_Imull_signed t bs1 bs2 :
     is_signed t ->
+    0 < size bs1 ->
     size bs1 = sizeof_typ t ->
     size bs2 = sizeof_typ t ->
-    (bv2z (unsigned_typ t) 
+    (bv2z (unsigned_typ t)
           (low (size bs2) (sext (size bs1) bs1 *# sext (size bs1) bs2)%bits) +
      bv2z t (high (size bs1) (sext (size bs1) bs1 *# sext (size bs1) bs2)%bits) *
      Cryptoline.DSL.z2expn (Z.of_nat (size bs2)))%Z =
     (bv2z t bs1 * bv2z t bs2)%Z.
   Proof.
     rewrite /Cryptoline.DSL.z2expn /=. case: t => //=.
-    move=> n _ H1 H2. rewrite -H2 in H1. exact: bv2z_mull_signed.
+    move=> n _ Hs H1 H2. rewrite -H2 in H1. exact: bv2z_mull_signed.
   Qed.
-
-  (* = TO BE REMOVED =
-  Lemma bv2z_Imulj t bs1 bs2 :
-    size bs1 = sizeof_typ t ->
-    size bs2 = sizeof_typ t ->
-    bv2z (double_typ t) (full_mul bs1 bs2) = (bv2z t bs1 * bv2z t bs2)%Z.
-  Proof.
-    case: t => /=.
-    - move=> n H1 H2. rewrite -H2 in H1. exact: bv2z_mulj_unsigned.
-    - move=> n H1 H2. rewrite -H2 in H1. exact: bv2z_mulj_signed.
-  Qed.
-   *)
-
-  (* The following lemma will be proved in coq-nbits.
-     Remove it when updating coq-nbits *)
-  Lemma bv2z_mulj_unsigned bs1 bs2 :
-    size bs1 = size bs2 ->    
-    to_Zpos (zext (size bs1) bs1 *# zext (size bs1) bs2)%bits =
-    (to_Zpos bs1 * to_Zpos bs2)%Z.
-  Proof.
-  Admitted.
-
-  (* The following lemma will be proved in coq-nbits.
-     Remove it when updating coq-nbits *)
-  Lemma bv2z_mulj_signed bs1 bs2 :
-    size bs1 = size bs2 ->
-    to_Z (sext (size bs1) bs1 *# sext (size bs1) bs2)%bits = (to_Z bs1 * to_Z bs2)%Z.
-  Proof.
-  Admitted.
 
   Lemma bv2z_Imulj_unsigned t bs1 bs2 :
     is_unsigned t ->
@@ -2388,7 +2356,7 @@ Section SplitSpec.
              rewrite -{3}(cat_low_high Hs') Heq.
              rewrite to_Zpos_cat /= Z.add_0_r. reflexivity.
           -- move: (Nats.ltn_lt Hs) => {Hs} Hs. rewrite subn1 in Hs.
-             move: (Nat.lt_pred_le _ _ Hs) => {Hs} /Nats.le_leq Hs. (* lala *)
+             move: (Nat.lt_pred_le _ _ Hs) => {Hs} /Nats.le_leq Hs.
              rewrite H0 in Hs. discriminate.
         * move/eqP=> Heq. rewrite (high_zeros_to_Zpos_low_eq Heq).
           apply: Logic.eq_sym. apply: (highn_0_to_Z _ Heq).
@@ -2542,10 +2510,18 @@ Section SplitSpec.
       (move: (conform_size_eval_atomic Hsub Hco Hsm) => Hsize);
       move: Hsub; intro_atomic_size
     |  Hs : _ = sizeof_typ (atyp ?a ?E),
+       Hsign : atyp ?a ?E = Tsint ?n,
+       Hws : is_true (well_sized_atomic ?E ?a) |- _ =>
+       let H := fresh in
+       (have: is_signed (atyp a E) by rewrite Hsign);
+       (move=> H); move: (well_sized_atomic_signed H Hws);
+       move: (well_sized_atomic_gt0 Hws); rewrite /asize;
+       rewrite -Hs; move: Hws; intro_atomic_size
+    |  Hs : _ = sizeof_typ (atyp ?a ?E),
        Hsign : is_true (is_signed (atyp ?a ?E)),
        Hws : is_true (well_sized_atomic ?E ?a) |- _ =>
-       move: (well_sized_atomic_signed Hsign Hws); rewrite /asize;
-       rewrite -Hs; move: Hws; intro_atomic_size
+       move: (well_sized_atomic_signed Hsign Hws); move: (well_sized_atomic_gt0 Hws);
+       rewrite /asize; rewrite -Hs; move: Hws; intro_atomic_size
     |  Hs : _ = sizeof_typ (atyp ?a ?E),
        Hws : is_true (well_sized_atomic ?E ?a) |- _ =>
        move: (well_sized_atomic_gt0 Hws); rewrite /asize;
@@ -2653,15 +2629,18 @@ Section SplitSpec.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by trivial.
         mytac. exact: (bv2z_Iadds_signed _ _ Hsa).
     (* Iadc *)
-    - move=> v a1 a2 ac Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst.
-      rewrite /=. split; last by done. mytac. exact: (bv2z_Iadc _ _ _ Hsa).
+    - move=> v a1 a2 ac Hwf Hun Hni Hco Hsa Hev. dcase (atyp a1 E). case=> n Hta1.
+      + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by done.
+        mytac. exact: (bv2z_Iadc_unsigned _ _ _ _ Hsa).
+      + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by done.
+        mytac. exact: (bv2z_Iadc_signed _ _ _ _ Hsa).
     (* Iadcs *)
     - move=> c v a1 a2 ac Hwf Hun Hni Hco Hsa Hev. dcase (atyp a1 E). case=> n Hta1.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split.
         * mytac. exact: (bv2z_Iadcs_unsigned _ _ _).
         * inversion_clear Hev. by prove_carry_constr.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by done.
-        mytac. exact: (bv2z_Iadcs_signed _ _ _ Hsa).
+        mytac. exact: (bv2z_Iadcs_signed _ _ _ _ Hsa).
     (* Isub *)
     - move=> v a1 a2 Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst.
       rewrite /=. split; last by done. mytac. exact: (bv2z_Isub _ _ Hsa).
@@ -2680,25 +2659,31 @@ Section SplitSpec.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by done.
         mytac. exact: (bv2z_Isubb_signed _ _ Hsa).
     (* Isbc *)
-    - move=> v a1 a2 ac Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst.
-      rewrite /=. split; last by done. mytac. exact: (bv2z_Isbc _ _ _ Hsa).
+    - move=> v a1 a2 ac Hwf Hun Hni Hco Hsa Hev. dcase (atyp a1 E). case=> n Hta1.
+      + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by done.
+        mytac. exact: (bv2z_Isbc_unsigned _ _ _ _ Hsa).
+      + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by done.
+        mytac. exact: (bv2z_Isbc_signed _ _ _ _ Hsa).
     (* Isbcs *)
     - move=> c v a1 a2 ac Hwf Hun Hni Hco Hsa Hev. dcase (atyp a1 E). case=> n Hta1.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split.
         * mytac. exact: (bv2z_Isbcs_unsigned _ _ _).
         * inversion_clear Hev. by prove_carry_constr.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by done.
-        mytac. exact: (bv2z_Isbcs_signed _ _ _ Hsa).
+        mytac. exact: (bv2z_Isbcs_signed _ _ _ _ Hsa).
     (* Isbb *)
-    - move=> v a1 a2 ac Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst.
-      rewrite /=. split; last by done. mytac. exact: (bv2z_Isbb _ _ _ Hsa).
+    - move=> v a1 a2 ac Hwf Hun Hni Hco Hsa Hev. dcase (atyp a1 E). case=> n Hta1.
+      + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by done.
+        mytac. exact: (bv2z_Isbb_unsigned _ _ _ _ Hsa).
+      + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by done.
+        mytac. exact: (bv2z_Isbb_signed _ _ _ _ Hsa).
     (* Isbbs *)
     - move=> c v a1 a2 ac Hwf Hun Hni Hco Hsa Hev. dcase (atyp a1 E). case=> n Hta1.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split.
         * mytac. exact: (bv2z_Isbbs_unsigned _ _ _).
         * inversion_clear Hev. by prove_carry_constr.
       + move=> [] ? ? [] ? ? Heq; subst. rewrite /=. split; last by done.
-        mytac. exact: (bv2z_Isbbs_signed _ _ _ Hsa).
+        mytac. exact: (bv2z_Isbbs_signed _ _ _ _ Hsa).
     (* Imul *)
     - move=> v a1 a2 Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
       split; last by trivial. mytac. exact: (bv2z_Imul _ _ Hsa).
@@ -2709,7 +2694,7 @@ Section SplitSpec.
       + exact: (bv2z_Imull_signed _ _ _).
     (* Imulj *)
     - move=> v a1 a2 Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
-      split; last by trivial. mytac. 
+      split; last by trivial. mytac.
       + exact: (bv2z_Imulj_unsigned _ _).
       + exact: (bv2z_Imulj_signed _ _).
     (* Isplit *)
