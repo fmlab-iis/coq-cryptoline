@@ -171,13 +171,13 @@ let visit_instr m g i =
   | Ast.Cryptoline.Ishl (v, a, n) ->
       let (m', g', coq_v') = visit_var m g v in
       let (m'', g'', coq_a') = visit_atomic m' g' a in
-      (m'', g'', Extraction.DSL.DSL.Ishl (coq_v', coq_a', Extraction.External.nat_of_z n))
+      (m'', g'', Extraction.DSL.DSL.Ishl (coq_v', coq_a', (*Extraction.External.nat_of_z*) Z.to_int n))
   | Ast.Cryptoline.Icshl (vh, vl, a1, a2, n) ->
       let (m', g', coq_vh') = visit_var m g vh in
       let (m'', g'', coq_vl') = visit_var m' g' vl in
       let (m''', g''', coq_a1') = visit_atomic m'' g'' a1 in
       let (m'''', g'''', coq_a2') = visit_atomic m''' g''' a2 in
-      (m'''', g'''', Extraction.DSL.DSL.Icshl (coq_vh', coq_vl', coq_a1', coq_a2', Extraction.External.nat_of_z n))
+      (m'''', g'''', Extraction.DSL.DSL.Icshl (coq_vh', coq_vl', coq_a1', coq_a2', (*Extraction.External.nat_of_z*) Z.to_int n))
   | Ast.Cryptoline.Inondet v ->
       let (m', g', coq_v') = visit_var m g v in
       (m', g', Extraction.DSL.DSL.Inondet (coq_v', visit_typ v.vtyp))
@@ -290,7 +290,7 @@ let visit_instr m g i =
       let (m', g', coq_vh') = visit_var m g vh in
       let (m'', g'', coq_vl') = visit_var m' g' vl in
       let (m''', g''', coq_a') = visit_atomic m'' g'' a in
-      (m''', g''', Extraction.DSL.DSL.Isplit (coq_vh', coq_vl', coq_a', Extraction.External.nat_of_z n))
+      (m''', g''', Extraction.DSL.DSL.Isplit (coq_vh', coq_vl', coq_a', (*Extraction.External.nat_of_z*) Z.to_int n))
 		(* Instructions that cannot be translated to polynomials *)
   | Ast.Cryptoline.Iand (v, a1, a2) ->
       let (m', g', coq_v') = visit_var m g v in

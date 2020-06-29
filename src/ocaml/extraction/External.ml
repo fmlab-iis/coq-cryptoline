@@ -22,9 +22,11 @@ let string_of_bits bs =
 
 let explode s = List.init (String.length s) (String.get s)
 
+(*
 let nat_of_z z = nat_of_int (Z.to_int z)
 
 let z_of_nat n = Z.of_int (int_of_nat n)
+*)
 
 let bits_of_z size z =
   let binstr =

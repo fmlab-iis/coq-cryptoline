@@ -5,8 +5,10 @@ open NBitsDef
 open Poly
 open Ring_polynom
 
+(*
 val nat_of_z : Z.t -> nat
 val z_of_nat : nat -> Z.t
+*)
 val bits_of_z : int -> Z.t -> bits
 val z_of_pos : positive -> Z.t
 val pos_of_z : Z.t -> positive

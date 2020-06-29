@@ -2,7 +2,7 @@
 (* Note: the file name cannot be Extraction.v. *)
 
 From Coq Require Import Extraction ExtrOcamlBasic ExtrOcamlString.
-From Coq Require Import ExtrOcamlIntConv.
+From Coq Require Import ExtrOcamlIntConv ExtrOcamlNatInt.
 From Coq Require Import Arith List.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun prime.
 From ssrlib Require Import Var Tactics Seqs.
