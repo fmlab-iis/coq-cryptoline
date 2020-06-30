@@ -77,6 +77,8 @@ let args =
     ("-singular", String (fun str -> singular_path := str; algebra_system := Singular),
      "PATH\n\t     Use Singular at the specified path\n");
     ("-slicing", Set apply_slicing, "  Enable slicing\n");
+    ("-tmpdir", String (fun str -> tmpdir := Some str),
+     "PATH\n\t     Specify a directory for temporary files");
     ("-untyped", Set use_untyped_parser, "  Use the untyped parser\n");
     ("-vector", Set use_vector_parser, "   Use the vectorized parser\n");
     ("-vo", Symbol (["lex"; "appearing"; "rev_lex"; "rev_appearing"],

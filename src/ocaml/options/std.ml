@@ -147,3 +147,9 @@ let gratgen_path = ref "gratgen"
 let gratchk_path = ref "gratchk"
 (*let lrat_checker_path = ref "PracticalInterface"*)
 let lrat_checker_path = ref "/Users/mht208/.git/sat_proof_checker/rat_checker/Interface.native"
+
+let tmpdir = ref None
+let tmpfile prefix suffix =
+  match !tmpdir with
+  | None -> Filename.temp_file prefix suffix
+  | Some dir -> Filename.temp_file ~temp_dir:dir prefix suffix

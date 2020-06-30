@@ -106,3 +106,6 @@ val drat_trim_path : string ref
 val gratgen_path : string ref
 val gratchk_path : string ref
 val lrat_checker_path : string ref
+
+val tmpdir : (string option) ref
+val tmpfile : string -> string -> string
