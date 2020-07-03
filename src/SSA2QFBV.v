@@ -472,14 +472,6 @@ Proof.
     + move=> H. move: (qfbv_conjs_rec_conj H) => [-> ->]. reflexivity.
 Qed.
 
-Lemma well_formed_bexp_qfbv_conjs_la_rcons E es e :
-  QFBV.well_formed_bexp (qfbv_conjs_la (rcons es e)) E =
-  QFBV.well_formed_bexp (qfbv_conjs_la es) E && QFBV.well_formed_bexp e E.
-Proof.
-  rewrite /qfbv_conjs_la. case: es => [| e1 es] //=.
-  rewrite qfbv_conjs_rec_rcons /=. reflexivity.
-Qed.
-
 Lemma eval_qfbv_conjs_rec s pre_es es :
   QFBV.eval_bexp (qfbv_conjs_rec pre_es es) s =
   QFBV.eval_bexp pre_es s && QFBV.eval_bexp (qfbv_conjs_la es) s.
@@ -530,6 +522,32 @@ Proof.
   - move=> e1. rewrite andbT. reflexivity.
   - move=> es le IH e1. rewrite qfbv_conjs_rec_rcons /=. rewrite -IH.
     rewrite eval_qfbv_conjs_rcons. rewrite andbA. reflexivity.
+Qed.
+
+Lemma well_formed_bexp_qfbv_conjs_rec_rcons E pre_es es e :
+  QFBV.well_formed_bexp (qfbv_conjs_rec pre_es (rcons es e)) E =
+  QFBV.well_formed_bexp (qfbv_conjs_rec pre_es es) E && QFBV.well_formed_bexp e E.
+Proof.
+  case: es => [| e1 es] //=. rewrite qfbv_conjs_rec_rcons /=. reflexivity.
+Qed.
+
+Lemma well_formed_bexp_qfbv_conjs_la_rcons E es e :
+  QFBV.well_formed_bexp (qfbv_conjs_la (rcons es e)) E =
+  QFBV.well_formed_bexp (qfbv_conjs_la es) E && QFBV.well_formed_bexp e E.
+Proof.
+  rewrite /qfbv_conjs_la. case: es => [| e1 es] //=.
+  rewrite qfbv_conjs_rec_rcons /=. reflexivity.
+Qed.
+
+Lemma well_formed_bexp_ra_la E es :
+  QFBV.well_formed_bexp (qfbv_conjs es) E = QFBV.well_formed_bexp (qfbv_conjs_la es) E.
+Proof.
+  rewrite /qfbv_conjs_la. case: es => [| e es] //=.
+  move: es e. apply: last_ind => //=.
+  - move=> e. rewrite andbT. reflexivity.
+  - move=> es le IH e. rewrite well_formed_bexp_qfbv_conjs_rec_rcons.
+    rewrite -IH. rewrite well_formed_bexp_qfbv_conjs_rcons. rewrite andbA.
+    reflexivity.
 Qed.
 
 
@@ -5444,6 +5462,68 @@ Section SplitConditionsFixedFinal.
     move: (well_formed_bexp_rbexp Hwf_Ef) => {Hwf_Ef} Hwf_Ef.
     rewrite (well_formed_bexp_submap Hsub_EpE Hwf_Ef).
     exact: is_true_true.
+  Qed.
+
+  (* Construct safety conditions with less prefix information and use qfbv_conjs_la. *)
+
+  Lemma bexp_program_safe_split_fixed_final_sound_la E f p :
+    let fE := program_succ_typenv p E in
+    well_formed_ssa_program E p ->
+    (forall pre_es safe,
+        List.In (pre_es, safe) (bexp_program_safe_split_fixed_final fE p) ->
+        forall s,
+          SSAStore.conform s fE ->
+          QFBV.eval_bexp (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs_la pre_es))
+                                   safe) s) ->
+    (forall s, SSAStore.conform s fE ->
+               eval_bexp (bexp_rbexp f) s ->
+               eval_bexp (bexp_program_safe_fixed_final fE p) s).
+  Proof.
+    move=> fE Hwf_Ep He.
+    apply: (bexp_program_safe_split_fixed_final_sound Hwf_Ep).
+    move=> pre_es safe Hin s Hco. move: (He pre_es safe Hin s Hco) => /=.
+    case Hf: (eval_bexp (bexp_rbexp f) s) => //=.
+    case Hsafe: (eval_bexp safe s) => /=.
+    - rewrite !orbT. by apply.
+    - rewrite !orbF. move/negP=> H. apply/negP=> H'. apply: H.
+      rewrite -eval_qfbv_conjs_ra_la. assumption.
+  Qed.
+
+  Lemma bexp_program_safe_split_fixed_final_complete_la E f p :
+    let fE := program_succ_typenv p E in
+    well_formed_ssa_program E p ->
+    (forall s, SSAStore.conform s fE ->
+               eval_bexp (bexp_rbexp f) s ->
+               eval_bexp (bexp_program_safe_fixed_final fE p) s) ->
+    (forall pre_es safe,
+        List.In (pre_es, safe) (bexp_program_safe_split_fixed_final fE p) ->
+        forall s,
+          SSAStore.conform s fE ->
+          QFBV.eval_bexp (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs_la pre_es))
+                                   safe) s).
+  Proof.
+    move=> fE Hwf H pre_es safe Hin s Hco.
+    move: (bexp_program_safe_split_fixed_final_complete Hwf H Hin Hco) => /=.
+    case Hf: (eval_bexp (bexp_rbexp f) s) => //=.
+    case Hsafe: (eval_bexp safe s) => /=.
+    - rewrite !orbT. by apply.
+    - rewrite !orbF. move/negP=> He. apply/negP=> He'. apply: He.
+      rewrite eval_qfbv_conjs_ra_la. assumption.
+  Qed.
+
+  Lemma bexp_program_safe_split_fixed_final_cond_well_formed_la E f p :
+    let fE := program_succ_typenv p E in
+    well_formed_rbexp E f ->
+    well_formed_ssa_program E p ->
+    forall pre_es safe,
+      List.In (pre_es, safe) (bexp_program_safe_split_fixed_final fE p) ->
+      QFBV.well_formed_bexp
+        (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs_la pre_es)) safe) fE.
+  Proof.
+    move=> fE Hwf_Ef Hwf_Ep pre_es safe Hin.
+    move: (bexp_program_safe_split_fixed_final_cond_well_formed Hwf_Ef Hwf_Ep Hin).
+    simpl. move/andP=> [/andP [H1 H2] H3]. rewrite H1 H3 andbT /=.
+    rewrite -well_formed_bexp_ra_la. assumption.
   Qed.
 
 End SplitConditionsFixedFinal.
