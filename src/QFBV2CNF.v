@@ -179,13 +179,8 @@ Section QFBV2CNF.
   Definition valid_bb_bexps_cache E es :=
     forall m c g cnfs cnf,
       bb_bexps_cache E es = (m, c, g, cnfs) ->
-      List.In cnf cnfs ->
+      In cnf cnfs ->
       ~ (CNF.sat cnf).
-
-  Definition valid_qfbv_bexps E es :=
-    forall s, SSAStore.conform s E ->
-              forall e, List.In e es ->
-                        QFBV.eval_bexp e s.
 
   Lemma bb_bexps_cache_bit_blast_bexps_cache_eq E es m1 c1 g1 cnfs m2 c2 g2 cs lr :
     bb_bexps_cache E es = (m1, c1, g1, cnfs) ->
@@ -353,10 +348,6 @@ Section QFBV2CNF.
   Definition bb_range_safety (s : spec) :=
     (qfbv_spec_range s)::(qfbv_spec_safety s).
 
-  Lemma well_formed_bexps_cons E e es :
-    well_formed_bexps (e::es) E = well_formed_bexp e E && well_formed_bexps es E.
-  Proof. reflexivity. Qed.
-
   Theorem bb_range_safety_well_formed s :
     let fE := program_succ_typenv (sprog s) (sinputs s) in
     well_formed_ssa_spec s ->
@@ -480,6 +471,183 @@ Section QFBV2CNF.
     apply/bb_range_safety_simplified_valid.
     apply: (bb_bexps_cache_sound Hwf_bb).
     exact: (bb_range_safety_complete Hwf Hrange Hsafety).
+  Qed.
+
+
+  (* The qfbv_conjs_la versions *)
+
+  Local Notation qfbv_spec_range_split_la := qfbv_bexp_spec_split_la.
+
+  Fixpoint qfbv_spec_safety_la_rec f es :=
+    match es with
+    | [::] => [::]
+    | (pre_es, safe)::tl =>
+      (qfbv_imp (qfbv_conj f (qfbv_conjs_la pre_es))
+                safe)::(qfbv_spec_safety_la_rec f tl)
+    end.
+
+  Definition qfbv_spec_safety_la (s : spec) : seq QFBV.bexp :=
+    let fE := program_succ_typenv (sprog s) (sinputs s) in
+    qfbv_spec_safety_la_rec (bexp_rbexp (rng_bexp (spre s)))
+                            (bexp_program_safe_split_fixed_final fE (sprog s)).
+
+  Definition bb_range_safety_la (s : spec) :=
+    (qfbv_spec_range_split_la s) ++ (qfbv_spec_safety_la s).
+
+  Definition bb_range_safety_la_simplified (s : spec) :=
+    map QFBV.simplify_bexp (bb_range_safety_la s).
+
+  Lemma map_simplify_bexp_eqvalid E es :
+    valid_qfbv_bexps E es <-> valid_qfbv_bexps E (map simplify_bexp es).
+  Proof.
+    elim: es => [| e es [IH1 IH2]] //=. split=> H s Hco e' Hin.
+    - case: (in_inv Hin) => {Hin} Hin.
+      + rewrite -Hin. apply/simplify_bexp_eqsat. apply: (H s Hco). exact: in_eq.
+      + apply: (IH1 _ _ Hco _ Hin). exact: (valid_qfbv_bexps_tl H).
+    - apply/simplify_bexp_eqsat. apply: (H _ Hco). apply/in_In.
+      rewrite -map_cons. apply/mapP. exists e'; last by reflexivity.
+      apply/in_In. assumption.
+  Qed.
+
+  Lemma map_simplify_bexp_well_formed E es :
+    well_formed_bexps es E -> well_formed_bexps (map simplify_bexp es) E.
+  Proof.
+    elim: es => [| e es IH] //=. move/andP=> [Hwf_e Hwf_es].
+    rewrite (QFBV.simplify_bexp_well_formed Hwf_e) (IH Hwf_es).
+    done.
+  Qed.
+
+  Lemma map_simplify_bexp_valid_qfbv_bexps E es1 es2 :
+    valid_qfbv_bexps E es1 <-> valid_qfbv_bexps E es2 ->
+    valid_qfbv_bexps E [seq simplify_bexp i | i <- es1] <->
+    valid_qfbv_bexps E [seq simplify_bexp i | i <- es2].
+  Proof.
+    move=> [H1 H2]. split=> H.
+    - apply/(map_simplify_bexp_eqvalid _ es2). apply: H1.
+      apply/map_simplify_bexp_eqvalid. assumption.
+    - apply/(map_simplify_bexp_eqvalid _ es1). apply: H2.
+      apply/map_simplify_bexp_eqvalid. assumption.
+  Qed.
+
+  Lemma qfbv_spec_safety_well_formed_ra_la E s :
+    QFBV.well_formed_bexps (qfbv_spec_safety s) E =
+    QFBV.well_formed_bexps (qfbv_spec_safety_la s) E.
+  Proof.
+    rewrite /qfbv_spec_safety /qfbv_spec_safety_la /=.
+    move: ((bexp_rbexp (rng_bexp (spre s)))).
+    move: (bexp_program_safe_split_fixed_final
+             (program_succ_typenv (sprog s) (sinputs s)) (sprog s)).
+    clear s. elim => [| [pre_es e] es IH] f //=.
+    rewrite -IH. rewrite -well_formed_bexp_ra_la. reflexivity.
+  Qed.
+
+  Lemma bb_range_safety_la_well_formed E s :
+    well_formed_bexps (bb_range_safety s) E ->
+    well_formed_bexps (bb_range_safety_la s) E.
+  Proof.
+    rewrite /bb_range_safety /bb_range_safety_la.
+    rewrite well_formed_bexps_cons well_formed_bexps_cat.
+    move/andP=> [H1 H2]. rewrite -well_formed_qfbv_bexp_spec_ra_split_la.
+    rewrite -qfbv_spec_safety_well_formed_ra_la.
+    by rewrite H1 H2.
+  Qed.
+
+  Lemma bb_range_safety_la_simplified_well_formed s :
+    let fE := program_succ_typenv (sprog s) (sinputs s) in
+    well_formed_ssa_spec s ->
+    well_formed_bexps (bb_range_safety_la_simplified s) fE.
+  Proof.
+    move=> fE Hwf. rewrite /bb_range_safety_la_simplified.
+    rewrite /bb_range_safety_la. rewrite map_cat.
+    rewrite well_formed_bexps_cat.
+    move: (well_formed_qfbv_bexp_rspec Hwf) => Hwf_rng.
+    rewrite well_formed_qfbv_bexp_spec_ra_split_la in Hwf_rng.
+    rewrite (map_simplify_bexp_well_formed Hwf_rng) /=.
+    move: (qfbv_spec_safety_well_formed Hwf) => Hwf_safe.
+    rewrite qfbv_spec_safety_well_formed_ra_la in Hwf_safe.
+    rewrite (map_simplify_bexp_well_formed Hwf_safe) /=.
+    reflexivity.
+  Qed.
+
+  Lemma qfbv_spec_safety_la_valid s :
+    let fE := program_succ_typenv (sprog s) (sinputs s) in
+    valid_qfbv_bexps fE (qfbv_spec_safety s) <->
+    valid_qfbv_bexps fE (qfbv_spec_safety_la s).
+  Proof.
+    move=> fE. rewrite /qfbv_spec_safety /qfbv_spec_safety_la /=.
+    move: fE.
+    move: (bexp_rbexp (rng_bexp (spre s))).
+    move: (bexp_program_safe_split_fixed_final
+             (program_succ_typenv (sprog s) (sinputs s)) (sprog s)).
+    clear s. elim => [| [pre_es safe] es IH] f E //=.
+    move: (IH f E) => [H1 H2]. split=> H s Hco e Hin.
+    - move: (in_inv Hin). case=> {Hin} Hin.
+      + rewrite -Hin. move: (valid_qfbv_bexps_hd H Hco) => /=.
+        case: (eval_bexp f s) => //=. case: (eval_bexp safe s) => //=.
+        * rewrite !orbT. by apply.
+        * rewrite !orbF. move/negP=> Hs. apply/negP=> Hs'; apply: Hs.
+          rewrite eval_qfbv_conjs_ra_la. assumption.
+      + move: (valid_qfbv_bexps_tl H) => {H} H. exact: (H1 H _ Hco _ Hin).
+    - move: (in_inv Hin). case=> {Hin} Hin.
+      + rewrite -Hin. move: (valid_qfbv_bexps_hd H Hco) => /=.
+        case: (eval_bexp f s) => //=. case: (eval_bexp safe s) => //=.
+        * rewrite !orbT. by apply.
+        * rewrite !orbF. move/negP=> Hs. apply/negP=> Hs'; apply: Hs.
+          rewrite -eval_qfbv_conjs_ra_la. assumption.
+      + move: (valid_qfbv_bexps_tl H) => {H} H. exact: (H2 H _ Hco _ Hin).
+  Qed.
+
+  Lemma bb_range_safety_la_simplified_valid s :
+    let fE := program_succ_typenv (sprog s) (sinputs s) in
+    valid_qfbv_bexps fE (bb_range_safety_simplified s) <->
+    valid_qfbv_bexps fE (bb_range_safety_la_simplified s).
+  Proof.
+    rewrite /bb_range_safety_la_simplified /bb_range_safety_simplified.
+    apply: map_simplify_bexp_valid_qfbv_bexps.
+    rewrite /bb_range_safety /bb_range_safety_la.
+    move: (valid_qfbv_bexp_spec_ra_split_la s) => [H1 H2].
+    split=> H st Hco e Hin.
+    - move/in_In: Hin=> Hin. rewrite mem_cat in Hin. case/orP: Hin=> Hin.
+      + move/in_In: Hin=> Hin. apply: (H1 _ _ Hco _ Hin).
+        move=> st' Hco'. exact: (valid_qfbv_bexps_hd H Hco').
+      + move: (valid_qfbv_bexps_tl H) => {H} H.
+        move/qfbv_spec_safety_la_valid: H => H. move/in_In: Hin=> Hin.
+        exact: (H st Hco _ Hin).
+    - move: (valid_qfbv_bexps_cat H) => {H} [Hrng Hsafe].
+      move: (in_inv Hin). case=> {Hin} Hin.
+      + rewrite -Hin. apply: (H2 _ _ Hco). exact: Hrng.
+      + move/qfbv_spec_safety_la_valid: Hsafe => Hsafe.
+        exact: (Hsafe _ Hco _ Hin).
+  Qed.
+
+  Theorem bb_range_safety_la_simplified_sound s :
+    let fE := program_succ_typenv (sprog s) (sinputs s) in
+    well_formed_ssa_spec s ->
+    valid_bb_bexps_cache fE (bb_range_safety_la_simplified s) ->
+    valid_rspec (rspec_of_spec s) /\ ssa_spec_safe s.
+  Proof.
+    move=> fE Hwf Hbb. apply: (bb_range_safety_simplified_sound Hwf).
+    move: (bb_range_safety_well_formed Hwf) => Hwf_bb.
+    move: (bb_range_safety_simplified_well_formed Hwf_bb) => Hwf_bbs.
+    apply: (bb_bexps_cache_complete Hwf_bbs).
+    move: (bb_range_safety_la_simplified_well_formed Hwf) => Hwf_la.
+    apply/bb_range_safety_la_simplified_valid.
+    apply: (bb_bexps_cache_sound Hwf_la). assumption.
+  Qed.
+
+  Theorem bb_range_safety_la_simplified_complete s :
+    let fE := program_succ_typenv (sprog s) (sinputs s) in
+    well_formed_ssa_spec s ->
+    valid_rspec (rspec_of_spec s) -> ssa_spec_safe s ->
+    valid_bb_bexps_cache fE (bb_range_safety_la_simplified s).
+  Proof.
+    move=> fE Hwf Hrng Hsafe.
+    move: (bb_range_safety_simplified_complete Hwf Hrng Hsafe) => Hv.
+    move: (bb_range_safety_well_formed Hwf) => Hwf_bb.
+    move: (bb_range_safety_simplified_well_formed Hwf_bb) => Hwf_bbs.
+    apply: (bb_bexps_cache_complete (bb_range_safety_la_simplified_well_formed Hwf)).
+    apply/bb_range_safety_la_simplified_valid.
+    apply: (bb_bexps_cache_sound Hwf_bbs). assumption.
   Qed.
 
 End QFBV2CNF.

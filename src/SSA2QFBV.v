@@ -3040,8 +3040,30 @@ Section SplitRangeConditions.
 
   Definition valid_qfbv_bexps E (es : seq QFBV.bexp) :=
     forall s, SSAStore.conform s E ->
-              forall e, (e \in es) ->
+              forall e, In e es ->
                         QFBV.eval_bexp e s.
+
+  Lemma valid_qfbv_bexps_hd E e es :
+    valid_qfbv_bexps E (e::es) ->
+    (forall s, SSAStore.conform s E -> QFBV.eval_bexp e s).
+  Proof.
+    move=> Hv s Hco. apply: (Hv _ Hco). left. reflexivity.
+  Qed.
+
+  Lemma valid_qfbv_bexps_tl E e es :
+    valid_qfbv_bexps E (e::es) -> valid_qfbv_bexps E es.
+  Proof.
+    move=> Hv s Hco e' Hin. apply: (Hv _ Hco). right. assumption.
+  Qed.
+
+  Lemma valid_qfbv_bexps_cat E es1 es2 :
+    valid_qfbv_bexps E (es1 ++ es2) ->
+    valid_qfbv_bexps E es1 /\ valid_qfbv_bexps E es2.
+  Proof.
+    move=> H; split=> s Hco e /in_In Hin.
+    - apply: (H s Hco e). apply/in_In. rewrite mem_cat Hin /=. reflexivity.
+    - apply: (H s Hco e). apply/in_In. rewrite mem_cat Hin orbT. reflexivity.
+  Qed.
 
   Fixpoint split_conj (e : QFBV.bexp) : seq QFBV.bexp :=
     match e with
@@ -3050,35 +3072,36 @@ Section SplitRangeConditions.
     end.
 
   Lemma split_conj_eval s e :
-    QFBV.eval_bexp e s -> forall e', (e' \in split_conj e) -> QFBV.eval_bexp e' s.
+    QFBV.eval_bexp e s -> forall e', (In e' (split_conj e)) -> QFBV.eval_bexp e' s.
   Proof.
     elim: e => //=.
-    - move=> _ e' Hin. rewrite in_cons in_nil orbF in Hin. by rewrite (eqP Hin).
-    - move=> op e1 e2 He e' Hin. rewrite in_cons in_nil orbF in Hin.
-        by rewrite (eqP Hin).
-    - move=> e IH He e' Hin. rewrite in_cons in_nil orbF in Hin.
-        by rewrite (eqP Hin).
-    - move=> e1 IH1 e2 IH2 /andP [He1 He2] e' Hin. rewrite mem_cat in Hin.
-      case/orP: Hin => Hin.
+    - move=> _ e' Hin. case: Hin => Hin //=. by rewrite -Hin.
+    - move=> op e1 e2 He e' Hin. case: Hin => Hin //=. by rewrite -Hin.
+    - move=> e IH He e' Hin. case: Hin => Hin //=. by rewrite -Hin.
+    - move=> e1 IH1 e2 IH2 /andP [He1 He2] e' /in_In Hin. rewrite mem_cat in Hin.
+      case/orP: Hin => /in_In Hin.
       + exact: (IH1 He1 _  Hin).
       + exact: (IH2 He2 _  Hin).
-    - move=> e1 IH1 e2 IH2 He e' Hin. rewrite in_cons in_nil orbF in Hin.
-        by rewrite (eqP Hin).
+    - move=> e1 IH1 e2 IH2 He e' Hin. case: Hin => Hin //=. by rewrite -Hin.
   Qed.
 
   Lemma eval_split_conj s e :
-    (forall e', (e' \in split_conj e) -> QFBV.eval_bexp e' s) -> QFBV.eval_bexp e s.
+    (forall e', (In e' (split_conj e)) -> QFBV.eval_bexp e' s) -> QFBV.eval_bexp e s.
   Proof.
     elim: e => //=.
-    - move=> H. move: (H Bfalse is_true_true) => /=. by apply.
-    - move=> op e1 e2 H. move: (H (Bbinop op e1 e2)). rewrite in_cons eqxx /=.
-      by apply.
-    - move=> e IH H. move: (H (Blneg e)). rewrite in_cons eqxx /=. by apply.
+    - move=> H. move: (H Bfalse (or_introl (Logic.eq_refl Bfalse))) => /=.
+        by apply.
+    - move=> op e1 e2 H. move: (H (Bbinop op e1 e2) (or_introl (Logic.eq_refl _))).
+        by apply.
+    - move=> e IH H. move: (H (Blneg e) (or_introl (Logic.eq_refl _))).
+        by apply.
     - move=> e1 IH1 e2 IH2 H. apply/andP; split.
-      + apply: IH1. move=> e' Hin. apply: H. rewrite mem_cat Hin /=. reflexivity.
-      + apply: IH2. move=> e' Hin. apply: H. rewrite mem_cat Hin orbT. reflexivity.
-    - move=> e1 IH1 e2 IH2 H. move: (H (Bdisj e1 e2)). rewrite in_cons eqxx /=.
-      by apply.
+      + apply: IH1. move=> e' /in_In Hin. apply: H. apply/in_In.
+        rewrite mem_cat Hin /=. reflexivity.
+      + apply: IH2. move=> e' /in_In Hin. apply: H. apply/in_In.
+        rewrite mem_cat Hin orbT. reflexivity.
+    - move=> e1 IH1 e2 IH2 H. move: (H (Bdisj e1 e2) (or_introl (Logic.eq_refl _))).
+        by apply.
   Qed.
 
   Definition qfbv_bexp_spec_split_la (s : spec) : seq QFBV.bexp :=
@@ -3095,8 +3118,8 @@ Section SplitRangeConditions.
   Proof.
     rewrite /valid_qfbv_bexp_spec /valid_qfbv_bexp_spec_split_la.
     rewrite /qfbv_bexp_spec_split_la. case: s => [E f p g] /=. split=> H.
-    - move=> s Hco e Hin. move: (H s Hco) => {H Hco}.
-      move/mapP: Hin => [ee Hin] He. rewrite He => {e He} /=.
+    - move=> s Hco e /in_In Hin. move: (H s Hco) => {H Hco}.
+      move/mapP: Hin => [ee /in_In Hin] He. rewrite He => {e He} /=.
       case Hf: (eval_bexp (bexp_rbexp (rng_bexp f)) s) => //=.
       case Hp: (eval_bexp (qfbv_conjs (bexp_program E (rng_program p))) s) => //=.
       + rewrite -eval_qfbv_conjs_ra_la. rewrite Hp /=. move=> Hg.
@@ -3113,9 +3136,34 @@ Section SplitRangeConditions.
                          (bexp_rbexp (rng_bexp f))
                          (qfbv_conjs_la (bexp_program E (rng_program p)))) post)
                    e')) => /=. rewrite Hf.
-      rewrite -eval_qfbv_conjs_ra_la Hp /=. apply. rewrite mem_map.
-      + assumption.
+      rewrite -eval_qfbv_conjs_ra_la Hp /=. apply.
+      apply/in_In. rewrite mem_map.
+      + apply/in_In. assumption.
       + move=> e1 e2. case. by apply.
+  Qed.
+
+  Lemma well_formed_qfbv_bexp_spec_ra_split_la E s :
+    well_formed_bexp (qfbv_bexp_spec s) E =
+    well_formed_bexps (qfbv_bexp_spec_split_la s) E.
+  Proof.
+    rewrite /qfbv_bexp_spec_split_la /qfbv_bexp_spec /=.
+    move: (bexp_rbexp (rng_bexp (spre s))).
+    move: (bexp_program (sinputs s) (rng_program (sprog s))).
+    move: (bexp_rbexp (rng_bexp (spost s))). clear s.
+    elim => //=.
+    - move=> ps fs. rewrite !andbT. rewrite -well_formed_bexp_ra_la. reflexivity.
+    - move=> ps fs. rewrite !andbT. rewrite -well_formed_bexp_ra_la. reflexivity.
+    - move=> _ e1 e2 ps fs. rewrite andbT. rewrite -well_formed_bexp_ra_la.
+      reflexivity.
+    - move=> e IH ps fs. rewrite andbT. rewrite -well_formed_bexp_ra_la.
+      reflexivity.
+    - move=> e1 IH1 e2 IH2 ps fs. rewrite map_cat /=.
+      rewrite well_formed_bexps_cat. rewrite -IH1 -IH2. rewrite !andbA.
+      case: (well_formed_bexp fs E) => //=.
+      case: (well_formed_bexp (qfbv_conjs ps) E) => //=.
+      rewrite !andbT. reflexivity.
+    - move=> e1 IH1 e2 IH2 ps fs. rewrite -well_formed_bexp_ra_la andbT.
+      reflexivity.
   Qed.
 
 End SplitRangeConditions.
