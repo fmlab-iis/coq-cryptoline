@@ -3014,6 +3014,95 @@ Section WellFormedRange.
 End WellFormedRange.
 
 
+(* Split range conditions and use qfbv_conjs_la *)
+
+Section SplitRangeConditions.
+
+  Import QFBV.
+
+  Definition valid_qfbv_bexps E (es : seq QFBV.bexp) :=
+    forall s, SSAStore.conform s E ->
+              forall e, (e \in es) ->
+                        QFBV.eval_bexp e s.
+
+  Fixpoint split_conj (e : QFBV.bexp) : seq QFBV.bexp :=
+    match e with
+    | QFBV.Bconj e1 e2 => split_conj e1 ++ split_conj e2
+    | _ => [:: e]
+    end.
+
+  Lemma split_conj_eval s e :
+    QFBV.eval_bexp e s -> forall e', (e' \in split_conj e) -> QFBV.eval_bexp e' s.
+  Proof.
+    elim: e => //=.
+    - move=> _ e' Hin. rewrite in_cons in_nil orbF in Hin. by rewrite (eqP Hin).
+    - move=> op e1 e2 He e' Hin. rewrite in_cons in_nil orbF in Hin.
+        by rewrite (eqP Hin).
+    - move=> e IH He e' Hin. rewrite in_cons in_nil orbF in Hin.
+        by rewrite (eqP Hin).
+    - move=> e1 IH1 e2 IH2 /andP [He1 He2] e' Hin. rewrite mem_cat in Hin.
+      case/orP: Hin => Hin.
+      + exact: (IH1 He1 _  Hin).
+      + exact: (IH2 He2 _  Hin).
+    - move=> e1 IH1 e2 IH2 He e' Hin. rewrite in_cons in_nil orbF in Hin.
+        by rewrite (eqP Hin).
+  Qed.
+
+  Lemma eval_split_conj s e :
+    (forall e', (e' \in split_conj e) -> QFBV.eval_bexp e' s) -> QFBV.eval_bexp e s.
+  Proof.
+    elim: e => //=.
+    - move=> H. move: (H Bfalse is_true_true) => /=. by apply.
+    - move=> op e1 e2 H. move: (H (Bbinop op e1 e2)). rewrite in_cons eqxx /=.
+      by apply.
+    - move=> e IH H. move: (H (Blneg e)). rewrite in_cons eqxx /=. by apply.
+    - move=> e1 IH1 e2 IH2 H. apply/andP; split.
+      + apply: IH1. move=> e' Hin. apply: H. rewrite mem_cat Hin /=. reflexivity.
+      + apply: IH2. move=> e' Hin. apply: H. rewrite mem_cat Hin orbT. reflexivity.
+    - move=> e1 IH1 e2 IH2 H. move: (H (Bdisj e1 e2)). rewrite in_cons eqxx /=.
+      by apply.
+  Qed.
+
+  Definition qfbv_bexp_spec_split_la (s : spec) : seq QFBV.bexp :=
+    let bs := bexp_of_rspec (sinputs s) (rspec_of_spec s) in
+    map (fun post => qfbv_imp (qfbv_conj (bpre bs) (qfbv_conjs_la (bprog bs))) post)
+        (split_conj (bpost bs)).
+
+  Definition valid_qfbv_bexp_spec_split_la (s : spec) :=
+    let fE := program_succ_typenv (sprog s) (sinputs s) in
+    valid_qfbv_bexps fE (qfbv_bexp_spec_split_la s).
+
+  Lemma valid_qfbv_bexp_spec_ra_split_la s :
+    valid_qfbv_bexp_spec s <-> valid_qfbv_bexp_spec_split_la s.
+  Proof.
+    rewrite /valid_qfbv_bexp_spec /valid_qfbv_bexp_spec_split_la.
+    rewrite /qfbv_bexp_spec_split_la. case: s => [E f p g] /=. split=> H.
+    - move=> s Hco e Hin. move: (H s Hco) => {H Hco}.
+      move/mapP: Hin => [ee Hin] He. rewrite He => {e He} /=.
+      case Hf: (eval_bexp (bexp_rbexp (rng_bexp f)) s) => //=.
+      case Hp: (eval_bexp (qfbv_conjs (bexp_program E (rng_program p))) s) => //=.
+      + rewrite -eval_qfbv_conjs_ra_la. rewrite Hp /=. move=> Hg.
+        exact: (split_conj_eval Hg Hin).
+      + move=> _. apply/orP; left. apply/negP => Hp'. move/negP: Hp; apply.
+        rewrite eval_qfbv_conjs_ra_la. assumption.
+    - move=> s Hco. move: (H s Hco) => {H Hco} He.
+      case Hf: (eval_bexp (bexp_rbexp (rng_bexp f)) s) => //=.
+      case Hp: (eval_bexp (qfbv_conjs (bexp_program E (rng_program p))) s) => //=.
+      apply: eval_split_conj. move=> e' Hin.
+      move: (He ((fun post =>
+                    qfbv_imp
+                      (qfbv_conj
+                         (bexp_rbexp (rng_bexp f))
+                         (qfbv_conjs_la (bexp_program E (rng_program p)))) post)
+                   e')) => /=. rewrite Hf.
+      rewrite -eval_qfbv_conjs_ra_la Hp /=. apply. rewrite mem_map.
+      + assumption.
+      + move=> e1 e2. case. by apply.
+  Qed.
+
+End SplitRangeConditions.
+
+
 (* Define the safety condition in terms of a QFBV expression *)
 
 Definition bexp_atomic_uaddB_safe a1 a2 : QFBV.bexp :=
