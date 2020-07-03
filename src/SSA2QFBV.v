@@ -362,6 +362,10 @@ Proof.
   case: a => //=. move=> t bs _ Hs. rewrite (eqP Hs). reflexivity.
 Qed.
 
+
+(* Make conjunctions of QFBV expressions
+   (right associativity, easy for induction) *)
+
 Fixpoint qfbv_conjs es :=
   match es with
   | [::] => QFBV.Btrue
@@ -394,6 +398,142 @@ Proof.
   rewrite -(@andbA _ _ (QFBV.eval_bexp (qfbv_conjs es2) s)).
   rewrite -IH. reflexivity.
 Qed.
+
+Lemma qfbv_conjs_inj es1 es2 :
+  qfbv_conjs es1 = qfbv_conjs es2 -> es1 = es2.
+Proof.
+  elim: es1 es2 => [| e1 es1 IH] [| e2 es2] //=.
+  case=> H1 H2. rewrite H1 (IH _ H2). reflexivity.
+Qed.
+
+(* Make conjunctions of QFBV expressions
+   (left associativity, good for bit-blasting cache) *)
+
+Fixpoint qfbv_conjs_rec pre_es es :=
+  match es with
+  | [::] => pre_es
+  | hd::tl => qfbv_conjs_rec (qfbv_conj pre_es hd) tl
+  end.
+
+(* Add QFBV.Btrue at the beginning to make qfbv_conjs_la injective *)
+Definition qfbv_conjs_la es :=
+  match es with
+  | [::] => QFBV.Btrue
+  | e::es => qfbv_conjs_rec (qfbv_conj QFBV.Btrue e) es
+  end.
+
+Lemma qfbv_conjs_rec_singleton pre_es e :
+  qfbv_conjs_rec pre_es [::e] = qfbv_conj pre_es e.
+Proof. reflexivity. Qed.
+
+Lemma qfbv_conjs_rec_cons pre_es e es :
+  qfbv_conjs_rec pre_es (e::es) = qfbv_conjs_rec (qfbv_conj pre_es e) es.
+Proof. reflexivity. Qed.
+
+Lemma qfbv_conjs_rec_cat pre_es es1 es2 :
+  qfbv_conjs_rec pre_es (es1 ++ es2) = qfbv_conjs_rec (qfbv_conjs_rec pre_es es1) es2.
+Proof. elim: es1 pre_es es2 => [| e1 es1 IH] //=. Qed.
+
+Lemma qfbv_conjs_rec_rcons pre_es es e :
+  qfbv_conjs_rec pre_es (rcons es e) = qfbv_conj (qfbv_conjs_rec pre_es es) e.
+Proof. by elim: es pre_es e => [| hd tl IH] //=. Qed.
+
+Lemma qfbv_conjs_rec_conj e1 es1 e2 es2 :
+  qfbv_conjs_rec (qfbv_conj QFBV.Btrue e1) es1 =
+  qfbv_conjs_rec (qfbv_conj QFBV.Btrue e2) es2 ->
+  e1 = e2 /\ es1 = es2.
+Proof.
+  move: es1 es2 e1 e2. apply: last_ind => //=.
+  - case=> [| e3 es2] e1 e2 //=.
+    + case. by move=> ->.
+    + move=> H. apply: False_ind. move: H. move: {2}QFBV.Btrue.
+      elim: es2 e1 e2 e3 => [| e es IH] e1 e2 e3 e4 //= H. apply: IH. exact: H.
+  - move=> es1 le1 IH. case/lastP => //=.
+    + move=> e1 e2 H. apply: False_ind. move: H. move: {1}QFBV.Btrue.
+      clear IH. elim: es1 le1 e1 e2 => [| e es IH] e1 e2 e3 e4 //= H. apply: IH.
+      exact: H.
+    + move=> es2 le2 e1 e2 /= H. rewrite !qfbv_conjs_rec_rcons in H.
+      case: H. move=> H1 ->. move: (IH _ _ _ H1). case=> -> ->. done.
+Qed.
+
+Lemma qfbv_conjs_la_inj es1 es2 :
+  qfbv_conjs_la es1 = qfbv_conjs_la es2 -> es1 = es2.
+Proof.
+  rewrite /qfbv_conjs_la. case: es1 => [| e1 es1] //=.
+  - case: es2 => [| e2 es2] //=. move: {2}QFBV.Btrue. move=> e1 H.
+    apply: False_ind. elim: es2 e1 e2 H => [| e es IH] e1 e2 /= H.
+    + discriminate.
+    + apply: IH. exact: H.
+  - case: es2 => [| e2 es2] //=.
+    + move: {1}QFBV.Btrue. move=> e2 H. apply: False_ind.
+      elim: es1 e1 e2 H => [| e es IH] e1 e2 /= H.
+      * discriminate.
+      * apply: IH. exact: H.
+    + move=> H. move: (qfbv_conjs_rec_conj H) => [-> ->]. reflexivity.
+Qed.
+
+Lemma well_formed_bexp_qfbv_conjs_la_rcons E es e :
+  QFBV.well_formed_bexp (qfbv_conjs_la (rcons es e)) E =
+  QFBV.well_formed_bexp (qfbv_conjs_la es) E && QFBV.well_formed_bexp e E.
+Proof.
+  rewrite /qfbv_conjs_la. case: es => [| e1 es] //=.
+  rewrite qfbv_conjs_rec_rcons /=. reflexivity.
+Qed.
+
+Lemma eval_qfbv_conjs_rec s pre_es es :
+  QFBV.eval_bexp (qfbv_conjs_rec pre_es es) s =
+  QFBV.eval_bexp pre_es s && QFBV.eval_bexp (qfbv_conjs_la es) s.
+Proof.
+  rewrite /qfbv_conjs_la. case: es => [| e1 es] //=.
+  - rewrite andbT. reflexivity.
+  - move: es pre_es e1. apply: last_ind => //=.
+    move=> es le1 IH pre_es e1. rewrite !qfbv_conjs_rec_rcons /=.
+    rewrite IH. rewrite !andbA. reflexivity.
+Qed.
+
+Lemma eval_qfbv_conjs_rec_ra s pre_es es :
+  QFBV.eval_bexp (qfbv_conjs_rec pre_es es) s =
+  QFBV.eval_bexp pre_es s && QFBV.eval_bexp (qfbv_conjs es) s.
+Proof.
+  elim: es pre_es => [| e1 es IH] pre_es //=.
+  - rewrite andbT. reflexivity.
+  - rewrite IH. rewrite /qfbv_conj /=. rewrite andbA. reflexivity.
+Qed.
+
+Lemma eval_qfbv_conjs_la_rcons es e s :
+  QFBV.eval_bexp (qfbv_conjs_la (rcons es e)) s =
+  QFBV.eval_bexp (qfbv_conjs_la es) s && QFBV.eval_bexp e s.
+Proof.
+  rewrite /qfbv_conjs_la. case: es => [| e1 es] //=.
+  rewrite qfbv_conjs_rec_rcons /=. reflexivity.
+Qed.
+
+Lemma eval_qfbv_conjs_la_cat es1 es2 s :
+  QFBV.eval_bexp (qfbv_conjs_la (es1 ++ es2)) s =
+  QFBV.eval_bexp (qfbv_conjs_la es1) s && QFBV.eval_bexp (qfbv_conjs_la es2) s.
+Proof.
+  rewrite /qfbv_conjs_la. case: es1 => [| e1 es1] //=. case: es2 => [| e2 es2] //=.
+  - rewrite cats0 andbT. reflexivity.
+  - move: es2 e1 e2 es1. apply: last_ind => //=.
+    + move=> e1 e2 es1. rewrite cats1. rewrite qfbv_conjs_rec_rcons /=.
+      reflexivity.
+    + move=> es2 le2 IH. move=> e1 e2 es1. rewrite qfbv_conjs_rec_rcons /=.
+      rewrite -cat_rcons. rewrite -rcons_cat. rewrite qfbv_conjs_rec_rcons /=.
+      rewrite cat_rcons. rewrite IH. rewrite !andbA. reflexivity.
+Qed.
+
+Lemma eval_qfbv_conjs_ra_la s es :
+  QFBV.eval_bexp (qfbv_conjs es) s = QFBV.eval_bexp (qfbv_conjs_la es) s.
+Proof.
+  rewrite /qfbv_conjs_la. case: es => [| e1 es] //=.
+  move: es e1. apply: last_ind => //=.
+  - move=> e1. rewrite andbT. reflexivity.
+  - move=> es le IH e1. rewrite qfbv_conjs_rec_rcons /=. rewrite -IH.
+    rewrite eval_qfbv_conjs_rcons. rewrite andbA. reflexivity.
+Qed.
+
+
+(* Some evaluation properties *)
 
 Lemma eval_exp_var v s :
   QFBV.eval_exp (qfbv_var v) s = SSAStore.acc v s.
@@ -4995,6 +5135,7 @@ Section SplitConditionsFixedFinal.
 
   (* Construct safety conditions with less prefix information. *)
 
+  (* pre_es: encoding of instructions in QFBV *)
   Fixpoint bexp_program_safe_split_fixed_final_rec E (pre_es : seq QFBV.bexp) p :=
     match p with
     | [::] => [::]

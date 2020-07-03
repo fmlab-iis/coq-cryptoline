@@ -42,13 +42,6 @@ Section QFBV2CNF.
     forall st, SSAStore.conform st fE ->
                QFBV.eval_bexp e st.
 
-  Lemma qfbv_conjs_inj es1 es2 :
-    qfbv_conjs es1 = qfbv_conjs es2 -> es1 = es2.
-  Proof.
-    elim: es1 es2 => [| e1 es1 IH] [| e2 es2] //=.
-    case=> H1 H2. rewrite H1 (IH _ H2). reflexivity.
-  Qed.
-
   Lemma qfbv_spec_safety_rec_format E f p e :
     In e (qfbv_spec_safety_rec
             f
