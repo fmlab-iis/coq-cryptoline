@@ -23,9 +23,14 @@ Section Verification.
       ext_all_unsat css ->
       forall cs, cs \in css -> ~ sat cs.
 
+  Axiom all_unsat_complete :
+    forall css : seq cnf,
+      (forall cs, cs \in css -> ~ sat cs) ->
+      ext_all_unsat css.
+
   Definition verify_rspec_safety (s : SSA.spec) : bool :=
     let fE := SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s) in
-    let es := bb_range_safety s in
+    let es := bb_range_safety_simplified s in
     let '(_, _, _, cnfs) := bb_bexps_cache fE es in
     (* rev is not necessary, it is used for grat *)
     let cnfs_rev := map rev cnfs in
@@ -36,7 +41,7 @@ Section Verification.
     verify_rspec_safety s ->
     SSA.valid_rspec (SSA.rspec_of_spec s) /\ ssa_spec_safe s.
   Proof.
-    move=> Hwf Hv. apply: (bb_range_safety_sound Hwf).
+    move=> Hwf Hv. apply: (bb_range_safety_simplified_sound Hwf).
     move=> m c g cnfs cnf Hbb Hin. rewrite /verify_rspec_safety in Hv.
     rewrite Hbb in Hv. move: (all_unsat_sound Hv) => Hsat.
     have Hmem: rev cnf \in [seq rev i | i <- cnfs].
@@ -44,6 +49,23 @@ Section Verification.
     move: (Hsat (rev cnf) Hmem) => {Hsat} Hsat.
     move=> Hsat'; apply: Hsat. move/rev_cnf_eqsat : Hsat' => Hsat'.
     exact: Hsat'.
+  Qed.
+
+  Lemma verify_rspec_safety_complete (s : SSA.spec) :
+    well_formed_ssa_spec s ->
+    SSA.valid_rspec (SSA.rspec_of_spec s) -> ssa_spec_safe s ->
+    verify_rspec_safety s.
+  Proof.
+    move=> Hwf Hrange Hsafe. rewrite /verify_rspec_safety.
+    dcase (bb_bexps_cache (SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s))
+                          (bb_range_safety_simplified s)) => [[[[m c] g] cnfs] Hbb].
+    apply: all_unsat_complete.
+    move: (bb_range_safety_simplified_complete Hwf Hrange Hsafe) => Hv.
+    move=> cs Hin. apply/rev_cnf_eqsat. apply: (Hv _ _ _ _ _ Hbb).
+    clear s Hwf Hrange Hsafe m c g Hbb Hv. elim: cnfs Hin => [| cnf cnfs IH] //= Hin.
+    rewrite in_cons in Hin. case/orP: Hin => Hin.
+    - left. rewrite (eqP Hin). apply: Logic.eq_sym. exact: revK.
+    - right. exact: (IH Hin).
   Qed.
 
 

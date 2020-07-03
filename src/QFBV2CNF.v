@@ -190,10 +190,9 @@ Section QFBV2CNF.
       ~ (CNF.sat cnf).
 
   Definition valid_qfbv_bexps E es :=
-    forall e,
-      List.In e es ->
-      (forall s, SSAStore.conform s E ->
-                 QFBV.eval_bexp e s).
+    forall s, SSAStore.conform s E ->
+              forall e, List.In e es ->
+                        QFBV.eval_bexp e s.
 
   Lemma bb_bexps_cache_bit_blast_bexps_cache_eq E es m1 c1 g1 cnfs m2 c2 g2 cs lr :
     bb_bexps_cache E es = (m1, c1, g1, cnfs) ->
@@ -311,7 +310,7 @@ Section QFBV2CNF.
     dcase (bit_blast_bexp_cache E m (reset_ct c) g e) =>
     [[[[[m' c'] g'] cs] lr] Hbb_e]. move=> H.
     move: (H m' c' g' (add_prelude ([:: neg_lit lr] :: cs) :: cnfs)) => {H} H.
-    move=> e' Hin s Hco. case: Hin=> Hin.
+    move=> s Hco e' Hin. case: Hin=> Hin.
     - rewrite -Hin => {Hin e'}.
       apply: (@bit_blast_cache_sound_general e es E m' c' g' cs lr).
       + rewrite /bit_blast_bexps_cache -/bit_blast_bexps_cache.
@@ -321,7 +320,7 @@ Section QFBV2CNF.
       + exact: Hwf.
       + apply: (H _ (Logic.eq_refl _)). exact: in_eq.
       + exact: (wf_conform_bexps Hwf Hco).
-    - move/andP: Hwf=> [Hwf_e Hwf_es]. apply: (IH Hwf_es _ _ Hin _ Hco).
+    - move/andP: Hwf=> [Hwf_e Hwf_es]. apply: (IH Hwf_es _ _ Hco _ Hin).
       move=> m0 c0 g0 cnfs0 cnf0 Hbb_es0 Hin0.
       apply: (H cnf0 (Logic.eq_refl _)). rewrite Hbb_es in Hbb_es0.
       case: Hbb_es0=> ? ? ? ?; subst. apply: List.in_cons. exact: Hin0.
@@ -348,15 +347,15 @@ Section QFBV2CNF.
                                                   (vars_env E)
                                                   (vars_bexp e))).
           apply: He.
-          -- left; reflexivity.
           -- exact: (conform_bexp_force_conform Hco).
+          -- left; reflexivity.
       + move/andP: Hwf=> [Hwf_e Hwf_es].
         apply: (IH Hwf_es _ _ _ _ _ _ Hbb_es Hin).
-        move=> f Hin_f s Hco. exact: (He _ (or_intror Hin_f) _ Hco).
+        move=> s Hco f Hin_f. exact: (He _ Hco _ (or_intror Hin_f)).
   Qed.
 
 
-  (* Bit-blast range spec and safety conditions *)
+  (* Combine range spec and safety conditions for bit-blasting *)
 
   Definition bb_range_safety (s : spec) :=
     (qfbv_spec_range s)::(qfbv_spec_safety s).
@@ -403,16 +402,16 @@ Section QFBV2CNF.
     move: (bb_bexps_cache_sound (bb_range_safety_well_formed Hwf) Hbb) => Hes.
     split.
     - apply: (qfbv_bexp_spec_sound Hwf). move=> st Hco.
-      exact: (Hes (qfbv_spec_range s) (range_in_bb_range_safety s) st
-                  Hco).
+      exact: (Hes st Hco (qfbv_spec_range s) (range_in_bb_range_safety s)).
     - apply: (ssa_spec_safe_final_init Hwf).
       apply: (ssa_spec_safe_qfbv_fixed_final_sound Hwf).
       move: (well_formed_ssa_spec_program Hwf) => Hwf_p.
       apply: (bexp_program_safe_split_fixed_final_sound Hwf_p).
       move=> pre_es safe Hin st Hco.
-      exact: (Hes (qfbv_imp
+      exact: (Hes _ Hco
+                  (qfbv_imp
                      (qfbv_conj (bexp_rbexp (rng_bexp (spre s))) (qfbv_conjs pre_es))
-                     safe) (safety_in_bb_range_safety Hin) _ Hco).
+                     safe) (safety_in_bb_range_safety Hin)).
   Qed.
 
   Theorem bb_range_safety_complete s :
@@ -423,11 +422,71 @@ Section QFBV2CNF.
   Proof.
     move=> fE. rewrite /fE => {fE} Hwf Hrange Hsafety.
     apply: (bb_bexps_cache_complete (bb_range_safety_well_formed Hwf)).
-    rewrite /bb_range_safety. move=> e Hin st Hco.
+    rewrite /bb_range_safety. move=> st Hco e Hin.
     case: (in_inv Hin) => {Hin} Hin.
     - rewrite -Hin. exact: (qfbv_bexp_spec_complete Hwf Hrange Hco).
     - exact: (qfbv_spec_safety_complete Hwf Hsafety Hin Hco).
   Qed.
 
+
+  (* Combine simplified range spec and safety conditions *)
+
+  Definition bb_range_safety_simplified (s : spec) :=
+    map QFBV.simplify_bexp (bb_range_safety s).
+
+  Lemma bb_range_safety_simplified_well_formed E s :
+    well_formed_bexps (bb_range_safety s) E ->
+    well_formed_bexps (bb_range_safety_simplified s) E.
+  Proof.
+    rewrite /bb_range_safety_simplified. move: (bb_range_safety s) => {s}.
+    elim => [| e es IH] //=. move/andP=> [Hwf_e Hwf_es].
+    rewrite (simplify_bexp_well_formed Hwf_e) (IH Hwf_es). reflexivity.
+  Qed.
+
+  Lemma bb_range_safety_simplified_valid E s :
+    valid_qfbv_bexps E (bb_range_safety s) <->
+    valid_qfbv_bexps E (bb_range_safety_simplified s).
+  Proof.
+    rewrite /bb_range_safety_simplified. move: (bb_range_safety s) => {s}.
+    move=> es; split=> H s Hco e Hin.
+    - move: (H _ Hco) => {H Hco} H. elim: es e Hin H => [| e es IH] //= f Hin H.
+      case: Hin => Hin.
+      + rewrite -Hin. apply/simplify_bexp_eqsat. apply: H. left; reflexivity.
+      + apply: (IH _ Hin). move=> g Hing. apply: H. right; assumption.
+    - move: (H _ Hco) => {H Hco} H. elim: es e Hin H => [| e es IH] //= f Hin H.
+      case: Hin => Hin.
+      + rewrite -Hin. apply/simplify_bexp_eqsat. apply: H. left; reflexivity.
+      + apply: (IH _ Hin). move=> g Hing. apply: H. right; assumption.
+  Qed.
+
+  Theorem bb_range_safety_simplified_sound s :
+    let fE := program_succ_typenv (sprog s) (sinputs s) in
+    well_formed_ssa_spec s ->
+    valid_bb_bexps_cache fE (bb_range_safety_simplified s) ->
+    valid_rspec (rspec_of_spec s) /\ ssa_spec_safe s.
+  Proof.
+    move=> fE. rewrite /fE => {fE} Hwf Hbb.
+    move: ((bb_range_safety_well_formed Hwf)) => Hwf_bb.
+    move: (bb_range_safety_simplified_well_formed Hwf_bb) => Hwf_bbs.
+    move: (bb_bexps_cache_sound Hwf_bbs Hbb) => Hess.
+    move/bb_range_safety_simplified_valid: Hess => Hes.
+    apply: (bb_range_safety_sound Hwf).
+    exact: (bb_bexps_cache_complete Hwf_bb Hes).
+  Qed.
+
+  Theorem bb_range_safety_simplified_complete s :
+    let fE := program_succ_typenv (sprog s) (sinputs s) in
+    well_formed_ssa_spec s ->
+    valid_rspec (rspec_of_spec s) -> ssa_spec_safe s ->
+    valid_bb_bexps_cache fE (bb_range_safety_simplified s).
+  Proof.
+    move=> fE. rewrite /fE => {fE} Hwf Hrange Hsafety.
+    move: (bb_range_safety_well_formed Hwf) => Hwf_bb.
+    move: (bb_range_safety_simplified_well_formed Hwf_bb) => Hwf_bbs.
+    apply: (bb_bexps_cache_complete Hwf_bbs).
+    apply/bb_range_safety_simplified_valid.
+    apply: (bb_bexps_cache_sound Hwf_bb).
+    exact: (bb_range_safety_complete Hwf Hrange Hsafety).
+  Qed.
 
 End QFBV2CNF.
