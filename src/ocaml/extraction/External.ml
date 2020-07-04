@@ -679,8 +679,7 @@ let coq_compute_coefficients_by_lift (vars, p, gs) =
   let _ = write_to_singular ifile in
   let _ = run_singular ifile ofile in
   let (is_in_ideal, p_coef_gs) = read_singular_output ofile in
-  let _ = Unix.unlink ifile in
-  let _ = Unix.unlink ofile in
+  let _ = cleanup [ifile; ofile] in
   let _ = trace("= in ideal? =\n" ^ string_of_bool is_in_ideal) in
   if is_in_ideal then
     let p_coef_gs = List.map (fun t -> coq_term_of_string (after_eq_sign t)) p_coef_gs in
@@ -699,6 +698,5 @@ let ext_find_coefficients_impl gs p m =
 	(List.hd coefs, List.tl coefs) in
   let t2 = Unix.gettimeofday() in
   let _ = vprintln ("[OK]\t\t" ^ string_of_running_time t1 t2) in
-  let _ = Unix.unlink ifile in
-  let _ = Unix.unlink ofile in
+  let _ = cleanup [ifile; ofile] in
   (cs_gs, c_m)
