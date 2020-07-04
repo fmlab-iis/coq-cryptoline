@@ -1927,7 +1927,7 @@ Module MakeDSL
     | Icshl v1 v2 a1 a2 n => is_unsigned (atyp a2 E) &&
                              compatible (atyp a1 E) (atyp a2 E) &&
                              (well_typed_atomic E a1) && (well_typed_atomic E a2) &&
-                             (n < asize a2 E)
+                             (n <= asize a2 E)
     | Inondet v t => true
     | Icmov v c a1 a2 => (atyp c E == Tbit) && (atyp a1 E == atyp a2 E) &&
                          (well_typed_atomic E a1) && (well_typed_atomic E a2) &&

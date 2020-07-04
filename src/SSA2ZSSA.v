@@ -526,11 +526,10 @@ Section SSA2Algebra.
       let za1 := bv2z_atomic a1 in
       let za2 := bv2z_atomic a2 in
       let a2size := asize a2 te in
-      (g, [:: bv2z_join
-              (emul2p (eadd (emul2p za1 (Z.of_nat a2size)) za2) (Z.of_nat n))
-              (evar vh)
-              (emul2p (evar vl) (Z.of_nat n))
-              a2size])
+      (g, [:: bv2z_split
+              vh vl
+              (eadd (emul2p za1 (Z.of_nat a2size)) za2)
+              (a2size - n)])
     | Inondet v t =>
       if t == Tbit then (g, carry_constr v)
       else (g, [::])
@@ -1866,19 +1865,18 @@ Section SplitSpec.
 
   Lemma bv2z_Icshl th tl bsh bsl n :
     is_unsigned tl -> compatible th tl ->
+    n <= size bsl ->
     size bsh = sizeof_typ th -> size bsl = sizeof_typ tl ->
     cshlBn_safe th bsh bsl n ->
-    (bv2z tl (low (size bsl) ((bsl ++ bsh) <<# n) >># n)%bits *
-     Cryptoline.DSL.z2expn (Z.of_nat n) +
+    (bv2z tl (low (size bsl) ((bsl ++ bsh) <<# n) >># n)%bits +
      bv2z th (high (size bsh) ((bsl ++ bsh) <<# n)%bits) *
-     Cryptoline.DSL.z2expn (Z.of_nat (size bsl)))%Z =
-    ((bv2z th bsh * Cryptoline.DSL.z2expn (Z.of_nat (size bsl)) +
-      bv2z tl bsl) * Cryptoline.DSL.z2expn (Z.of_nat n))%Z.
+     Cryptoline.DSL.z2expn (Z.of_nat (size bsl - n)))%Z =
+    (bv2z th bsh * Cryptoline.DSL.z2expn (Z.of_nat (size bsl)) + bv2z tl bsl)%Z.
   Proof.
     rewrite /compatible /cshlBn_safe /ucshlBn_safe /scshlBn_safe /ushlBn_safe
             /sshlBn_safe /Cryptoline.DSL.z2expn. case: th; case: tl => //=.
-    - move=> ? ? _ /eqP -> H1 H2. rewrite -H2 in H1. exact: bv2z_cshl_unsigned.
-    - move=> ? ? _ /eqP -> H1 H2. rewrite -H2 in H1. exact: bv2z_cshl_signed.
+    - move=> ? ? _ /eqP -> Hs H1 H2. rewrite -H2 in H1. exact: bv2z_cshl_unsigned'.
+    - move=> ? ? _ /eqP -> Hs H1 H2. rewrite -H2 in H1. exact: bv2z_cshl_signed'.
   Qed.
 
   Lemma bv2z_Icmov_true t c a1 a2 :
@@ -2596,7 +2594,7 @@ Section SplitSpec.
     (* Icshl *)
     - move=> vh vl ah al n Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst;
                rewrite /=. split; last by trivial. mytac.
-      exact: (bv2z_Icshl _ _ _ _ Hsa).
+      apply: (bv2z_Icshl _ _ _ _ _ Hsa) => //=. rewrite Hsize. assumption.
     (* Inondet *)
     - move=> v t Hwf Hun Hni Hco _ Hev.
       case Ht: (t == Tbit); (move=> [] ? ? [] ? ? Heq; subst; rewrite /=);

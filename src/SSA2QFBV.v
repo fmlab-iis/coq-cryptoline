@@ -1450,10 +1450,11 @@ Proof.
   well_defined_to_vs_subset. unfold_well_typed.
   repeat eval_exp_exp_atomic_to_pred_state.
   inversion_clear Hinst. repeat qfbv_store_acc.
-  rewrite (to_nat_from_nat_very_small (ltnW Hty1)).
+  rewrite (to_nat_from_nat_very_small Hty1).
   intro_same_size a a0. to_size_atyp a. to_size_atyp a0. move=> Hs.
-  move: (lt_eq_addl Hty1 Hs) => Hadd.
-  rewrite (to_nat_from_nat_very_small (ltnW Hadd)).
+  move: (leq0n (asize a E)) => Hs'.
+  move: (leq_add Hs' Hty1) => Hadd. rewrite add0n in Hadd.
+  rewrite (to_nat_from_nat_very_small Hadd).
   apply/andP; split; done.
 Qed.
 
@@ -2024,6 +2025,9 @@ Ltac norm_tac :=
     | Hs : is_true (?n < ?w),
       H : context f [to_nat (?w -bits of ?n)%bits] |- _ =>
       rewrite (to_nat_from_nat_very_small (ltnW Hs)) in H
+    | Hs : is_true (?n <= ?w),
+      H : context f [to_nat (?w -bits of ?n)%bits] |- _ =>
+      rewrite (to_nat_from_nat_very_small Hs) in H
     | H : context f [QFBV.eval_exp (qfbv_atomic _) _] |- _ =>
       rewrite eval_exp_atomic in H
     | |- context f [QFBV.eval_exp (qfbv_atomic _) _] =>
@@ -2033,14 +2037,15 @@ Ltac norm_tac :=
       Hsm : is_true (size_matched_atomic ?a) |-
       context f [size (eval_atomic ?a ?s)] =>
       rewrite (size_eval_atomic_asize Hsub Hco Hsm)
-    | Hs : is_true (?n < (asize ?a2 ?E)),
+    | Hs : is_true (?n <= (asize ?a2 ?E)),
       Hc : is_true (Typ.compatible (atyp ?a1 ?E) (atyp ?a2 ?E)),
       H : context f [to_nat ((asize ?a1 ?E + asize ?a2 ?E) -bits of ?n)%bits] |- _ =>
       let H1 := fresh in
       let H2 := fresh in
       intro_same_size a1 a2; to_size_atyp a1; to_size_atyp a2;
-      (move=> H1); (move: (lt_eq_addl Hs H1) => H2);
-      rewrite (to_nat_from_nat_very_small (ltnW H2)) in H
+      (move=> H1); (move: (leq0n (asize a1 E)) => H2);
+      (move: (leq_add H2 Hs) => {H2} H2); (rewrite add0n in H2);
+      rewrite (to_nat_from_nat_very_small H2) in H
     | Hs : is_true (?n < (asize ?a ?E)),
       H : context f [to_nat ((asize ?a ?E) -bits of (asize ?a ?E - ?n))%bits] |- _ =>
       let H1 := fresh in
