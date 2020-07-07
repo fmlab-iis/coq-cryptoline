@@ -231,6 +231,7 @@ let coq_cnf_unsat (id, cnf) =
   let unsat =
     let ch = open_out ifile in
     let _ = coq_output_dimacs ch cnf in
+    let _ = close_out ch in
     run_sat_solver ifile ofile errfile dratfile in
   let t2 = Unix.gettimeofday() in
   let _ =
@@ -260,6 +261,22 @@ let coq_all_unsat id_cnf_pairs =
 
 
 (* ===== Multi-thread solving ===== *)
+
+let coq_output_clause_lwt ch c = Lwt_io.write ch (String.concat " " (List.map coq_string_of_literal c) ^ " 0")
+
+let coq_output_cnf_lwt ch cs = Lwt_list.iter_s (
+                                   fun c ->
+                                   let%lwt _ = coq_output_clause_lwt ch c in
+                                   let%lwt _ = Lwt_io.write ch "\n" in
+                                   Lwt.return_unit) cs
+
+let coq_output_dimacs_lwt ch cs =
+  let%lwt nvars = Lwt.return (int_of_pos (CNF.max_var_of_cnf cs)) in
+  let%lwt nclauses = Lwt.return (int_of_n (CNF.num_clauses cs)) in
+  let%lwt _ = Lwt_io.write ch ("p cnf " ^ string_of_int nvars ^ " " ^ string_of_int nclauses ^ "\n") in
+  let%lwt _ = coq_output_cnf_lwt ch cs in
+  let _ = Lwt_io.flush ch in
+  Lwt.return_unit
 
 let cleanup_lwt files =
   if not !keep_temp_files then Lwt_list.iter_p Lwt_unix.unlink files
@@ -360,8 +377,9 @@ let coq_cnf_unsat_lwt header cnf : (bool * string * bool * string) Lwt.t =
   let ofile = tmpfile "coqcryptoline" ".out" in
   let errfile = tmpfile "coqcryptoline" ".err" in
   let dratfile = tmpfile "coqcryptoline" ".drat" in
-  let ch = open_out ifile in
-  let _ = coq_output_dimacs ch cnf in
+  let%lwt ch = Lwt_io.open_file ~mode:Lwt_io.output ifile in
+  let%lwt _ = coq_output_dimacs_lwt ch cnf in
+  let%lwt _ = Lwt_io.close ch in
   let%lwt (unsat, unsat_time) =
     let t1 = Unix.gettimeofday() in
     let%lwt res = run_sat_solver_lwt header ifile ofile errfile dratfile in
@@ -397,7 +415,7 @@ let coq_all_unsat_lwt id_cnf_pairs =
   let delivered_helper all_unsat (id, unsat, unsat_time, certified, certified_time) =
     let _ = vprint ("\t CNF #" ^ string_of_int id ^ ":\t\t\t") in
     let _ = vprintln ((if unsat then "[UNSAT]\t\t" else "[SAT]\t\t") ^ unsat_time) in
-    let _ = if unsat then vprintln ("\t\t\t\t\t" ^ (if certified then "[CERTIFIED]\t" else "[NOT CERTIFIED]\t\t") ^ certified_time) in
+    let _ = if unsat then vprintln ("\t\t\t\t\t" ^ (if certified then "[CERTIFIED]\t" else "[NOT CERTIFIED]\t") ^ certified_time) in
 	all_unsat && certified in
   let fold_fun (all_unsat, pending) (id, cnf) =
 	if all_unsat then
