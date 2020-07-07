@@ -747,10 +747,10 @@ Definition bexp_instr (E : SSATE.env) (i : SSA.instr) : QFBV.bexp :=
   | SSA.Imull vh vl a1 a2 =>
     let 'a1_size := asize a1 E in
     let 'a2_size := asize a2 E in
-    let 'qe1ext := 
+    let 'qe1ext :=
         if Typ.is_unsigned (atyp a1 E) then qfbv_zext a1_size (qfbv_atomic a1)
         else qfbv_sext a1_size (qfbv_atomic a1) in
-    let 'qe2ext := 
+    let 'qe2ext :=
         if Typ.is_unsigned (atyp a1 E) then qfbv_zext a1_size (qfbv_atomic a2)
         else qfbv_sext a1_size (qfbv_atomic a2) in
     let 'qerext := qfbv_mul qe1ext qe2ext in
@@ -762,10 +762,10 @@ Definition bexp_instr (E : SSATE.env) (i : SSA.instr) : QFBV.bexp :=
      to Iumull (vh, vl, a1, a2); Join (r, vh, vl) *)
   | SSA.Imulj v a1 a2 =>
     let 'a_size := asize a1 E  in
-    let 'qe1ext := 
+    let 'qe1ext :=
         if Typ.is_unsigned (atyp a1 E) then qfbv_zext a_size (qfbv_atomic a1)
         else qfbv_sext a_size (qfbv_atomic a1) in
-    let 'qe2ext := 
+    let 'qe2ext :=
         if Typ.is_unsigned (atyp a1 E) then qfbv_zext a_size (qfbv_atomic a2)
         else qfbv_sext a_size (qfbv_atomic a2) in
     let 'qerext := qfbv_mul qe1ext qe2ext in
@@ -1059,8 +1059,8 @@ Proof.
   - (* mull *)
     move : H1; case (Typ.is_unsigned (atyp a E)) => /=;
     move: (ssa_unchanged_program_add1 H) => {H} [H1 H2];
-    move: (ssa_unchanged_program_add1 H2) => {H2} [H2 H3]; 
-    move: (ssa_unchanged_program_union1 H3) => {H3} [H3 H4]; 
+    move: (ssa_unchanged_program_add1 H2) => {H2} [H2 H3];
+    move: (ssa_unchanged_program_union1 H3) => {H3} [H3 H4];
     rewrite -!(acc_unchanged_program H2 H0)
             -!(acc_unchanged_program H1 H0);
     rewrite_eval_exp_atomic;
@@ -1071,7 +1071,7 @@ Proof.
   - (* mulj *)
     move : H1; case (Typ.is_unsigned (atyp a E)) => /=;
     move: (ssa_unchanged_program_add1 H) => {H} [H1 H2];
-    move: (ssa_unchanged_program_union1 H2) => {H2} [H2 H3]; 
+    move: (ssa_unchanged_program_union1 H2) => {H2} [H2 H3];
     rewrite -!(acc_unchanged_program H1 H0);
     rewrite_eval_exp_atomic;
     rewrite -!(ssa_unchanged_program_eval_atomic H3 H0)
@@ -1741,10 +1741,10 @@ Proof.
   repeat eval_exp_exp_atomic_to_pred_state.
   have Hinst' : eval_instr E (Imull t t0 a a0) s1 s2 by assumption.
   inversion_clear Hinst'; repeat qfbv_store_acc.
-  - rewrite H /=. to_size_atyp a; to_size_atyp a0. 
+  - rewrite H /=. to_size_atyp a; to_size_atyp a0.
     apply/andP; split; by repeat eval_exp_exp_atomic_to_pred_state.
   - rewrite -Typ.not_signed_is_unsigned H /=.
-    to_size_atyp a; to_size_atyp a0. 
+    to_size_atyp a; to_size_atyp a0.
     apply/andP; split; by repeat eval_exp_exp_atomic_to_pred_state.
   (*
   rewrite (eqP (mul_sext (eval_atomic a s1) (eval_atomic a0 s1))).
@@ -2350,7 +2350,7 @@ Proof.
     rewrite Htyp /= in Hev.
     apply: (EImuljU Hun). norm_tac. by solve_tac.
   - have Hsn: Typ.is_signed (atyp a1 E) by rewrite Htyp.
-    rewrite Htyp /= in Hev. 
+    rewrite Htyp /= in Hev.
     apply: (EImuljS Hsn). norm_tac. by solve_tac.
   (*
   apply: EImulj. norm_tac.
@@ -2702,8 +2702,7 @@ Definition qfbv_bexp_spec (s : spec) : QFBV.bexp :=
 
 Definition valid_qfbv_bexp_spec (s : spec) :=
   let fE := program_succ_typenv (sprog s) (sinputs s) in
-  forall st, SSAStore.conform st fE ->
-             QFBV.eval_bexp (qfbv_bexp_spec s) st.
+  QFBV.valid fE (qfbv_bexp_spec s).
 
 Lemma eval_bexps_conj_qfbv_conj es s :
   eval_bexps_conj es s <-> QFBV.eval_bexp (qfbv_conjs es) s.
@@ -2719,9 +2718,10 @@ Proof.
   case: s => E f p g. rewrite /valid_qfbv_bexp_spec /valid_bexp_spec_conj /=.
   split.
   - move=> H s Hco Hf Hp. rewrite rng_program_succ_typenv in Hco.
-    move: (H s Hco). rewrite Hf. move/eval_bexps_conj_qfbv_conj: Hp => -> /=.
-      by apply.
-  - move=> H s Hco. rewrite -rng_program_succ_typenv in Hco. move: (H s Hco) => {H}.
+    move: (H s Hco) => /=. rewrite Hf.
+    move/eval_bexps_conj_qfbv_conj: Hp => -> /=. by apply.
+  - move=> H s Hco. rewrite -rng_program_succ_typenv in Hco.
+    move: (H s Hco) => {H} /=.
     case Hf: (QFBV.eval_bexp (bexp_rbexp (rng_bexp f)) s) => //=.
     case Hp: (QFBV.eval_bexp (qfbv_conjs (bexp_program E (rng_program p))) s) => //=.
     move/eval_bexps_conj_qfbv_conj: Hp => Hp. by apply.
@@ -3043,72 +3043,6 @@ Section SplitRangeConditions.
 
   Import QFBV.
 
-  Definition valid_qfbv_bexps E (es : seq QFBV.bexp) :=
-    forall s, SSAStore.conform s E ->
-              forall e, In e es ->
-                        QFBV.eval_bexp e s.
-
-  Lemma valid_qfbv_bexps_hd E e es :
-    valid_qfbv_bexps E (e::es) ->
-    (forall s, SSAStore.conform s E -> QFBV.eval_bexp e s).
-  Proof.
-    move=> Hv s Hco. apply: (Hv _ Hco). left. reflexivity.
-  Qed.
-
-  Lemma valid_qfbv_bexps_tl E e es :
-    valid_qfbv_bexps E (e::es) -> valid_qfbv_bexps E es.
-  Proof.
-    move=> Hv s Hco e' Hin. apply: (Hv _ Hco). right. assumption.
-  Qed.
-
-  Lemma valid_qfbv_bexps_cat E es1 es2 :
-    valid_qfbv_bexps E (es1 ++ es2) ->
-    valid_qfbv_bexps E es1 /\ valid_qfbv_bexps E es2.
-  Proof.
-    move=> H; split=> s Hco e /in_In Hin.
-    - apply: (H s Hco e). apply/in_In. rewrite mem_cat Hin /=. reflexivity.
-    - apply: (H s Hco e). apply/in_In. rewrite mem_cat Hin orbT. reflexivity.
-  Qed.
-
-  Fixpoint split_conj (e : QFBV.bexp) : seq QFBV.bexp :=
-    match e with
-    | QFBV.Bconj e1 e2 => split_conj e1 ++ split_conj e2
-    | _ => [:: e]
-    end.
-
-  Lemma split_conj_eval s e :
-    QFBV.eval_bexp e s -> forall e', (In e' (split_conj e)) -> QFBV.eval_bexp e' s.
-  Proof.
-    elim: e => //=.
-    - move=> _ e' Hin. case: Hin => Hin //=. by rewrite -Hin.
-    - move=> op e1 e2 He e' Hin. case: Hin => Hin //=. by rewrite -Hin.
-    - move=> e IH He e' Hin. case: Hin => Hin //=. by rewrite -Hin.
-    - move=> e1 IH1 e2 IH2 /andP [He1 He2] e' /in_In Hin. rewrite mem_cat in Hin.
-      case/orP: Hin => /in_In Hin.
-      + exact: (IH1 He1 _  Hin).
-      + exact: (IH2 He2 _  Hin).
-    - move=> e1 IH1 e2 IH2 He e' Hin. case: Hin => Hin //=. by rewrite -Hin.
-  Qed.
-
-  Lemma eval_split_conj s e :
-    (forall e', (In e' (split_conj e)) -> QFBV.eval_bexp e' s) -> QFBV.eval_bexp e s.
-  Proof.
-    elim: e => //=.
-    - move=> H. move: (H Bfalse (or_introl (Logic.eq_refl Bfalse))) => /=.
-        by apply.
-    - move=> op e1 e2 H. move: (H (Bbinop op e1 e2) (or_introl (Logic.eq_refl _))).
-        by apply.
-    - move=> e IH H. move: (H (Blneg e) (or_introl (Logic.eq_refl _))).
-        by apply.
-    - move=> e1 IH1 e2 IH2 H. apply/andP; split.
-      + apply: IH1. move=> e' /in_In Hin. apply: H. apply/in_In.
-        rewrite mem_cat Hin /=. reflexivity.
-      + apply: IH2. move=> e' /in_In Hin. apply: H. apply/in_In.
-        rewrite mem_cat Hin orbT. reflexivity.
-    - move=> e1 IH1 e2 IH2 H. move: (H (Bdisj e1 e2) (or_introl (Logic.eq_refl _))).
-        by apply.
-  Qed.
-
   Definition qfbv_bexp_spec_split_la (s : spec) : seq QFBV.bexp :=
     let bs := bexp_of_rspec (sinputs s) (rspec_of_spec s) in
     map (fun post => qfbv_imp (qfbv_conj (bpre bs) (qfbv_conjs_la (bprog bs))) post)
@@ -3123,27 +3057,26 @@ Section SplitRangeConditions.
   Proof.
     rewrite /valid_qfbv_bexp_spec /valid_qfbv_bexp_spec_split_la.
     rewrite /qfbv_bexp_spec_split_la. case: s => [E f p g] /=. split=> H.
-    - move=> s Hco e /in_In Hin. move: (H s Hco) => {H Hco}.
-      move/mapP: Hin => [ee /in_In Hin] He. rewrite He => {e He} /=.
+    - move=> s Hco e Hin. move: (H s Hco) => {H Hco}.
+      move/mapP: Hin => [ee Hin] He. rewrite He => {e He} /=.
       case Hf: (eval_bexp (bexp_rbexp (rng_bexp f)) s) => //=.
       case Hp: (eval_bexp (qfbv_conjs (bexp_program E (rng_program p))) s) => //=.
       + rewrite -eval_qfbv_conjs_ra_la. rewrite Hp /=. move=> Hg.
-        exact: (split_conj_eval Hg Hin).
+        move/split_conj_eval: Hg. apply. assumption.
       + move=> _. apply/orP; left. apply/negP => Hp'. move/negP: Hp; apply.
         rewrite eval_qfbv_conjs_ra_la. assumption.
-    - move=> s Hco. move: (H s Hco) => {H Hco} He.
+    - move=> s Hco. move: (H s Hco) => {H Hco} He /=.
       case Hf: (eval_bexp (bexp_rbexp (rng_bexp f)) s) => //=.
       case Hp: (eval_bexp (qfbv_conjs (bexp_program E (rng_program p))) s) => //=.
-      apply: eval_split_conj. move=> e' Hin.
+      apply/split_conj_eval. move=> e' Hin.
       move: (He ((fun post =>
                     qfbv_imp
                       (qfbv_conj
                          (bexp_rbexp (rng_bexp f))
                          (qfbv_conjs_la (bexp_program E (rng_program p)))) post)
                    e')) => /=. rewrite Hf.
-      rewrite -eval_qfbv_conjs_ra_la Hp /=. apply.
-      apply/in_In. rewrite mem_map.
-      + apply/in_In. assumption.
+      rewrite -eval_qfbv_conjs_ra_la Hp /=. apply. rewrite mem_map.
+      + assumption.
       + move=> e1 e2. case. by apply.
   Qed.
 
@@ -5092,10 +5025,8 @@ Section SplitConditionsFixedFinal.
     (forall pre_is pre_es hd tl safe,
         List.In (pre_is, pre_es, hd, tl, safe)
                 (bexp_program_safe_split_fixed_final_full fE p) ->
-        forall s,
-          SSAStore.conform s fE ->
-          eval_bexp (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs pre_es))
-                                   safe) s) ->
+        QFBV.valid fE (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs pre_es))
+                                safe)) ->
     (forall s, SSAStore.conform s fE ->
                eval_bexp (bexp_rbexp f) s ->
                eval_bexp (bexp_program_safe_fixed_final fE p) s).
@@ -5113,7 +5044,7 @@ Section SplitConditionsFixedFinal.
                       (pre_is, pre_es, i, p,
                        bexp_instr_safe (program_succ_typenv
                                           p (instr_succ_typenv i E)) i)))
-                s Hco).
+                s Hco) => /=.
       rewrite negb_and Hf Hpre_es /=. by apply.
     - case His:
         (eval_bexp
@@ -5141,10 +5072,8 @@ Section SplitConditionsFixedFinal.
     (forall pre_is pre_es hd tl safe,
         List.In (pre_is, pre_es, hd, tl, safe)
                 (bexp_program_safe_split_fixed_final_full fE p) ->
-        forall s,
-          SSAStore.conform s fE ->
-          eval_bexp (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs pre_es))
-                              safe) s).
+        QFBV.valid fE (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs pre_es))
+                                safe)).
   Proof.
     move=> fE.
     rewrite /bexp_program_safe_split_fixed_final_full. move=> Hwf Hsafe.
@@ -5312,12 +5241,12 @@ Section SplitConditionsFixedFinal.
     forall pre_is' pre_es' hd tl safe,
       List.In (pre_is', pre_es', hd, tl, safe)
               (bexp_program_safe_split_fixed_final_full_rec E pre_is pre_es p) ->
-      List.In (pre_es', safe) (bexp_program_safe_split_fixed_final_rec E pre_es p).
+      (pre_es', safe) \in (bexp_program_safe_split_fixed_final_rec E pre_es p).
   Proof.
     elim: p E pre_is pre_es => [| i p IH] E pre_is pre_es //=.
     move=> pre_is' pre_es' hd tl safe. case.
-    - case=> ? ? ? ? ?; subst. left. reflexivity.
-    - move=> Hin. right. exact: (IH _ _ _ _ _ _ _ _ Hin).
+    - case=> ? ? ? ? ?; subst. exact: mem_head.
+    - move=> Hin. by rewrite in_cons (IH _ _ _ _ _ _ _ _ Hin) orbT.
   Qed.
 
   Lemma bexp_program_safe_split_fixed_final_rec_partial_full E pre_is pre_es p :
@@ -5327,7 +5256,7 @@ Section SplitConditionsFixedFinal.
     are_defined (lvs_program pre_is) fE ->
     env_unchanged_program fE pre_is ->
     forall pre_es' safe,
-      List.In (pre_es', safe) (bexp_program_safe_split_fixed_final_rec fE pre_es p) ->
+      ((pre_es', safe) \in (bexp_program_safe_split_fixed_final_rec fE pre_es p)) ->
       pre_es = bexp_program fE (rng_program pre_is) ->
     exists pre_is' hd tl,
       List.In (pre_is', pre_es', hd, tl, safe)
@@ -5362,8 +5291,8 @@ Section SplitConditionsFixedFinal.
              (well_formed_instr_submap
                 Hwf_Ei (TELemmas.submap_trans Hsub_EiE Hsub_iEpiE))) => Hwf_piEi.
 
-    move=> pre_es' safe. case.
-    - case=> ? ? ?; subst. exists pre_is. exists i. exists p.
+    move=> pre_es' safe. rewrite in_cons. case/orP.
+    - case/eqP=> ? ? ?; subst. exists pre_is. exists i. exists p.
       repeat split. left. reflexivity.
     - move=> Hin Hes.
 
@@ -5408,7 +5337,7 @@ Section SplitConditionsFixedFinal.
     forall pre_is' pre_es' hd tl safe,
       List.In (pre_is', pre_es', hd, tl, safe)
               (bexp_program_safe_split_fixed_final_full E p) ->
-      List.In (pre_es', safe) (bexp_program_safe_split_fixed_final E p).
+      (pre_es', safe) \in (bexp_program_safe_split_fixed_final E p).
   Proof.
     move=> pre_is' pre_es' hd tl safe Hin.
     apply: bexp_program_safe_split_fixed_final_rec_full_partial. exact: Hin.
@@ -5418,7 +5347,7 @@ Section SplitConditionsFixedFinal.
     let fE := program_succ_typenv p E in
     well_formed_ssa_program E p ->
     forall pre_es' safe,
-      List.In (pre_es', safe) (bexp_program_safe_split_fixed_final fE p) ->
+      ((pre_es', safe) \in (bexp_program_safe_split_fixed_final fE p)) ->
       exists pre_is' hd tl,
         List.In (pre_is', pre_es', hd, tl, safe)
                 (bexp_program_safe_split_fixed_final_full fE p) /\
@@ -5434,11 +5363,9 @@ Section SplitConditionsFixedFinal.
     let fE := program_succ_typenv p E in
     well_formed_ssa_program E p ->
     (forall pre_es safe,
-        List.In (pre_es, safe) (bexp_program_safe_split_fixed_final fE p) ->
-        forall s,
-          SSAStore.conform s fE ->
-          QFBV.eval_bexp (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs pre_es))
-                                   safe) s) ->
+        ((pre_es, safe) \in (bexp_program_safe_split_fixed_final fE p)) ->
+        QFBV.valid fE (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs pre_es))
+                                safe)) ->
     (forall s, SSAStore.conform s fE ->
                eval_bexp (bexp_rbexp f) s ->
                eval_bexp (bexp_program_safe_fixed_final fE p) s).
@@ -5456,11 +5383,9 @@ Section SplitConditionsFixedFinal.
                eval_bexp (bexp_rbexp f) s ->
                eval_bexp (bexp_program_safe_fixed_final fE p) s) ->
     (forall pre_es safe,
-        List.In (pre_es, safe) (bexp_program_safe_split_fixed_final fE p) ->
-        forall s,
-          SSAStore.conform s fE ->
-          QFBV.eval_bexp (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs pre_es))
-                                   safe) s).
+        ((pre_es, safe) \in (bexp_program_safe_split_fixed_final fE p)) ->
+        QFBV.valid fE (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs pre_es))
+                                safe)).
   Proof.
     move=> fE Hwf H pre_es safe Hin s Hco.
     move: (bexp_program_safe_split_fixed_final_partial_full Hwf Hin) =>
@@ -5475,7 +5400,7 @@ Section SplitConditionsFixedFinal.
     let fE := program_succ_typenv p E in
     well_formed_ssa_program E p ->
     forall pre_es safe,
-      List.In (pre_es, safe) (bexp_program_safe_split_fixed_final fE p) ->
+      ((pre_es, safe) \in (bexp_program_safe_split_fixed_final fE p)) ->
       QFBV.well_formed_bexp safe fE.
   Proof.
     move=> fE Hwf pre_es safe Hin.
@@ -5488,7 +5413,7 @@ Section SplitConditionsFixedFinal.
     let fE := program_succ_typenv p E in
     well_formed_ssa_program E p ->
     forall pre_es safe,
-      List.In (pre_es, safe) (bexp_program_safe_split_fixed_final fE p) ->
+      ((pre_es, safe) \in (bexp_program_safe_split_fixed_final fE p)) ->
       QFBV.well_formed_bexp (qfbv_conjs pre_es) fE.
   Proof.
     move=> FE Hwf pre_es safe Hin.
@@ -5502,7 +5427,7 @@ Section SplitConditionsFixedFinal.
     well_formed_rbexp E f ->
     well_formed_ssa_program E p ->
     forall pre_es safe,
-      List.In (pre_es, safe) (bexp_program_safe_split_fixed_final fE p) ->
+      ((pre_es, safe) \in (bexp_program_safe_split_fixed_final fE p)) ->
       QFBV.well_formed_bexp
         (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs pre_es)) safe) fE.
   Proof.
@@ -5523,11 +5448,9 @@ Section SplitConditionsFixedFinal.
     let fE := program_succ_typenv p E in
     well_formed_ssa_program E p ->
     (forall pre_es safe,
-        List.In (pre_es, safe) (bexp_program_safe_split_fixed_final fE p) ->
-        forall s,
-          SSAStore.conform s fE ->
-          QFBV.eval_bexp (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs_la pre_es))
-                                   safe) s) ->
+        ((pre_es, safe) \in (bexp_program_safe_split_fixed_final fE p)) ->
+        QFBV.valid fE (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs_la pre_es))
+                                safe)) ->
     (forall s, SSAStore.conform s fE ->
                eval_bexp (bexp_rbexp f) s ->
                eval_bexp (bexp_program_safe_fixed_final fE p) s).
@@ -5549,11 +5472,9 @@ Section SplitConditionsFixedFinal.
                eval_bexp (bexp_rbexp f) s ->
                eval_bexp (bexp_program_safe_fixed_final fE p) s) ->
     (forall pre_es safe,
-        List.In (pre_es, safe) (bexp_program_safe_split_fixed_final fE p) ->
-        forall s,
-          SSAStore.conform s fE ->
-          QFBV.eval_bexp (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs_la pre_es))
-                                   safe) s).
+        ((pre_es, safe) \in (bexp_program_safe_split_fixed_final fE p)) ->
+        QFBV.valid fE (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs_la pre_es))
+                                safe)).
   Proof.
     move=> fE Hwf H pre_es safe Hin s Hco.
     move: (bexp_program_safe_split_fixed_final_complete Hwf H Hin Hco) => /=.
@@ -5569,7 +5490,7 @@ Section SplitConditionsFixedFinal.
     well_formed_rbexp E f ->
     well_formed_ssa_program E p ->
     forall pre_es safe,
-      List.In (pre_es, safe) (bexp_program_safe_split_fixed_final fE p) ->
+      ((pre_es, safe) \in (bexp_program_safe_split_fixed_final fE p)) ->
       QFBV.well_formed_bexp
         (qfbv_imp (qfbv_conj (bexp_rbexp f) (qfbv_conjs_la pre_es)) safe) fE.
   Proof.
