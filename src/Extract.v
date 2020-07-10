@@ -7,6 +7,7 @@ From Coq Require Import Arith List.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun prime.
 From ssrlib Require Import Var Tactics Seqs.
 From BitBlasting Require Import State QFBV TypEnv.
+From BBCache Require Import Cache.
 From Cryptoline Require Import DSL SSA SSA2QFBV SSA2ZSSA Verify.
 From nbits Require Import NBits.
 
@@ -23,6 +24,5 @@ Separate Extraction
          int_of_pos pos_of_int int_of_n n_of_int int_of_nat nat_of_int
          NBitsDef.from_Zpos NBitsDef.from_Zneg NBitsDef.from_Z
          CNF.dimacs_cnf_with_header CNF.max_var_of_cnf CNF.num_clauses
-         QFBV2CNF.bb_range_safety_simplified QFBV2CNF.bb_range_safety_la_simplified
          DSL.well_formed_spec Verify.verify_dsl.
 Cd "../../..".

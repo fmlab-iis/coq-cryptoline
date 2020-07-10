@@ -4,6 +4,7 @@ From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From ssrlib Require Import Var Tactics Seqs.
 From BitBlasting Require Import State QFBV TypEnv CNF.
 From BBCache Require Import Cache BitBlastingInit BitBlastingCacheDef BitBlastingCache.
+From BBCache Require Import CacheFlatten BitBlastingCacheFlatten.
 From Cryptoline Require Import SSA SSA2ZSSA SSA2QFBV.
 From nbits Require Import NBits.
 
@@ -170,10 +171,11 @@ Section QFBV2CNF.
 
   Fixpoint bb_bexps_cache E (es : seq QFBV.bexp) :=
     match es with
-    | [::] => (init_vm, init_cache, init_gen, [::])
+    | [::] => (init_vm, init_fcache, init_gen, [::])
     | e :: es' =>
       let '(m, c, g, cnfs) := bb_bexps_cache E es' in
-      let '(m', c', g', cs, lr) := bit_blast_bexp_cache E m (Cache.reset_ct c) g e in
+      let '(m', c', g', cs, lr) := bit_blast_bexp_fcache_tflatten
+                                     E m (CacheFlatten.reset_ct c) g e in
       (m', c', g', (CNF.add_prelude ([::CNF.neg_lit lr]::cs))::cnfs)
     end.
 
@@ -183,34 +185,39 @@ Section QFBV2CNF.
       (cnf \in cnfs) ->
       ~ (CNF.sat cnf).
 
-  Lemma bb_bexps_cache_bit_blast_bexps_cache_eq E es m1 c1 g1 cnfs m2 c2 g2 cs lr :
+  Lemma bb_bexps_cache_bit_blast_bexps_fcache_eq E es m1 c1 g1 cnfs m2 c2 g2 cs lr :
     bb_bexps_cache E es = (m1, c1, g1, cnfs) ->
-    bit_blast_bexps_cache E es = (m2, c2, g2, cs, lr) ->
+    bit_blast_bexps_fcache E es = (m2, c2, g2, cs, lr) ->
     m1 = m2 /\ c1 = c2 /\ g1 = g2.
   Proof.
     elim: es m1 c1 g1 cnfs m2 c2 g2 cs lr =>
     [| e es IH] m1 c1 g1 cnfs m2 c2 g2 cs lr /=.
-    - case=> <- <- <- _. case=> <- <- <- _ _. done.
+    - case=> ? ? ? ?; subst. case=> ? ? ? ? ?; subst. done.
     - dcase (bb_bexps_cache E es) => [[[[m1' c1'] g1'] cnfs'] Hbb_es].
-      dcase (bit_blast_bexps_cache E es) => [[[[[m2' c2'] g2'] cs'] lr'] Hb_es].
-      move: (IH _ _ _ _ _ _ _ _ _ Hbb_es Hb_es) => [<- [<- <-]].
-      dcase (bit_blast_bexp_cache E m1' (reset_ct c1') g1' e) =>
-      [[[[[m'' c''] g''] cs''] lr''] Hbb_e].
-      case=> -> -> -> _. case=> -> -> -> _ _. done.
+      dcase (bit_blast_bexps_fcache E es) => [[[[[m2' c2'] g2'] cs'] lr'] Hb_es].
+      dcase (bit_blast_bexp_fcache_tflatten E m1' (CacheFlatten.reset_ct c1') g1' e) =>
+      [[[[[em ec] eg] ecs] elr] Hbbe].
+      case=> ? ? ? ?; subst. move=> Hbbe_e.
+      dcase (bit_blast_bexps_fcache E es) => [[[[[m3 c3] g3] cs3] lr3] Hbbe_es].
+      move: (IH _ _ _ _ _ _ _ _ _ Hbb_es Hbbe_es) => [? [? ?]]; subst.
+      rewrite Hbbe_es in Hb_es. case: Hb_es => ? ? ? ? ?; subst.
+      rewrite Hbbe in Hbbe_e. case: Hbbe_e => ? ? ? ? ?; subst.
+      done.
   Qed.
 
-  Lemma bb_bexps_cache_bit_blast_bexps_cache_exists E es m c g cnfs :
+  Lemma bb_bexps_cache_bit_blast_bexps_fcache_exists E es m c g cnfs :
     bb_bexps_cache E es = (m, c, g, cnfs) ->
     exists cs, exists lr,
-        bit_blast_bexps_cache E es = (m, c, g, cs, lr).
+        bit_blast_bexps_fcache E es = (m, c, g, cs, lr).
   Proof.
     elim: es m c g cnfs => [| e es IH] m c g cnfs /=.
-    - case=> <- <- <- _. exists (add_prelude [::]). exists lit_tt. reflexivity.
-    - dcase (bb_bexps_cache E es) => [[[[m1 c1] g1] cnfs1] Hbb_es].
-      dcase (bit_blast_bexp_cache E m1 (reset_ct c1) g1 e)
-      => [[[[[m2 c2] g2] cs] lr] Hbb_e].
-      case=> <- <- <- _. move: (IH _ _ _ _ Hbb_es) => [cs' [lr' Hb_es]].
-      rewrite Hb_es. exists cs; exists lr. exact: Hbb_e.
+    - case=> ? ? ? ?; subst. exists (add_prelude [::]). exists lit_tt. done.
+    - dcase (bb_bexps_cache E es) => [[[[m1 c1] g1] cnfs1] Hbbe_es].
+      rewrite /bit_blast_bexp_fcache_tflatten.
+      dcase (bit_blast_bexp_fcache E m1 (CacheFlatten.reset_ct c1) g1 e)
+      => [[[[[m2 c2] g2] cs] lr] Hbbe_e]. case=> ? ? ? ?; subst.
+      move: (IH _ _ _ _ Hbbe_es) => [cs1 [lr1 Hbb_es]]. rewrite Hbb_es.
+      rewrite Hbbe_e. exists (tflatten cs). exists lr. done.
   Qed.
 
   Lemma force_conform_eval_exp E vs s e :
@@ -295,23 +302,23 @@ Section QFBV2CNF.
   Proof.
     rewrite /valid_bb_bexps_cache. rewrite /valid_qfbv_bexps.
     elim: es => [| e es IH] Hwf //=.
-    dcase (bb_bexps_cache E es) => [[[[m c] g] cnfs] Hbb_es].
-    dcase (bit_blast_bexp_cache E m (reset_ct c) g e) =>
-    [[[[[m' c'] g'] cs] lr] Hbb_e]. move=> H.
-    move: (H m' c' g' (add_prelude ([:: neg_lit lr] :: cs) :: cnfs)) => {H} H.
-    move=> s Hco e' Hin. rewrite in_cons in Hin. case/orP: Hin=> Hin.
+    dcase (bb_bexps_cache E es) => [[[[m ec] g] cnfs] Hbbe_es].
+    dcase (bit_blast_bexp_fcache_tflatten E m (CacheFlatten.reset_ct ec) g e) =>
+    [[[[[m' ec'] g'] cs] lr] Hbbe_e]. move=> H.
+    move: (H m' ec' g' (add_prelude ([:: neg_lit lr] :: cs) :: cnfs)) =>
+    {H} H. move=> s Hco e' Hin. rewrite in_cons in Hin. case/orP: Hin=> Hin.
     - rewrite (eqP Hin) => {Hin e'}.
-      apply: (@bit_blast_cache_sound_general e es E m' c' g' cs lr).
-      + rewrite /bit_blast_bexps_cache -/bit_blast_bexps_cache.
-        dcase (bit_blast_bexps_cache E es) => [[[[[m0 c0] g0] cs0] lr0] Hb_es].
-        move: (bb_bexps_cache_bit_blast_bexps_cache_eq Hbb_es Hb_es).
-        move=> [<- [<- <-]]. exact: Hbb_e.
+      apply: (@bit_blast_bexps_fcache_sound e es E m' ec' g' cs lr).
+      + rewrite /=.
+        dcase (bit_blast_bexps_fcache E es) => [[[[[m0 c0] g0] cs0] lr0] Hb_es].
+        move: (bb_bexps_cache_bit_blast_bexps_fcache_eq Hbbe_es Hb_es) =>
+        [? [? ?]]; subst. assumption.
       + exact: Hwf.
       + apply: (H _ (Logic.eq_refl _)). exact: mem_head.
       + exact: (wf_conform_bexps Hwf Hco).
     - move/andP: Hwf=> [Hwf_e Hwf_es]. apply: (IH Hwf_es _ _ Hco _ Hin).
       move=> m0 c0 g0 cnfs0 cnf0 Hbb_es0 Hin0.
-      apply: (H cnf0 (Logic.eq_refl _)). rewrite Hbb_es in Hbb_es0.
+      apply: (H cnf0 (Logic.eq_refl _)). rewrite Hbbe_es in Hbb_es0.
       case: Hbb_es0 => ? ? ? ?; subst. by rewrite in_cons Hin0 orbT.
   Qed.
 
@@ -325,13 +332,14 @@ Section QFBV2CNF.
     - move=> He m c g cnfs cnf. case=> ? ? ? ?; subst. move=> H; by inversion H.
     - move=> He m c g cnfs cnf.
       dcase (bb_bexps_cache E es) => [[[[m1 c1] g1] cnfs1] Hbb_es].
-      dcase (bit_blast_bexp_cache E m1 (reset_ct c1) g1 e)
+      dcase (bit_blast_bexp_fcache_tflatten E m1 (CacheFlatten.reset_ct c1) g1 e)
             => [[[[[m2 c2] g2] cs2] lr2] Hbb_e].
       case=> ? ? ? ?; subst. move=> Hin. rewrite in_cons in Hin.
       case/orP: Hin => Hin.
-      + rewrite (eqP Hin). apply: (bit_blast_cache_complete_general _ Hwf).
-        * rewrite /=. move: (bb_bexps_cache_bit_blast_bexps_cache_exists Hbb_es)
-                      => [cs [lr Hb_es]]. rewrite Hb_es. exact: Hbb_e.
+      + rewrite (eqP Hin). apply: (bit_blast_bexps_fcache_complete _ Hwf).
+        * rewrite /=. move: (bb_bexps_cache_bit_blast_bexps_fcache_exists Hbb_es)
+                      => [cs [lr Hb_es]].
+          rewrite Hb_es. exact: Hbb_e.
         * move=> s Hco. move/andP: Hco=> [Hco _].
           rewrite (force_conform_eval_bexp E _ (SSAVS.Lemmas.disjoint_diff
                                                   (vars_env E)
