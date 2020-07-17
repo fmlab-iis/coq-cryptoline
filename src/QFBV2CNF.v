@@ -4,7 +4,7 @@ From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From ssrlib Require Import Var Tactics Seqs.
 From BitBlasting Require Import State QFBV TypEnv CNF.
 From BBCache Require Import Cache BitBlastingInit BitBlastingCacheDef BitBlastingCache.
-From BBCache Require Import CacheFlatten BitBlastingCacheFlatten.
+From BBCache Require Import CacheHash BitBlastingCacheHash.
 From Cryptoline Require Import SSA SSA2ZSSA SSA2QFBV.
 From nbits Require Import NBits.
 
@@ -169,55 +169,52 @@ Section QFBV2CNF.
   Qed.
 
 
-  Fixpoint bb_bexps_cache E (es : seq QFBV.bexp) :=
+  Fixpoint bb_hbexps_cache E (es : seq QFBVHash.hbexp) :=
     match es with
-    | [::] => (init_vm, init_fcache, init_gen, [::])
+    | [::] => (init_vm, init_hcache, init_gen, [::])
     | e :: es' =>
-      let '(m, c, g, cnfs) := bb_bexps_cache E es' in
-      let '(m', c', g', cs, lr) := bit_blast_bexp_fcache_tflatten
-                                     E m (CacheFlatten.reset_ct c) g e in
+      let '(m, c, g, cnfs) := bb_hbexps_cache E es' in
+      let '(m', c', g', cs, lr) := bit_blast_bexp_hcache_tflatten
+                                     E m (CacheHash.reset_ct c) g e in
       (m', c', g', (CNF.add_prelude ([::CNF.neg_lit lr]::cs))::cnfs)
     end.
 
-  Definition valid_bb_bexps_cache E es :=
+  Definition valid_bb_bexps_cache E (es : seq QFBV.bexp) :=
     forall m c g cnfs cnf,
-      bb_bexps_cache E es = (m, c, g, cnfs) ->
+      bb_hbexps_cache E (map QFBVHash.hash_bexp es) = (m, c, g, cnfs) ->
       (cnf \in cnfs) ->
       ~ (CNF.sat cnf).
 
-  Lemma bb_bexps_cache_bit_blast_bexps_fcache_eq E es m1 c1 g1 cnfs m2 c2 g2 cs lr :
-    bb_bexps_cache E es = (m1, c1, g1, cnfs) ->
-    bit_blast_bexps_fcache E es = (m2, c2, g2, cs, lr) ->
+  Lemma bb_hbexps_cache_bit_blast_bexps_hcache_eq E es m1 c1 g1 cnfs m2 c2 g2 cs lr :
+    bb_hbexps_cache E es = (m1, c1, g1, cnfs) ->
+    bit_blast_hbexps_hcache E es = (m2, c2, g2, cs, lr) ->
     m1 = m2 /\ c1 = c2 /\ g1 = g2.
   Proof.
     elim: es m1 c1 g1 cnfs m2 c2 g2 cs lr =>
     [| e es IH] m1 c1 g1 cnfs m2 c2 g2 cs lr /=.
     - case=> ? ? ? ?; subst. case=> ? ? ? ? ?; subst. done.
-    - dcase (bb_bexps_cache E es) => [[[[m1' c1'] g1'] cnfs'] Hbb_es].
-      dcase (bit_blast_bexps_fcache E es) => [[[[[m2' c2'] g2'] cs'] lr'] Hb_es].
-      dcase (bit_blast_bexp_fcache_tflatten E m1' (CacheFlatten.reset_ct c1') g1' e) =>
-      [[[[[em ec] eg] ecs] elr] Hbbe].
-      case=> ? ? ? ?; subst. move=> Hbbe_e.
-      dcase (bit_blast_bexps_fcache E es) => [[[[[m3 c3] g3] cs3] lr3] Hbbe_es].
-      move: (IH _ _ _ _ _ _ _ _ _ Hbb_es Hbbe_es) => [? [? ?]]; subst.
-      rewrite Hbbe_es in Hb_es. case: Hb_es => ? ? ? ? ?; subst.
-      rewrite Hbbe in Hbbe_e. case: Hbbe_e => ? ? ? ? ?; subst.
-      done.
+    - dcase (bb_hbexps_cache E es) => [[[[m1' c1'] g1'] cnfs'] Hbb_es].
+      dcase (bit_blast_hbexps_hcache E es) => [[[[[m2' c2'] g2'] cs'] lr'] Hhbb_es].
+      dcase (bit_blast_bexp_hcache_tflatten E m1' (CacheHash.reset_ct c1') g1' e) =>
+      [[[[[em ec] eg] ecs] elr] Hbb_e].
+      case=> ? ? ? ?; subst. move=> Hhbb_e.
+      move: (IH _ _ _ _ _ _ _ _ _ Hbb_es Hhbb_es) => [? [? ?]]; subst.
+      rewrite Hhbb_e in Hbb_e. case: Hbb_e => ? ? ? ? ?; subst. done.
   Qed.
 
-  Lemma bb_bexps_cache_bit_blast_bexps_fcache_exists E es m c g cnfs :
-    bb_bexps_cache E es = (m, c, g, cnfs) ->
+  Lemma bb_hbexps_cache_bit_blast_bexps_hcache_exists E es m c g cnfs :
+    bb_hbexps_cache E es = (m, c, g, cnfs) ->
     exists cs, exists lr,
-        bit_blast_bexps_fcache E es = (m, c, g, cs, lr).
+        bit_blast_hbexps_hcache E es = (m, c, g, cs, lr).
   Proof.
     elim: es m c g cnfs => [| e es IH] m c g cnfs /=.
     - case=> ? ? ? ?; subst. exists (add_prelude [::]). exists lit_tt. done.
-    - dcase (bb_bexps_cache E es) => [[[[m1 c1] g1] cnfs1] Hbbe_es].
-      rewrite /bit_blast_bexp_fcache_tflatten.
-      dcase (bit_blast_bexp_fcache E m1 (CacheFlatten.reset_ct c1) g1 e)
-      => [[[[[m2 c2] g2] cs] lr] Hbbe_e]. case=> ? ? ? ?; subst.
-      move: (IH _ _ _ _ Hbbe_es) => [cs1 [lr1 Hbb_es]]. rewrite Hbb_es.
-      rewrite Hbbe_e. exists (tflatten cs). exists lr. done.
+    - dcase (bb_hbexps_cache E es) => [[[[m1 c1] g1] cnfs1] Hbb_es].
+      rewrite /bit_blast_bexp_hcache_tflatten.
+      dcase (bit_blast_bexp_hcache E m1 (CacheHash.reset_ct c1) g1 e)
+      => [[[[[m2 c2] g2] cs] lr] Hbb_e]. case=> ? ? ? ?; subst.
+      move: (IH _ _ _ _ Hbb_es) => [cs1 [lr1 Hhbb_es]]. rewrite Hhbb_es.
+      rewrite Hbb_e. exists (tflatten cs). exists lr. done.
   Qed.
 
   Lemma force_conform_eval_exp E vs s e :
@@ -295,24 +292,28 @@ Section QFBV2CNF.
       reflexivity.
   Qed.
 
-  Lemma bb_bexps_cache_sound E es :
+  Lemma bb_hbexps_cache_sound E es :
     QFBV.well_formed_bexps es E ->
     valid_bb_bexps_cache E es ->
     valid_qfbv_bexps E es.
   Proof.
     rewrite /valid_bb_bexps_cache. rewrite /valid_qfbv_bexps.
     elim: es => [| e es IH] Hwf //=.
-    dcase (bb_bexps_cache E es) => [[[[m ec] g] cnfs] Hbbe_es].
-    dcase (bit_blast_bexp_fcache_tflatten E m (CacheFlatten.reset_ct ec) g e) =>
+    dcase (bb_hbexps_cache E (map QFBVHash.hash_bexp es)) =>
+    [[[[m ec] g] cnfs] Hbbe_es].
+    dcase (bit_blast_bexp_hcache_tflatten
+             E m (CacheHash.reset_ct ec) g (QFBVHash.hash_bexp e)) =>
     [[[[[m' ec'] g'] cs] lr] Hbbe_e]. move=> H.
     move: (H m' ec' g' (add_prelude ([:: neg_lit lr] :: cs) :: cnfs)) =>
     {H} H. move=> s Hco e' Hin. rewrite in_cons in Hin. case/orP: Hin=> Hin.
     - rewrite (eqP Hin) => {Hin e'}.
-      apply: (@bit_blast_bexps_fcache_sound e es E m' ec' g' cs lr).
-      + rewrite /=.
-        dcase (bit_blast_bexps_fcache E es) => [[[[[m0 c0] g0] cs0] lr0] Hb_es].
-        move: (bb_bexps_cache_bit_blast_bexps_fcache_eq Hbbe_es Hb_es) =>
-        [? [? ?]]; subst. assumption.
+      apply: (@bit_blast_bexps_hcache_sound e es E m' ec' g' cs lr).
+      + dcase (bit_blast_bexps_hcache E es) => [[[[[m0 c0] g0] cs0] lr0] Hb_es].
+        rewrite /bit_blast_bexps_hcache in Hb_es.
+        move: (bb_hbexps_cache_bit_blast_bexps_hcache_eq Hbbe_es Hb_es) =>
+        [? [? ?]]; subst.
+        rewrite /bit_blast_bexps_hcache /=. rewrite Hb_es. rewrite Hbbe_e.
+        reflexivity.
       + exact: Hwf.
       + apply: (H _ (Logic.eq_refl _)). exact: mem_head.
       + exact: (wf_conform_bexps Hwf Hco).
@@ -322,7 +323,7 @@ Section QFBV2CNF.
       case: Hbb_es0 => ? ? ? ?; subst. by rewrite in_cons Hin0 orbT.
   Qed.
 
-  Lemma bb_bexps_cache_complete E es :
+  Lemma bb_hbexps_cache_complete E es :
     QFBV.well_formed_bexps es E ->
     valid_qfbv_bexps E es ->
     valid_bb_bexps_cache E es.
@@ -331,14 +332,17 @@ Section QFBV2CNF.
     elim: es => [| e es IH] Hwf //=.
     - move=> He m c g cnfs cnf. case=> ? ? ? ?; subst. move=> H; by inversion H.
     - move=> He m c g cnfs cnf.
-      dcase (bb_bexps_cache E es) => [[[[m1 c1] g1] cnfs1] Hbb_es].
-      dcase (bit_blast_bexp_fcache_tflatten E m1 (CacheFlatten.reset_ct c1) g1 e)
-            => [[[[[m2 c2] g2] cs2] lr2] Hbb_e].
+      dcase (bb_hbexps_cache E (map QFBVHash.hash_bexp es)) =>
+             [[[[m1 c1] g1] cnfs1] Hbb_es].
+      dcase (bit_blast_bexp_hcache_tflatten
+               E m1 (CacheHash.reset_ct c1) g1 (QFBVHash.hash_bexp e))
+      => [[[[[m2 c2] g2] cs2] lr2] Hbb_e].
       case=> ? ? ? ?; subst. move=> Hin. rewrite in_cons in Hin.
       case/orP: Hin => Hin.
-      + rewrite (eqP Hin). apply: (bit_blast_bexps_fcache_complete _ Hwf).
-        * rewrite /=. move: (bb_bexps_cache_bit_blast_bexps_fcache_exists Hbb_es)
+      + rewrite (eqP Hin). apply: (bit_blast_bexps_hcache_complete _ Hwf).
+        * rewrite /=. move: (bb_hbexps_cache_bit_blast_bexps_hcache_exists Hbb_es)
                       => [cs [lr Hb_es]].
+          rewrite /bit_blast_bexps_hcache /=.
           rewrite Hb_es. exact: Hbb_e.
         * move=> s Hco. move/andP: Hco=> [Hco _].
           rewrite (force_conform_eval_bexp E _ (SSAVS.Lemmas.disjoint_diff
@@ -352,20 +356,20 @@ Section QFBV2CNF.
         move=> s Hco f Hin_f. apply: (He _ Hco). by rewrite in_cons Hin_f orbT.
   Qed.
 
-  Lemma bb_bexps_cache_eqvalid E es1 es2 :
+  Lemma bb_hbexps_cache_eqvalid E es1 es2 :
     well_formed_bexps es1 E -> well_formed_bexps es2 E ->
     (valid_qfbv_bexps E es1 <-> valid_qfbv_bexps E es2) <->
     (valid_bb_bexps_cache E es1 <-> valid_bb_bexps_cache E es2).
   Proof.
     move=> Hwf1 Hwf2. split; move=> [H1 H2]; split; move=> H3.
-    - apply: (bb_bexps_cache_complete Hwf2). apply: H1.
-      apply: (bb_bexps_cache_sound Hwf1). assumption.
-    - apply: (bb_bexps_cache_complete Hwf1). apply: H2.
-      apply: (bb_bexps_cache_sound Hwf2). assumption.
-    - apply: (bb_bexps_cache_sound Hwf2). apply: H1.
-      apply: (bb_bexps_cache_complete Hwf1). assumption.
-    - apply: (bb_bexps_cache_sound Hwf1). apply: H2.
-      apply: (bb_bexps_cache_complete Hwf2). assumption.
+    - apply: (bb_hbexps_cache_complete Hwf2). apply: H1.
+      apply: (bb_hbexps_cache_sound Hwf1). assumption.
+    - apply: (bb_hbexps_cache_complete Hwf1). apply: H2.
+      apply: (bb_hbexps_cache_sound Hwf2). assumption.
+    - apply: (bb_hbexps_cache_sound Hwf2). apply: H1.
+      apply: (bb_hbexps_cache_complete Hwf1). assumption.
+    - apply: (bb_hbexps_cache_sound Hwf1). apply: H2.
+      apply: (bb_hbexps_cache_complete Hwf2). assumption.
   Qed.
 
 
@@ -407,7 +411,7 @@ Section QFBV2CNF.
     valid_rspec (rspec_of_spec s) /\ ssa_spec_safe s.
   Proof.
     move=> fE. rewrite /fE => {fE} Hwf Hbb.
-    move: (bb_bexps_cache_sound (bb_range_safety_well_formed Hwf) Hbb) => Hes.
+    move: (bb_hbexps_cache_sound (bb_range_safety_well_formed Hwf) Hbb) => Hes.
     split.
     - apply: (qfbv_bexp_spec_sound Hwf). move=> st Hco.
       exact: (Hes st Hco (qfbv_spec_range s) (range_in_bb_range_safety s)).
@@ -429,7 +433,7 @@ Section QFBV2CNF.
     valid_bb_bexps_cache fE (bb_range_safety s).
   Proof.
     move=> fE. rewrite /fE => {fE} Hwf Hrange Hsafety.
-    apply: (bb_bexps_cache_complete (bb_range_safety_well_formed Hwf)).
+    apply: (bb_hbexps_cache_complete (bb_range_safety_well_formed Hwf)).
     rewrite /bb_range_safety. move=> st Hco e Hin.
     rewrite in_cons in Hin. case/orP: Hin=> Hin.
     - rewrite (eqP Hin). exact: (qfbv_bexp_spec_complete Hwf Hrange Hco).
@@ -476,10 +480,10 @@ Section QFBV2CNF.
     move=> fE. rewrite /fE => {fE} Hwf Hbb.
     move: ((bb_range_safety_well_formed Hwf)) => Hwf_bb.
     move: (bb_range_safety_simplified_well_formed Hwf_bb) => Hwf_bbs.
-    move: (bb_bexps_cache_sound Hwf_bbs Hbb) => Hess.
+    move: (bb_hbexps_cache_sound Hwf_bbs Hbb) => Hess.
     move/bb_range_safety_simplified_valid: Hess => Hes.
     apply: (bb_range_safety_sound Hwf).
-    exact: (bb_bexps_cache_complete Hwf_bb Hes).
+    exact: (bb_hbexps_cache_complete Hwf_bb Hes).
   Qed.
 
   Theorem bb_range_safety_simplified_complete s :
@@ -491,9 +495,9 @@ Section QFBV2CNF.
     move=> fE. rewrite /fE => {fE} Hwf Hrange Hsafety.
     move: (bb_range_safety_well_formed Hwf) => Hwf_bb.
     move: (bb_range_safety_simplified_well_formed Hwf_bb) => Hwf_bbs.
-    apply: (bb_bexps_cache_complete Hwf_bbs).
+    apply: (bb_hbexps_cache_complete Hwf_bbs).
     apply/bb_range_safety_simplified_valid.
-    apply: (bb_bexps_cache_sound Hwf_bb).
+    apply: (bb_hbexps_cache_sound Hwf_bb).
     exact: (bb_range_safety_complete Hwf Hrange Hsafety).
   Qed.
 
@@ -652,10 +656,10 @@ Section QFBV2CNF.
     move=> fE Hwf Hbb. apply: (bb_range_safety_simplified_sound Hwf).
     move: (bb_range_safety_well_formed Hwf) => Hwf_bb.
     move: (bb_range_safety_simplified_well_formed Hwf_bb) => Hwf_bbs.
-    apply: (bb_bexps_cache_complete Hwf_bbs).
+    apply: (bb_hbexps_cache_complete Hwf_bbs).
     move: (bb_range_safety_la_simplified_well_formed Hwf) => Hwf_la.
     apply/bb_range_safety_la_simplified_valid.
-    apply: (bb_bexps_cache_sound Hwf_la). assumption.
+    apply: (bb_hbexps_cache_sound Hwf_la). assumption.
   Qed.
 
   Theorem bb_range_safety_la_simplified_complete s :
@@ -668,9 +672,9 @@ Section QFBV2CNF.
     move: (bb_range_safety_simplified_complete Hwf Hrng Hsafe) => Hv.
     move: (bb_range_safety_well_formed Hwf) => Hwf_bb.
     move: (bb_range_safety_simplified_well_formed Hwf_bb) => Hwf_bbs.
-    apply: (bb_bexps_cache_complete (bb_range_safety_la_simplified_well_formed Hwf)).
+    apply: (bb_hbexps_cache_complete (bb_range_safety_la_simplified_well_formed Hwf)).
     apply/bb_range_safety_la_simplified_valid.
-    apply: (bb_bexps_cache_sound Hwf_bbs). assumption.
+    apply: (bb_hbexps_cache_sound Hwf_bbs). assumption.
   Qed.
 
 
@@ -742,7 +746,7 @@ Section QFBV2CNF.
      <-> valid_bb_bexps_cache fE (bb_range_safety_la_simplified s)).
   Proof.
     move=> fE Hwf.
-    apply/(bb_bexps_cache_eqvalid
+    apply/(bb_hbexps_cache_eqvalid
              (bb_range_safety_la_simplified_filtered_well_formed Hwf)
              (bb_range_safety_la_simplified_well_formed Hwf)).
     exact: filter_not_true_eqvalid.

@@ -32,7 +32,7 @@ Section Verification.
     let fE := SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s) in
     (* filter is not necessary, it is used to make grat work well *)
     let es := bb_range_safety_la_simplified_filtered s in
-    let '(_, _, _, cnfs) := bb_bexps_cache fE es in
+    let '(_, _, _, cnfs) := bb_hbexps_cache fE (map QFBVHash.hash_bexp es) in
     ext_all_unsat cnfs.
 
   Lemma verify_rspec_safety_sound (s : SSA.spec) :
@@ -53,8 +53,9 @@ Section Verification.
     verify_rspec_safety s.
   Proof.
     move=> Hwf Hrange Hsafe. rewrite /verify_rspec_safety.
-    dcase (bb_bexps_cache (SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s))
-                          (bb_range_safety_la_simplified_filtered s)) =>
+    dcase (bb_hbexps_cache (SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s))
+                           (map QFBVHash.hash_bexp
+                                (bb_range_safety_la_simplified_filtered s))) =>
     [[[[m c] g] cnfs] Hbb].
     apply: all_unsat_complete.
     move: (bb_range_safety_la_simplified_filtered_complete Hwf Hrange Hsafe) => Hv.
