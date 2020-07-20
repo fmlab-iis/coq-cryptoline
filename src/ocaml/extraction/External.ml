@@ -603,22 +603,20 @@ let coq_atomic_of_string str =
   else if Z.equal c (Z.of_int (-1)) then PEopp (mk_pow (mk_var v) e)
   else raise (ParseError ("Failed to parse atomic: " ^ str ^ "."))
 
-let rec coq_sum_terms ts =
+let coq_sum_terms ts =
   match ts with
   | [] -> PEO
-  | t::[] -> t
-  | t::ts -> PEadd (t, coq_sum_terms ts)
+  | t::ts -> List.fold_left (fun res t -> PEadd (res, t)) t ts
 
-let rec coq_mul_terms ts =
+let coq_mul_terms ts =
   match ts with
   | [] -> PEO
-  | t::[] -> t
-  | t::ts -> PEmul (t, coq_mul_terms ts)
+  | t::ts -> List.fold_left (fun res t -> PEmul (res, t)) t ts
 
 let coq_mon_of_string str =
   try
     let t = split_regexp "[\\*]" str in
-    let mons = List.map coq_atomic_of_string t in
+    let mons = List.rev_map coq_atomic_of_string t in
     coq_mul_terms mons
   with ParseError msg ->
     raise (ParseError (msg ^ " " ^ "Failed to parse monomial: " ^ str ^ "."))
@@ -626,12 +624,90 @@ let coq_mon_of_string str =
 let coq_term_of_string str =
   try
     let str = replace "-" "+-" str in
-    let mons = List.map (coq_mon_of_string) (split_regexp "[\\+]" str) in
+    let mons = List.rev_map (coq_mon_of_string) (split_regexp "[\\+]" str) in
     coq_sum_terms mons
   with ParseError msg ->
     raise (ParseError (msg ^ " " ^ "Failed to parse term: " ^ str ^ "."))
 
+let coq_compute_coefficients_by_div (vars, p, g) =
+  let _ = trace "by div" in
+  let singular_args = ref ["-q"] in
+  let singular_output_sep = "--" in
+  let rec create_dummy len =
+	if len = 0 then []
+	else PEO::create_dummy (len - 1) in
+  let write_to_singular file =
+    let input_text =
+      let varseq =
+		match vars with
+		| [] -> "x"
+		| _ -> String.concat "," (List.map coq_pexpr_string_of_var vars) in
+      let generator = coq_singular_of_pexpr g in
+      let poly = coq_singular_of_pexpr p in
+      "ring r = integer, (" ^ varseq ^ "), lp;\n"
+      ^ "poly g = " ^ generator ^ ";\n"
+      ^ "poly p = " ^ poly ^ ";\n"
+      ^ "poly c = p / g;\n"
+      ^ "\"" ^ singular_output_sep ^ "\";\n"
+      ^ "c;\n"
+(*
+      ^ "ideal I = groebner(g);\n"
+      ^ "if (size(I) == 0) {\n"
+      ^ "  \"" ^ singular_output_sep ^ "\";\n"
+      ^ "  \"0\";\n"
+      ^ "} else {\n"
+      ^ "  matrix M = lift(I, p);\n"
+      ^ "  poly h = M[1,1];\n"
+      ^ "  \"" ^ singular_output_sep ^ "\";\n"
+      ^ "  h;\n"
+      ^ "}\n"
+ *)
+      ^ "exit;\n" in
+    let ch = open_out file in
+    let _ = output_string ch input_text; close_out ch in
+    let _ =
+      trace "INPUT TO SINGULAR:";
+      trace_file file;
+      trace "" in
+    () in
+  let run_singular ifile ofile =
+    let _ = unix (!singular_path ^ " " ^ String.concat " " !singular_args ^ " " ^ ifile ^ " 1> " ^ ofile ^ " 2>&1") in
+    let _ =
+      trace "OUTPUT FROM SINGULAR:";
+      trace_file ofile;
+      trace "" in
+    () in
+  let read_singular_output file =
+    let rec split (coefs, sep_found) lines =
+      match lines with
+      | [] -> coefs
+      | hd::tl when hd = singular_output_sep -> split (coefs, true) tl
+      | hd::tl -> if sep_found then split (hd::coefs, sep_found) tl
+                  else split (coefs, sep_found) tl in
+    let lines = ref [] in
+    let ch = open_in file in
+    let _ =
+      try
+        while true do
+	      lines := String.trim (input_line ch)::!lines
+        done
+      with
+        End_of_file -> ()
+      | _ -> failwith "Failed to read the output file" in
+    let _ = close_in ch in
+    split ([], false) (List.rev !lines) in
+  let ifile = tmpfile "inputfgb_" "" in
+  let ofile = tmpfile "outputfgb_" "" in
+  let _ = write_to_singular ifile in
+  let _ = run_singular ifile ofile in
+  let coefs = read_singular_output ofile in
+  let _ = cleanup [ifile; ofile] in
+  match coefs with
+  | c::[] -> [coq_term_of_string c]
+  | _ -> create_dummy 1
+
 let coq_compute_coefficients_by_lift (vars, p, gs) =
+  let _ = trace "by lift" in
   let singular_args = ref ["-q"] in
   let singular_output_sep = "--" in
   let rec create_dummy len =
@@ -664,7 +740,7 @@ let coq_compute_coefficients_by_lift (vars, p, gs) =
       trace "" in
     () in
   let run_singular ifile ofile =
-    let _ = unix (!singular_path ^ " -q " ^ String.concat " " !singular_args ^ " " ^ ifile ^ " 1> " ^ ofile ^ " 2>&1") in
+    let _ = unix (!singular_path ^ " " ^ String.concat " " !singular_args ^ " " ^ ifile ^ " 1> " ^ ofile ^ " 2>&1") in
     let _ =
       trace "OUTPUT FROM SINGULAR:";
       trace_file ofile;
@@ -712,7 +788,10 @@ let ext_find_coefficients_impl gs p m =
   let ofile = tmpfile "outputfgb_" "" in
   let (c_m, cs_gs) =
 	let vars = coq_vars_in_order (gs@[m]@[p]) in
-	let coefs = coq_compute_coefficients_by_lift (vars, p, (m::gs)) in
+    let coefs =
+      match gs with
+      | [] -> coq_compute_coefficients_by_div (vars, p, m)
+      | _ -> coq_compute_coefficients_by_lift (vars, p, (m::gs)) in
 	(List.hd coefs, List.tl coefs) in
   let t2 = Unix.gettimeofday() in
   let _ = vprintln ("[OK]\t\t" ^ string_of_running_time t1 t2) in

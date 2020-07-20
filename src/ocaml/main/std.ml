@@ -108,7 +108,7 @@ let anon file =
   | Verify ->
       let (_vs, _s, coq_spec) = parse_and_check file in
 	  (* options : bool, true to add carry constraints *)
-	  let o = false in
+	  let o = !carry_constraint in
 	  let res = Extraction.Verify.verify_dsl o coq_spec in
 	  (*
       let coq_ssa_spec = Extraction.SSA.ssa_spec coq_spec in
