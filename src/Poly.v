@@ -498,6 +498,10 @@ Section ZRing.
             Z 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Z.eqb id
             Zrm.
 
+  Definition ZPeq_spec :=
+    @Peq_spec Z 0 1 Z.add Z.mul Z.sub Z.opp Z.eq RelationClasses.eq_equivalence Zeqe
+              Z 0%Z 1%Z Z.add Z.mul Z.sub Z.opp Z.eqb id Zrm.
+
   Definition Znorm_subst_spec :=
     @norm_subst_spec Z 0 1 Z.add Z.mul Z.sub Z.opp
                      Z.eq RelationClasses.eq_equivalence Zeqe Zath
@@ -1971,6 +1975,101 @@ Section Checker.
     valid_pspec s.
   Proof.
     move=> Hpoly Hch. exact: (zimply_eq_valid_pspec Hpoly (checker_imply_eq Hch)).
+  Qed.
+
+
+  (* Tail-recursive checker *)
+
+  Definition combine_coefficients_tr (cs : seq (PExpr Z)) (ps : seq (PExpr Z))
+  : seq (PExpr Z) :=
+    mapr (fun '(c, p) => PEmul c p) (zip cs ps).
+
+  Fixpoint sum_polys_rec res (ps : seq (PExpr Z)) : PExpr Z :=
+    match ps with
+    | [::] => res
+    | hd::tl => sum_polys_rec (PEadd res hd) tl
+    end.
+
+  Definition sum_polys_tr (ps : seq (PExpr Z)) : PExpr Z :=
+    match ps with
+    | [::] => PEc 0%Z
+    | hd::tl => sum_polys_rec hd tl
+    end.
+
+  Lemma combine_coefficients_tr_cons c cs p ps :
+    combine_coefficients_tr (c::cs) (p::ps) = rcons (combine_coefficients_tr cs ps)
+                                                    (PEmul c p).
+  Proof.
+    rewrite /combine_coefficients_tr. rewrite NBitsOp.zip_cons.
+    rewrite mapr_cons. reflexivity.
+  Qed.
+
+  Lemma sum_polys_rec_rcons res ps p :
+    sum_polys_rec res (rcons ps p) = PEadd (sum_polys_rec res ps) p.
+  Proof. by elim: ps res p => [| hd tl IH] //=. Qed.
+
+  Lemma sum_polys_tr_rcons ps p :
+    0 < size ps ->
+    sum_polys_tr (rcons ps p) = PEadd (sum_polys_tr ps) p.
+  Proof.
+    rewrite /sum_polys_tr. case: ps => [| hd tl] //=.
+    move=> _. rewrite sum_polys_rec_rcons. reflexivity.
+  Qed.
+
+  (* Check if q = cs * ps + c * m *)
+  Definition coefficients_checker_tr ps m q cs c : bool :=
+    (size ps == size cs) &&
+    zpexpr_eqb q (PEadd (sum_polys_tr (combine_coefficients_tr cs ps)) (PEmul c m)).
+
+  (* If q = cs * ps + c * m and for each p \in ps, p = 0, then q = c * m *)
+  Lemma checker_tr_imply_eq ps m q cs c :
+    coefficients_checker_tr ps m q cs c ->
+    zpimply_eq ps q (PEmul c m).
+  Proof.
+    move/andP=> [Hs Heq] l Heq0. rewrite /ZPEeval.
+    (* Convert the syntactical equality in the hypotheses to semantic equality *)
+    rewrite /zpexpr_eqb /ZPeq in Heq. move: (ZPeq_ok Heq) => {Heq} Heq.
+    move: (Heq l) => {Heq} Heq.
+    (* Convert Pol evaluation to PExpr evaluation *)
+    move: Heq. rewrite -Znorm_subst_spec; try done.
+    rewrite -Znorm_subst_spec; try done.
+    (* rewrite q = cs * ps + c * m *)
+    move=> ->.
+    (* Induction on ps *)
+    rewrite /=. case: ps cs Hs Heq0 => [| hd tl] //=.
+    - (* ps = [::] *) by case.
+    - (* ps = hd::tl *) case=> //=. move=> cs_hd. (* cs = cs_hd::cs_tl *)
+      elim: tl => [| tl_hd tl_tl IH] //=.
+      + (* ps = [:: hd] *) case=> //=. (* cs = cs_hd *) rewrite /ZPEeval.
+        move=> _ [-> _]. rewrite Z.mul_0_r !Z.add_0_l. reflexivity.
+      + (* ps = hd::tl_hd::tl_tl *) case => //=. (* cs = cs_hd::cs_tl_hd::cs_tl_tl *)
+        move=> cs_tl_hd cs_tl_tl. rewrite /ZPEeval=> Hsize [Hhd [Htl_hd Htl_tl]].
+        apply/Z.add_move_r. rewrite Z.sub_diag.
+        have Hseq: (size tl_tl) = (size cs_tl_tl).
+        { rewrite -addn2 -(addn2 (size cs_tl_tl)) eqn_add2r in Hsize.
+          exact: (eqP Hsize). }
+        have Hssucc: (size tl_tl).+1 == (size cs_tl_tl).+1 by rewrite Hseq.
+        move: (IH cs_tl_tl Hssucc (conj Hhd Htl_tl)) => H.
+        move/Z.add_move_r: H. rewrite Z.sub_diag => H.
+        move: H. rewrite !combine_coefficients_tr_cons.
+        case Hs0: (0 < size (combine_coefficients_tr cs_tl_tl tl_tl)).
+        * rewrite (sum_polys_tr_rcons _ Hs0) /=. rewrite Hhd Z.mul_0_r Z.add_0_r.
+          rewrite sum_polys_tr_rcons /=; last by rewrite size_rcons.
+          rewrite Hhd Z.mul_0_r Z.add_0_r.
+          rewrite (sum_polys_tr_rcons _ Hs0) /=. rewrite Htl_hd Z.mul_0_r Z.add_0_r.
+          by apply.
+        * move/idP/negP: Hs0. rewrite -eqn0Ngt. move/eqP=> Hs.
+          move: (size0nil Hs) => -> /=. rewrite Hhd Htl_hd.
+          rewrite !Z.mul_0_r. reflexivity.
+  Qed.
+
+  (* If the coefficients are verified by the checker, the pspec is valid *)
+  Theorem checker_tr_valid_pspec s g t ps m q cs c :
+    zpexprs_of_pspec s = (g, t, ps, m, q) ->
+    coefficients_checker_tr ps m q cs c ->
+    valid_pspec s.
+  Proof.
+    move=> Hpoly Hch. exact: (zimply_eq_valid_pspec Hpoly (checker_tr_imply_eq Hch)).
   Qed.
 
 End Checker.

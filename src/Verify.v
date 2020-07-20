@@ -75,7 +75,7 @@ Section Verification.
     | ps::pss =>
       let '(g, t, ps, m, q) := zpexprs_of_pspec ps in
       let (cs, c) := ext_find_coefficients ps q m in
-      if coefficients_checker ps m q cs c then verify_pspecs pss
+      if coefficients_checker_tr ps m q cs c then verify_pspecs pss
       else false
     end.
 
@@ -89,9 +89,9 @@ Section Verification.
     elim: pss => [| hd tl IH] //=.
     dcase (zpexprs_of_pspec hd) => [[[[[g t] zps] zm] zq] Hzp].
     dcase (ext_find_coefficients zps zq zm) => [[cs c] Hco].
-    case Hch: (coefficients_checker zps zm zq cs c) => //=.
+    case Hch: (coefficients_checker_tr zps zm zq cs c) => //=.
     move=> Htl Hin. rewrite in_cons in Hin. case/orP: Hin=> Hin.
-    - rewrite (eqP Hin). exact: (checker_valid_pspec Hzp Hch).
+    - rewrite (eqP Hin). exact: (checker_tr_valid_pspec Hzp Hch).
     - exact: (IH Htl Hin).
   Qed.
 
