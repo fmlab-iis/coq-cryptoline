@@ -1,0 +1,56 @@
+COMPILE
+=======
+
+$ dune build
+
+
+RUN
+====
+
+$ _build/default/coqcryptoline.exe [ ARGS ] FILE
+
+
+ARGUMENTS
+---------
+
+* -jobs N		Specify the number of concurrent jobs
+* -sat_solver		Specify the SAT solver
+			(cadical, glucose, or cryptominisat)
+* -cadical		Specify the path to cadical
+			(implies -sat_solver cadical)
+* -glucose		Specify the path to glucose
+			(implies -sat_solver glucose)
+* -cryptominisat	Specify the path to cryptominisat
+			(implies -sat_solver cryptominisat)
+* -sat_cert		Specify the SAT certifier (drat, grat, or lrat)
+* -no_carry_constraint
+			Do not add carry constraints
+* -tmpdir PATH		Specify the directory for storing temporary files
+* -v			Print verbose messages
+
+
+OCAMLRUNPARAM
+-------------
+
+It is important to allocate enough space of the minor heap to achieve better
+performance. To specify the size of the minor heap, run
+_build/default/coqcryptoline.exe with the following prefix:
+
+    OCAMLRUNPARAM=s=X
+
+where X is the size. For example, using the command
+
+    $ OCAMLRUNPARAM=s=2G _build/default/coqcryptoline.exe fe25519_mul.cl
+
+to verify fe25519_mul.cl is much faster than using the command
+
+    $ _build/default/coqcryptoline.exe fe25519_mul.cl
+
+
+EXAMPLE
+-------
+
+$ OCAMLRUNPARAM=s=2G \
+        ./_build/default/coqcryptoline.exe -v -jobs 16 \
+        -sat_solver cadical -sat_cert grat \
+        -no_carry_constraint -tmpdir .
