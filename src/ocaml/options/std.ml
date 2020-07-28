@@ -95,14 +95,15 @@ let unix cmd =
 
 let logfile = ref "cryptoline.log"
 
-let debug = ref true
+let debug = ref false
 
 let trace msg =
-  let ch = open_out_gen [Open_append; Open_creat; Open_text] 0o640 !logfile in
-  let _ = output_string ch msg in
-  let _ = output_string ch "\n" in
-  let _ = close_out ch in
-  ()
+  if !debug then
+    let ch = open_out_gen [Open_append; Open_creat; Open_text] 0o640 !logfile in
+    let _ = output_string ch msg in
+    let _ = output_string ch "\n" in
+    let _ = close_out ch in
+    ()
 
 let trace_file file =
   if !debug then

@@ -14,6 +14,8 @@ type variable_order =
   | RevLexOrder
   | RevAppearingOrder
 
+val debug : bool ref
+
 val default_solver : sat_solver
 val default_algebra : algebra_system
 
