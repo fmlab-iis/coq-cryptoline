@@ -73,8 +73,8 @@ val unix : string -> Unix.process_status
 
 val logfile : string ref
 
-val trace : string -> unit
-val trace_file : string -> unit
+val trace : ?log:string -> string -> unit
+val trace_file : ?log:string -> string -> unit
 
 val fail : string -> 'a
 

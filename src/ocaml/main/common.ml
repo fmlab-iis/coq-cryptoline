@@ -30,26 +30,28 @@ let args =
                                       else if str = Options.Std.string_of_sat_certificate Options.Std.Grat then sat_certificate := Options.Std.Grat
                                       else if str = Options.Std.string_of_sat_certificate Options.Std.Lrat then sat_certificate := Options.Std.Lrat
                                       else failwith ("Unknown format of SAT certification: " ^ str))),
-     "\t\t Specify the format of SAT certification");
+     "\n\t     Specify the format of SAT certification\n");
     ("-cadical", String (fun str -> cadical_path := str; sat_solver := Cadical), "PATH\n\t     Use Cadical at the specified path\n");
     ("-cryptominisat", String (fun str -> cryptominisat_path := str; sat_solver := Cryptominisat), "PATH\n\t     Use Cryptominisat at the specified path\n");
+    ("-debug", Set debug, "    Log debug messages\n");
     ("-disable_rewriting", Clear apply_rewriting, "\n\t     Disable rewriting of assignments (at program level) and equalities\n\t     (at polynomial level)\n");
     ("-drat-trim", String (fun str -> Options.Std.drat_trim_path := str),
-     "\t\t Set the path to drat-trim (default: " ^
-       !Options.Std.drat_trim_path ^ ")");
+     "Set the path to drat-trim (default: " ^
+       !Options.Std.drat_trim_path ^ ")\n");
+    ("-fork", Unit (fun () -> Extraction.External.use_fork := true), "     Use fork instead of lwt if the number of jobs is greater than 1\n");
     ("-glucose", String (fun str -> glucose_path := str; sat_solver := Glucose), "PATH\n\t     Use Glucose at the specified path\n");
     ("-gratchk", String (fun str -> Options.Std.gratchk_path := str),
-     "\t\t Set the path to gratchk (default: " ^
-       !Options.Std.gratchk_path ^ ")");
+     "  Set the path to gratchk (default: " ^
+       !Options.Std.gratchk_path ^ ")\n");
     ("-gratgen", String (fun str -> Options.Std.gratgen_path := str),
-     "\t\t Set the path to gratgen (default: " ^
-       !Options.Std.gratgen_path ^ ")");
+     "  Set the path to gratgen (default: " ^
+       !Options.Std.gratgen_path ^ ")\n");
     ("-isafety", Set incremental_safety, "  Verify program safety incrementally\n");
     ("-isafety_timeout", Int (fun i -> incremental_safety_timeout := i), "INT\n\t     Set initial timeout for incremental verification of program safety\n");
+    ("-keep", Set Extraction.External.keep_temp_files, "     Keep temporary files\n");
     ("-legacy", Set use_legacy_parser, "   Use the legacy parser\n");
     ("-lrat", String (fun str -> Options.Std.lrat_checker_path := str),
-     "\t\t Set the path to lrat-checker\n\t\t\t (default: " ^
-       !Options.Std.lrat_checker_path ^ ")");
+     "     Set the path to lrat-checker (default: " ^ !Options.Std.lrat_checker_path ^ ")\n");
     ("-macaulay2", String (fun str -> macaulay2_path := str; algebra_system := Macaulay2),
      "PATH\n\t     Use Macaulay2 at the specified path\n");
     ("-magma", String (fun str -> magma_path := str; algebra_system := Magma),
@@ -78,7 +80,7 @@ let args =
      "PATH\n\t     Use Singular at the specified path\n");
     ("-slicing", Set apply_slicing, "  Enable slicing\n");
     ("-tmpdir", String (fun str -> tmpdir := Some str),
-     "PATH\n\t     Specify a directory for temporary files");
+     "PATH\n\t     Specify a directory for temporary files\n");
     ("-untyped", Set use_untyped_parser, "  Use the untyped parser\n");
     ("-vector", Set use_vector_parser, "   Use the vectorized parser\n");
     ("-vo", Symbol (["lex"; "appearing"; "rev_lex"; "rev_appearing"],

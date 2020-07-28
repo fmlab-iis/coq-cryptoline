@@ -14,6 +14,7 @@ exception ParseError of string
 
 let keep_temp_files = ref false
 let temp_file_prefix = "coqcryptoline_temp"
+let use_fork = ref false
 
 (** Basic numbers conversion *)
 
@@ -137,7 +138,7 @@ let coq_output_dimacs ch cs =
 let cleanup files =
   if not !keep_temp_files then List.iter Unix.unlink files
 
-let run_sat_solver ifile ofile errfile dratfile =
+let run_sat_solver ?log:(logfile=(!logfile)) ifile ofile errfile dratfile =
   let t1 = Unix.gettimeofday() in
   let cmd =
     match !sat_solver with
@@ -164,10 +165,10 @@ let run_sat_solver ifile ofile errfile dratfile =
   let res = unix cmd in
   let t2 = Unix.gettimeofday() in
   let _ =
-    let _ = trace ("Execution time of SAT SOLVER: " ^ string_of_float (t2 -. t1) ^ " seconds") in
-    let _ = trace "OUTPUT FROM SAT SOLVER:" in
-    let _ = trace_file ofile in
-    let _ = trace_file errfile in
+    let _ = trace ~log:logfile ("Execution time of SAT SOLVER: " ^ string_of_float (t2 -. t1) ^ " seconds") in
+    let _ = trace ~log:logfile "OUTPUT FROM SAT SOLVER:" in
+    let _ = trace_file ~log:logfile ofile in
+    let _ = trace_file ~log:logfile errfile in
     () in
   res = Unix.WEXITED 0
 
@@ -435,6 +436,114 @@ let coq_all_unsat_lwt id_cnf_pairs =
   finish_pending delivered_helper res pending
 
 
+(* ===== Multi-process solving ===== *)
+
+let coq_cnf_unsat_fork cnf resfile logfile =
+  let ifile = tmpfile temp_file_prefix ".cnf" in
+  let ofile = tmpfile temp_file_prefix ".out" in
+  let errfile = tmpfile temp_file_prefix ".err" in
+  let dratfile = tmpfile temp_file_prefix ".drat" in
+  let _ =
+    let _ = trace ~log:logfile ("CNF input file: " ^ ifile) in
+    let _ = trace ~log:logfile ("CNF output file: " ^ ofile) in
+    let _ = trace ~log:logfile ("CNF error file: " ^ errfile) in
+    let _ = trace ~log:logfile ("CNF drat file: " ^ dratfile) in
+    () in
+  let resch = open_out resfile in
+  let t1 = Unix.gettimeofday() in
+  let unsat =
+    let ch = open_out ifile in
+    let _ = coq_output_dimacs ch cnf in
+    let _ = close_out ch in
+    run_sat_solver ~log:logfile ifile ofile errfile dratfile in
+  let t2 = Unix.gettimeofday() in
+  let _ = output_string resch (if unsat then "UNSAT\n" else "SAT\n") in
+  let _ = output_string resch (string_of_running_time t1 t2 ^ "\n") in
+  let certified =
+    if unsat then
+      let t1 = Unix.gettimeofday() in
+      let certified = run_sat_certifier ifile dratfile in
+      let t2 = Unix.gettimeofday() in
+      let _ = output_string resch (if certified then "CERTIFIED\n" else "NOT CERTIFIED\n") in
+      let _ = output_string resch (string_of_running_time t1 t2 ^ "\n") in
+      certified
+    else
+      false in
+  let _ = cleanup [ifile; ofile; errfile; dratfile] in
+  certified
+
+let work_on_pending_fork delivered_helper res =
+  try
+    let (child, _) = Unix.wait () in
+    let res' = delivered_helper res child in
+    res'
+  with _ ->
+    res
+
+let rec finish_pending_fork delivered_helper res =
+  try
+    let (child, _) = Unix.wait () in
+    let res' = delivered_helper res child in
+    finish_pending_fork delivered_helper res'
+  with _ ->
+    res
+
+let read_resfile resfile =
+  let lines = ref [] in
+  let ch = open_in resfile in
+  let _ =
+    try
+      while true do
+	    lines := String.trim (input_line ch)::!lines
+      done
+    with
+      End_of_file -> ()
+    | _ -> failwith "Failed to read the output file" in
+  let _ = close_in ch in
+  let lines = List.rev !lines in
+  let l = List.length lines in
+  let unsat = if l > 0 then List.nth lines 0 = "UNSAT" else false in
+  let unsat_time = if l > 1 then List.nth lines 1 else "" in
+  let certified = if l > 2 then List.nth lines 2 = "CERTIFIED" else false in
+  let certified_time = if l > 3 then List.nth lines 3 else "" in
+  (unsat, unsat_time, certified, certified_time)
+
+let coq_all_unsat_fork id_cnf_pairs =
+  let ptable = Hashtbl.create !jobs in
+  let run_task cnf resfile logfile = coq_cnf_unsat_fork cnf resfile logfile in
+  let delivered_helper all_unsat child =
+    let (id, resfile, logfile) = Hashtbl.find ptable child in
+    let (unsat, unsat_time, certified, certified_time) = read_resfile resfile in
+    let _ = vprint ("\t CNF #" ^ string_of_int id ^ ":\t\t\t") in
+    let _ = vprintln ((if unsat then "[UNSAT]\t\t" else "[SAT]\t\t") ^ unsat_time) in
+    let _ = if unsat then vprintln ("\t\t\t\t\t" ^ (if certified then "[CERTIFIED]\t" else "[NOT CERTIFIED]\t") ^ certified_time) in
+    let _ = trace ("CNF #" ^ string_of_int id) in
+    let _ = trace_file logfile in
+    let _ = trace "" in
+    let _ = cleanup [resfile; logfile] in
+    let _ = Hashtbl.remove ptable child in
+	all_unsat && certified in
+  let rec verify all_unsat id_cnf_pairs =
+    match id_cnf_pairs with
+    | [] -> finish_pending_fork delivered_helper all_unsat
+    | (id, cnf)::rest ->
+       if Hashtbl.length ptable < !jobs then
+         let resfile = tmpfile temp_file_prefix ".res" in
+         let logfile = tmpfile temp_file_prefix ".log" in
+         match Unix.fork() with
+         | 0 ->
+            let _ = run_task cnf resfile logfile in
+            exit 0
+         | child ->
+            let _ = Hashtbl.add ptable child (id, resfile, logfile) in
+            verify all_unsat rest
+       else
+         let all_unsat' = work_on_pending_fork delivered_helper all_unsat in
+         verify all_unsat' rest
+  in
+  verify true id_cnf_pairs
+
+
 (* ===== Implementation of ext_all_unsat ===== *)
 
 let ext_all_unsat_impl cnfs =
@@ -442,7 +551,9 @@ let ext_all_unsat_impl cnfs =
   let t1 = Unix.gettimeofday() in
   let res =
 	let id_cnf_pairs = List.mapi (fun i cnf -> (i, cnf)) cnfs in
-	if !jobs > 1 then coq_all_unsat_lwt id_cnf_pairs
+	if !jobs > 1 then
+      if !use_fork then coq_all_unsat_fork id_cnf_pairs
+      else coq_all_unsat_lwt id_cnf_pairs
 	else coq_all_unsat id_cnf_pairs in
   let t2 = Unix.gettimeofday() in
   let _ =

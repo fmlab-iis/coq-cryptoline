@@ -13,18 +13,25 @@ $ _build/default/coqcryptoline.exe [ ARGS ] FILE
 ARGUMENTS
 ---------
 
-* -jobs N		Specify the number of concurrent jobs
+* -jobs N		Set the number of concurrent jobs
+* -fork			Use fork instead of lwt if the number of concurrent
+			jobs is greater than 1
 * -sat_solver		Specify the SAT solver
 			(cadical, glucose, or cryptominisat)
-* -cadical		Specify the path to cadical
+* -cadical		Set the path to cadical
 			(implies -sat_solver cadical)
-* -glucose		Specify the path to glucose
+* -glucose		Set the path to glucose
 			(implies -sat_solver glucose)
-* -cryptominisat	Specify the path to cryptominisat
+* -cryptominisat	Set the path to cryptominisat
 			(implies -sat_solver cryptominisat)
 * -sat_cert		Specify the SAT certifier (drat, grat, or lrat)
+* -drat-trim		Set the path to drat-trim
+* -gratchk		Set the path to gratchk
+* -gratgen		Set the path to gratgen
+* -lrat			Set the path to lrat-checker
 * -no_carry_constraint
 			Do not add carry constraints
+* -singular		Set the path to Singular
 * -tmpdir PATH		Specify the directory for storing temporary files
 * -v			Print verbose messages
 

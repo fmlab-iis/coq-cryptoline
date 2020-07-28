@@ -97,17 +97,17 @@ let logfile = ref "cryptoline.log"
 
 let debug = ref false
 
-let trace msg =
+let trace ?log:(lf=(!logfile)) msg =
   if !debug then
-    let ch = open_out_gen [Open_append; Open_creat; Open_text] 0o640 !logfile in
+    let ch = open_out_gen [Open_append; Open_creat; Open_text] 0o640 lf in
     let _ = output_string ch msg in
     let _ = output_string ch "\n" in
     let _ = close_out ch in
     ()
 
-let trace_file file =
+let trace_file ?log:(lf=(!logfile)) file =
   if !debug then
-    ignore(unix ("cat " ^ file ^ " >>  " ^ !logfile))
+    ignore(unix ("cat " ^ file ^ " >>  " ^ lf))
 
 let fail s = trace s; failwith s
 
@@ -147,7 +147,7 @@ let drat_trim_path = ref "drat-trim"
 let gratgen_path = ref "gratgen"
 let gratchk_path = ref "gratchk"
 (*let lrat_checker_path = ref "PracticalInterface"*)
-let lrat_checker_path = ref "/Users/mht208/.git/sat_proof_checker/rat_checker/Interface.native"
+let lrat_checker_path = ref "Interface.native"
 
 let tmpdir = ref None
 let tmpfile prefix suffix =
