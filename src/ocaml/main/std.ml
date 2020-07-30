@@ -3,6 +3,7 @@ open Arg
 open Options.Std
 open Ast.Cryptoline
 open Parsers.Std
+open Extraction.Options0
 
 type action = Verify | Parse | PrintSSA | PrintESpec | PrintRSpec
 
@@ -108,7 +109,7 @@ let anon file =
   | Verify ->
       let (_vs, _s, coq_spec) = parse_and_check file in
 	  (* options : bool, true to add carry constraints *)
-	  let o = !carry_constraint in
+	  let o = { add_carry_constraints = !carry_constraint; rewrite_assignments = !apply_rewriting }  in
 	  let res = Extraction.Verify.verify_dsl o coq_spec in
 	  (*
       let coq_ssa_spec = Extraction.SSA.ssa_spec coq_spec in

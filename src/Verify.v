@@ -2,7 +2,7 @@
 From Coq Require Import List ZArith.
 From mathcomp Require Import ssreflect ssrbool eqtype seq ssrfun.
 From ssrlib Require Import Var Types SsrOrder Seqs Tactics.
-From Cryptoline Require Import DSL SSA ZSSA SSA2QFBV SSA2ZSSA QFBV2CNF Poly.
+From Cryptoline Require Import Options DSL SSA ZSSA SSA2QFBV SSA2ZSSA QFBV2CNF Poly.
 From Coq Require Import Ring_polynom.
 
 Set Implicit Arguments.
@@ -79,13 +79,15 @@ Section Verification.
       else false
     end.
 
-  Definition verify_zspec (zs : ZSSA.zspec) : bool :=
-    verify_pspecs (pspecs_of_zspec_simplified zs).
+  Definition verify_zspec (o : options) (zs : ZSSA.zspec) : bool :=
+    if rewrite_assignments o then
+      verify_pspecs (pspecs_of_zspec_simplified zs)
+    else
+      verify_pspecs (pspecs_of_zspec zs).
 
-  Lemma verify_zspec_sound (zs : ZSSA.zspec) : verify_zspec zs -> ZSSA.valid_zspec zs.
+  Lemma verify_pspecs_in ps pss :
+    verify_pspecs pss -> ps \in pss -> valid_pspec ps.
   Proof.
-    rewrite /verify_zspec=> Hv. apply: pspecs_of_zspec_simplified_sound => ps Hin.
-    move: (pspecs_of_zspec_simplified zs) Hv Hin => {zs} pss.
     elim: pss => [| hd tl IH] //=.
     dcase (zpexprs_of_pspec hd) => [[[[[g t] zps] zm] zq] Hzp].
     dcase (ext_find_coefficients zps zq zm) => [[cs c] Hco].
@@ -95,12 +97,22 @@ Section Verification.
     - exact: (IH Htl Hin).
   Qed.
 
+  Lemma verify_zspec_sound o (zs : ZSSA.zspec) :
+    verify_zspec o zs -> ZSSA.valid_zspec zs.
+  Proof.
+    rewrite /verify_zspec. case: (rewrite_assignments o) => Hv.
+    - apply: pspecs_of_zspec_simplified_sound => ps Hin.
+      exact: (verify_pspecs_in Hv Hin).
+    - apply: pspecs_of_zspec_sound => ps Hin.
+      exact: (verify_pspecs_in Hv Hin).
+  Qed.
+
 
   (* Verify specifications *)
 
   Definition verify_ssa (o : options) (s : SSA.spec) :=
     (verify_rspec_safety s) &&
-    (verify_zspec (bv2z_espec o (new_svar_spec s) (SSA.espec_of_spec s))).
+    (verify_zspec o (bv2z_espec o (new_svar_spec s) (SSA.espec_of_spec s))).
 
   Definition verify_dsl (o : options) (s : DSL.spec) :=
     verify_ssa o (ssa_spec s).

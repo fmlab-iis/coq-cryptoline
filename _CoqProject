@@ -3,6 +3,7 @@
 -Q lib/coq-bitblasting/src BitBlasting
 -Q lib/coq-bitblasting/src/bbcache BBCache
 -Q src Cryptoline
+src/Options.v
 src/DSL.v
 src/SSA.v
 src/ZSSA.v

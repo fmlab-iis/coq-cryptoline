@@ -14,7 +14,7 @@ From nbits Require Import NBits.
 Extraction Language OCaml.
 
 (* Avoid name clashes *)
-Extraction Blacklist Nat Int List String.
+Extraction Blacklist Nat Int List String Options.
 
 Extract Constant Verify.ext_all_unsat => "External.ext_all_unsat_impl".
 Extract Constant Verify.ext_find_coefficients => "External.ext_find_coefficients_impl".

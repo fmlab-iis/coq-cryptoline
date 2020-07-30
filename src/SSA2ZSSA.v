@@ -3,7 +3,7 @@ From Coq Require Import List ZArith.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From ssrlib Require Import Var Types SsrOrder Nats ZAriths Store Tactics.
 From BitBlasting Require Import State Typ TypEnv.
-From Cryptoline Require Import DSL SSA ZSSA.
+From Cryptoline Require Import Options DSL SSA ZSSA.
 From nbits Require Import NBits.
 
 (** Conversion from a specification to a range specification, an algebraic specification, and a safety condition. *)
@@ -11,12 +11,6 @@ From nbits Require Import NBits.
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
-
-Record options : Set :=
-  mkOptions { add_carry_constraints : bool }.
-
-Definition default_options : options :=
-  {| add_carry_constraints := false |}.
 
 
 
