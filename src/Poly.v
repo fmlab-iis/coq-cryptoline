@@ -236,7 +236,7 @@ Section PSpecSimpl.
           (visited : seq szbexp) (premises : seq szbexp) (conseq : szbexp)
           {wf size_lt premises} :=
     match premises with
-    | [::] => (visited, conseq)
+    | [::] => (rev visited, conseq)
     | e::es =>
       match is_assignment e with
       | None => simplify_pspec_rec (e::visited) es conseq
@@ -281,7 +281,7 @@ Section PSpecSimpl.
   Qed.
 
   Lemma simplify_pspec_rec_empty visited q :
-    simplify_pspec_rec visited [::] q = (visited, q).
+    simplify_pspec_rec visited [::] q = (rev visited, q).
   Proof. reflexivity. Qed.
 
   Lemma simplify_pspec_rec_sound pre ps q ps' q' :
@@ -297,7 +297,8 @@ Section PSpecSimpl.
     have ->: q' = (ps', q').2 by reflexivity.
     move: (ps', q'). clear ps' q'. eapply simplify_pspec_rec_ind.
     - move=> {pre ps q} pre ps q Hps [ps' q'] [] ? ?; subst => /=.
-      move=> Hs s Hev. rewrite cats0 in Hev. exact: (Hs _ Hev).
+      move=> Hs s Hev. rewrite cats0 in Hev. apply: Hs.
+      move=> e Hin; apply: Hev. rewrite mem_rev in Hin. assumption.
     - move=> {pre ps q} pre ps q e es Hps Ha IH [ps' q']  /= Hrec Hs s He.
       apply: (IH _ Hrec Hs). move=> f Hin. apply: He. rewrite mem_cat in_cons.
       rewrite mem_cat in_cons in Hin. (case/orP: Hin; [case/orP|] => -> //=);
@@ -312,7 +313,6 @@ Section PSpecSimpl.
       apply: He. rewrite mem_cat in_cons. rewrite mem_cat in Hin.
       case/orP: Hin => -> //=; rewrite !orbT; exact: is_true_true.
   Qed.
-
 
 
   Definition simplify_pspec (s : pspec) : pspec :=
