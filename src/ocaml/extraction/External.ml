@@ -883,9 +883,9 @@ let ext_find_coefficients_impl gs p m =
   let (c_m, cs_gs) =
 	let vars = coq_vars_in_order (gs@[m]@[p]) in
     let coefs =
-      match gs with
-      | [] -> coq_compute_coefficients_by_div (vars, p, m)
-      | _ -> coq_compute_coefficients_by_lift (vars, p, (m::gs)) in
+      if gs = [] && not (Poly.zpexpr_is_zero m)
+      then coq_compute_coefficients_by_div (vars, p, m)
+      else coq_compute_coefficients_by_lift (vars, p, (m::gs)) in
 	(List.hd coefs, List.tl coefs) in
   let t2 = Unix.gettimeofday() in
   let _ = vprintln ("[OK]\t\t" ^ string_of_running_time t1 t2) in

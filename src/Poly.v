@@ -572,6 +572,15 @@ Section ZRing.
       split; [exact: (IH1 _ _ Hle H1g) | exact: (IH2 _ _ Hle H2g)].
   Qed.
 
+  (* Utilities *)
+
+  Definition zpexpr_is_zero (e : PExpr Z) : bool :=
+    match e with
+    | PEO => true
+    | PEc n => n == 0
+    | _ => false
+    end.
+
 End ZRing.
 
 
@@ -720,7 +729,7 @@ Section PExpr.
     | Seq e1 e2 =>
       let '(g1, t1, e1) := zpexpr_of_zexp g t e1 in
       let '(g2, t2, e2) := zpexpr_of_zexp g1 t1 e2 in
-      (g2, t2, PEsub e1 e2, PEc 0)
+      (g2, t2, PEsub e1 e2, PEO)
     | Seqmod e1 e2 p =>
       let '(g1, t1, e1) := zpexpr_of_zexp g t e1 in
       let '(g2, t2, e2) := zpexpr_of_zexp g1 t1 e2 in
@@ -869,7 +878,7 @@ Section PExpr.
     | Seq e1 e2 =>
       let '(vl1, g1, t1, e1) := zpexpr_of_zexp_vl s vl g t e1 in
       let '(vl2, g2, t2, e2) := zpexpr_of_zexp_vl s vl1 g1 t1 e2 in
-      (vl2, g2, t2, PEsub e1 e2, PEc 0)
+      (vl2, g2, t2, PEsub e1 e2, PEO)
     | Seqmod e1 e2 p =>
       let '(vl1, g1, t1, e1) := zpexpr_of_zexp_vl s vl g t e1 in
       let '(vl2, g2, t2, e2) := zpexpr_of_zexp_vl s vl1 g1 t1 e2 in
@@ -1914,7 +1923,7 @@ Section Checker.
 
   Fixpoint sum_polys (ps : seq (PExpr Z)) : PExpr Z :=
     match ps with
-    | [::] => PEc 0%Z
+    | [::] => PEO
     | hd::tl => PEadd hd (sum_polys tl)
     end.
 
@@ -1992,7 +2001,7 @@ Section Checker.
 
   Definition sum_polys_tr (ps : seq (PExpr Z)) : PExpr Z :=
     match ps with
-    | [::] => PEc 0%Z
+    | [::] => PEO
     | hd::tl => sum_polys_rec hd tl
     end.
 
