@@ -101,8 +101,7 @@ let anon file =
     let (vs, s) = parse_spec file in
     let coq_spec = Translator.Visitor.visit_spec vs s in
      if Extraction.DSL.DSL.well_formed_spec coq_spec then (vs, s, coq_spec)
-     else if not !verbose then failwith ("The program is not well-formed. Run again with \"-v\" to see the detailed error.")
-     else exit 1 in
+     else failwith ("The program is not well-formed.") in
   let t1 = Unix.gettimeofday() in
   let _ = Random.self_init() in
   match !action with
