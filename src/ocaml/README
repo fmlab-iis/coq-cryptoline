@@ -31,8 +31,11 @@ ARGUMENTS
 * -lrat			Set the path to lrat-checker
 * -no_carry_constraint
 			Do not add carry constraints
+* -disable_rewriting	Do not apply polynomial rewriting
 * -singular		Set the path to Singular
 * -tmpdir PATH		Specify the directory for storing temporary files
+* -keep			Keep temporary files
+* -debug		Log debugging messages
 * -v			Print verbose messages
 
 
