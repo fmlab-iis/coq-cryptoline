@@ -1963,7 +1963,7 @@ Module MakeDSL
     | Iand v t a1 a2
     | Ior v t a1 a2
     | Ixor v t a1 a2 =>
-      compatible t (atyp a1 E) && (atyp a1 E == atyp a2 E) &&
+      compatible t (atyp a1 E) && compatible t (atyp a2 E) &&
       (well_typed_atomic E a1) && (well_typed_atomic E a2)
     | Icast v t a
     | Ivpc v t a => (well_typed_atomic E a)
@@ -3890,13 +3890,14 @@ Module MakeDSL
     S.conform s2 (instr_succ_typenv (Iand t t0 a a0) te) .
   Proof .
     move => Hcon /=; rewrite 2!are_defined_subset_env =>
-    /andP [Hdef0 Hdef1] /andP [/andP [/andP [Htyc Hty] Hsm0] Hsm1] Hev .
+    /andP [Hdef0 Hdef1] /andP [/andP [/andP [Hty1 Hty2] Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    rewrite /compatible in Hty1 Hty2.
       by rewrite
            size_lift
            (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
            (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
-           /asize -(eqP Hty) maxnn (eqP Htyc) .
+           /asize -(eqP Hty1) -(eqP Hty2) maxnn.
   Qed .
 
   Lemma conform_eval_succ_typenv_Ior te t t0 a a0 s1 s2 :
@@ -3907,13 +3908,14 @@ Module MakeDSL
     S.conform s2 (instr_succ_typenv (Ior t t0 a a0) te) .
   Proof .
     move => Hcon /=; rewrite 2!are_defined_subset_env =>
-    /andP [Hdef0 Hdef1] /andP [/andP [/andP [Htyc Hty] Hsm0] Hsm1] Hev .
+    /andP [Hdef0 Hdef1] /andP [/andP [/andP [Hty1 Hty2] Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    rewrite /compatible in Hty1 Hty2.
       by rewrite
            size_lift
            (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
            (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
-           /asize -(eqP Hty) maxnn (eqP Htyc) .
+           /asize -(eqP Hty1) -(eqP Hty2) maxnn .
   Qed .
 
   Lemma conform_eval_succ_typenv_Ixor te t t0 a a0 s1 s2 :
@@ -3924,13 +3926,14 @@ Module MakeDSL
     S.conform s2 (instr_succ_typenv (Ixor t t0 a a0) te) .
   Proof .
     move => Hcon /=; rewrite 2!are_defined_subset_env =>
-    /andP [Hdef0 Hdef1] /andP [/andP [/andP [Htyc Hty] Hsm0] Hsm1] Hev .
+    /andP [Hdef0 Hdef1] /andP [/andP [/andP [Hty1 Hty2] Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
+    rewrite /compatible in Hty1 Hty2.
       by rewrite
            size_lift
            (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
            (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
-           /asize -(eqP Hty) maxnn (eqP Htyc) .
+           /asize -(eqP Hty1) -(eqP Hty2) maxnn .
   Qed .
 
   Lemma conform_eval_succ_typenv_Icast te t t0 a s1 s2 :

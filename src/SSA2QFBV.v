@@ -2975,9 +2975,9 @@ Section WellFormedRange.
       | |- context f [asize ?a (SSATE.add _ (atyp ?a ?E) ?E)] =>
         rewrite asize_add_same
       | |- context f [asize _ _] => rewrite /asize
-      | H : is_true (Typ.compatible ?t _)
+      | H : is_true (Typ.compatible _ ?t)
         |- context f [Typ.sizeof_typ ?t] =>
-        rewrite (eqP H)
+        rewrite -(eqP H)
       | H : ~ (is_true (?vl == ?vh))
         |- context f [SSATE.mem ?vl (SSATE.add ?vh _ _)] =>
         rewrite (SSATE.Lemmas.mem_add_neq H)
