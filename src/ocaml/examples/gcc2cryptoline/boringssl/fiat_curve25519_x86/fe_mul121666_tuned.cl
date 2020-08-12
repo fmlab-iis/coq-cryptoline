@@ -1,3 +1,14 @@
+(* @frege
+===== Verification =====
+Prefix: OCAMLRUNPARAM=s=8G
+Options: -v -jobs 16 -fork -cadical /home/mht208/Sources/cadical/cadical-rel-1.3.0/build/cadical  -sat_cert grat  -gratchk /home/mht208/Sources/grat/gratchk/code/gratchk  -gratgen /home/mht208/Sources/grat/gratgen/gratgen  -no_carry_constraint -tmpdir .
+Command: OCAMLRUNPARAM=s=8G ./coqcryptoline.exe -v -jobs 16 -fork -cadical /home/mht208/Sources/cadical/cadical-rel-1.3.0/build/cadical  -sat_cert grat  -gratchk /home/mht208/Sources/grat/gratchk/code/gratchk  -gratgen /home/mht208/Sources/grat/gratgen/gratgen  -no_carry_constraint -tmpdir .  fe_mul121666_tuned.cl
+
+Results of checking CNF formulas:       [OK]            3.302935 seconds
+Finding polynomial coefficients         [OK]            0.161511 seconds
+Verification result:                    [OK]            4.991026 seconds
+*)
+
 proc main(uint32 a0_0, uint32 a1_0, uint32 a2_0, uint32 a3_0, uint32 a4_0, uint32 a5_0, uint32 a6_0, uint32 a7_0, uint32 a8_0, uint32 a9_0) =
 { true && and [a0_0 <=u 221459250@32, a1_0 <=u 110729625@32, a2_0 <=u 221459250@32, a3_0 <=u 110729625@32, a4_0 <=u 221459250@32, a5_0 <=u 110729625@32, a6_0 <=u 221459250@32, a7_0 <=u 110729625@32, a8_0 <=u 221459250@32, a9_0 <=u 110729625@32] }
 mov f3_0_1 a0_0;
