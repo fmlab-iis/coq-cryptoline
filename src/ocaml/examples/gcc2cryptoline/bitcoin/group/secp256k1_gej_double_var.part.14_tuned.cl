@@ -1,3 +1,15 @@
+(* @frege
+===== Verification =====
+Prefix: OCAMLRUNPARAM=s=32G
+Options: -v -jobs 16 -fork -cadical /home/mht208/Sources/cadical/cadical-rel-1.3.0/build/cadical  -sat_cert grat  -gratchk /home/mht208/Sources/grat/gratchk/code/gratchk  -gratgen /home/mht208/Sources/grat/gratgen/gratgen  -no_carry_constraint -tmpdir .
+Command: OCAMLRUNPARAM=s=32G ./coqcryptoline.exe -v -jobs 16 -fork -cadical /home/mht208/Sources/cadical/cadical-rel-1.3.0/build/cadical  -sat_cert grat  -gratchk /home/mht208/Sources/grat/gratchk/code/gratchk  -gratgen /home/mht208/Sources/grat/gratgen/gratgen  -no_carry_constraint -tmpdir .  secp256k1_gej_double_var.part.14_tuned.cl
+
+Results of checking CNF formulas:       [OK]            3491.929537 seconds
+Finding polynomial coefficients         [OK]            2.531701 seconds
+Finding polynomial coefficients         [OK]            2.745684 seconds
+Verification result:                    [OK]            4342.367418 seconds
+*)
+
 proc main(uint64 x0_0, uint64 x1_0, uint64 x2_0, uint64 x3_0, uint64 x4_0, uint64 y0_0, uint64 y1_0, uint64 y2_0, uint64 y3_0, uint64 y4_0, uint64 z0_0, uint64 z1_0, uint64 z2_0, uint64 z3_0, uint64 z4_0) =
 { true && and [x0_0 <u 72057594037927928@64, x1_0 <u 72057594037927928@64, x2_0 <u 72057594037927928@64, x3_0 <u 72057594037927928@64, x4_0 <u 4503599627370488@64, y0_0 <u 72057594037927928@64, y1_0 <u 72057594037927928@64, y2_0 <u 72057594037927928@64, y3_0 <u 72057594037927928@64, y4_0 <u 4503599627370488@64, z0_0 <u 72057594037927928@64, z1_0 <u 72057594037927928@64, z2_0 <u 72057594037927928@64, z3_0 <u 72057594037927928@64, z4_0 <u 4503599627370488@64] }
 mov a2_0_1 x0_0;

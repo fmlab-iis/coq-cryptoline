@@ -1,3 +1,13 @@
+(* @frege
+===== Verification =====
+Prefix: OCAMLRUNPARAM=s=8G
+Options: -v -jobs 16 -fork -cadical /home/mht208/Sources/cadical/cadical-rel-1.3.0/build/cadical  -sat_cert grat  -gratchk /home/mht208/Sources/grat/gratchk/code/gratchk  -gratgen /home/mht208/Sources/grat/gratgen/gratgen  -no_carry_constraint -tmpdir .
+Command: OCAMLRUNPARAM=s=8G ./coqcryptoline.exe -v -jobs 16 -fork -cadical /home/mht208/Sources/cadical/cadical-rel-1.3.0/build/cadical  -sat_cert grat  -gratchk /home/mht208/Sources/grat/gratchk/code/gratchk  -gratgen /home/mht208/Sources/grat/gratgen/gratgen  -no_carry_constraint -tmpdir .  secp256k1_scalar_negate_tuned.cl
+
+Results of checking CNF formulas:       [OK]            39.621084 seconds
+Verification result:                    [OK]            58.358856 seconds
+*)
+
 proc main(uint64 a0_0, uint64 a1_0, uint64 a2_0, uint64 a3_0) =
 { true && add (mul (uext a0_0 192) (1@256)) (add (mul (uext a1_0 192) (18446744073709551616@256)) (add (mul (uext a2_0 192) (340282366920938463463374607431768211456@256)) (mul (uext a3_0 192) (6277101735386680763835789423207666416102355444464034512896@256)))) <u add (mul (uext 13822214165235122497@64 192) (1@256)) (add (mul (uext 13451932020343611451@64 192) (18446744073709551616@256)) (add (mul (uext 18446744073709551614@64 192) (340282366920938463463374607431768211456@256)) (mul (uext 18446744073709551615@64 192) (6277101735386680763835789423207666416102355444464034512896@256)))) }
 mov a23_0_1 a0_0;

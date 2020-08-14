@@ -1,3 +1,14 @@
+(* @frege
+===== Verification =====
+Prefix: OCAMLRUNPARAM=s=8G
+Options: -v -jobs 16 -fork -cadical /home/mht208/Sources/cadical/cadical-rel-1.3.0/build/cadical  -sat_cert grat  -gratchk /home/mht208/Sources/grat/gratchk/code/gratchk  -gratgen /home/mht208/Sources/grat/gratgen/gratgen  -no_carry_constraint -tmpdir .
+Command: OCAMLRUNPARAM=s=8G ./coqcryptoline.exe -v -jobs 16 -fork -cadical /home/mht208/Sources/cadical/cadical-rel-1.3.0/build/cadical  -sat_cert grat  -gratchk /home/mht208/Sources/grat/gratchk/code/gratchk  -gratgen /home/mht208/Sources/grat/gratgen/gratgen  -no_carry_constraint -tmpdir .  secp256k1_scalar_sqr_tuned.cl
+
+Results of checking CNF formulas:       [OK]            187.611308 seconds
+Finding polynomial coefficients         [OK]            0.430636 seconds
+Verification result:                    [OK]            444.430971 seconds
+*)
+
 proc main(uint64 a0_0, uint64 a1_0, uint64 a2_0, uint64 a3_0) =
 { true && true }
 mov a96_0_1 a0_0;
