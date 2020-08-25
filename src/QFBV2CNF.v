@@ -143,7 +143,7 @@ Section QFBV2CNF.
     case: e => //=.
     - move=> v Hmem Hco. apply/eqP. exact: (Hco v Hmem).
     - move=> op e Hwf Hco. exact: (wf_conform_exp _ _ _ Hwf Hco).
-    - move=> op e1 e2 /andP [/andP [Hwf1 Hwf2] Hs] Hco.
+    - move=> op e1 e2 /andP [/andP [/andP [Hwf1 Hwf2] Hw] Hs] Hco.
       by rewrite (wf_conform_exp _ _ _ Hwf1 Hco) (wf_conform_exp _ _ _ Hwf2 Hco).
     - move=> c e1 e2 /andP [/andP [/andP [Hwfb Hwf1] Hwf2] Hs] Hco.
         by rewrite (wf_conform_bexp _ _ _ Hwfb Hco)

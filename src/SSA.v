@@ -4558,48 +4558,38 @@ Section MakeSSA.
     SSA.well_typed_rexp (ssa_typenv m te) (ssa_rexp m e).
   Proof.
     split; elim: e m te; intros; rewrite /=.
-    - done.
+    - rewrite /= in H. rewrite -ssa_typenv_size. assumption.
     - done.
     - rewrite /= in H0.
-      move/andP: H0 => [H0_1 H0_2].
-      apply/andP; split.
+      move/andP: H0 => [/andP [Hw H0_1] H0_2].
+      repeat splitb; first assumption.
       + by apply H.
       + by rewrite -ssa_typenv_size_rexp.
-    - rewrite /= in H1.
-      split_andb_hyps.
-      split_andb_goal.
+    - rewrite /= in H1. split_andb_hyps. split_andb_goal; first assumption.
       + by apply H.
       + by rewrite -ssa_typenv_size_rexp.
       + by apply H0.
       + by rewrite -ssa_typenv_size_rexp.
-    - rewrite /= in H0.
-      split_andb_hyps; split_andb_goal.
+    - rewrite /= in H0. split_andb_hyps; split_andb_goal; first assumption.
       + by apply H.
       + by rewrite -ssa_typenv_size_rexp.
-    - rewrite /= in H0.
-      split_andb_hyps; split_andb_goal.
+    - rewrite /= in H0. split_andb_hyps; split_andb_goal; first assumption.
       + by apply H.
       + by rewrite -ssa_typenv_size_rexp.
+    - rewrite /= in H. rewrite -ssa_typenv_size in H. assumption.
     - done.
-    - done.
-    - rewrite /= in H0.
-      move/andP: H0 => [H0_1 H0_2].
-      apply/andP; split.
+    - rewrite /= in H0. split_andb_hyps; split_andb_goal; first assumption.
       + by apply (H m).
       + by rewrite (ssa_typenv_size_rexp m).
-    - rewrite /= in H1.
-      split_andb_hyps.
-      split_andb_goal.
+    - rewrite /= in H1. split_andb_hyps; split_andb_goal; first assumption.
       + by apply (H m).
       + by rewrite (ssa_typenv_size_rexp m).
       + by apply (H0 m).
       + by rewrite (ssa_typenv_size_rexp m).
-    - rewrite /= in H0.
-      split_andb_hyps; split_andb_goal.
+    - rewrite /= in H0. split_andb_hyps; split_andb_goal; first assumption.
       + by apply (H m).
       + by rewrite (ssa_typenv_size_rexp m).
-    - rewrite /= in H0.
-      split_andb_hyps; split_andb_goal.
+    - rewrite /= in H0. split_andb_hyps; split_andb_goal; first assumption.
       + by apply (H m).
       + by rewrite (ssa_typenv_size_rexp m).
   Qed.
@@ -4608,7 +4598,8 @@ Section MakeSSA.
     DSL.well_typed_ebexp te e <->
     SSA.well_typed_ebexp (ssa_typenv m te) (ssa_ebexp m e).
   Proof.
-    split; elim: e m te; intros; rewrite /=; rewrite /= in H; split_andb_hyps; split_andb_goal.
+    split; elim: e m te; intros; rewrite /=; rewrite /= in H;
+      split_andb_hyps; split_andb_goal.
     - done.
     - by apply ssa_well_typed_eexp.
     - by apply ssa_well_typed_eexp.
@@ -4631,8 +4622,8 @@ Section MakeSSA.
     DSL.well_typed_rbexp te e <->
     SSA.well_typed_rbexp (ssa_typenv m te) (ssa_rbexp m e).
   Proof.
-    split; elim: e m te; intros; rewrite /=; rewrite /= in H; split_andb_hyps; split_andb_goal.
-    - done.
+    split; elim: e m te; intros; rewrite /=; rewrite /= in H;
+      split_andb_hyps; split_andb_goal => //=.
     - by apply ssa_well_typed_rexp.
     - by rewrite -ssa_typenv_size_rexp.
     - by apply ssa_well_typed_rexp.
@@ -4646,7 +4637,6 @@ Section MakeSSA.
     - rewrite /= in H1; split_andb_hyps; by apply H0.
     - rewrite /= in H1; split_andb_hyps; by apply H.
     - rewrite /= in H1; split_andb_hyps; by apply H0.
-    - done.
     - by apply (ssa_well_typed_rexp m).
     - by rewrite (ssa_typenv_size_rexp m).
     - by apply (ssa_well_typed_rexp m).

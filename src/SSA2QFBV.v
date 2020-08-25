@@ -936,16 +936,16 @@ Lemma size_exp_rexp E e :
   QFBV.exp_size (exp_rexp e) E = size_of_rexp e E.
 Proof.
   elim: e => //=.
-  - move=> n bs /andP /= [Hdef Hs]. apply/eqP. exact: Hs.
-  - move=> w op e IH Hwf. move: (well_formed_rexp_unop Hwf) => {Hwf} [Hwfe Hse].
+  - move=> n bs /andP /= [Hdef [/andP [Hw Hs]]]. apply/eqP. exact: Hs.
+  - move=> w op e IH Hwf. move: (well_formed_rexp_unop Hwf) => {Hwf} [Hwfe [Hw Hse]].
     move: (IH Hwfe) => {IH} IH. case: op => /=; rewrite IH; exact: Hse.
   - move=> w op e1 IH1 e2 IH2 Hwf.
-    move: (well_formed_rexp_binop Hwf) => {Hwf} [Hwf1 [Hwf2 [Hs1 Hs2]]].
+    move: (well_formed_rexp_binop Hwf) => {Hwf} [Hwf1 [Hwf2 [Hw [Hs1 Hs2]]]].
     move: (IH1 Hwf1) (IH2 Hwf2) => {IH1 IH2} IH1 IH2.
     case: op => /=; rewrite ?IH1 ?IH2 ?Hs1 ?Hs2 ?minnn ?maxnn; reflexivity.
-  - move=> w e IH n Hwf. move: (well_formed_rexp_uext Hwf) => {Hwf} [Hwfe Hse].
+  - move=> w e IH n Hwf. move: (well_formed_rexp_uext Hwf) => {Hwf} [Hwfe [Hw Hse]].
     move: (IH Hwfe) => {IH} IH. rewrite IH Hse. reflexivity.
-  - move=> w e IH n Hwf. move: (well_formed_rexp_sext Hwf) => {Hwf} [Hwfe Hse].
+  - move=> w e IH n Hwf. move: (well_formed_rexp_sext Hwf) => {Hwf} [Hwfe [Hw Hse]].
     move: (IH Hwfe) => {IH} IH. rewrite IH Hse. reflexivity.
 Qed.
 
@@ -2875,16 +2875,17 @@ Section WellFormedRange.
     elim: e => //=.
     - move=> v Hwf. unfold_well_formed. rewrite are_defined_singleton in Hwf0.
       move/memdefP: Hwf0. by apply.
-    - move=> w op e IH Hwf. move: (well_formed_rexp_unop Hwf) => {Hwf} [Hwf Hs].
+    - move=> w op e IH Hwf. move: (well_formed_rexp_unop Hwf) => {Hwf} [Hwf [Hw Hs]].
       move: (IH Hwf) => {IH Hwf} Hwf. case: op => /=; assumption.
     - move=> w op e1 IH1 e2 IH2 Hwf.
-      move: (well_formed_rexp_binop Hwf) => {Hwf} [Hwf1 [Hwf2 [Hs1 Hs2]]].
+      move: (well_formed_rexp_binop Hwf) => {Hwf} [Hwf1 [Hwf2 [Hw [Hs1 Hs2]]]].
       move: (IH1 Hwf1) (IH2 Hwf2) => {IH1 IH2} Hqwf1 Hqwf2.
       case: op => /=; rewrite ?Hqwf1 ?Hqwf2 ?(size_exp_rexp Hwf1)
-                      ?(size_exp_rexp Hwf2) ?Hs1 ?Hs2 eqxx; by trivial.
-    - move=> w e IH n Hwf. move: (well_formed_rexp_uext Hwf) => {Hwf} [Hwf Hs].
+                      ?(size_exp_rexp Hwf2) ?Hs1 ?Hs2 eqxx !andbT !andTb;
+                    by trivial.
+    - move=> w e IH n Hwf. move: (well_formed_rexp_uext Hwf) => {Hwf} [Hwf [Hw Hs]].
       exact: (IH Hwf).
-    - move=> w e IH n Hwf. move: (well_formed_rexp_sext Hwf) => {Hwf} [Hwf Hs].
+    - move=> w e IH n Hwf. move: (well_formed_rexp_sext Hwf) => {Hwf} [Hwf [Hw Hs]].
       exact: (IH Hwf).
   Qed.
 
@@ -2892,12 +2893,13 @@ Section WellFormedRange.
     well_formed_rbexp E e -> QFBV.well_formed_bexp (bexp_rbexp e) E.
   Proof.
     elim: e => //=.
-    - move=> w e1 e2 Hwf. move: (well_formed_rbexp_eq Hwf) => [Hwf1 [Hwf2 [Hs1 Hs2]]].
+    - move=> w e1 e2 Hwf. move: (well_formed_rbexp_eq Hwf) =>
+                          [Hwf1 [Hwf2 [Hw [Hs1 Hs2]]]].
       rewrite (well_formed_exp_rexp Hwf1) (well_formed_exp_rexp Hwf2).
       rewrite (size_exp_rexp Hwf1) Hs1 (size_exp_rexp Hwf2) Hs2.
       rewrite eqxx. exact: is_true_true.
     - move=> w op e1 e2 Hwf.
-      move: (well_formed_rbexp_cmp Hwf) => {Hwf} [Hwf1 [Hwf2 [Hs1 Hs2]]].
+      move: (well_formed_rbexp_cmp Hwf) => {Hwf} [Hwf1 [Hwf2 [Hw [Hs1 Hs2]]]].
       (case: op => /=);
         rewrite (well_formed_exp_rexp Hwf1) (well_formed_exp_rexp Hwf2)
                 (size_exp_rexp Hwf1) Hs1 (size_exp_rexp Hwf2) Hs2 eqxx;
@@ -2959,6 +2961,11 @@ Section WellFormedRange.
         Hsub : is_true (SSAVS.subset (vars_atomic ?a) (vars_env ?E)),
         H : context f [atyp ?a (SSATE.add ?v ?t _)] |- _ =>
         rewrite (atyp_add_not_mem _ _ (SSAVS.Lemmas.not_mem_subset Hmem Hsub)) in H
+      | Hwsa : is_true (well_sized_atomic ?E ?a) |-
+        context f [0 < Typ.sizeof_typ (atyp ?a ?E)] =>
+        rewrite (well_sized_atomic_gt0 Hwsa) /=
+      | |- context f [0 < _ + _] =>
+        rewrite addn_gt0
       (**)
       | |- context f [size (from_nat _ _)] => rewrite size_from_nat
       | |- context f [SSATE.mem ?v (SSATE.add ?v _ _)] =>
@@ -3676,6 +3683,11 @@ Section WellFormedBexpInstrSafe.
         rewrite (eqP H) /=
       | |- context f [minn ?n ?n] => rewrite (minnn n)
       | |- context f [?n + (_ - ?n)] => rewrite subnKC
+      | H : is_true (well_sized_atomic ?E ?a) |-
+        context f [0 < Typ.sizeof_typ (atyp ?a ?E)] =>
+        rewrite (well_sized_atomic_gt0 H) /=
+      | |- context f [0 < _ + _] =>
+        rewrite addn_gt0
       | H : is_true (well_sized_atomic ?E ?a)
         |- is_true (0 < Typ.sizeof_typ (atyp ?a ?E)) =>
         exact: (well_sized_atomic_gt0 H)
