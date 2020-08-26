@@ -81,7 +81,7 @@ Section Verification.
 
   Definition verify_zspec (o : options) (zs : ZSSA.zspec) : bool :=
     if rewrite_assignments o then
-      verify_pspecs (pspecs_of_zspec_simplified zs)
+      verify_pspecs (pspecs_of_zspec_simplified o zs)
     else
       verify_pspecs (pspecs_of_zspec zs).
 
@@ -101,7 +101,7 @@ Section Verification.
     verify_zspec o zs -> ZSSA.valid_zspec zs.
   Proof.
     rewrite /verify_zspec. case: (rewrite_assignments o) => Hv.
-    - apply: pspecs_of_zspec_simplified_sound => ps Hin.
+    - apply: (@pspecs_of_zspec_simplified_sound o) => ps Hin.
       exact: (verify_pspecs_in Hv Hin).
     - apply: pspecs_of_zspec_sound => ps Hin.
       exact: (verify_pspecs_in Hv Hin).

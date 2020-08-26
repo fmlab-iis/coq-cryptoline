@@ -9,6 +9,8 @@ type action = Verify | Parse | PrintSSA | PrintESpec | PrintRSpec
 
 let action = ref Verify
 
+let vars_cache_in_rewriting = ref true
+
 let args = [
     ("-autocast", Set Options.Std.auto_cast, " Automatically cast variables when parsing untyped programs\n");
     ("-autovpc", Unit (fun () -> Options.Std.auto_cast := true; Options.Std.auto_cast_preserve_value := true), "  Automatically cast variables when parsing untyped programs\n");
@@ -22,6 +24,7 @@ let args = [
     ("-disable_epost", Clear verify_epost, "\n\t     Disable verification of algebraic postconditions (including cuts)\n");
     ("-disable_rpost", Clear verify_rpost, "\n\t     Disable verification of range postconditions (including cuts)\n");
     ("-disable_safety", Clear verify_program_safety, "\n\t     Disable verification of program safety\n");
+    ("-disable_vars_cache_in_rewriting", Clear vars_cache_in_rewriting, "\n\t     Disable variables cache in rewriting\n");
     ("-jobs", Int (fun j -> jobs := j),
      "N    Set number of jobs (default = 4)\n");
     ("-p", Unit (fun () -> action := Parse), "\t     Print the parsed specification\n");
@@ -108,7 +111,9 @@ let anon file =
   | Verify ->
       let (_vs, _s, coq_spec) = parse_and_check file in
 	  (* options : bool, true to add carry constraints *)
-	  let o = { add_carry_constraints = !carry_constraint; rewrite_assignments = !apply_rewriting }  in
+	  let o = { add_carry_constraints = !carry_constraint;
+                rewrite_assignments = !apply_rewriting;
+                vars_cache_in_rewrite_assignments = !vars_cache_in_rewriting }  in
 	  let res = Extraction.Verify.verify_dsl o coq_spec in
 	  (*
       let coq_ssa_spec = Extraction.SSA.ssa_spec coq_spec in
