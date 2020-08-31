@@ -64,3 +64,18 @@ $ OCAMLRUNPARAM=s=2G \
         ./_build/default/coqcryptoline.exe -v -jobs 16 \
         -sat_solver cadical -sat_cert grat \
         -no_carry_constraint -tmpdir .
+
+
+EXTERNAL TOOLS
+--------------
+
+* SAT solvers
+  * cadical: http://fmv.jku.at/cadical/
+  * cryptominisat: https://github.com/msoos/cryptominisat
+  * glucose: https://www.labri.fr/perso/lsimon/glucose/
+* SAT SAT certifier
+  * drat: http://www.cs.utexas.edu/~marijn/drat-trim/
+  * grat: https://www21.in.tum.de/~lammich/grat/
+  * lrat: https://github.com/acl2/acl2/tree/master/books/projects/sat/lrat/
+* Algebraic system
+  * singular: https://www.singular.uni-kl.de
