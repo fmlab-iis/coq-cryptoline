@@ -1,3 +1,15 @@
+(* @frege
+===== Verification =====
+Prefix: OCAMLRUNPARAM=s=32G
+Options: -v -jobs 16 -fork -cadical /home/mht208/Sources/cadical/cadical-rel-1.3.0/build/cadical  -sat_cert grat  -gratchk /home/mht208/Sources/grat/gratchk/code/gratchk  -gratgen /home/mht208/Sources/grat/gratgen/gratgen  -no_carry_constraint -tmpdir .
+Command: OCAMLRUNPARAM=s=32G ./coqcryptoline.exe -v -jobs 16 -fork -cadical /home/mht208/Sources/cadical/cadical-rel-1.3.0/build/cadical  -sat_cert grat  -gratchk /home/mht208/Sources/grat/gratchk/code/gratchk  -gratgen /home/mht208/Sources/grat/gratgen/gratgen  -no_carry_constraint -tmpdir .  Hacl_Curve25519_51_point_double_tuned.cl
+
+Results of checking CNF formulas:       [OK]            2420.238862 seconds
+Finding polynomial coefficients         [OK]            1.625472 seconds
+Finding polynomial coefficients         [OK]            1.639677 seconds
+Verification result:                    [OK]            2839.957304 seconds
+*)
+
 proc main(uint64 X2_0_0, uint64 X2_1_0, uint64 X2_2_0, uint64 X2_3_0, uint64 X2_4_0, uint64 Z2_0_0, uint64 Z2_1_0, uint64 Z2_2_0, uint64 Z2_3_0, uint64 Z2_4_0) =
 { true && and [X2_0_0 <=u 2251799813685247@64, X2_1_0 <=u 2251799813693439@64, X2_2_0 <=u 2251799813685247@64, X2_3_0 <=u 2251799813685247@64, X2_4_0 <=u 2251799813685247@64, Z2_0_0 <=u 2251799813685247@64, Z2_1_0 <=u 2251799813693439@64, Z2_2_0 <=u 2251799813685247@64, Z2_3_0 <=u 2251799813685247@64, Z2_4_0 <=u 2251799813685247@64] }
 mov mem0_0_1 X2_0_0;
