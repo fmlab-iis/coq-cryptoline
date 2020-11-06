@@ -65,7 +65,7 @@ Lemma addB_nat p1 p2 :
   addB p1 p2 =
   from_nat (size (addB p1 p2)) (to_nat p1 + to_nat p2).
 Proof.
-  by rewrite /addB adcB_nat size_from_nat.
+  by rewrite /addB to_nat_adcB' size_from_nat.
 Qed.
 
 Lemma to_nat_zext_bool n bs :

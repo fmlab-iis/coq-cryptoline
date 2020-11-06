@@ -2129,13 +2129,14 @@ Section SplitSpec.
   Qed.
 
   Lemma bv2z_Imul t bs1 bs2 :
+    0 < size bs1 ->
     size bs1 = sizeof_typ t -> size bs2 = sizeof_typ t ->
     mulB_safe t bs1 bs2 ->
     bv2z t (bs1 *# bs2)%bits = (bv2z t bs1 * bv2z t bs2)%Z.
   Proof.
     rewrite /mulB_safe /umulB_safe /smulB_safe. case: t => /=.
-    - move=> n H1 H2. rewrite -H2 in H1. exact: bv2z_mul_unsigned.
-    - move=> n H1 H2. rewrite -H2 in H1. exact: bv2z_mul_signed.
+    - move=> n Hsz H1 H2. rewrite -H2 in H1. exact: bv2z_mul_unsigned.
+    - move=> n Hsz H1 H2. rewrite -H2 in H1. exact: bv2z_mul_signed.
   Qed.
 
   Lemma bv2z_Imull_unsigned t bs1 bs2 :
@@ -2179,12 +2180,13 @@ Section SplitSpec.
 
   Lemma bv2z_Imulj_signed t bs1 bs2 :
     is_signed t ->
+    0 < size bs1 ->
     size bs1 = sizeof_typ t ->
     size bs2 = sizeof_typ t ->
     bv2z (double_typ t) (sext (size bs1) bs1 *# sext (size bs1) bs2)%bits =
     (bv2z t bs1 * bv2z t bs2)%Z.
   Proof.
-    case: t => //=. move=> n _ H1 H2. rewrite -H2 in H1. exact: bv2z_mulj_signed.
+    case: t => //=. move=> n _ Hsz H1 H2. rewrite -H2 in H1. exact: bv2z_mulj_signed.
   Qed.
 
   Lemma bv2z_Isplit_unsigned t bs n :
@@ -2678,7 +2680,7 @@ Section SplitSpec.
         mytac. exact: (bv2z_Isbbs_signed _ _ _ _ Hsa).
     (* Imul *)
     - move=> v a1 a2 Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
-      split; last by trivial. mytac. exact: (bv2z_Imul _ _ Hsa).
+      split; last by trivial. mytac. exact: (bv2z_Imul _ _ _ Hsa).
     (* Imull *)
     - move=> vh vl a1 a2 Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst. rewrite /=.
       split; last by trivial. mytac.
