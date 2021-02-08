@@ -1,6 +1,8 @@
 .coqdeps.d
 *.glob
 *.vo
+*.vok
+*.vos
 *.aux
 .merlin
 src/ocaml/extraction/*

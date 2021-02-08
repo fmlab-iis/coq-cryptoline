@@ -1165,8 +1165,8 @@ Section MakeSSA.
       move: (SSA.TELemmas.find_eq_mem_eq Heq2) => Heq3.
       rewrite Heq3.
       rewrite SSA.TEKS.MLemmas.mem_add_eq.
-      reflexivity.
-        by rewrite (eqP Hyx).
+      + reflexivity.
+      + rewrite (eqP Hyx). reflexivity.
     - rewrite Hmem.
       move/negP: Hyx => Hyx.
       rewrite (DSL.TELemmas.mem_add_neq Hyx).

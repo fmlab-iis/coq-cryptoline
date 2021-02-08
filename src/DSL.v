@@ -4225,7 +4225,7 @@ Module MakeDSL
       move: (bvs_eqi_eval_rbexp Hdefr Heqi) => Hr. tauto.
     Qed.
 
-    Ltac mytac :=
+    Ltac mytac ::=
       repeat
         match goal with
         | H : is_true (_ && _) |- _ =>

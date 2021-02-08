@@ -2147,7 +2147,7 @@ Proof.
   move=> /= v t Hwf Hco Hco' H. apply: (@EInondet _ _ _ _ _ (SSAStore.acc v s)).
   - move: (Hco' v) => HH. rewrite -HH.
     + rewrite (SSATE.vsize_add_eq (eqxx v)). reflexivity.
-    + exact: SSATE.Lemmas.mem_add_eq.
+    + apply: SSATE.Lemmas.mem_add_eq. reflexivity.
   - exact: ssastore_reupd.
 Qed.
 
@@ -3655,7 +3655,7 @@ Qed.
 
 Section WellFormedBexpInstrSafe.
 
-  Ltac norm_tac :=
+  Ltac norm_tac ::=
     unfold_well_formed;
     repeat
       match goal with
