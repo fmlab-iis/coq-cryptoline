@@ -1468,7 +1468,7 @@ Proof.
   well_defined_to_vs_subset. unfold_well_typed.
   eval_exp_exp_atomic_to_pred_state.
   inversion_clear Hinst. qfbv_store_acc.
-  rewrite (to_nat_from_nat_very_small (ltnW Hty0)).
+  rewrite shlBB_shlB. rewrite (to_nat_from_nat_very_small (ltnW Hty0)).
   exact: eqxx.
 Qed.
 
@@ -1489,7 +1489,7 @@ Proof.
   well_defined_to_vs_subset. unfold_well_typed.
   repeat eval_exp_exp_atomic_to_pred_state.
   inversion_clear Hinst. repeat qfbv_store_acc.
-  rewrite (to_nat_from_nat_very_small Hty1).
+  rewrite shlBB_shlB shrBB_shrB. rewrite (to_nat_from_nat_very_small Hty1).
   intro_same_size a a0. to_size_atyp a. to_size_atyp a0. move=> Hs.
   move: (leq0n (asize a E)) => Hs'.
   move: (leq_add Hs' Hty1) => Hadd. rewrite add0n in Hadd.
@@ -1824,6 +1824,7 @@ Proof.
   move => /andP [Hdef Hty] Hcon Hun Hinst /=.
   well_defined_to_vs_subset. unfold_well_typed.
   rewrite eval_bexp_if /=. repeat eval_exp_exp_atomic_to_pred_state.
+  rewrite shlBB_shlB !shrBB_shrB sarBB_sarB.
   rewrite (to_nat_from_nat_very_small (ltnW Hty1)).
   move: (leq_subr n (asize a E)) => Hs.
   rewrite (to_nat_from_nat_very_small Hs).
@@ -1977,8 +1978,8 @@ Qed.
 Lemma ssastore_reupd v s : SSAStore.Upd v (SSAStore.acc v s) s s.
 Proof.
   move=> x. case Hxv: (x == v).
-  - rewrite (SSAStore.S.acc_upd_eq Hxv). rewrite (eqP Hxv). reflexivity.
-  - move/idP/negP: Hxv => Hxv. rewrite (SSAStore.S.acc_upd_neq Hxv). reflexivity.
+  - rewrite (SSAStore.acc_upd_eq Hxv). rewrite (eqP Hxv). reflexivity.
+  - move/idP/negP: Hxv => Hxv. rewrite (SSAStore.acc_upd_neq Hxv). reflexivity.
 Qed.
 
 Lemma ssastore_reupd_imp v bs s : bs = SSAStore.acc v s -> SSAStore.Upd v bs s s.
@@ -1988,11 +1989,11 @@ Lemma ssastore_reupd2 vl vh s :
   SSAStore.Upd2 vl (SSAStore.acc vl s) vh (SSAStore.acc vh s) s s.
 Proof.
   move=> x. case Hxh: (x == vh).
-  - rewrite (SSAStore.S.acc_upd_eq Hxh). rewrite (eqP Hxh). reflexivity.
-  - move/idP/negP: Hxh => Hxh. rewrite (SSAStore.S.acc_upd_neq Hxh).
+  - rewrite (SSAStore.acc_upd_eq Hxh). rewrite (eqP Hxh). reflexivity.
+  - move/idP/negP: Hxh => Hxh. rewrite (SSAStore.acc_upd_neq Hxh).
     case Hxl: (x == vl).
-    + rewrite (SSAStore.S.acc_upd_eq Hxl). rewrite (eqP Hxl). reflexivity.
-    + move/idP/negP: Hxl => Hxl. rewrite (SSAStore.S.acc_upd_neq Hxl).
+    + rewrite (SSAStore.acc_upd_eq Hxl). rewrite (eqP Hxl). reflexivity.
+    + move/idP/negP: Hxl => Hxl. rewrite (SSAStore.acc_upd_neq Hxl).
       reflexivity.
 Qed.
 
@@ -2102,6 +2103,9 @@ Ltac norm_tac :=
              | |- context f [eval_atomic c s] => rewrite Hb
              end;
       move/eqP: Htyp=> Htyp
+    | H : context [shlBB _ _] |- _ => rewrite shlBB_shlB in H
+    | H : context [shrBB _ _] |- _ => rewrite shrBB_shrB in H
+    | H : context [sarBB _ _] |- _ => rewrite sarBB_sarB in H
     end; intro_atomic_size.
 
 Ltac solve_tac :=

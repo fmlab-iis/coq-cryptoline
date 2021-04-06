@@ -1,7 +1,7 @@
 
 From Coq Require Import List ZArith.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
-From ssrlib Require Import Var Types SsrOrder Nats ZAriths Store Tactics.
+From ssrlib Require Import Var Types SsrOrder Nats ZAriths Store Tactics FMaps.
 From BitBlasting Require Import State Typ TypEnv.
 From Cryptoline Require Import Options DSL SSA ZSSA.
 From nbits Require Import NBits.
@@ -12,6 +12,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
+Module M2ZSSA := Map2Map SSAStore.M ZSSAStore.M.
 
 
 (* Tactics *)
@@ -1319,17 +1320,67 @@ Section SplitSpec.
 
   (* Convert bit-vector stores to integer stores. *)
 
-  Definition bv2z_store (E : SSATE.env) (bs : SSAStore.t) : ZSSAStore.t :=
-    fun v => acc2z E v bs.
+  Definition zssa_store_key (v : ssavar) : option ssavar := Some v.
 
-  Lemma acc_bv2z_store E v bs : ZSSAStore.acc v (bv2z_store E bs) = acc2z E v bs.
-  Proof. reflexivity. Qed.
+  Definition zssa_store_value (E : SSATE.env) (v : ssavar) (bs : bits) : Z :=
+    bv2z (SSATE.vtyp v E) bs.
+
+  Lemma zssa_store_key_eq_none :
+    forall k1 k2 : ssavar, k1 == k2 -> zssa_store_key k1 = None -> zssa_store_key k2 = None.
+  Proof. move=> k1 k2 Heqk Hn. rewrite -(eqP Heqk). assumption. Qed.
+
+  Lemma zssa_store_key_eq_some :
+    forall (k1 k2 : ssavar) (fk1 : ssavar),
+      k1 == k2 -> zssa_store_key k1 = Some fk1 ->
+      exists fk2 : ssavar, zssa_store_key k2 = Some fk2 /\ fk1 == fk2.
+  Proof. move=> k1 k2 fk1 Heqk Hfk1. exists fk1. rewrite -(eqP Heqk). done. Qed.
+
+  Lemma zssa_store_key_some_inj k1 k2 v :
+    zssa_store_key k1 = Some v -> zssa_store_key k2 = Some v -> k1 = k2.
+  Proof.
+    rewrite /zssa_store_key. case=> ?; case=> ?; subst. reflexivity.
+  Qed.
+
+  Lemma zssa_store_key_neq_some :
+    forall (k1 k2 : ssavar) (fk1 fk2 : ssavar),
+      ~ k1 == k2 -> zssa_store_key k1 = Some fk1 -> zssa_store_key k2 = Some fk2 ->
+      ~ fk1 == fk2.
+  Proof.
+    move=> k1 k2 fk1 fk2 Hneqk Hfk1 Hfk2 Heqk. rewrite (eqP Heqk) in Hfk1.
+    apply: Hneqk. apply/eqP. exact: (zssa_store_key_some_inj Hfk1 Hfk2).
+  Qed.
+
+  Lemma zssa_store_value_eq_key E :
+    forall (k1 k2 : ssavar) (v : bits),
+      k1 == k2 -> zssa_store_value E k1 v = zssa_store_value E k2 v.
+  Proof. move=> ? ? ? /eqP H; subst. reflexivity. Qed.
+
+  Definition bv2z_store (E : SSATE.env) (bs : SSAStore.t) : ZSSAStore.t :=
+    M2ZSSA.map2map zssa_store_key (zssa_store_value E) bs.
+
+  Lemma acc_bv2z_store E v s : ZSSAStore.acc v (bv2z_store E s) = acc2z E v s.
+  Proof.
+    rewrite /bv2z_store /acc2z /ZSSAStore.acc /SSAStore.acc.
+    have Hfk: zssa_store_key v = Some v by reflexivity.
+    dcase (SSAStore.M.find v s); case.
+    - move=> bs Hf. rewrite (M2ZSSA.map2map_find_some zssa_store_key_eq_none
+                                                      zssa_store_key_eq_some
+                                                      zssa_store_key_neq_some
+                                                      (zssa_store_value_eq_key E) Hfk Hf).
+      reflexivity.
+    - move=> Hf. rewrite (M2ZSSA.map2map_find_none zssa_store_key_eq_none
+                                                   zssa_store_key_eq_some
+                                                   zssa_store_key_neq_some
+                                                   (zssa_store_value_eq_key E) Hfk Hf).
+      rewrite /bv2z /BitsValueType.default /=. rewrite to_Z_nil.
+      case: (SSATE.vtyp v E); reflexivity.
+  Qed.
 
   Lemma bv2z_store_eq E bs : bvz_eq E bs (bv2z_store E bs).
-  Proof. move=> x; reflexivity. Qed.
+  Proof. move=> x. symmetry. exact: acc_bv2z_store. Qed.
 
   Lemma bv2z_store_eqi E bs : bvz_eqi E bs (bv2z_store E bs).
-  Proof. move=> x _. reflexivity. Qed.
+  Proof. move=> x _. symmetry. exact: acc_bv2z_store. Qed.
 
   Lemma bvs_bvz_eqi E bs1 bs2 zs :
     bvs_eqi E bs1 bs2 -> bvz_eqi E bs1 zs -> bvz_eqi E bs2 zs.

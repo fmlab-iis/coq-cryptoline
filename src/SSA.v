@@ -14,6 +14,10 @@ Module SSA := MakeDSL SSAVarOrder SSAVS SSAVM SSATE SSAStore.
 
 Module M2 := Map2 VS SSAVS.
 
+Module M2SSA := Map2Map Store.M SSAStore.M.
+
+Module MdeSSA := Map2Map SSAStore.M Store.M.
+
 Section MakeSSA.
 
   Open Scope N_scope.
@@ -897,28 +901,67 @@ Section MakeSSA.
 
   (** Convert a DSL state to an SSA state. *)
 
+  Definition ssa_store_key (m : vmap) (v : var) : option ssavar := Some (ssa_var m v).
+
+  Definition ssa_store_value (v : var) (bs : bits) : bits := bs.
+
+  Lemma ssa_store_key_eq_none (m : vmap) :
+    forall k1 k2 : N, k1 == k2 -> ssa_store_key m k1 = None -> ssa_store_key m k2 = None.
+  Proof. move=> k1 k2 Heqk Hn. rewrite -(eqP Heqk). assumption. Qed.
+
+  Lemma ssa_store_key_eq_some (m : vmap) :
+    forall (k1 k2 : N) (fk1 : N * N),
+      k1 == k2 -> ssa_store_key m k1 = Some fk1 ->
+      exists fk2 : N * N, ssa_store_key m k2 = Some fk2 /\ fk1 == fk2.
+  Proof. move=> k1 k2 fk1 Heqk Hfk1. exists fk1. rewrite -(eqP Heqk). done. Qed.
+
+  Lemma ssa_store_key_some_inj (m : vmap) k1 k2 v :
+    ssa_store_key m k1 = Some v -> ssa_store_key m k2 = Some v -> k1 = k2.
+  Proof.
+    rewrite /ssa_store_key. case: v => [v i]. case=> ? ?; subst.
+    case=> ? ?; subst. reflexivity.
+  Qed.
+
+  Lemma ssa_store_key_neq_some (m : vmap) :
+    forall (k1 k2 : N) (fk1 fk2 : N * N),
+      ~ k1 == k2 -> ssa_store_key m k1 = Some fk1 -> ssa_store_key m k2 = Some fk2 ->
+      ~ fk1 == fk2.
+  Proof.
+    move=> k1 k2 fk1 fk2 Hneqk Hfk1 Hfk2 Heqk. rewrite (eqP Heqk) in Hfk1.
+    apply: Hneqk. apply/eqP. exact: (ssa_store_key_some_inj Hfk1 Hfk2).
+  Qed.
+
+  Lemma ssa_store_value_eq_key :
+    forall (k1 k2 : var) (v : bits),
+      k1 == k2 -> ssa_store_value k1 v = ssa_store_value k2 v.
+  Proof. move=> ? ? ? /eqP H; subst. reflexivity. Qed.
+
   Definition ssa_state (m : vmap) (s : Store.t) : SSAStore.t :=
-    fun v =>
-      if (sidx v) == get_index (svar v) m
-      then Store.acc (svar v) s
-      else Store.acc (svar v) Store.empty.
+    M2SSA.map2map (ssa_store_key m) ssa_store_value s.
 
   Lemma acc_ssa_state_eq m s v i:
     i == get_index v m ->
     SSAStore.acc (v, i) (ssa_state m s) = Store.acc v s.
   Proof.
-    move=> Heq.
-    rewrite /ssa_state /SSAStore.acc /SSAStore.S.acc /=.
-    rewrite (eqP Heq) eqxx.
-    reflexivity.
+    move/eqP=> -> {i}. have Hfk: (ssa_store_key m v = Some (v, get_index v m)) by reflexivity.
+    rewrite /ssa_state /SSAStore.acc /Store.acc. case Hf: (Store.M.find v s).
+    Check M2SSA.map2map_find_some.
+    - rewrite (M2SSA.map2map_find_some (@ssa_store_key_eq_none m)
+                                       (@ssa_store_key_eq_some m)
+                                       (@ssa_store_key_neq_some m)
+                                       ssa_store_value_eq_key Hfk Hf).
+      reflexivity.
+    - rewrite (M2SSA.map2map_find_none (@ssa_store_key_eq_none m)
+                                       (@ssa_store_key_eq_some m)
+                                       (@ssa_store_key_neq_some m)
+                                       ssa_store_value_eq_key Hfk Hf).
+      reflexivity.
   Qed.
 
   Lemma ssa_state_equiv m s:
     state_equiv m s (ssa_state m s).
   Proof.
-    move=> x.
-    rewrite (acc_ssa_state_eq _ (eqxx (get_index x m))).
-    reflexivity.
+    move=> x. rewrite (acc_ssa_state_eq _ (eqxx (get_index x m))). reflexivity.
   Qed.
 
   (* Type Environment Equivalence *)
@@ -2388,77 +2431,121 @@ Section MakeSSA.
 
   (** Convert an SSA state to a DSL state. *)
 
+  Definition dessa_store_key (m : vmap) (v : ssavar) : option var :=
+    if get_index (svar v) m == sidx v
+    then Some (svar v)
+    else None.
+
+  Definition dessa_store_value (v : ssavar) (bs : bits) : bits := bs.
+
+  Lemma dessa_store_key_get_index m v :
+    dessa_store_key m (v, get_index v m) = Some v.
+  Proof.
+    rewrite /dessa_store_key /get_index /=.
+    case: (VM.find v m) => *; rewrite eqxx; reflexivity.
+  Qed.
+
+  Lemma dessa_store_key_eq_none (m : vmap) :
+    forall k1 k2 : ssavar,
+      k1 == k2 -> dessa_store_key m k1 = None -> dessa_store_key m k2 = None.
+  Proof. move=> k1 k2 Heqk Hn. rewrite -(eqP Heqk). assumption. Qed.
+
+  Lemma dessa_store_key_eq_some (m : vmap) :
+    forall (k1 k2 : ssavar) (fk1 : var),
+      k1 == k2 -> dessa_store_key m k1 = Some fk1 ->
+      exists fk2 : var, dessa_store_key m k2 = Some fk2 /\ fk1 == fk2.
+  Proof. move=> k1 k2 fk1 Heqk Hfk1. exists fk1. rewrite -(eqP Heqk). done. Qed.
+
+  Lemma dessa_store_key_some_inj (m : vmap) k1 k2 v :
+    dessa_store_key m k1 = Some v -> dessa_store_key m k2 = Some v -> k1 = k2.
+  Proof.
+    rewrite /dessa_store_key. case: k1 => [v1 i1]; case: k2 => [v2 i2] /=.
+    case Hi1: (get_index v1 m == i1); case Hi2: (get_index v2 m == i2) => //=.
+    case=> ?; case=> ?; subst. rewrite -(eqP Hi1) -(eqP Hi2). reflexivity.
+  Qed.
+
+  Lemma dessa_store_key_neq_some (m : vmap) :
+    forall (k1 k2 : ssavar) (fk1 fk2 : var),
+      ~ k1 == k2 -> dessa_store_key m k1 = Some fk1 -> dessa_store_key m k2 = Some fk2 ->
+      ~ fk1 == fk2.
+  Proof.
+    move=> k1 k2 fk1 fk2 Hneqk Hfk1 Hfk2 Heqk. rewrite (eqP Heqk) in Hfk1.
+    apply: Hneqk. apply/eqP. exact: (dessa_store_key_some_inj Hfk1 Hfk2).
+  Qed.
+
+  Lemma dessa_store_value_eq_key :
+    forall (k1 k2 : ssavar) (v : bits),
+      k1 == k2 -> dessa_store_value k1 v = dessa_store_value k2 v.
+  Proof. move=> ? ? ? /eqP H; subst. reflexivity. Qed.
+
   Definition dessa_state (m : vmap) (s : SSAStore.t) : Store.t :=
-    fun v => SSAStore.acc (v, get_index v m) s.
+    MdeSSA.map2map (dessa_store_key m) dessa_store_value s.
 
   Lemma acc_dessa_state :
     forall (m : vmap) (s : SSAStore.t) (v : var),
       Store.acc v (dessa_state m s) = SSAStore.acc (v, get_index v m) s.
   Proof.
-    reflexivity.
+    rewrite /dessa_state /Store.acc /SSAStore.acc. move=> m s v.
+    dcase (SSAStore.M.find (v, get_index v m) s); case.
+    - move=> bs Hfvi. move: (dessa_store_key_get_index m v) => Hdessa.
+      rewrite (MdeSSA.map2map_find_some (@dessa_store_key_eq_none m)
+                                        (@dessa_store_key_eq_some m)
+                                        (@dessa_store_key_neq_some m)
+                                        dessa_store_value_eq_key Hdessa Hfvi).
+      reflexivity.
+    - move=> Hfvi. move: (dessa_store_key_get_index m v) => Hdessa.
+      rewrite (MdeSSA.map2map_find_none (@dessa_store_key_eq_none m)
+                                        (@dessa_store_key_eq_some m)
+                                        (@dessa_store_key_neq_some m)
+                                        dessa_store_value_eq_key Hdessa Hfvi).
+      reflexivity.
   Qed.
 
   Lemma ssa_dessaK :
     forall (m : vmap) (s : Store.t) (x : var),
       Store.acc x (dessa_state m (ssa_state m s)) = Store.acc x s.
   Proof.
-    move=> m s x.
-    rewrite acc_dessa_state.
-    rewrite (acc_ssa_state_eq _ (eqxx (get_index x m))).
-    reflexivity.
+    move=> m s x. rewrite acc_dessa_state.
+    rewrite (acc_ssa_state_eq _ (eqxx (get_index x m))). reflexivity.
   Qed.
 
   Corollary dessa_state_equiv :
     forall m s, state_equiv m (dessa_state m s) s.
   Proof.
-    move=> m s x.
-    exact: acc_dessa_state.
+    move=> m s x. exact: acc_dessa_state.
   Qed.
 
   Lemma ssa_store_conform m s te:
     Store.conform s te ->
     SSAStore.conform (ssa_state m s) (ssa_typenv m te).
   Proof.
-    rewrite /Store.conform /SSAStore.conform /= => Hconform.
-    move=> x Hmem.
-    move: (ssa_typenv_exist Hmem) => [v].
-    move=> Hssa.
-    rewrite -Hssa in Hmem |- *.
-    rewrite -ssa_typenv_mem in Hmem.
-    rewrite -ssa_typenv_size.
-    rewrite (Hconform _ Hmem).
-    move: (ssa_state_equiv m s) => Hstate_equiv.
-    rewrite (Hstate_equiv v).
+    rewrite /Store.conform /SSAStore.conform /= => Hconform. move=> x Hmem.
+    move: (ssa_typenv_exist Hmem) => [v]. move=> Hssa.
+    rewrite -Hssa in Hmem |- *. rewrite -ssa_typenv_mem in Hmem.
+    rewrite -ssa_typenv_size. rewrite (Hconform _ Hmem).
+    move: (ssa_state_equiv m s) => Hstate_equiv. rewrite (Hstate_equiv v).
     reflexivity.
   Qed.
 
   Corollary ssa_store_conform_empty s te:
     Store.conform s te ->
     SSAStore.conform (ssa_state empty_vmap s) (ssa_typenv empty_vmap te).
-  Proof.
-    exact: ssa_store_conform.
-  Qed.
+  Proof. exact: ssa_store_conform. Qed.
 
   Lemma dessa_store_conform m ss te:
     SSAStore.conform ss (ssa_typenv m te) ->
     Store.conform (dessa_state m ss) te.
   Proof.
-    rewrite /Store.conform /SSAStore.conform /= => Hconform.
-    move=> x Hmem.
-    rewrite (ssa_typenv_mem m) in Hmem.
-    rewrite (ssa_typenv_size _ _ m).
-    rewrite (Hconform _ Hmem).
-    move: (dessa_state_equiv m ss) => Hstate_equiv.
-    rewrite -(Hstate_equiv x).
-    reflexivity.
+    rewrite /Store.conform /SSAStore.conform /= => Hconform. move=> x Hmem.
+    rewrite (ssa_typenv_mem m) in Hmem. rewrite (ssa_typenv_size _ _ m).
+    rewrite (Hconform _ Hmem). move: (dessa_state_equiv m ss) => Hstate_equiv.
+    rewrite -(Hstate_equiv x). reflexivity.
   Qed.
 
   Corollary dessa_store_conform_empty ss te:
     SSAStore.conform ss (ssa_typenv empty_vmap te) ->
     Store.conform (dessa_state empty_vmap ss) te.
-  Proof.
-    exact: dessa_store_conform.
-  Qed.
+  Proof. exact: dessa_store_conform. Qed.
 
   (** Soundness and completeness *)
 
