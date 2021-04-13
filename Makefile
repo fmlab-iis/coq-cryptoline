@@ -1,4 +1,4 @@
-LIBS=lib/coq-bitblasting
+LIBS=lib/coq-qfbv
 COQMAKEFILE=Makefile.coq
 MAKE=make
 
