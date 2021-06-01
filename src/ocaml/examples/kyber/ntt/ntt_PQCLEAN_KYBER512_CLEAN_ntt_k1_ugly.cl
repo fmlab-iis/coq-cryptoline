@@ -1,6 +1,9 @@
 (*
 @szu
-Command : OCAMLRUNPARAM=s=100G _build/default/coqcryptoline.exe -v -jobs 20 -sat_solver cadical -sat_cert grat -no_carry_constraint -tmpdir . ~/tmp/coqc_try_ntt.cl
+Command : OCAMLRUNPARAM=s=100G _build/default/coqcryptoline.exe -v -jobs 20 -sat_solver cadical -sat_cert grat -no_carry_constraint -tmpdir . ntt_PQCLEAN_KYBER512_CLEAN_ntt_k1_ugly.cl
+
+Results of checking CNF formulas:       [OK]		2074.180622 seconds
+Verification result:                    [OK]            149858.432068 seconds
 *)
 
 proc PQCLEAN_KYBER512_CLEAN_montgomery_reduce (sint32 v_a, sint16 ret) =
