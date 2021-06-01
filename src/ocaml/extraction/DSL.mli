@@ -1473,12 +1473,12 @@ module MakeDSL :
 
   val spost : spec -> bexp
 
-  type espec = { esinputs : TE.env; espre : ebexp; esprog : program;
+  type espec = { esinputs : TE.env; espre : bexp; esprog : program;
                  espost : ebexp }
 
   val esinputs : espec -> TE.env
 
-  val espre : espec -> ebexp
+  val espre : espec -> bexp
 
   val esprog : espec -> program
 
@@ -3135,12 +3135,12 @@ module DSL :
 
   val spost : spec -> bexp
 
-  type espec = { esinputs : TypEnv.TE.env; espre : ebexp; esprog : program;
+  type espec = { esinputs : TypEnv.TE.env; espre : bexp; esprog : program;
                  espost : ebexp }
 
   val esinputs : espec -> TypEnv.TE.env
 
-  val espre : espec -> ebexp
+  val espre : espec -> bexp
 
   val esprog : espec -> program
 

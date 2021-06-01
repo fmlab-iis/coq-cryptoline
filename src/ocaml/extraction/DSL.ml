@@ -1903,7 +1903,7 @@ module MakeDSL =
   let spost s =
     s.spost
 
-  type espec = { esinputs : TE.env; espre : ebexp; esprog : program;
+  type espec = { esinputs : TE.env; espre : bexp; esprog : program;
                  espost : ebexp }
 
   (** val esinputs : espec -> TE.env **)
@@ -1911,7 +1911,7 @@ module MakeDSL =
   let esinputs e =
     e.esinputs
 
-  (** val espre : espec -> ebexp **)
+  (** val espre : espec -> bexp **)
 
   let espre e =
     e.espre
@@ -1952,8 +1952,8 @@ module MakeDSL =
   (** val espec_of_spec : spec -> espec **)
 
   let espec_of_spec s =
-    { esinputs = (sinputs s); espre = (eqn_bexp (spre s)); esprog =
-      (eqn_program (sprog s)); espost = (eqn_bexp (spost s)) }
+    { esinputs = (sinputs s); espre = (spre s); esprog = (sprog s); espost =
+      (eqn_bexp (spost s)) }
 
   (** val rspec_of_spec : spec -> rspec **)
 

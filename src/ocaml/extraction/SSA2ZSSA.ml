@@ -310,5 +310,5 @@ let bv2z_espec options0 avn s =
       (SSA.SSA.esprog s)
   in
   { ZSSA.ZSSA.zspre =
-  (SSA.SSA.eand (SSA.SSA.espre s) (SSA.SSA.eands eprogs)); ZSSA.ZSSA.zspost =
-  (SSA.SSA.espost s) }
+  (SSA.SSA.eand (SSA.SSA.eqn_bexp (SSA.SSA.espre s)) (SSA.SSA.eands eprogs));
+  ZSSA.ZSSA.zspost = (SSA.SSA.espost s) }

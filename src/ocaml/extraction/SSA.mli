@@ -993,12 +993,12 @@ module SSA :
 
   val spost : spec -> bexp
 
-  type espec = { esinputs : TypEnv.SSATE.env; espre : ebexp;
-                 esprog : program; espost : ebexp }
+  type espec = { esinputs : TypEnv.SSATE.env; espre : bexp; esprog : 
+                 program; espost : ebexp }
 
   val esinputs : espec -> TypEnv.SSATE.env
 
-  val espre : espec -> ebexp
+  val espre : espec -> bexp
 
   val esprog : espec -> program
 

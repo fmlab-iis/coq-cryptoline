@@ -685,7 +685,7 @@ Section SSA2Algebra.
   Definition new_svar_espec (s : espec) : VarOrder.t :=
     new_svar (SSAVS.union (vars_env (esinputs s))
                           (SSAVS.union
-                             (vars_ebexp (espre s))
+                             (vars_bexp (espre s))
                              (SSAVS.union (vars_program (esprog s))
                                           (vars_ebexp (espost s))))).
 
@@ -708,7 +708,7 @@ Section SSA2Algebra.
   Definition bv2z_espec avn (s : espec) : zspec :=
     let (g, eprogs) := bv2z_program (esinputs s)
                                     avn initial_index (esprog s) in
-    {| zspre := eand (espre s) (eands eprogs);
+    {| zspre := eand (eqn_bexp (espre s)) (eands eprogs);
        zspost := espost s |}.
 
 
@@ -2913,12 +2913,12 @@ Section SplitSpec.
          move/svar_notin_union: H => [H1 H2]
        end).
 
-  Theorem bv2z_spec_sound (o : options) (s : spec) :
+  Lemma bv2z_espec_sound (o : options) (s : spec) :
     well_formed_ssa_spec s ->
     ssa_spec_safe s ->
     valid_rspec (rspec_of_spec s) ->
     ZSSA.valid_zspec (bv2z_espec o (new_svar_spec s) (espec_of_spec s)) ->
-    valid_spec s.
+    valid_espec s.
   Proof.
     destruct s as [E f p g] => /=. rewrite /well_formed_ssa_spec /bv2z_espec /=.
     rewrite /well_formed_spec /=.
@@ -2928,7 +2928,6 @@ Section SplitSpec.
     dcase (bv2z_program o E avn g1 (eqn_program p)) => [[g2 eprogs] Hzp].
     move=> Hsafe Hrng Heqn bs1 bs2 /= Hcon [Hpre_eqn Hpre_rng] Hprog.
 
-    split; last exact: (Hrng _ _ Hcon Hpre_rng (eval_rng_program Hprog)).
     rewrite /ZSSA.valid_zspec /= in Heqn.
 
     rewrite /new_svar_spec /= in Havn.
@@ -2970,9 +2969,22 @@ Section SplitSpec.
                   E avn g1 (eqn_program p)
                   (bv2z_store (program_succ_typenv (eqn_program p) E) bs2).
     move=> Hzf Hzprog.
-    move: (Heqn zbs2 (conj Hzf Hzprog)) => Hzg.
+    move: (Heqn zbs2). rewrite Hzp /= => Hzg.
+    move: (Hzg (conj Hzf Hzprog)) => {} Hzg.
 
     apply/(bv2z_upd_avars_eval_ebexp Hni_eqn_g). exact: Hzg.
+  Qed.
+
+  Theorem bv2z_spec_sound (o : options) (s : spec) :
+    well_formed_ssa_spec s ->
+    ssa_spec_safe s ->
+    valid_rspec (rspec_of_spec s) ->
+    ZSSA.valid_zspec (bv2z_espec o (new_svar_spec s) (espec_of_spec s)) ->
+    valid_spec s.
+  Proof.
+    move=> Hwf Hsafe Hvr Hvz. apply: valid_spec_split.
+    - exact: (bv2z_espec_sound Hwf Hsafe Hvr Hvz).
+    - exact: Hvr.
   Qed.
 
 End SplitSpec.

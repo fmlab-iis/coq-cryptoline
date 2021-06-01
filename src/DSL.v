@@ -1144,7 +1144,7 @@ Module MakeDSL
 
   Record espec :=
     { esinputs : TE.env;
-      espre : ebexp;
+      espre : bexp;
       esprog : program;
       espost : ebexp }.
 
@@ -1156,8 +1156,8 @@ Module MakeDSL
 
   Coercion espec_of_spec s :=
     {| esinputs := sinputs s;
-       espre := eqn_bexp (spre s);
-       esprog := eqn_program (sprog s);
+       espre := spre s;
+       esprog := sprog s;
        espost := eqn_bexp (spost s) |}.
 
   Coercion rspec_of_spec s :=
@@ -1389,6 +1389,13 @@ Module MakeDSL
   Lemma rng_instr_succ_typenv i te :
     instr_succ_typenv (rng_instr i) te = instr_succ_typenv i te.
   Proof. case: i => //=. move=> [e r] /=. reflexivity. Qed.
+
+  Lemma eqn_lvs_instr_subset i :
+    VS.subset (lvs_instr (eqn_instr i)) (lvs_instr i).
+  Proof.
+    case: i => /=; try (intros; apply: VSLemmas.subset_refl).
+    case => _ r /=. exact: VSLemmas.subset_refl.
+  Qed.
 
   Lemma rng_lvs_instr_subset i :
     VS.subset (lvs_instr (rng_instr i)) (lvs_instr i).
@@ -1812,7 +1819,7 @@ Module MakeDSL
   Definition valid_espec (s : espec) : Prop :=
     forall s1 s2,
       S.conform s1 (esinputs s) ->
-      eval_ebexp (espre s) (esinputs s) s1 ->
+      eval_bexp (espre s) (esinputs s) s1 ->
       eval_program (esinputs s) (esprog s) s1 s2 ->
       eval_ebexp (espost s) (program_succ_typenv (esprog s) (esinputs s)) s2.
 
@@ -1828,8 +1835,7 @@ Module MakeDSL
     valid_spec s.
   Proof.
     move=> He Hr s1 s2 Hcon [Hepre Hrpre] Hprog. split.
-    - move: (He s1 s2 Hcon Hepre (eval_eqn_program Hprog)) => /=.
-      rewrite eqn_program_succ_typenv. by apply.
+    - exact: (He s1 s2 Hcon (conj Hepre Hrpre) Hprog).
     - exact: (Hr s1 s2 Hcon Hrpre (eval_rng_program Hprog)).
   Qed.
 
@@ -3170,6 +3176,29 @@ Module MakeDSL
   Lemma well_formed_rng_bexp te e :
     well_formed_bexp te e -> well_formed_rbexp te (rng_bexp e).
   Proof. rewrite well_formed_bexp_split. by move/andP=> [? ?]. Qed.
+
+  Lemma well_defined_eqn_instr E i :
+    well_defined_instr E i -> well_defined_instr E (eqn_instr i).
+  Proof.
+    case: i => //=. case => e r //=. rewrite /vars_bexp /=.
+    rewrite !are_defined_union. move/andP => [Hdefe Hdefr].
+    rewrite Hdefe are_defined_empty. exact: is_true_true.
+  Qed.
+
+  Lemma well_typed_eqn_instr E i :
+    well_typed_instr E i -> well_typed_instr E (eqn_instr i).
+  Proof.
+    case: i => //=. case => e r //=. rewrite /well_typed_bexp.
+    move/andP=> /= [Hwte Hwtr]. by rewrite Hwte.
+  Qed.
+
+  Lemma well_formed_eqn_instr E i :
+    well_formed_instr E i -> well_formed_instr E (eqn_instr i).
+  Proof.
+    case: i => //=. case => e r //=. move/andP => [H1 H2]. apply/andP. split.
+  - exact: (well_defined_eqn_instr H1).
+  - exact: (well_typed_eqn_instr H2).
+  Qed.
 
   Lemma well_defined_rng_instr E i :
     well_defined_instr E i -> well_defined_instr E (rng_instr i).

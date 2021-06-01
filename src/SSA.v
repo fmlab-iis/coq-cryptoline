@@ -3291,6 +3291,22 @@ Section MakeSSA.
       by rewrite !ssa_unchanged_program_cons ssa_vars_unchanged_rng_instr IH.
   Qed.
 
+  Lemma ssa_single_assignment_eqn p :
+    ssa_single_assignment p -> ssa_single_assignment (SSA.eqn_program p).
+  Proof.
+    elim: p => [| i p IHp] //=. move=> /andP [Hun_ip Hssa_p]. rewrite (IHp Hssa_p) andbT.
+    rewrite ssa_vars_unchanged_eqn_program.
+    exact: (ssa_unchanged_program_subset Hun_ip (SSA.eqn_lvs_instr_subset i)).
+  Qed.
+
+  Lemma ssa_single_assignment_rng p :
+    ssa_single_assignment p -> ssa_single_assignment (SSA.rng_program p).
+  Proof.
+    elim: p => [| i p IHp] //=. move=> /andP [Hun_ip Hssa_p]. rewrite (IHp Hssa_p) andbT.
+    rewrite ssa_vars_unchanged_rng_program.
+    exact: (ssa_unchanged_program_subset Hun_ip (SSA.rng_lvs_instr_subset i)).
+  Qed.
+
 
   Lemma ssa_unchanged_instr_eval_singleton v te s1 s2 i :
     ssa_vars_unchanged_instr (SSAVS.singleton v) i ->
