@@ -1,5 +1,5 @@
 
-type sat_solver = Cryptominisat | Cadical | Glucose
+type sat_solver = Cryptominisat | Cadical | Glucose | Kissat
 
 type algebra_system =
   | Singular
@@ -30,6 +30,7 @@ val minisat_path : string ref
 val cryptominisat_path : string ref
 val cadical_path : string ref
 val glucose_path : string ref
+val kissat_path : string ref
 
 val sat_solver : sat_solver ref
 val sat_args : string ref
@@ -100,10 +101,10 @@ val auto_cast_preserve_value : bool ref
 val typing_file : (string option) ref
 val use_binary_repr : bool ref
 
-type sat_certificate = Drat | Lrat | Grat
-val string_of_sat_certificate : sat_certificate -> string
-val default_sat_certificate : sat_certificate
-val sat_certificate : sat_certificate ref
+type unsat_certifier = Drat | Lrat | Grat
+val string_of_unsat_certifier : unsat_certifier -> string
+val default_unsat_certifier : unsat_certifier
+val unsat_certifier : unsat_certifier ref
 val drat_trim_path : string ref
 val gratgen_path : string ref
 val gratchk_path : string ref
@@ -111,3 +112,5 @@ val lrat_checker_path : string ref
 
 val tmpdir : (string option) ref
 val tmpfile : string -> string -> string
+
+val disable_range : bool ref

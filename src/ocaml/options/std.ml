@@ -1,5 +1,5 @@
 
-type sat_solver = Cryptominisat | Cadical | Glucose
+type sat_solver = Cryptominisat | Cadical | Glucose | Kissat
 
 type algebra_system =
   | Singular
@@ -14,7 +14,7 @@ type variable_order =
   | RevLexOrder
   | RevAppearingOrder
 
-let default_solver = Cryptominisat
+let default_solver = Kissat
 
 let default_algebra = Singular
 
@@ -29,6 +29,7 @@ let minisat_path = ref "minisat"
 let cryptominisat_path = ref "cryptominisat5_simple"
 let cadical_path = ref "cadical"
 let glucose_path = ref "glucose"
+let kissat_path = ref "kissat"
 
 let sat_solver = ref default_solver
 let sat_args = ref ""
@@ -37,6 +38,7 @@ let string_of_sat_solver s =
   | Cryptominisat -> "cryptominisat"
   | Cadical -> "cadical"
   | Glucose -> "glucose"
+  | Kissat -> "kissat"
 
 let use_btor = ref false
 
@@ -135,14 +137,14 @@ let typing_file = ref None
 let use_binary_repr = ref false
 
 
-type sat_certificate = Drat | Lrat | Grat
-let string_of_sat_certificate c =
+type unsat_certifier = Drat | Lrat | Grat
+let string_of_unsat_certifier c =
   match c with
   | Drat -> "drat"
   | Lrat -> "lrat"
   | Grat -> "grat"
-let default_sat_certificate = Drat
-let sat_certificate = ref Drat
+let default_unsat_certifier = Grat
+let unsat_certifier = ref default_unsat_certifier
 let drat_trim_path = ref "drat-trim"
 let gratgen_path = ref "gratgen"
 let gratchk_path = ref "gratchk"
@@ -154,3 +156,5 @@ let tmpfile prefix suffix =
   match !tmpdir with
   | None -> Filename.temp_file prefix suffix
   | Some dir -> Filename.temp_file ~temp_dir:dir prefix suffix
+
+let disable_range = ref false

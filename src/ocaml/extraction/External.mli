@@ -21,3 +21,5 @@ val use_fork : bool ref
 val ext_all_unsat_impl : cnf list -> bool
 
 val ext_find_coefficients_impl : coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z coq_PExpr -> (coq_Z coq_PExpr) list * coq_Z coq_PExpr
+
+val ext_find_coefficients_list_impl : ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr) list -> ((coq_Z coq_PExpr) list * coq_Z coq_PExpr) list

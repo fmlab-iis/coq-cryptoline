@@ -113,7 +113,8 @@ let anon file =
 	  (* options : bool, true to add carry constraints *)
 	  let o = { add_carry_constraints = !carry_constraint;
                 rewrite_assignments = !apply_rewriting;
-                vars_cache_in_rewrite_assignments = !vars_cache_in_rewriting }  in
+                vars_cache_in_rewrite_assignments = !vars_cache_in_rewriting;
+                compute_coefficients_one_by_one = !jobs <= 1 }  in
 	  let res = Extraction.Verify.verify_dsl o coq_spec in
 	  (*
       let coq_ssa_spec = Extraction.SSA.ssa_spec coq_spec in

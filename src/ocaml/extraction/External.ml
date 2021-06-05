@@ -128,7 +128,7 @@ let coq_output_dimacs_reorder ch cs =
   ()
 
 let coq_output_dimacs ch cs =
-  (*if !sat_certificate = Grat then coq_output_dimacs_reorder ch cs
+  (*if !unsat_certifier = Grat then coq_output_dimacs_reorder ch cs
   else*) coq_output_dimacs ch cs
 
 
@@ -161,6 +161,9 @@ let run_sat_solver ?log:(logfile=(!logfile)) ifile ofile errfile dratfile =
        ^ " -certified -certified-output=\"" ^ dratfile ^ "\" "
        ^ "\"" ^ ifile ^ "\" "
        ^ "| grep 's UNSATISFIABLE' 1> \"" ^ ofile ^ "\" 2> \"" ^ errfile ^ "\" "
+    | Kissat ->
+       !kissat_path ^ " -q \"" ^ ifile ^ "\" \"" ^ dratfile ^ "\" "
+       ^ "| grep 's UNSATISFIABLE' 1> \"" ^ ofile ^ "\" 2> \"" ^ errfile ^ "\" "
   in
   let res = unix cmd in
   let t2 = Unix.gettimeofday() in
@@ -174,7 +177,7 @@ let run_sat_solver ?log:(logfile=(!logfile)) ifile ofile errfile dratfile =
 
 let run_sat_certifier ifile dratfile =
   let res =
-    match !sat_certificate with
+    match !unsat_certifier with
     | Drat ->
        unix (!Options.Std.drat_trim_path ^ " " ^ ifile ^ " "
              ^ dratfile ^ " | grep 's VERIFIED'"
@@ -258,7 +261,8 @@ let coq_cnf_unsat (id, cnf) =
   certified
 
 let coq_all_unsat id_cnf_pairs =
-  List.for_all coq_cnf_unsat id_cnf_pairs
+  if !Options.Std.disable_range then true
+  else List.for_all coq_cnf_unsat id_cnf_pairs
 
 
 (* ===== Multi-thread solving ===== *)
@@ -300,12 +304,15 @@ let run_sat_solver_lwt header ifile ofile errfile dratfile =
            ^ !sat_args ^ " "
            ^ "\"" ^ ifile ^ "\" "
            ^ "\"" ^ dratfile ^ "\" "
-           ^ "| grep 's UNSATISFIABLE' 1> \"" ^ ofile ^ "\" 2> \"" ^ errfile ^ "\" "
+           ^ "| grep 's UNSATISFIABLE' 1> \"" ^ ofile ^ "\" 2> \"" ^ errfile ^ "\""
         | Glucose ->
            !glucose_path ^ " "
            ^ !sat_args ^ " "
            ^ " -certified -certified-output=\"" ^ dratfile ^ "\" "
            ^ "\"" ^ ifile ^ "\" "
+           ^ "| grep 's UNSATISFIABLE' 1> \"" ^ ofile ^ "\" 2> \"" ^ errfile ^ "\""
+        | Kissat ->
+           !kissat_path ^ " -q \"" ^ ifile ^ "\" \"" ^ dratfile ^ "\" "
            ^ "| grep 's UNSATISFIABLE' 1> \"" ^ ofile ^ "\" 2> \"" ^ errfile ^ "\" "
       )
   in
@@ -326,7 +333,7 @@ let run_sat_solver_lwt header ifile ofile errfile dratfile =
 
 let run_sat_certifier_lwt ifile dratfile =
   let%lwt res =
-    match !sat_certificate with
+    match !unsat_certifier with
     | Drat ->
        Options.WithLwt.unix (!Options.Std.drat_trim_path ^ " " ^ ifile ^ " "
                              ^ dratfile ^ " | grep 's VERIFIED'"
@@ -561,9 +568,12 @@ let ext_all_unsat_impl cnfs =
 	else vprintln ("Results of checking CNF formulas:\t[FAILED]\t" ^ string_of_running_time t1 t2) in
   res
 
+let ext_all_unsat_impl cnfs =
+  if !Options.Std.disable_range then true
+  else ext_all_unsat_impl cnfs
 
 
-(** Find coefficients using Singular *)
+(* ===== Find coefficients using Singular ===== *)
 
 let vname = "x"
 
@@ -723,9 +733,16 @@ let coq_term_of_string str =
   with ParseError msg ->
     raise (ParseError (msg ^ " " ^ "Failed to parse term: " ^ str ^ "."))
 
+let run_singular ifile ofile =
+  let _ = unix (!singular_path ^ " -q " ^ !Options.Std.algebra_args ^ " " ^ ifile ^ " 1> " ^ ofile ^ " 2>&1") in
+  let _ =
+    trace "OUTPUT FROM SINGULAR:";
+    trace_file ofile;
+    trace "" in
+  ()
+
 let coq_compute_coefficients_by_div (vars, p, g) =
   let _ = trace "by div" in
-  let singular_args = ref ["-q"] in
   let singular_output_sep = "--" in
   let rec create_dummy len =
 	if len = 0 then []
@@ -764,13 +781,6 @@ let coq_compute_coefficients_by_div (vars, p, g) =
       trace_file file;
       trace "" in
     () in
-  let run_singular ifile ofile =
-    let _ = unix (!singular_path ^ " " ^ String.concat " " !singular_args ^ " " ^ ifile ^ " 1> " ^ ofile ^ " 2>&1") in
-    let _ =
-      trace "OUTPUT FROM SINGULAR:";
-      trace_file ofile;
-      trace "" in
-    () in
   let read_singular_output file =
     let rec split (coefs, sep_found) lines =
       match lines with
@@ -802,7 +812,6 @@ let coq_compute_coefficients_by_div (vars, p, g) =
 
 let coq_compute_coefficients_by_lift (vars, p, gs) =
   let _ = trace "by lift" in
-  let singular_args = ref ["-q"] in
   let singular_output_sep = "--" in
   let rec create_dummy len =
 	if len = 0 then []
@@ -831,13 +840,6 @@ let coq_compute_coefficients_by_lift (vars, p, gs) =
     let _ =
       trace "INPUT TO SINGULAR:";
       trace_file file;
-      trace "" in
-    () in
-  let run_singular ifile ofile =
-    let _ = unix (!singular_path ^ " " ^ String.concat " " !singular_args ^ " " ^ ifile ^ " 1> " ^ ofile ^ " 2>&1") in
-    let _ =
-      trace "OUTPUT FROM SINGULAR:";
-      trace_file ofile;
       trace "" in
     () in
   let read_singular_output file =
@@ -878,8 +880,6 @@ let coq_compute_coefficients_by_lift (vars, p, gs) =
 let ext_find_coefficients_impl gs p m =
   let _ = vprint ("Finding polynomial coefficients\t\t") in
   let t1 = Unix.gettimeofday() in
-  let ifile = tmpfile "inputfgb_" "" in
-  let ofile = tmpfile "outputfgb_" "" in
   let (c_m, cs_gs) =
 	let vars = coq_vars_in_order (gs@[m]@[p]) in
     let coefs =
@@ -889,5 +889,191 @@ let ext_find_coefficients_impl gs p m =
 	(List.hd coefs, List.tl coefs) in
   let t2 = Unix.gettimeofday() in
   let _ = vprintln ("[OK]\t\t" ^ string_of_running_time t1 t2) in
-  let _ = cleanup [ifile; ofile] in
   (cs_gs, c_m)
+
+
+(* ===== Find coefficients concurrently using Singular ===== *)
+
+let write_header_to_log header =
+  Lwt_list.iter_s (fun h ->
+      let%lwt _ = Options.WithLwt.trace h in
+      Lwt.return_unit) header
+
+let run_singular_lwt header ifile ofile =
+  let t1 = Unix.gettimeofday() in
+  let%lwt _ =
+    Options.WithLwt.unix (!singular_path ^ " -q " ^ !Options.Std.algebra_args ^ " \"" ^ ifile ^ "\" 1> \"" ^ ofile ^ "\" 2>&1") in
+  let t2 = Unix.gettimeofday() in
+  let%lwt _ = Options.WithLwt.lock_log () in
+  let%lwt _ = write_header_to_log header in
+  let%lwt _ = Options.WithLwt.trace "INPUT TO SINGULAR:" in
+  let%lwt _ = Options.WithLwt.unix ("cat " ^ ifile ^ " >>  " ^ !logfile) in
+  let%lwt _ = Options.WithLwt.trace "" in
+  let%lwt _ = Options.WithLwt.trace ("Execution time of Singular: " ^ string_of_float (t2 -. t1) ^ " seconds") in
+  let%lwt _ = Options.WithLwt.trace "OUTPUT FROM SINGULAR:" in
+  let%lwt _ = Options.WithLwt.unix ("cat \"" ^ ofile ^ "\" >>  " ^ !logfile) in
+  let%lwt _ = Options.WithLwt.trace "" in
+  let _ = Options.WithLwt.unlock_log () in
+  Lwt.return_unit
+
+let coq_compute_coefficients_by_div_lwt header (vars, p, g) =
+  let _ = trace "by div" in
+  let singular_output_sep = "--" in
+  let ifile = tmpfile "inputfgb_" "" in
+  let ofile = tmpfile "outputfgb_" "" in
+  let rec create_dummy len =
+	if len = 0 then []
+	else PEO::create_dummy (len - 1) in
+  let write_to_singular file =
+    let input_text =
+      let varseq =
+		match vars with
+		| [] -> "x"
+		| _ -> String.concat "," (List.map coq_pexpr_string_of_var vars) in
+      let generator = coq_singular_of_pexpr g in
+      let poly = coq_singular_of_pexpr p in
+      "ring r = integer, (" ^ varseq ^ "), lp;\n"
+      ^ "poly g = " ^ generator ^ ";\n"
+      ^ "poly p = " ^ poly ^ ";\n"
+      ^ "poly c = p / g;\n"
+      ^ "\"" ^ singular_output_sep ^ "\";\n"
+      ^ "c;\n"
+      ^ "exit;\n" in
+    let%lwt ifd = Lwt_unix.openfile file
+                    [Lwt_unix.O_WRONLY; Lwt_unix.O_CREAT; Lwt_unix.O_TRUNC]
+                    0o600 in
+    let ch = Lwt_io.of_fd ~mode:Lwt_io.output ifd in
+    let%lwt _ = Lwt_io.write ch input_text in
+    let%lwt _ = Lwt_io.close ch in
+    Lwt.return_unit in
+  let read_singular_output ofile =
+    let rec split (coefs, sep_found) lines =
+      match lines with
+      | [] -> coefs
+      | hd::tl when hd = singular_output_sep -> split (coefs, true) tl
+      | hd::tl -> if sep_found then split (hd::coefs, sep_found) tl
+                  else split (coefs, sep_found) tl in
+    let%lwt ofd = Lwt_unix.openfile ofile [Lwt_unix.O_RDONLY] 0o600 in
+    let ch = Lwt_io.of_fd ~mode:Lwt_io.input ofd in
+    let%lwt lines =
+      try%lwt
+            Lwt.return (Lwt_io.read_lines ch)
+      with _ -> failwith "Failed to read the output file" in
+    let%lwt lines = Lwt_stream.to_list lines in
+    let%lwt _ = Lwt_io.close ch in
+    Lwt.return (split ([], false) lines) in
+  let%lwt t1 = Lwt.return (Unix.gettimeofday()) in
+  let%lwt _ = write_to_singular ifile in
+  let%lwt _ = run_singular_lwt header ifile ofile in
+  let%lwt coefs = read_singular_output ofile in
+  let%lwt _ = cleanup_lwt [ifile; ofile] in
+  let%lwt res =
+    Lwt.return (match coefs with
+                | c::[] -> [coq_term_of_string c]
+                | _ -> create_dummy 1) in
+  let%lwt t2 = Lwt.return (Unix.gettimeofday()) in
+  Lwt.return (res, string_of_running_time t1 t2)
+
+let coq_compute_coefficients_by_lift_lwt header (vars, p, gs) =
+  let _ = trace "by lift" in
+  let singular_output_sep = "--" in
+  let ifile = tmpfile "inputfgb_" "" in
+  let ofile = tmpfile "outputfgb_" "" in
+  let rec create_dummy len =
+	if len = 0 then []
+	else PEO::create_dummy (len - 1) in
+  let write_to_singular file =
+    let input_text =
+      let varseq =
+		match vars with
+		| [] -> "x"
+		| _ -> String.concat "," (List.map coq_pexpr_string_of_var vars) in
+      let generator = if List.length gs = 0 then "0" else (String.concat ",\n  " (List.map coq_singular_of_pexpr gs)) in
+      let poly = coq_singular_of_pexpr p in
+      "ring r = integer, (" ^ varseq ^ "), lp;\n"
+      ^ "ideal gs' = " ^ generator ^ ";\n"
+      ^ "poly p' = " ^ poly ^ ";\n"
+      ^ "ideal I' = groebner(gs');\n"
+      ^ "poly q' = reduce(p', I');\n"
+      ^ "q';\n"
+      ^ "if (q' == 0) {\n"
+      ^ "  \"" ^ singular_output_sep ^ "\";\n"
+      ^ "  lift(gs', p');\n"
+      ^ "}\n"
+      ^ "exit;\n" in
+    let%lwt ifd = Lwt_unix.openfile file
+                    [Lwt_unix.O_WRONLY; Lwt_unix.O_CREAT; Lwt_unix.O_TRUNC]
+                    0o600 in
+    let ch = Lwt_io.of_fd ~mode:Lwt_io.output ifd in
+    let%lwt _ = Lwt_io.write ch input_text in
+    let%lwt _ = Lwt_io.close ch in
+    Lwt.return_unit in
+  let read_singular_output ofile =
+    let rec split (is_in_ideal, p_coef_gs, i) lines =
+      match lines with
+      | [] -> (is_in_ideal, List.rev p_coef_gs)
+      | hd::tl when hd = singular_output_sep -> split (is_in_ideal, p_coef_gs, i + 1) tl
+      | hd::tl ->
+         let hd = String.trim hd in
+         if hd = "" then split (is_in_ideal, p_coef_gs, i) tl (* skip empty line *)
+         else if i = 0 then split (hd = "0", p_coef_gs, i) tl
+         else split (is_in_ideal, hd::p_coef_gs, i) tl in
+    let%lwt ofd = Lwt_unix.openfile ofile [Lwt_unix.O_RDONLY] 0o600 in
+    let ch = Lwt_io.of_fd ~mode:Lwt_io.input ofd in
+    let%lwt lines =
+      try%lwt
+            Lwt.return (Lwt_io.read_lines ch)
+      with _ -> failwith "Failed to read the output file" in
+    let%lwt lines = Lwt_stream.to_list lines in
+    let%lwt _ = Lwt_io.close ch in
+    Lwt.return (split (false, [], 0) lines) in
+  let after_eq_sign str =
+    let i = String.index str '=' + 1 in
+    String.sub str i (String.length str - i) in
+  let%lwt t1 = Lwt.return (Unix.gettimeofday()) in
+  let%lwt _ = write_to_singular ifile in
+  let%lwt _ = run_singular_lwt header ifile ofile in
+  let%lwt (is_in_ideal, p_coef_gs) = read_singular_output ofile in
+  let%lwt _ = cleanup_lwt [ifile; ofile] in
+  let%lwt res =
+    if is_in_ideal then
+      let%lwt p_coef_gs = Lwt_list.map_s (fun t -> Lwt.return (coq_term_of_string (after_eq_sign t))) p_coef_gs in
+      Lwt.return p_coef_gs
+    else
+      Lwt.return (create_dummy (List.length gs)) in
+  let%lwt t2 = Lwt.return (Unix.gettimeofday()) in
+  Lwt.return (res, string_of_running_time t1 t2)
+
+let coq_compute_coefficients_lwt poly_with_id_list =
+  let mk_promise (id, ((gs, p), m)) =
+    let%lwt (c_m, cs_gs, running_time) =
+	  let%lwt vars = Lwt.return (coq_vars_in_order (gs@[m]@[p])) in
+      let%lwt (coefs, running_time) =
+        if gs = [] && not (Poly.zpexpr_is_zero m)
+        then coq_compute_coefficients_by_div_lwt ["Polynomials #" ^ string_of_int id] (vars, p, m)
+        else coq_compute_coefficients_by_lift_lwt ["Polynomials #" ^ string_of_int id] (vars, p, (m::gs)) in
+	  Lwt.return (List.hd coefs, List.tl coefs, running_time) in
+    Lwt.return (id, cs_gs, c_m, running_time) in
+  let delivered_helper coef_list_unordered (id, cs_gs, cs_m, running_time) =
+    let _ = vprint ("\t Polynomials #" ^ string_of_int id ^ ":\t\t") in
+    let _ = vprintln ("[DONE]\t\t" ^ running_time) in
+	(id, (cs_gs, cs_m))::coef_list_unordered in
+  let fold_fun (coef_list_unordered, pending) (id, poly) =
+    if List.length pending < !jobs then
+      let promise = mk_promise (id, poly) in
+      (coef_list_unordered, promise::pending)
+    else
+      let (coef_list_unordered', pending') = work_on_pending delivered_helper coef_list_unordered pending in
+      let promise = mk_promise (id, poly) in
+      (coef_list_unordered', promise::pending') in
+  let (coef_list_unordered, pending) = List.fold_left fold_fun ([], []) poly_with_id_list in
+  let coef_list_unordered = finish_pending delivered_helper coef_list_unordered pending in
+  snd (List.split (List.sort (fun (id1, _) (id2, _) -> compare id1 id2) coef_list_unordered))
+
+let rec ext_find_coefficients_list_impl polys =
+  let _ = vprint ("Finding polynomial coefficients\n") in
+  let t1 = Unix.gettimeofday() in
+  let coef_list = coq_compute_coefficients_lwt (List.mapi (fun id poly -> (id, poly)) polys) in
+  let t2 = Unix.gettimeofday() in
+  let _ = vprintln ("Finished finding polynomial coefficients\t\t" ^ string_of_running_time t1 t2) in
+  coef_list

@@ -18,6 +18,7 @@ Extraction Blacklist Nat Int List String Options.
 
 Extract Constant Verify.ext_all_unsat => "External.ext_all_unsat_impl".
 Extract Constant Verify.ext_find_coefficients => "External.ext_find_coefficients_impl".
+Extract Constant Verify.ext_find_coefficients_list => "External.ext_find_coefficients_list_impl".
 
 Cd "src/ocaml/extraction".
 Separate Extraction

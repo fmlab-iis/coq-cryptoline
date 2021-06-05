@@ -23,17 +23,18 @@ let args =
      "\n\t     Specify the algebra solver (default is singular)\n");
     ("-br", Set use_binary_repr, "       Always use binary representation in SMTLIB outputs. Otherwise,\n\t     hexadecimal representation is used if applicable.\n");
     ("-btor", Set use_btor, "     Output btor format to Boolector\n");
-    ("-sat_cert", Symbol ([Options.Std.string_of_sat_certificate Options.Std.Drat;
-                           Options.Std.string_of_sat_certificate Options.Std.Grat;
-                           Options.Std.string_of_sat_certificate Options.Std.Lrat],
-                          (fun str -> if str = Options.Std.string_of_sat_certificate Options.Std.Drat then sat_certificate := Options.Std.Drat
-                                      else if str = Options.Std.string_of_sat_certificate Options.Std.Grat then sat_certificate := Options.Std.Grat
-                                      else if str = Options.Std.string_of_sat_certificate Options.Std.Lrat then sat_certificate := Options.Std.Lrat
+    ("-sat_cert", Symbol ([Options.Std.string_of_unsat_certifier Options.Std.Drat;
+                           Options.Std.string_of_unsat_certifier Options.Std.Grat;
+                           Options.Std.string_of_unsat_certifier Options.Std.Lrat],
+                          (fun str -> if str = Options.Std.string_of_unsat_certifier Options.Std.Drat then unsat_certifier := Options.Std.Drat
+                                      else if str = Options.Std.string_of_unsat_certifier Options.Std.Grat then unsat_certifier := Options.Std.Grat
+                                      else if str = Options.Std.string_of_unsat_certifier Options.Std.Lrat then unsat_certifier := Options.Std.Lrat
                                       else failwith ("Unknown format of SAT certification: " ^ str))),
-     "\n\t     Specify the format of SAT certification\n");
+     "\n\t     Specify the UNSAT proof certifier (the default is " ^ Options.Std.string_of_unsat_certifier Options.Std.default_unsat_certifier ^ ").\n");
     ("-cadical", String (fun str -> cadical_path := str; sat_solver := Cadical), "PATH\n\t     Use Cadical at the specified path\n");
     ("-cryptominisat", String (fun str -> cryptominisat_path := str; sat_solver := Cryptominisat), "PATH\n\t     Use Cryptominisat at the specified path\n");
     ("-debug", Set debug, "    Log debug messages\n");
+    ("-disable_range", Set disable_range, "\n\t     Disable QF_BV solving (bit-blasting is still performed)\n");
     ("-disable_rewriting", Clear apply_rewriting, "\n\t     Disable rewriting of assignments (at program level) and equalities\n\t     (at polynomial level)\n");
     ("-drat-trim", String (fun str -> Options.Std.drat_trim_path := str),
      "Set the path to drat-trim (default: " ^
@@ -65,13 +66,15 @@ let args =
      "ARGS\n\t     Specify additional arguments passed to the SAT solver\n");
    ("-sat_solver", Symbol ([Options.Std.string_of_sat_solver Options.Std.Cryptominisat;
 							Options.Std.string_of_sat_solver Options.Std.Cadical;
-							Options.Std.string_of_sat_solver Options.Std.Glucose],
+							Options.Std.string_of_sat_solver Options.Std.Glucose;
+                            Options.Std.string_of_sat_solver Options.Std.Kissat],
                              (fun str ->
                                if str = Options.Std.string_of_sat_solver Options.Std.Cryptominisat then sat_solver := Cryptominisat
                                else if str = Options.Std.string_of_sat_solver Options.Std.Cadical then sat_solver := Cadical
                                else if str = Options.Std.string_of_sat_solver Options.Std.Glucose then sat_solver := Glucose
+                               else if str = Options.Std.string_of_sat_solver Options.Std.Kissat then sat_solver := Kissat
                                else failwith ("Unknown SAT solver: " ^ str))),
-     "\n\t     Specify the SAT solver (default is " ^ Options.Std.string_of_sat_solver Options.Std.default_solver ^ ")\n");
+     "\n\t     Specify the SAT solver (the default is " ^ Options.Std.string_of_sat_solver Options.Std.default_solver ^ ")\n");
     ("-re", Set polys_rewrite_replace_eexp, "\t     Replace expressions rather than variables in the rewriting of\n\t     polynomials (experimental)\n");
     ("-rename_local", Set rename_local, "\n\t     Rename local variables when inlining a call to a procedure\n");
     ("-sage", String (fun str -> sage_path := str; algebra_system := Sage),
