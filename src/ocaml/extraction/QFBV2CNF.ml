@@ -52,7 +52,7 @@ let bb_range_safety_la s =
     SSA.SSA.spec -> QFBV.QFBV.bexp list **)
 
 let bb_range_safety_la_simplified s =
-  map QFBV.QFBV.simplify_bexp (bb_range_safety_la s)
+  map QFBV.QFBV.simplify_bexp2 (bb_range_safety_la s)
 
 (** val bexp_is_not_true : QFBV.QFBV.bexp -> bool **)
 

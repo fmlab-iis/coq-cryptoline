@@ -444,7 +444,7 @@ Section QFBV2CNF.
   (* Combine simplified range spec and safety conditions *)
 
   Definition bb_range_safety_simplified (s : spec) :=
-    map QFBV.simplify_bexp (bb_range_safety s).
+    map QFBV.simplify_bexp2 (bb_range_safety s).
 
   Lemma bb_range_safety_simplified_well_formed E s :
     well_formed_bexps (bb_range_safety s) E ->
@@ -452,7 +452,7 @@ Section QFBV2CNF.
   Proof.
     rewrite /bb_range_safety_simplified. move: (bb_range_safety s) => {s}.
     elim => [| e es IH] //=. move/andP=> [Hwf_e Hwf_es].
-    rewrite (simplify_bexp_well_formed Hwf_e) (IH Hwf_es). reflexivity.
+    rewrite (simplify_bexp2_well_formed Hwf_e) (IH Hwf_es). reflexivity.
   Qed.
 
   Lemma bb_range_safety_simplified_valid E s :
@@ -463,11 +463,11 @@ Section QFBV2CNF.
     move=> es; split=> H s Hco e Hin.
     - move: (H _ Hco) => {H Hco} H. elim: es e Hin H => [| e es IH] //= f Hin H.
       case/orP: Hin => Hin.
-      + rewrite (eqP Hin). apply/simplify_bexp_eqsat. apply: H. exact: mem_head.
+      + rewrite (eqP Hin). apply/simplify_bexp2_eqsat. apply: H. exact: mem_head.
       + apply: (IH _ Hin). move=> g Hing. apply: H. by rewrite in_cons Hing orbT.
     - move: (H _ Hco) => {H Hco} H. elim: es e Hin H => [| e es IH] //= f Hin H.
       case/orP: Hin => Hin.
-      + rewrite (eqP Hin). apply/simplify_bexp_eqsat. apply: H. exact: mem_head.
+      + rewrite (eqP Hin). apply/simplify_bexp2_eqsat. apply: H. exact: mem_head.
       + apply: (IH _ Hin). move=> g Hing. apply: H. by rewrite in_cons Hing orbT.
   Qed.
 
@@ -523,32 +523,32 @@ Section QFBV2CNF.
     (qfbv_spec_range_split_la s) ++ (qfbv_spec_safety_la s).
 
   Definition bb_range_safety_la_simplified (s : spec) :=
-    map QFBV.simplify_bexp (bb_range_safety_la s).
+    map QFBV.simplify_bexp2 (bb_range_safety_la s).
 
   Lemma map_simplify_bexp_eqvalid E es :
-    valid_qfbv_bexps E es <-> valid_qfbv_bexps E (map simplify_bexp es).
+    valid_qfbv_bexps E es <-> valid_qfbv_bexps E (map simplify_bexp2 es).
   Proof.
     elim: es => [| e es [IH1 IH2]] //=. split=> H s Hco e' Hin.
     - rewrite in_cons in Hin. case/orP: Hin => Hin.
-      + rewrite (eqP Hin). apply/simplify_bexp_eqsat.
+      + rewrite (eqP Hin). apply/simplify_bexp2_eqsat.
         apply: (H s Hco). exact: mem_head.
       + apply: (IH1 _ _ Hco _ Hin). exact: (valid_qfbv_bexps_tl H).
-    - apply/simplify_bexp_eqsat. apply: (H _ Hco). rewrite -map_cons.
+    - apply/simplify_bexp2_eqsat. apply: (H _ Hco). rewrite -map_cons.
       apply/mapP. exists e'; last by reflexivity. assumption.
   Qed.
 
   Lemma map_simplify_bexp_well_formed E es :
-    well_formed_bexps es E -> well_formed_bexps (map simplify_bexp es) E.
+    well_formed_bexps es E -> well_formed_bexps (map simplify_bexp2 es) E.
   Proof.
     elim: es => [| e es IH] //=. move/andP=> [Hwf_e Hwf_es].
-    rewrite (QFBV.simplify_bexp_well_formed Hwf_e) (IH Hwf_es).
+    rewrite (QFBV.simplify_bexp2_well_formed Hwf_e) (IH Hwf_es).
     done.
   Qed.
 
   Lemma map_simplify_bexp_valid_qfbv_bexps E es1 es2 :
     valid_qfbv_bexps E es1 <-> valid_qfbv_bexps E es2 ->
-    valid_qfbv_bexps E [seq simplify_bexp i | i <- es1] <->
-    valid_qfbv_bexps E [seq simplify_bexp i | i <- es2].
+    valid_qfbv_bexps E [seq simplify_bexp2 i | i <- es1] <->
+    valid_qfbv_bexps E [seq simplify_bexp2 i | i <- es2].
   Proof.
     move=> [H1 H2]. split=> H.
     - apply/(map_simplify_bexp_eqvalid _ es2). apply: H1.
