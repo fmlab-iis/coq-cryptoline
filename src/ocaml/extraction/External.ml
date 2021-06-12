@@ -907,11 +907,11 @@ let run_singular_lwt header ifile ofile =
   let%lwt _ = Options.WithLwt.lock_log () in
   let%lwt _ = write_header_to_log header in
   let%lwt _ = Options.WithLwt.trace "INPUT TO SINGULAR:" in
-  let%lwt _ = Options.WithLwt.unix ("cat " ^ ifile ^ " >>  " ^ !logfile) in
+  let%lwt _ = Options.WithLwt.trace_file ifile in
   let%lwt _ = Options.WithLwt.trace "" in
   let%lwt _ = Options.WithLwt.trace ("Execution time of Singular: " ^ string_of_float (t2 -. t1) ^ " seconds") in
   let%lwt _ = Options.WithLwt.trace "OUTPUT FROM SINGULAR:" in
-  let%lwt _ = Options.WithLwt.unix ("cat \"" ^ ofile ^ "\" >>  " ^ !logfile) in
+  let%lwt _ = Options.WithLwt.trace_file ofile in
   let%lwt _ = Options.WithLwt.trace "" in
   let _ = Options.WithLwt.unlock_log () in
   Lwt.return_unit
