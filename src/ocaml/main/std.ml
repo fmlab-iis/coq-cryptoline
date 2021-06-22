@@ -12,6 +12,7 @@ let action = ref Verify
 let vars_cache_in_rewriting = ref true
 
 let args = [
+    (*
     ("-autocast", Set Options.Std.auto_cast, " Automatically cast variables when parsing untyped programs\n");
     ("-autovpc", Unit (fun () -> Options.Std.auto_cast := true; Options.Std.auto_cast_preserve_value := true), "  Automatically cast variables when parsing untyped programs\n");
     ("-cli", Set Options.Std.use_cli, "\t     Use CLI to run verification tasks (when # of jobs > 1)\n");
@@ -24,15 +25,21 @@ let args = [
     ("-disable_epost", Clear verify_epost, "\n\t     Disable verification of algebraic postconditions (including cuts)\n");
     ("-disable_rpost", Clear verify_rpost, "\n\t     Disable verification of range postconditions (including cuts)\n");
     ("-disable_safety", Clear verify_program_safety, "\n\t     Disable verification of program safety\n");
+     *)
     ("-disable_vars_cache_in_rewriting", Clear vars_cache_in_rewriting, "\n\t     Disable variables cache in rewriting\n");
     ("-jobs", Int (fun j -> jobs := j),
      "N    Set number of jobs (default = 4)\n");
     ("-p", Unit (fun () -> action := Parse), "\t     Print the parsed specification\n");
+    (*
     ("-pespec", Unit (fun () -> action := PrintESpec), "   Print the parsed algebraic specification\n");
     ("-prspec", Unit (fun () -> action := PrintRSpec), "   Print the parsed range specification\n");
     ("-pssa", Unit (fun () -> action := PrintSSA), "     Print the parsed specification in SSA\n");
+     *)
+    (*
     ("-typing_file", String (fun f -> Options.Std.typing_file := Some f), "\n\t     Predefined typing in parsing untyped programs\n");
-    ("-v", Set verbose, "\t     Display verbose messages\n");
+     *)
+    ("-v", Set verbose, "\t     Display verbose messages\n")
+    (*
     ("-vector", Set use_vector_parser, "   Use the vectorized parser\n");
     ("-vecuts", String (fun str -> verify_ecuts := Some (List.map
                                                            (fun str ->
@@ -52,6 +59,7 @@ let args = [
                                                            )
                                                            (Str.split (Str.regexp ",") str))),
      "INDICES\n\t     Verify the specified range cuts (comma separated). The indices\n\t     start with 0. The range postcondition is the last cut.\n")
+     *)
   ]@Common.args
 let args = List.sort Pervasives.compare args
 
