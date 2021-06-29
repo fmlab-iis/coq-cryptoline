@@ -2916,7 +2916,6 @@ Section SplitSpec.
   Lemma bv2z_espec_sound (o : options) (s : spec) :
     well_formed_ssa_spec s ->
     ssa_spec_safe s ->
-    valid_rspec (rspec_of_spec s) ->
     ZSSA.valid_zspec (bv2z_espec o (new_svar_spec s) (espec_of_spec s)) ->
     valid_espec s.
   Proof.
@@ -2926,7 +2925,7 @@ Section SplitSpec.
     dcase (new_svar_spec {| sinputs := E; spre := f; sprog := p; spost := g |}) =>
     avn Havn. set g1 := initial_index.
     dcase (bv2z_program o E avn g1 (eqn_program p)) => [[g2 eprogs] Hzp].
-    move=> Hsafe Hrng Heqn bs1 bs2 /= Hcon [Hpre_eqn Hpre_rng] Hprog.
+    move=> Hsafe Heqn bs1 bs2 /= Hcon [Hpre_eqn Hpre_rng] Hprog.
 
     rewrite /ZSSA.valid_zspec /= in Heqn.
 
@@ -2983,7 +2982,7 @@ Section SplitSpec.
     valid_spec s.
   Proof.
     move=> Hwf Hsafe Hvr Hvz. apply: valid_spec_split.
-    - exact: (bv2z_espec_sound Hwf Hsafe Hvr Hvz).
+    - exact: (bv2z_espec_sound Hwf Hsafe Hvz).
     - exact: Hvr.
   Qed.
 
