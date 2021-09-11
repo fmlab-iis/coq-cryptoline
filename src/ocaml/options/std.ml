@@ -127,8 +127,6 @@ let cli_path = ref "cv_cli"
 
 let rename_local = ref false
 
-let use_legacy_parser = ref false
-let use_untyped_parser = ref false
 let use_vector_parser = ref false
 
 let auto_cast = ref false
