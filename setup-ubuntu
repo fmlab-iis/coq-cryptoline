@@ -1,0 +1,192 @@
+#!/bin/bash
+
+inside_coqcryptoline=no
+read -n 1 -p "Are you running this script inside CoqCryptoline source code directory (y/n)? " answer
+case ${answer} in
+  y|Y )
+    inside_coqcryptoline=yes
+    ;;
+  * )
+    inside_coqcryptoline=no
+    ;;
+esac
+echo
+echo
+
+
+install_singular=no
+read -n 1 -p "The computer algebra system Singular is required to verify
+algebraic conditions. Install Singular (y/n)? " answer
+case ${answer} in
+  y|Y )
+    install_singular=yes
+    ;;
+  * )
+    install_singular=no
+    ;;
+esac
+echo
+echo
+
+
+install_kissat=no
+read -n 1 -p "The SAT solver kissat is required to verify range conditions.
+Install the SAT solver kissat version sc2020 (y/n)? " answer
+case ${answer} in
+  y|Y )
+    install_kissat=yes
+    ;;
+  * )
+    install_kissat=no
+    ;;
+esac
+echo
+echo
+
+
+install_grat=no
+read -n 1 -p "The SAT solver certificate checking tool chain GRAT is required
+to certify UNSAT proofs produced by SAT solvers. Install the SAT solver
+certificate checking tool chain GRAT (y/n)? " answer
+case ${answer} in
+  y|Y )
+    install_grat=yes
+    ;;
+  * )
+    install_grat=no
+    ;;
+esac
+echo
+echo
+
+
+compile_coq=no
+read -n 1 -p "Compilation of the Coq proofs of CoqCryptoline is not required
+for running the extracted certified OCaml code. It takes much more memory to
+compile the Coq proofs of CoqCryptoline. Do you want to compile the Coq proofs
+of CoqCryptoline (y/n)? " answer
+case ${answer} in
+  y|Y )
+    compile_coq=yes
+    ;;
+  * )
+    compile_coq=no
+    ;;
+esac
+echo
+echo
+
+
+echo "Below is the configuration."
+echo "* Some required Ubuntu packages will be installed."
+if [[ "${install_singular}" == "yes" ]]; then
+  echo "* Computer algebra system Singular will be installed."
+else
+  echo "* Computer algebra system Singular will not be installed."
+fi
+if [[ "${install_kissat}" == "yes" ]]; then
+  echo "* SAT solver kissat will be installed to /usr/local/bin."
+else
+  echo "* SAT solver kissat will not be installed."
+fi
+if [[ "${install_grat}" == "yes" ]]; then
+  echo "* SAT solver certificate checking tool chain GRAT will be installed"
+  echo "  to /usr/local/bin."
+else
+  echo "* SAT solver certificate checking tool chain GRAT will not be installed."
+fi
+if [[ "${inside_coqcryptoline}" == "yes" ]]; then
+  echo "* Use the source code of CoqCryptoline in ${PWD}."
+else
+  echo "* The CoqCryptoline project will be installed to ~/."
+fi
+if [[ "${compile_coq}" == "yes" ]]; then
+  echo "* Both Coq proofs and OCaml source code will be compiled."
+else
+  echo "* Compilation of the Coq proofs will be skipped."
+  echo "* OCaml source code will be compiled."
+fi
+
+doit=no
+read -n 1 -p "Continue (y/n)? " answer
+case ${answer} in
+  y|Y )
+    doit=yes
+    ;;
+  * )
+    doit=no
+    ;;
+esac
+echo
+echo
+if [[ "${doit}" != "yes" ]]; then
+  exit
+fi
+
+echo "# Installing Ubuntu packages #"
+
+sudo apt -y install \
+	build-essential git ocaml ocaml-dune libzarith-ocaml-dev \
+	coq libssreflect-coq liblwt-ocaml-dev \
+	cmake mlton libboost-timer-dev \
+	singular
+
+if [[ "${install_kissat}" == "yes" ]]; then
+  echo "# Installing kissat to /usr/local/bin #"
+
+  wget https://github.com/arminbiere/kissat/archive/refs/tags/sc2020.tar.gz
+  tar zxf sc2020.tar.gz
+  pushd kissat-sc2020
+  ./configure
+  make
+  sudo install build/kissat /usr/local/bin
+  popd
+  [[ -d "kissat-sc2020" ]] && rm -rf kissat-sc2020
+  [[ -f "sc2020.tar.gz" ]] && rm -f sc2020.tar.gz
+fi
+
+if [[ "${install_grat}" == "yes" ]]; then
+  echo "# Installing grat to /usr/local/bin #"
+
+  wget https://www21.in.tum.de/~lammich/grat/gratgen.tgz
+  wget https://www21.in.tum.de/~lammich/grat/gratchk.tgz
+  tar zxf gratgen.tgz
+  tar zxf gratchk.tgz
+  pushd gratgen
+  cmake .
+  make
+  sudo install gratgen /usr/local/bin
+  popd
+  [[ -d "gratgen" ]] && rm -rf gratgen
+  [[ -f "gratgen.tgz" ]] && rm -f gratgen.tgz
+  pushd gratchk/code
+  make
+  sudo install gratchk /usr/local/bin
+  popd
+  [[ -d "gratchk" ]] && rm -rf gratchk
+  [[ -f "gratchk.tgz" ]] && rm -rf gratchk.tgz
+fi
+
+if [[ "${inside_coqcryptoline}" == "no" ]]; then
+  echo "# Installing CoqCryptoline project to ~/."
+else
+  echo "# Compiling CoqCryptoline at ${PWD} #"
+fi
+
+if [[ "${inside_coqcryptoline}" == "no" ]]; then
+  pushd ~/
+  git clone https://github.com/fmlab-iis/coq-cryptoline.git
+  pushd ~/coq-cryptoline
+fi
+git submodule update --init --recursive
+if [[ "${compile_coq}" == "yes" ]]; then
+  make all
+fi
+pushd ./src/ocaml
+dune build
+popd
+if [[ "${inside_coqcryptoline}" == "no" ]]; then
+  popd
+  popd
+fi
+

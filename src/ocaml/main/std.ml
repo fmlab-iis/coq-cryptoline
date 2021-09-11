@@ -63,7 +63,7 @@ let args = [
   ]@Common.args
 let args = List.sort Pervasives.compare args
 
-let usage = "Usage: cv OPTIONS FILE\n"
+let usage = "Usage: coqcryptoline.exe OPTIONS FILE\n"
 
 let parse_spec file =
   let t1 = Unix.gettimeofday() in

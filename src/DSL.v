@@ -1983,6 +1983,19 @@ Module MakeDSL
     | Iassume e => well_typed_bexp E e
     end.
 
+  Lemma well_typed_eexp_true E e : well_typed_eexp E e.
+  Proof.
+    elim: e => //=. move=> op e1 Hwt1 e2 Hwt2. by rewrite Hwt1 Hwt2.
+  Qed.
+
+  Lemma well_typed_ebexp_true E e : well_typed_ebexp E e.
+  Proof.
+    elim: e => //=.
+    - move=> e1 e2. by rewrite !well_typed_eexp_true.
+    - move=> e1 e2 e3. by rewrite !well_typed_eexp_true.
+    - move=> e1 Hwt1 e2 Hwt2. by rewrite Hwt1 Hwt2.
+  Qed.
+
 
   (* Well-formedness *)
 
