@@ -1,0 +1,48 @@
+proc main(uint64 a0_0, uint64 a1_0, uint64 a2_0, uint64 a3_0, uint64 b0_0, uint64 b1_0, uint64 b2_0, uint64 b3_0) =
+{ true && true }
+adds carry_1 v45_REAL_1 b0_0 a0_0;
+adc v45_IMAGE_1 0@uint64 0@uint64 carry_1;
+subb gt_value_1 dontcare_1 0@uint64 v45_IMAGE_1;
+assume gt_value_1 = carry_1 && true;
+vpc v5_2@uint8 gt_value_1;
+vpc carry41_1@uint64 v5_2;
+adds carry_2 v87_REAL_1 a1_0 b1_0;
+adc v87_IMAGE_1 0@uint64 0@uint64 carry_2;
+subb gt_value_2 dontcare_2 0@uint64 v87_IMAGE_1;
+assume gt_value_2 = carry_2 && true;
+vpc v58_2@uint8 gt_value_2;
+adds carry_3 v65_REAL_1 carry41_1 v87_REAL_1;
+adc v65_IMAGE_1 0@uint64 0@uint64 carry_3;
+subb gt_value_3 dontcare_3 0@uint64 v65_IMAGE_1;
+assume gt_value_3 = carry_3 && true;
+vpc v60_2@uint8 gt_value_3;
+or v61_1@uint8 v58_2 v60_2;
+assume v61_1 = v58_2 + v60_2 && true;
+vpc carry62_1@uint64 v61_1;
+adds carry_4 v27_REAL_1 a2_0 b2_0;
+adc v27_IMAGE_1 0@uint64 0@uint64 carry_4;
+subb gt_value_4 dontcare_4 0@uint64 v27_IMAGE_1;
+assume gt_value_4 = carry_4 && true;
+vpc v79_2@uint8 gt_value_4;
+adds carry_5 v21_REAL_1 carry62_1 v27_REAL_1;
+adc v21_IMAGE_1 0@uint64 0@uint64 carry_5;
+subb gt_value_5 dontcare_5 0@uint64 v21_IMAGE_1;
+assume gt_value_5 = carry_5 && true;
+vpc v81_2@uint8 gt_value_5;
+or v82_1@uint8 v79_2 v81_2;
+assume v82_1 = v79_2 + v81_2 && true;
+vpc carry83_1@uint64 v82_1;
+adds carry_6 v23_REAL_1 a3_0 b3_0;
+adc v23_IMAGE_1 0@uint64 0@uint64 carry_6;
+subb gt_value_6 dontcare_6 0@uint64 v23_IMAGE_1;
+assume gt_value_6 = carry_6 && true;
+vpc v3_2@uint8 gt_value_6;
+adds carry_7 v74_REAL_1 v23_REAL_1 carry83_1;
+adc v74_IMAGE_1 0@uint64 0@uint64 carry_7;
+subb gt_value_7 dontcare_7 0@uint64 v74_IMAGE_1;
+assume gt_value_7 = carry_7 && true;
+vpc v4_2@uint8 gt_value_7;
+or v11_1@uint8 v3_2 v4_2;
+assume v11_1 = v3_2 + v4_2 && true;
+vpc carry18_1@uint64 v11_1;
+{ v45_REAL_1 + (v65_REAL_1 * 18446744073709551616) + (v21_REAL_1 * 340282366920938463463374607431768211456) + (v74_REAL_1 * 6277101735386680763835789423207666416102355444464034512896) + (carry18_1 * 115792089237316195423570985008687907853269984665640564039457584007913129639936) = a0_0 + (a1_0 * 18446744073709551616) + (a2_0 * 340282366920938463463374607431768211456) + (a3_0 * 6277101735386680763835789423207666416102355444464034512896) + b0_0 + (b1_0 * 18446744073709551616) + (b2_0 * 340282366920938463463374607431768211456) + (b3_0 * 6277101735386680763835789423207666416102355444464034512896) && and [gt_value_1 = carry_1, gt_value_2 = carry_2, gt_value_3 = carry_3, v61_1 = add (v58_2) (v60_2), gt_value_4 = carry_4, gt_value_5 = carry_5, v82_1 = add (v79_2) (v81_2), gt_value_6 = carry_6, gt_value_7 = carry_7, v11_1 = add (v3_2) (v4_2)] }
