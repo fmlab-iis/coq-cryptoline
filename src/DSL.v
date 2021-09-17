@@ -1406,7 +1406,6 @@ Module MakeDSL
 
   Local Notation state := S.t.
 
-  (* TODO: Finish this *)
   Inductive eval_instr (te : TE.env) : instr -> state -> state -> Prop :=
   | EImov v a s t :
       S.Upd v (eval_atomic a s) s t ->
@@ -1515,17 +1514,8 @@ Module MakeDSL
   | EImul v a1 a2 s t :
       S.Upd v (mulB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
       eval_instr te (Imul v a1 a2) s t
-  (*
-  | EImull vh vl a1 a2 s t :
-      S.Upd2 vl (low (size (eval_atomic a2 s))
-                     (full_mul (eval_atomic a1 s) (eval_atomic a2 s)))
-             vh (high (size (eval_atomic a1 s))
-                      (full_mul (eval_atomic a1 s) (eval_atomic a2 s)))
-             s t ->
-      eval_instr te (Imull vh vl a1 a2) s t
-   *)
   | EImullU vh vl a1 a2 s t :
-      is_unsigned (atyp a1 te) ->      
+      is_unsigned (atyp a1 te) ->
       S.Upd2 vl (low (size (eval_atomic a2 s))
                      (mulB (zext (size (eval_atomic a1 s)) (eval_atomic a1 s))
                            (zext (size (eval_atomic a1 s)) (eval_atomic a2 s))))
@@ -1544,11 +1534,6 @@ Module MakeDSL
                             (sext (size (eval_atomic a1 s)) (eval_atomic a2 s))))
              s t ->
       eval_instr te (Imull vh vl a1 a2) s t
-  (*
-  | EImulj v a1 a2 s t :
-      S.Upd v (full_mul (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
-      eval_instr te (Imulj v a1 a2) s t
-   *)
   | EImuljU v a1 a2 s t :
       is_unsigned (atyp a1 te) ->
       S.Upd v (mulB (zext (size (eval_atomic a1 s)) (eval_atomic a1 s))
@@ -1838,26 +1823,6 @@ Module MakeDSL
     - exact: (He s1 s2 Hcon (conj Hepre Hrpre) Hprog).
     - exact: (Hr s1 s2 Hcon Hrpre (eval_rng_program Hprog)).
   Qed.
-
-  (* clash with Ltac notation
-  Local Notation "te , s |= f" := (eval_bexp f te s) (at level 74, no associativity).
-  Local Notation "f ===> g" := (entails f g) (at level 82, no associativity).
-  Local Notation "te |= {{ f }} p {{ g }}" :=
-    (valid_spec {| sinputs := te;
-                   spre := f;
-                   sprog := p;
-                   spost := g |}) (at level 83).
-  Local Notation "te |='e' {{ f }} p {{ g }}" :=
-    (valid_espec {| esinputs := te;
-                    espre := f;
-                    esprog := p;
-                    espost := g |}) (at level 83).
-  Local Notation "te |='r' {{ f }} p {{ g }}" :=
-    (valid_espec {| rsinputs := te;
-                    rspre := f;
-                    rsprog := p;
-                    rspost := g |}) (at level 83).
-  *)
 
   (* Well-typedness *)
 
@@ -3898,15 +3863,6 @@ Module MakeDSL
               (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
               /asize /Typ.double_typ;
       by case (atyp a te) => /= // n; rewrite mul2n addnn // .
-    (*
-    rewrite size_full_mul
-            (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
-            (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
-            /asize -(eqP Hty) .
-    rewrite /Typ.double_typ /= .
-      by case (atyp a te) => /= // n;
-                               rewrite mul2n addnn // .
-     *)
   Qed .
 
   Lemma conform_eval_succ_typenv_Isplit te t t0 a n s1 s2 :

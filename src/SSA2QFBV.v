@@ -100,27 +100,6 @@ Proof.
   rewrite /asize. by move=> ->.
 Qed.
 
-
-(*
-Lemma adcB_addB bsc bs0 bs1 :
-  size bsc == 1 ->
-  size bs0 == size bs1 ->
-  (adcB (to_bool bsc) bs0 bs1).2 ==
-  (zext (size bs0) bsc +# bs0 +# bs1)%bits.
-Proof.
-  move => Hszc Hszeq.
-  rewrite adcB_nat addB_nat.
-  rewrite !size_addB size_adcB size_zext /=.
-  move : (leq_addl (size bsc) (size bs0)) => /minn_idPr ->.
-  rewrite addB_nat size_addB size_zext /=.
-  move : (leq_addl (size bsc) (size bs0)) => /minn_idPr ->.
-  rewrite -!(eqP Hszeq) /=.
-  move : (leqnn (size bs0)) => /minn_idPl ->.
-  rewrite (eqP (to_nat_zext_bool _ Hszc)).
-  apply from_nat_idem.
-Qed.
-*)
-
 Lemma eval_exp_if s b qfbv0 qfbv1 :
   QFBV.eval_exp (if b then qfbv0 else qfbv1) s =
   if b then QFBV.eval_exp qfbv0 s else QFBV.eval_exp qfbv1 s.
@@ -694,12 +673,6 @@ Definition bexp_instr (E : SSATE.env) (i : SSA.instr) : QFBV.bexp :=
     qfbv_conj
       (qfbv_eq (qfbv_var c) (qfbv_high 1 qerext))
       (qfbv_eq (qfbv_var v) (qfbv_low a_size qerext))
-    (*
-    qfbv_conj
-      (qfbv_eq (qfbv_var c)
-               (qfbv_ite (qfbv_uaddo qe1 qe2) (qfbv_one 1) (qfbv_zero 1)))
-      (qfbv_eq (qfbv_var v) (qfbv_add qe1 qe2))
-     *)
   (* Iadc (v, a1, a2, y): v = a1 + a2 + y, overflow is forbidden *)
   | SSA.Iadc v a1 a2 y =>
     let 'a_size := asize a1 E in
@@ -1785,11 +1758,6 @@ Proof.
   - rewrite -Typ.not_signed_is_unsigned H /=.
     to_size_atyp a; to_size_atyp a0.
     apply/andP; split; by repeat eval_exp_exp_atomic_to_pred_state.
-  (*
-  rewrite (eqP (mul_sext (eval_atomic a s1) (eval_atomic a0 s1))).
-  to_size_atyp a. to_size_atyp a0.
-  apply/andP; split; done.
-   *)
 Qed.
 
 Lemma bexp_instr_eval_Imulj E t a a0 s1 s2 :
@@ -1808,10 +1776,6 @@ Proof.
   - rewrite H /=. to_size_atyp a. by repeat eval_exp_exp_atomic_to_pred_state.
   - rewrite -Typ.not_signed_is_unsigned H /=.
     to_size_atyp a. by repeat eval_exp_exp_atomic_to_pred_state.
-  (*
-  rewrite (eqP (mul_sext (eval_atomic a s1) (eval_atomic a0 s1))).
-  to_size_atyp a. exact: eqxx.
-   *)
 Qed.
 
 Lemma bexp_instr_eval_Isplit E t t0 a n s1 s2 :
@@ -2374,10 +2338,6 @@ Proof.
   - have Hsn: Typ.is_signed (atyp a1 E) by rewrite Htyp.
     rewrite Htyp /= in Hev. move/andP: Hev => [Hev1 Hev2].
     apply: (EImullS Hsn). norm_tac. by solve_tac.
-  (*
-  apply: EImull. norm_tac.
-  rewrite (eqP (mul_sext _ _)). to_asize. by solve_tac.
-   *)
 Qed.
 
 Lemma eval_bexp_instr_Imulj E s :
@@ -2395,10 +2355,6 @@ Proof.
   - have Hsn: Typ.is_signed (atyp a1 E) by rewrite Htyp.
     rewrite Htyp /= in Hev.
     apply: (EImuljS Hsn). norm_tac. by solve_tac.
-  (*
-  apply: EImulj. norm_tac.
-  rewrite (eqP (mul_sext _ _)). to_asize. by solve_tac.
-   *)
 Qed.
 
 Lemma eval_bexp_instr_Isplit E s :

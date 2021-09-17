@@ -30,7 +30,6 @@ Section Verification.
 
   Definition verify_rspec_safety (s : SSA.spec) : bool :=
     let fE := SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s) in
-    (* filter is not necessary, it is used to make grat work well *)
     let es := bb_range_safety_la_simplified_filtered s in
     let '(_, _, _, cnfs) := bb_hbexps_cache fE (map QFBVHash.hash_bexp es) in
     ext_all_unsat cnfs.

@@ -1034,7 +1034,6 @@ Section MakeSSA.
   Proof.
     move=> Hempty.
     move: m.
-    (* intros x. *)
     rewrite /ssa_typenv /=.
     move=> m.
     have Heq: (TE.fold (add_to_ste m) te (SSATE.empty typ)) = (SSATE.empty typ).
@@ -2154,9 +2153,6 @@ Section MakeSSA.
       ssa_eval_instr_succ_tac.
       ssa_eval_instr_succ_tac.
       rewrite ssa_var_upd_eq.
-      (* rewrite (ssa_atyp a H1). *)
-      (* exact: SSAStore.Upd_upd. *)
-      (* rewrite /=. *)
       repeat ssa_eval_instr_succ_tac.
       rewrite /=.
       repeat ssa_eval_instr_succ_tac.
@@ -2343,7 +2339,6 @@ Section MakeSSA.
         repeat dessa_eval_instr_succ_tac.
         repeat dessa_eval_instr_succ_tac.
     - dessa_eval_instr_succ_tac.
-      (* rewrite /= in H3. *)
       inversion H2; subst;clear H2.
       + repeat dessa_eval_instr_succ_tac.
       + dessa_eval_instr_succ_tac.
