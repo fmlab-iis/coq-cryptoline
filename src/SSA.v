@@ -1832,9 +1832,9 @@ Section MakeSSA.
     - done.
     - move=> w e1 e2. rewrite 2!(ssa_eval_rexp _ Heq). done.
     - move=> w op e1 e2. rewrite 2!(ssa_eval_rexp _ Heq) ssa_eval_rcmpop. done.
-    - move=> e1 [IH11 IH12]. tauto.
-    - move=> e1 [IH11 IH12] e2 [IH21 IH22]. tauto.
-    - move=> e1 [IH11 IH12] e2 [IH21 IH22]. tauto.
+    - move=> e1 IH. by iffb_tac.
+    - move=> e1 IH1 e2 IH2. by iffb_tac.
+    - move=> e1 IH1 e2 IH2. by iffb_tac.
   Qed.
 
   Lemma ssa_eval_rbexp1 m s ss e :
@@ -3466,14 +3466,13 @@ Section MakeSSA.
       move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2].
       rewrite (ssa_unchanged_instr_eval_rexp Hun1 Hei)
               (ssa_unchanged_instr_eval_rexp Hun2 Hei) // .
-    - move=> e IH Hun Hei .
-      rewrite (IH Hun Hei) // .
+    - move=> e IH Hun Hei. move: (IH Hun Hei) => H. by iffb_tac.
     - move=> e1 IH1 e2 IH2 Hun Hei.
       move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2].
-      rewrite (IH1 Hun1 Hei) (IH2 Hun2 Hei) // .
+      move: (IH1 Hun1 Hei) (IH2 Hun2 Hei) => H1 H2. by iffb_tac.
     - move=> e1 IH1 e2 IH2 Hun Hei.
       move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2].
-      rewrite (IH1 Hun1 Hei) (IH2 Hun2 Hei) //.
+      move: (IH1 Hun1 Hei) (IH2 Hun2 Hei) => H1 H2. by iffb_tac.
   Qed.
 
   Lemma ssa_unchanged_instr_eval_bexp e te s1 s2 i :
@@ -3547,14 +3546,13 @@ Section MakeSSA.
       move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
       rewrite (ssa_unchanged_program_eval_rexp Hun1 Hep)
               (ssa_unchanged_program_eval_rexp Hun2 Hep) // .
-    - move=> e IH Hun Hep.
-      rewrite (IH Hun Hep) // .
+    - move=> e IH Hun Hep. move: (IH Hun Hep) => H. by iffb_tac.
     - move=> e1 IH1 e2 IH2 Hun Hep.
       move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
-      rewrite (IH1 Hun1 Hep) (IH2 Hun2 Hep) // .
+      move: (IH1 Hun1 Hep) (IH2 Hun2 Hep) => H1 H2. by iffb_tac.
     - move=> e1 IH1 e2 IH2 Hun Hep.
       move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
-      rewrite (IH1 Hun1 Hep) (IH2 Hun2 Hep) //.
+      move: (IH1 Hun1 Hep) (IH2 Hun2 Hep) => H1 H2. by iffb_tac.
   Qed.
 
   Lemma ssa_unchanged_program_eval_rbexp1 e te s1 s2 p :

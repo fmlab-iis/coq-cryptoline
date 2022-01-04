@@ -2042,6 +2042,20 @@ module MakeDSL =
     | Ruext (_, e0, i) -> zext i (eval_rexp e0 s)
     | Rsext (_, e0, i) -> sext i (eval_rexp e0 s)
 
+  (** val eval_rbexp : rbexp -> S.t -> bool **)
+
+  let rec eval_rbexp e s =
+    match e with
+    | Rtrue -> true
+    | Req (_, e1, e2) ->
+      eq_op bitseq_eqType (Obj.magic eval_rexp e1 s)
+        (Obj.magic eval_rexp e2 s)
+    | Rcmp (_, op0, e1, e2) ->
+      eval_rcmpop op0 (eval_rexp e1 s) (eval_rexp e2 s)
+    | Rneg e0 -> negb (eval_rbexp e0 s)
+    | Rand (e1, e2) -> (&&) (eval_rbexp e1 s) (eval_rbexp e2 s)
+    | Ror (e1, e2) -> (||) (eval_rbexp e1 s) (eval_rbexp e2 s)
+
   (** val eval_atomic : atomic -> S.t -> bits **)
 
   let eval_atomic a s =

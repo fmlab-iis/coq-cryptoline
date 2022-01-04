@@ -1037,6 +1037,8 @@ module SSA :
 
   val eval_rexp : rexp -> SSAStore.t -> bits
 
+  val eval_rbexp : rbexp -> SSAStore.t -> bool
+
   val eval_atomic : atomic -> SSAStore.t -> bits
 
   val instr_succ_typenv : instr -> TypEnv.SSATE.env -> TypEnv.SSATE.env

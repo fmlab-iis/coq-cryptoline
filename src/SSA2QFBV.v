@@ -608,25 +608,9 @@ Proof.
     + move => Heq; rewrite !eval_exp_rexp Heq //.
   - move => w op e0 e1;
       elim : op => /=; rewrite -!eval_exp_rexp //.
-  - move => e; elim => Hleft Hright; split.
-    + move => /negP Hneg.
-      red; move => Heval.
-      move : (Hright Heval); done.
-    + move => Heval.
-      apply /negP; red; move => Hneg.
-      move : (Hleft Hneg); done.
-  - move => e0 IH0 e1 IH1; split.
-    + move => /andP [Heval0 Heval1].
-      tauto.
-    + move => [Heval0 Heval1].
-      elim IH0 => {IH0} _ IH0; elim IH1 => {IH1} _ IH1.
-      rewrite (IH0 Heval0) (IH1 Heval1) //.
-  - move => e0 IH0 e1 IH1; split.
-    + move => /orP Hor.
-      tauto.
-    + move => Hor.
-      elim IH0 => {IH0} _ IH0; elim IH1 => {IH1} _ IH1.
-      elim Hor; move => He; apply /orP; tauto.
+  - move => e H. by iffb_tac.
+  - move => e0 IH0 e1 IH1. by iffb_tac.
+  - move => e0 IH0 e1 IH1. by iffb_tac.
 Qed.
 
 Lemma eval_bexp_rbexp1 e s :

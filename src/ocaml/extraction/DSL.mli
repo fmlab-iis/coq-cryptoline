@@ -1517,6 +1517,8 @@ module MakeDSL :
 
   val eval_rexp : rexp -> S.t -> bits
 
+  val eval_rbexp : rbexp -> S.t -> bool
+
   val eval_atomic : atomic -> S.t -> bits
 
   val instr_succ_typenv : instr -> TE.env -> TE.env
@@ -3178,6 +3180,8 @@ module DSL :
   val eval_eexp : eexp -> TypEnv.TE.env -> Store.t -> coq_Z
 
   val eval_rexp : rexp -> Store.t -> bits
+
+  val eval_rbexp : rbexp -> Store.t -> bool
 
   val eval_atomic : atomic -> Store.t -> bits
 

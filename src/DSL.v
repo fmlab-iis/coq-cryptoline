@@ -1321,14 +1321,14 @@ Module MakeDSL
     | Eand e1 e2 => eval_ebexp e1 te s /\ eval_ebexp e2 te s
     end.
 
-  Fixpoint eval_rbexp (e : rbexp) (s : S.t) : Prop :=
+  Fixpoint eval_rbexp (e : rbexp) (s : S.t) : bool :=
     match e with
-    | Rtrue => True
-    | Req _ e1 e2 => eval_rexp e1 s = eval_rexp e2 s
+    | Rtrue => true
+    | Req _ e1 e2 => eval_rexp e1 s == eval_rexp e2 s
     | Rcmp _ op e1 e2 => eval_rcmpop op (eval_rexp e1 s) (eval_rexp e2 s)
-    | Rneg e => ~ (eval_rbexp e s)
-    | Rand e1 e2 => eval_rbexp e1 s /\ eval_rbexp e2 s
-    | Ror e1 e2 => eval_rbexp e1 s \/ eval_rbexp e2 s
+    | Rneg e => ~~ (eval_rbexp e s)
+    | Rand e1 e2 => (eval_rbexp e1 s) && (eval_rbexp e2 s)
+    | Ror e1 e2 => (eval_rbexp e1 s) || (eval_rbexp e2 s)
     end.
 
   Definition eval_bexp (e : bexp) (te : TE.env) (s : S.t) : Prop :=
@@ -4203,13 +4203,13 @@ Module MakeDSL
       - move=> _ op e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
         move/andP: Hdef => [Hdef1 Hdef2].
         rewrite (bvs_eqi_eval_rexp Hdef1 Heqi) (bvs_eqi_eval_rexp Hdef2 Heqi). done.
-      - move=> e IH Hdef Heqi. move: (IH Hdef Heqi). tauto.
+      - move=> e IH Hdef Heqi. move: (IH Hdef Heqi)=> H. by iffb_tac.
       - move=> e1 IH1 e2 IH2 Hdef Heqi. rewrite are_defined_union in Hdef.
-        move/andP: Hdef => [Hdef1 Hdef2]. move: (IH1 Hdef1 Heqi) (IH2 Hdef2 Heqi).
-        tauto.
+        move/andP: Hdef => [Hdef1 Hdef2]. move: (IH1 Hdef1 Heqi) (IH2 Hdef2 Heqi) => H1 H2.
+        by iffb_tac.
       - move=> e1 IH1 e2 IH2 Hdef Heqi. rewrite are_defined_union in Hdef.
-        move/andP: Hdef => [Hdef1 Hdef2]. move: (IH1 Hdef1 Heqi) (IH2 Hdef2 Heqi).
-        tauto.
+        move/andP: Hdef => [Hdef1 Hdef2]. move: (IH1 Hdef1 Heqi) (IH2 Hdef2 Heqi) => H1 H2.
+        by iffb_tac.
     Qed.
 
     Lemma bvs_eqi_eval_bexp E e s1 s2 :
@@ -4456,11 +4456,11 @@ Module MakeDSL
       - move=> _ op e1 e2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
         rewrite (force_conform_eval_rexp _ Hsub Hdef1)
                 (force_conform_eval_rexp _ Hsub Hdef2). done.
-      - move=> e IH Hdef. move: (IH Hdef). tauto.
+      - move=> e IH Hdef. move: (IH Hdef) => H. by iffb_tac.
       - move=> e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
-        move: (IH1 Hdef1) (IH2 Hdef2). tauto.
+        move: (IH1 Hdef1) (IH2 Hdef2) => H1 H2. by iffb_tac.
       - move=> e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
-        move: (IH1 Hdef1) (IH2 Hdef2). tauto.
+        move: (IH1 Hdef1) (IH2 Hdef2) => H1 H2. by iffb_tac.
     Qed.
 
     Lemma force_conform_bvs_eqi E1 E2 s :
