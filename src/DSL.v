@@ -2,7 +2,7 @@
 (** Typed CryptoLine. *)
 
 From Coq Require Import List ZArith.
-From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
+From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun choice.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
 From ssrlib Require Import Var SsrOrder ZAriths FSets FMaps Tactics.
@@ -12,6 +12,23 @@ Unset Strict Implicit.
 Import Prenex Implicits.
 
 Delimit Scope dsl with dsl.
+
+(** Modulo. *)
+Section ZEQM.
+
+  Local Open Scope Z_scope.
+
+  Definition zeqm (x y m : Z) := exists k : Z, x - y == k * m.
+
+  Definition xchoose_zeqm (x y m : Z) (ex : zeqm x y m) : Z :=
+    xchoose ex.
+
+  Lemma xchoose_zeqm_sound x y m (ex : zeqm x y m) :
+    x - y = (xchoose_zeqm ex) * m.
+  Proof. exact: (eqP (xchooseP ex)). Qed.
+
+End ZEQM.
+
 
 Section Operators.
 
@@ -1319,7 +1336,7 @@ Module MakeDSL
     | Etrue => True
     | Eeq e1 e2 => eval_eexp e1 te s = eval_eexp e2 te s
     | Eeqmod e1 e2 p =>
-      modulo (eval_eexp e1 te s) (eval_eexp e2 te s) (eval_eexp p te s)
+      zeqm (eval_eexp e1 te s) (eval_eexp e2 te s) (eval_eexp p te s)
     | Eand e1 e2 => eval_ebexp e1 te s /\ eval_ebexp e2 te s
     end.
 

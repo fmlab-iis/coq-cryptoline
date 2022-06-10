@@ -42,7 +42,7 @@ Module ZSSA.
     match e with
     | Etrue => True
     | Eeq e1 e2 => eval_zexp e1 s = eval_zexp e2 s
-    | Eeqmod e1 e2 p => modulo (eval_zexp e1 s) (eval_zexp e2 s) (eval_zexp p s)
+    | Eeqmod e1 e2 p => zeqm (eval_zexp e1 s) (eval_zexp e2 s) (eval_zexp p s)
     | Eand e1 e2 => eval_zbexp e1 s /\ eval_zbexp e2 s
     end.
 
