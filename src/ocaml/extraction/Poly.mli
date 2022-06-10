@@ -12,47 +12,47 @@ open Eqtype
 open Seq
 open Ssrnat
 
-type szbexp =
+type azbexp =
 | Seq of SSA.SSA.eexp * SSA.SSA.eexp
 | Seqmod of SSA.SSA.eexp * SSA.SSA.eexp * SSA.SSA.eexp
 
-type pspec = { ppremises : szbexp list; pconseq : szbexp }
+type arep = { apremises : azbexp list; aconseq : azbexp }
 
 val zexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp -> DSL.eexp
 
-val szbexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> szbexp -> szbexp
+val azbexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> azbexp -> azbexp
 
-val subst_szbexps : SSA.SSA.eexp -> SSA.SSA.eexp -> szbexp list -> szbexp list
+val subst_azbexps : SSA.SSA.eexp -> SSA.SSA.eexp -> azbexp list -> azbexp list
 
-val is_assignment : szbexp -> (ssavar * SSA.SSA.eexp) option
+val is_assignment : azbexp -> (ssavar * SSA.SSA.eexp) option
 
-val simplify_pspec_rec :
-  szbexp list -> szbexp list -> szbexp -> szbexp list * szbexp
+val simplify_arep_rec :
+  azbexp list -> azbexp list -> azbexp -> azbexp list * azbexp
 
-val simplify_pspec : pspec -> pspec
+val simplify_arep : arep -> arep
 
-val szbexp_subst_vars_cache :
-  ssavar -> SSA.SSA.eexp -> SSAVS.t -> (SSAVS.t * szbexp) -> SSAVS.t * szbexp
+val azbexp_subst_vars_cache :
+  ssavar -> SSA.SSA.eexp -> SSAVS.t -> (SSAVS.t * azbexp) -> SSAVS.t * azbexp
 
-val subst_szbexps_vars_cache :
-  ssavar -> SSA.SSA.eexp -> SSAVS.t -> (SSAVS.t * szbexp) list ->
-  (SSAVS.t * szbexp) list
+val subst_azbexps_vars_cache :
+  ssavar -> SSA.SSA.eexp -> SSAVS.t -> (SSAVS.t * azbexp) list ->
+  (SSAVS.t * azbexp) list
 
-val simplify_pspec_vars_cache_rec :
-  (SSAVS.t * szbexp) list -> (SSAVS.t * szbexp) list -> (SSAVS.t * szbexp) ->
-  (SSAVS.t * szbexp) list * (SSAVS.t * szbexp)
+val simplify_arep_vars_cache_rec :
+  (SSAVS.t * azbexp) list -> (SSAVS.t * azbexp) list -> (SSAVS.t * azbexp) ->
+  (SSAVS.t * azbexp) list * (SSAVS.t * azbexp)
 
-val vars_szbexp : szbexp -> SSAVS.t
+val vars_azbexp : azbexp -> SSAVS.t
 
-val pair_with_vars : szbexp -> SSAVS.t * szbexp
+val pair_with_vars : azbexp -> SSAVS.t * azbexp
 
-val simplify_pspec_vars_cache : pspec -> pspec
+val simplify_arep_vars_cache : arep -> arep
 
-val split_zbexp : SSA.SSA.ebexp -> szbexp list
+val split_zbexp : SSA.SSA.ebexp -> azbexp list
 
-val pspecs_of_zspec : ZSSA.ZSSA.zspec -> pspec list
+val areps_of_rep : ZSSA.ZSSA.rep -> arep list
 
-val pspecs_of_zspec_simplified : options -> ZSSA.ZSSA.zspec -> pspec list
+val areps_of_rep_simplified : options -> ZSSA.ZSSA.rep -> arep list
 
 val coq_Znorm_subst : coq_Z coq_PExpr -> coq_Z coq_Pol
 
@@ -78,19 +78,19 @@ val zpexpr_of_zexp :
   SSAVM.t) * coq_Z coq_PExpr
 
 val zpexpr_of_premise :
-  positive -> positive SSAVM.t -> szbexp -> (positive * positive
+  positive -> positive SSAVM.t -> azbexp -> (positive * positive
   SSAVM.t) * coq_Z coq_PExpr
 
 val zpexprs_of_premises :
-  positive -> positive SSAVM.t -> szbexp list -> (positive * positive
+  positive -> positive SSAVM.t -> azbexp list -> (positive * positive
   SSAVM.t) * coq_Z coq_PExpr list
 
 val zpexpr_of_conseq :
-  positive -> positive SSAVM.t -> szbexp -> ((positive * positive
+  positive -> positive SSAVM.t -> azbexp -> ((positive * positive
   SSAVM.t) * coq_Z coq_PExpr) * coq_Z coq_PExpr
 
-val zpexprs_of_pspec :
-  pspec -> (((positive * positive SSAVM.t) * coq_Z coq_PExpr list) * coq_Z
+val imp_of_arep :
+  arep -> (((positive * positive SSAVM.t) * coq_Z coq_PExpr list) * coq_Z
   coq_PExpr) * coq_Z coq_PExpr
 
 val zpexpr_eqb : coq_Z coq_PExpr -> coq_Z coq_PExpr -> bool
@@ -102,6 +102,6 @@ val sum_polys_rec : coq_Z coq_PExpr -> coq_Z coq_PExpr list -> coq_Z coq_PExpr
 
 val sum_polys_tr : coq_Z coq_PExpr list -> coq_Z coq_PExpr
 
-val coefficients_checker_tr :
+val validate_imp_answer_tr :
   coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z coq_PExpr -> coq_Z
   coq_PExpr list -> coq_Z coq_PExpr -> bool

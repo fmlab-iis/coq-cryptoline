@@ -1,4 +1,6 @@
 
+(** Typed CryptoLine. *)
+
 From Coq Require Import List ZArith.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
@@ -798,87 +800,87 @@ Module MakeDSL
 
   (* Instructions and programs *)
 
-  Inductive atomic : Type :=
-  | Avar : var -> atomic
-  | Aconst : typ -> bits -> atomic.
+  Inductive atom : Type :=
+  | Avar : var -> atom
+  | Aconst : typ -> bits -> atom.
 
-  Definition atyp (a : atomic) (te : TE.env) : typ :=
+  Definition atyp (a : atom) (te : TE.env) : typ :=
     match a with
     | Avar v => TE.vtyp v te
     | Aconst ty _ => ty
     end.
 
-  Definition asize (a : atomic) (te : TE.env) : nat := sizeof_typ (atyp a te).
+  Definition asize (a : atom) (te : TE.env) : nat := sizeof_typ (atyp a te).
 
   Inductive instr : Type :=
   (* Imov (v, a): v = a *)
-  | Imov : var -> atomic -> instr
+  | Imov : var -> atom -> instr
   (* Ishl (v, a, n): v = a * 2^n, overflow is forbidden *)
-  | Ishl : var -> atomic -> nat -> instr
+  | Ishl : var -> atom -> nat -> instr
   (* Icshl (vh, vl, a1, a2, n) *)
-  | Icshl : var -> var -> atomic -> atomic -> nat -> instr
+  | Icshl : var -> var -> atom -> atom -> nat -> instr
   (* Inondet (v, t): v = a nondeterministic value of type t *)
   | Inondet : var -> typ -> instr
   (* Icmov (v, c, a1, a2): if c then v = a1 else v = a2 *)
-  | Icmov : var -> atomic -> atomic -> atomic -> instr
+  | Icmov : var -> atom -> atom -> atom -> instr
   (* Inop: do nothing *)
   | Inop : instr
   (* Inot (v, t, a): v = not(a), the one's complement of a, v is of type t *)
-  | Inot : var -> typ -> atomic -> instr
+  | Inot : var -> typ -> atom -> instr
   (* Iadd (v, a1, a2): v = a1 + a2, overflow is forbidden *)
-  | Iadd : var -> atomic -> atomic -> instr
+  | Iadd : var -> atom -> atom -> instr
   (* Iadds (c, v, a1, a2): v = a1 + a2, c = carry flag *)
-  | Iadds : var -> var -> atomic -> atomic -> instr
+  | Iadds : var -> var -> atom -> atom -> instr
   (* Iadc (v, a1, a2, y): v = a1 + a2 + y, overflow is forbidden *)
-  | Iadc : var -> atomic -> atomic -> atomic -> instr
+  | Iadc : var -> atom -> atom -> atom -> instr
   (* Iadcs (c, v, a1, a2, y): v = a1 + a2 + y, c = carry flag *)
-  | Iadcs : var -> var -> atomic -> atomic -> atomic -> instr
+  | Iadcs : var -> var -> atom -> atom -> atom -> instr
   (* Isub (v, a1, a2): v = a1 - a2, overflow is forbidden *)
-  | Isub : var -> atomic -> atomic -> instr
+  | Isub : var -> atom -> atom -> instr
   (* Isubc (c, v, a1, a2): v = a1 + not(a2) + 1, c = carry flag *)
-  | Isubc : var -> var -> atomic -> atomic -> instr
+  | Isubc : var -> var -> atom -> atom -> instr
   (* Isous (b, v, a1, a2): v = a1 - a2, b = borrow flag *)
-  | Isubb : var -> var -> atomic -> atomic -> instr
+  | Isubb : var -> var -> atom -> atom -> instr
   (* Isbc (v, a1, a2, y): v = a1 + not(a2) + y *)
-  | Isbc : var -> atomic -> atomic -> atomic -> instr
+  | Isbc : var -> atom -> atom -> atom -> instr
   (* Isbcs (c, v, a1, a2, y): v = a1 + not(a2) + y, c = carry flag *)
-  | Isbcs : var -> var -> atomic -> atomic -> atomic -> instr
+  | Isbcs : var -> var -> atom -> atom -> atom -> instr
   (* Isbb (v, a1, a2, y): v = a1 - a2 - y *)
-  | Isbb : var -> atomic -> atomic -> atomic -> instr
+  | Isbb : var -> atom -> atom -> atom -> instr
   (* Isbbs (b, v, a1, a2, y): v = a1 - a2 - y, b = borrow flag *)
-  | Isbbs : var -> var -> atomic -> atomic -> atomic -> instr
+  | Isbbs : var -> var -> atom -> atom -> atom -> instr
   (* Imul (v, a1, a2): v = a1 * a2, overflow is forbidden *)
-  | Imul : var -> atomic -> atomic -> instr
+  | Imul : var -> atom -> atom -> instr
   (* Imull (vh, vl, a1, a2): vh and vl are respectively the high part and
      the low part of the full multiplication a1 * a2 *)
-  | Imull : var -> var -> atomic -> atomic -> instr
+  | Imull : var -> var -> atom -> atom -> instr
   (* Iumulj (v, a1, a2): v = the full multiplication of a1 * a2, which is equivalent
      to Iumull (vh, vl, a1, a2); Join (r, vh, vl) *)
-  | Imulj : var -> atomic -> atomic -> instr
+  | Imulj : var -> atom -> atom -> instr
   (* Isplit (vh, vl, a, n): vh is the high (w - n) bits (signed extended to w bits)
      of a and vl is the low n bits (zero extended to w bits) of a where w is the
      bit-width of a *)
-  | Isplit : var -> var -> atomic -> nat -> instr
+  | Isplit : var -> var -> atom -> nat -> instr
   (* == Instructions that cannot be translated to polynomials == *)
   (* Iand (v, t, a1, a2): v = the bitwise AND of a1 and a2, v is of type t *)
-  | Iand : var -> typ -> atomic -> atomic -> instr
+  | Iand : var -> typ -> atom -> atom -> instr
   (* Ior (v, t, a1, a2): v = the bitwise OR of a1 and a2, v is of type t *)
-  | Ior : var -> typ -> atomic -> atomic -> instr
+  | Ior : var -> typ -> atom -> atom -> instr
   (* Ixor (v, t, a1, a2): v = the bitwise XOR of a1 and a2, v is of type t *)
-  | Ixor : var -> typ -> atomic -> atomic -> instr
+  | Ixor : var -> typ -> atom -> atom -> instr
   (* == Type conversions == *)
   (* Icast (v, t, a): v = the value of a represented by the type t of v *)
-  | Icast : var -> typ -> atomic -> instr
+  | Icast : var -> typ -> atom -> instr
   (* Ivpc (v, t, a): v = a, value preserved casting to type t *)
-  | Ivpc : var -> typ -> atomic -> instr
+  | Ivpc : var -> typ -> atom -> instr
   (* Ijoin (v, ah, al): v = ah * 2^w + al where w is the bit-width of al *)
-  | Ijoin : var -> atomic -> atomic -> instr
+  | Ijoin : var -> atom -> atom -> instr
   (* Specifications *)
   | Iassume : bexp -> instr.
 
   Definition program := seq instr.
 
-  Definition vars_atomic (a : atomic) : VS.t :=
+  Definition vars_atom (a : atom) : VS.t :=
     match a with
     | Avar v => VS.singleton v
     | Aconst _ _ => VS.empty
@@ -887,51 +889,51 @@ Module MakeDSL
   Definition vars_instr (i : instr) : VS.t :=
     match i with
     | Imov v a
-    | Ishl v a _ => VS.add v (vars_atomic a)
+    | Ishl v a _ => VS.add v (vars_atom a)
     | Icshl vh vl a1 a2 _ =>
-      VS.add vh (VS.add vl (VS.union (vars_atomic a1) (vars_atomic a2)))
+      VS.add vh (VS.add vl (VS.union (vars_atom a1) (vars_atom a2)))
     | Inondet v _ => VS.singleton v
     | Icmov v c a1 a2 =>
-      VS.add v (VS.union (vars_atomic c)
-                         (VS.union (vars_atomic a1) (vars_atomic a2)))
+      VS.add v (VS.union (vars_atom c)
+                         (VS.union (vars_atom a1) (vars_atom a2)))
     | Inop => VS.empty
-    | Inot v _ a => VS.add v (vars_atomic a)
-    | Iadd v a1 a2 => VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
+    | Inot v _ a => VS.add v (vars_atom a)
+    | Iadd v a1 a2 => VS.add v (VS.union (vars_atom a1) (vars_atom a2))
     | Iadds c v a1 a2 =>
-      VS.add c (VS.add v (VS.union (vars_atomic a1) (vars_atomic a2)))
+      VS.add c (VS.add v (VS.union (vars_atom a1) (vars_atom a2)))
     | Iadc v a1 a2 y =>
-      VS.add v (VS.union (vars_atomic a1)
-                         (VS.union (vars_atomic a2) (vars_atomic y)))
+      VS.add v (VS.union (vars_atom a1)
+                         (VS.union (vars_atom a2) (vars_atom y)))
     | Iadcs c v a1 a2 y =>
-      VS.add c (VS.add v (VS.union (vars_atomic a1)
-                                   (VS.union (vars_atomic a2) (vars_atomic y))))
-    | Isub v a1 a2 => VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
+      VS.add c (VS.add v (VS.union (vars_atom a1)
+                                   (VS.union (vars_atom a2) (vars_atom y))))
+    | Isub v a1 a2 => VS.add v (VS.union (vars_atom a1) (vars_atom a2))
     | Isubc c v a1 a2
     | Isubb c v a1 a2 =>
-      VS.add c (VS.add v (VS.union (vars_atomic a1) (vars_atomic a2)))
+      VS.add c (VS.add v (VS.union (vars_atom a1) (vars_atom a2)))
     | Isbc v a1 a2 y =>
-      VS.add v (VS.union (vars_atomic a1)
-                         (VS.union (vars_atomic a2) (vars_atomic y)))
+      VS.add v (VS.union (vars_atom a1)
+                         (VS.union (vars_atom a2) (vars_atom y)))
     | Isbcs c v a1 a2 y =>
-      VS.add c (VS.add v (VS.union (vars_atomic a1)
-                                   (VS.union (vars_atomic a2) (vars_atomic y))))
+      VS.add c (VS.add v (VS.union (vars_atom a1)
+                                   (VS.union (vars_atom a2) (vars_atom y))))
     | Isbb v a1 a2 y =>
-      VS.add v (VS.union (vars_atomic a1)
-                         (VS.union (vars_atomic a2) (vars_atomic y)))
+      VS.add v (VS.union (vars_atom a1)
+                         (VS.union (vars_atom a2) (vars_atom y)))
     | Isbbs c v a1 a2 y =>
-      VS.add c (VS.add v (VS.union (vars_atomic a1)
-                                   (VS.union (vars_atomic a2) (vars_atomic y))))
-    | Imul v a1 a2 => VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
+      VS.add c (VS.add v (VS.union (vars_atom a1)
+                                   (VS.union (vars_atom a2) (vars_atom y))))
+    | Imul v a1 a2 => VS.add v (VS.union (vars_atom a1) (vars_atom a2))
     | Imull vh vl a1 a2 =>
-      VS.add vh (VS.add vl (VS.union (vars_atomic a1) (vars_atomic a2)))
-    | Imulj v a1 a2 => VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
-    | Isplit vh vl a n => VS.add vh (VS.add vl (vars_atomic a))
+      VS.add vh (VS.add vl (VS.union (vars_atom a1) (vars_atom a2)))
+    | Imulj v a1 a2 => VS.add v (VS.union (vars_atom a1) (vars_atom a2))
+    | Isplit vh vl a n => VS.add vh (VS.add vl (vars_atom a))
     | Iand v _ a1 a2
     | Ior v _ a1 a2
-    | Ixor v _ a1 a2 => VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
+    | Ixor v _ a1 a2 => VS.add v (VS.union (vars_atom a1) (vars_atom a2))
     | Icast v t a
-    | Ivpc v t a => VS.add v (vars_atomic a)
-    | Ijoin v ah al => VS.add v (VS.union (vars_atomic ah) (vars_atomic al))
+    | Ivpc v t a => VS.add v (vars_atom a)
+    | Ijoin v ah al => VS.add v (VS.union (vars_atom ah) (vars_atom al))
     | Iassume e => vars_bexp e
     end.
 
@@ -971,36 +973,36 @@ Module MakeDSL
   Definition rvs_instr (i : instr) : VS.t :=
     match i with
     | Imov _ a
-    | Ishl _ a _ => vars_atomic a
-    | Icshl _ _ a1 a2 _ => VS.union (vars_atomic a1) (vars_atomic a2)
+    | Ishl _ a _ => vars_atom a
+    | Icshl _ _ a1 a2 _ => VS.union (vars_atom a1) (vars_atom a2)
     | Inondet _ _ => VS.empty
-    | Icmov _ c a1 a2 => VS.union (vars_atomic c)
-                                  (VS.union (vars_atomic a1) (vars_atomic a2))
+    | Icmov _ c a1 a2 => VS.union (vars_atom c)
+                                  (VS.union (vars_atom a1) (vars_atom a2))
     | Inop => VS.empty
-    | Inot _ _ a => vars_atomic a
+    | Inot _ _ a => vars_atom a
     | Iadd _ a1 a2
-    | Iadds _ _ a1 a2 => VS.union (vars_atomic a1) (vars_atomic a2)
+    | Iadds _ _ a1 a2 => VS.union (vars_atom a1) (vars_atom a2)
     | Iadc _ a1 a2 y
-    | Iadcs _ _ a1 a2 y => VS.union (vars_atomic a1)
-                                    (VS.union (vars_atomic a2) (vars_atomic y))
+    | Iadcs _ _ a1 a2 y => VS.union (vars_atom a1)
+                                    (VS.union (vars_atom a2) (vars_atom y))
     | Isub _ a1 a2
     | Isubc _ _ a1 a2
-    | Isubb _ _ a1 a2 => VS.union (vars_atomic a1) (vars_atomic a2)
+    | Isubb _ _ a1 a2 => VS.union (vars_atom a1) (vars_atom a2)
     | Isbc _ a1 a2 y
     | Isbcs _ _ a1 a2 y
     | Isbb _ a1 a2 y
-    | Isbbs _ _ a1 a2 y => VS.union (vars_atomic a1)
-                                    (VS.union (vars_atomic a2) (vars_atomic y))
+    | Isbbs _ _ a1 a2 y => VS.union (vars_atom a1)
+                                    (VS.union (vars_atom a2) (vars_atom y))
     | Imul _ a1 a2
     | Imull _ _ a1 a2
-    | Imulj _ a1 a2 => VS.union (vars_atomic a1) (vars_atomic a2)
-    | Isplit _ _ a _ => vars_atomic a
+    | Imulj _ a1 a2 => VS.union (vars_atom a1) (vars_atom a2)
+    | Isplit _ _ a _ => vars_atom a
     | Iand _ _ a1 a2
     | Ior _ _ a1 a2
-    | Ixor _ _ a1 a2 => VS.union (vars_atomic a1) (vars_atomic a2)
+    | Ixor _ _ a1 a2 => VS.union (vars_atom a1) (vars_atom a2)
     | Icast _ _ a
-    | Ivpc _ _ a => vars_atomic a
-    | Ijoin _ ah al => VS.union (vars_atomic ah) (vars_atomic al)
+    | Ivpc _ _ a => vars_atom a
+    | Ijoin _ ah al => VS.union (vars_atom ah) (vars_atom al)
     | Iassume e => vars_bexp e
     end.
 
@@ -1340,7 +1342,7 @@ Module MakeDSL
   Definition entails (f g : bexp) (te : TE.env) : Prop :=
     forall s : S.t, S.conform s te -> eval_bexp f te s -> eval_bexp g te s.
 
-  Definition eval_atomic (a : atomic) (s : S.t) : bits :=
+  Definition eval_atom (a : atom) (s : S.t) : bits :=
     match a with
     | Avar v => S.acc v s
     | Aconst _ n => n
@@ -1408,19 +1410,19 @@ Module MakeDSL
 
   Inductive eval_instr (te : TE.env) : instr -> state -> state -> Prop :=
   | EImov v a s t :
-      S.Upd v (eval_atomic a s) s t ->
+      S.Upd v (eval_atom a s) s t ->
       eval_instr te (Imov v a) s t
   | EIshl v a i s t :
-      S.Upd v (shlB i (eval_atomic a s)) s t ->
+      S.Upd v (shlB i (eval_atom a s)) s t ->
       eval_instr te (Ishl v a i) s t
   | EIcshl vh vl a1 a2 i s t :
       S.Upd2 vl (shrB i
-                      (low (size (eval_atomic a2 s))
+                      (low (size (eval_atom a2 s))
                            (shlB i
-                                 (cat (eval_atomic a2 s) (eval_atomic a1 s)))))
-             vh (high (size (eval_atomic a1 s))
+                                 (cat (eval_atom a2 s) (eval_atom a1 s)))))
+             vh (high (size (eval_atom a1 s))
                       (shlB i
-                            (cat (eval_atomic a2 s) (eval_atomic a1 s))))
+                            (cat (eval_atom a2 s) (eval_atom a1 s))))
              s t ->
       eval_instr te (Icshl vh vl a1 a2 i) s t
   | EInondet v ty s t n :
@@ -1428,153 +1430,153 @@ Module MakeDSL
       S.Upd v n s t ->
       eval_instr te (Inondet v ty) s t
   | EIcmovT v c a1 a2 s t :
-      to_bool (eval_atomic c s) ->
-      S.Upd v (eval_atomic a1 s) s t ->
+      to_bool (eval_atom c s) ->
+      S.Upd v (eval_atom a1 s) s t ->
       eval_instr te (Icmov v c a1 a2) s t
   | EIcmovF v c a1 a2 s t :
-      ~~ to_bool (eval_atomic c s) ->
-      S.Upd v (eval_atomic a2 s) s t ->
+      ~~ to_bool (eval_atom c s) ->
+      S.Upd v (eval_atom a2 s) s t ->
       eval_instr te (Icmov v c a1 a2) s t
   | EInop s : eval_instr te Inop s s
   | EInot v ty a s t :
-      S.Upd v (invB (eval_atomic a s)) s t ->
+      S.Upd v (invB (eval_atom a s)) s t ->
       eval_instr te (Inot v ty a) s t
   | EIadd v a1 a2 s t :
-      S.Upd v (addB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
+      S.Upd v (addB (eval_atom a1 s) (eval_atom a2 s)) s t ->
       eval_instr te (Iadd v a1 a2) s t
   | EIadds c v a1 a2 s t :
-      S.Upd2 v (addB (eval_atomic a1 s) (eval_atomic a2 s))
+      S.Upd2 v (addB (eval_atom a1 s) (eval_atom a2 s))
              c (1-bits of bool
-                       (carry_addB (eval_atomic a1 s) (eval_atomic a2 s)))
+                       (carry_addB (eval_atom a1 s) (eval_atom a2 s)))
              s t ->
       eval_instr te (Iadds c v a1 a2) s t
   | EIadc v a1 a2 y s t :
-      S.Upd v (adcB (to_bool (eval_atomic y s))
-                    (eval_atomic a1 s)
-                    (eval_atomic a2 s)).2
+      S.Upd v (adcB (to_bool (eval_atom y s))
+                    (eval_atom a1 s)
+                    (eval_atom a2 s)).2
             s t ->
       eval_instr te (Iadc v a1 a2 y) s t
   | EIadcs c v a1 a2 y s t :
-      S.Upd2 v (adcB (to_bool (eval_atomic y s))
-                     (eval_atomic a1 s)
-                     (eval_atomic a2 s)).2
+      S.Upd2 v (adcB (to_bool (eval_atom y s))
+                     (eval_atom a1 s)
+                     (eval_atom a2 s)).2
              c (1-bits of bool
-                       ((adcB (to_bool (eval_atomic y s))
-                             (eval_atomic a1 s)
-                             (eval_atomic a2 s)).1))
+                       ((adcB (to_bool (eval_atom y s))
+                             (eval_atom a1 s)
+                             (eval_atom a2 s)).1))
              s t ->
       eval_instr te (Iadcs c v a1 a2 y) s t
   | EIsub v a1 a2 s t :
-      S.Upd v (subB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
+      S.Upd v (subB (eval_atom a1 s) (eval_atom a2 s)) s t ->
       eval_instr te (Isub v a1 a2) s t
   | EIsubc c v a1 a2 s t :
-      S.Upd2 v ((adcB true (eval_atomic a1 s) (invB (eval_atomic a2 s))).2)
+      S.Upd2 v ((adcB true (eval_atom a1 s) (invB (eval_atom a2 s))).2)
              c (1-bits of bool
-                       ((adcB true (eval_atomic a1 s) (invB (eval_atomic a2 s))).1))
+                       ((adcB true (eval_atom a1 s) (invB (eval_atom a2 s))).1))
              s t ->
       eval_instr te (Isubc c v a1 a2) s t
   | EIsubb b v a1 a2 s t :
-      S.Upd2 v (subB (eval_atomic a1 s) (eval_atomic a2 s))
+      S.Upd2 v (subB (eval_atom a1 s) (eval_atom a2 s))
              b (1-bits of bool
-                       (borrow_subB (eval_atomic a1 s) (eval_atomic a2 s)))
+                       (borrow_subB (eval_atom a1 s) (eval_atom a2 s)))
              s t ->
       eval_instr te (Isubb b v a1 a2) s t
   | EIsbc v a1 a2 y s t :
-      S.Upd v (adcB (to_bool (eval_atomic y s))
-                    (eval_atomic a1 s)
-                    (invB (eval_atomic a2 s))).2
+      S.Upd v (adcB (to_bool (eval_atom y s))
+                    (eval_atom a1 s)
+                    (invB (eval_atom a2 s))).2
             s t ->
       eval_instr te (Isbc v a1 a2 y) s t
   | EIsbcs c v a1 a2 y s t :
-      S.Upd2 v (adcB (to_bool (eval_atomic y s))
-                     (eval_atomic a1 s)
-                     (invB (eval_atomic a2 s))).2
+      S.Upd2 v (adcB (to_bool (eval_atom y s))
+                     (eval_atom a1 s)
+                     (invB (eval_atom a2 s))).2
              c (1-bits of bool
-                       ((adcB (to_bool (eval_atomic y s))
-                             (eval_atomic a1 s)
-                             (invB (eval_atomic a2 s))).1))
+                       ((adcB (to_bool (eval_atom y s))
+                             (eval_atom a1 s)
+                             (invB (eval_atom a2 s))).1))
              s t ->
       eval_instr te (Isbcs c v a1 a2 y) s t
   | EIsbb v a1 a2 y s t :
-      S.Upd v (sbbB (to_bool (eval_atomic y s))
-                    (eval_atomic a1 s)
-                    (eval_atomic a2 s)).2
+      S.Upd v (sbbB (to_bool (eval_atom y s))
+                    (eval_atom a1 s)
+                    (eval_atom a2 s)).2
             s t ->
       eval_instr te (Isbb v a1 a2 y) s t
   | EIsbbs b v a1 a2 y s t :
-      S.Upd2 v (sbbB (to_bool (eval_atomic y s))
-                     (eval_atomic a1 s)
-                     (eval_atomic a2 s)).2
+      S.Upd2 v (sbbB (to_bool (eval_atom y s))
+                     (eval_atom a1 s)
+                     (eval_atom a2 s)).2
              b (1-bits of bool
-                       ((sbbB (to_bool (eval_atomic y s))
-                             (eval_atomic a1 s)
-                             (eval_atomic a2 s)).1))
+                       ((sbbB (to_bool (eval_atom y s))
+                             (eval_atom a1 s)
+                             (eval_atom a2 s)).1))
              s t ->
       eval_instr te (Isbbs b v a1 a2 y) s t
   | EImul v a1 a2 s t :
-      S.Upd v (mulB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
+      S.Upd v (mulB (eval_atom a1 s) (eval_atom a2 s)) s t ->
       eval_instr te (Imul v a1 a2) s t
   | EImullU vh vl a1 a2 s t :
       is_unsigned (atyp a1 te) ->
-      S.Upd2 vl (low (size (eval_atomic a2 s))
-                     (mulB (zext (size (eval_atomic a1 s)) (eval_atomic a1 s))
-                           (zext (size (eval_atomic a1 s)) (eval_atomic a2 s))))
-             vh (high (size (eval_atomic a1 s))
-                      (mulB (zext (size (eval_atomic a1 s)) (eval_atomic a1 s))
-                            (zext (size (eval_atomic a1 s)) (eval_atomic a2 s))))
+      S.Upd2 vl (low (size (eval_atom a2 s))
+                     (mulB (zext (size (eval_atom a1 s)) (eval_atom a1 s))
+                           (zext (size (eval_atom a1 s)) (eval_atom a2 s))))
+             vh (high (size (eval_atom a1 s))
+                      (mulB (zext (size (eval_atom a1 s)) (eval_atom a1 s))
+                            (zext (size (eval_atom a1 s)) (eval_atom a2 s))))
              s t ->
       eval_instr te (Imull vh vl a1 a2) s t
   | EImullS vh vl a1 a2 s t :
       is_signed (atyp a1 te) ->
-      S.Upd2 vl (low (size (eval_atomic a2 s))
-                     (mulB (sext (size (eval_atomic a1 s)) (eval_atomic a1 s))
-                           (sext (size (eval_atomic a1 s)) (eval_atomic a2 s))))
-             vh (high (size (eval_atomic a1 s))
-                      (mulB (sext (size (eval_atomic a1 s)) (eval_atomic a1 s))
-                            (sext (size (eval_atomic a1 s)) (eval_atomic a2 s))))
+      S.Upd2 vl (low (size (eval_atom a2 s))
+                     (mulB (sext (size (eval_atom a1 s)) (eval_atom a1 s))
+                           (sext (size (eval_atom a1 s)) (eval_atom a2 s))))
+             vh (high (size (eval_atom a1 s))
+                      (mulB (sext (size (eval_atom a1 s)) (eval_atom a1 s))
+                            (sext (size (eval_atom a1 s)) (eval_atom a2 s))))
              s t ->
       eval_instr te (Imull vh vl a1 a2) s t
   | EImuljU v a1 a2 s t :
       is_unsigned (atyp a1 te) ->
-      S.Upd v (mulB (zext (size (eval_atomic a1 s)) (eval_atomic a1 s))
-                    (zext (size (eval_atomic a1 s)) (eval_atomic a2 s)))
+      S.Upd v (mulB (zext (size (eval_atom a1 s)) (eval_atom a1 s))
+                    (zext (size (eval_atom a1 s)) (eval_atom a2 s)))
             s t ->
       eval_instr te (Imulj v a1 a2) s t
   | EImuljS v a1 a2 s t :
       is_signed (atyp a1 te) ->
-      S.Upd v (mulB (sext (size (eval_atomic a1 s)) (eval_atomic a1 s))
-                    (sext (size (eval_atomic a1 s)) (eval_atomic a2 s)))
+      S.Upd v (mulB (sext (size (eval_atom a1 s)) (eval_atom a1 s))
+                    (sext (size (eval_atom a1 s)) (eval_atom a2 s)))
             s t ->
       eval_instr te (Imulj v a1 a2) s t
   | EIsplitU vh vl a n s t :
       is_unsigned (atyp a te) ->
-      S.Upd2 vl (shrB ((size (eval_atomic a s)) - n) (shlB ((size (eval_atomic a s)) - n) (eval_atomic a s)))
-             vh (shrB n (eval_atomic a s))
+      S.Upd2 vl (shrB ((size (eval_atom a s)) - n) (shlB ((size (eval_atom a s)) - n) (eval_atom a s)))
+             vh (shrB n (eval_atom a s))
              s t ->
       eval_instr te (Isplit vh vl a n) s t
   | EIsplitS vh vl a n s t :
       is_signed (atyp a te) ->
-      S.Upd2 vl (shrB ((size (eval_atomic a s)) - n) (shlB ((size (eval_atomic a s)) - n) (eval_atomic a s)))
-             vh (sarB n (eval_atomic a s))
+      S.Upd2 vl (shrB ((size (eval_atom a s)) - n) (shlB ((size (eval_atom a s)) - n) (eval_atom a s)))
+             vh (sarB n (eval_atom a s))
              s t ->
       eval_instr te (Isplit vh vl a n) s t
   | EIand v ty a1 a2 s t :
-      S.Upd v (andB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
+      S.Upd v (andB (eval_atom a1 s) (eval_atom a2 s)) s t ->
       eval_instr te (Iand v ty a1 a2) s t
   | EIor v ty a1 a2 s t :
-      S.Upd v (orB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
+      S.Upd v (orB (eval_atom a1 s) (eval_atom a2 s)) s t ->
       eval_instr te (Ior v ty a1 a2) s t
   | EIxor v ty a1 a2 s t :
-      S.Upd v (xorB (eval_atomic a1 s) (eval_atomic a2 s)) s t ->
+      S.Upd v (xorB (eval_atom a1 s) (eval_atom a2 s)) s t ->
       eval_instr te (Ixor v ty a1 a2) s t
   | EIcast v ty a s t :
-      S.Upd v (tcast (eval_atomic a s) (atyp a te) ty) s t ->
+      S.Upd v (tcast (eval_atom a s) (atyp a te) ty) s t ->
       eval_instr te (Icast v ty a) s t
   | EIvpc v ty a s t :
-      S.Upd v (tcast (eval_atomic a s) (atyp a te) ty) s t ->
+      S.Upd v (tcast (eval_atom a s) (atyp a te) ty) s t ->
       eval_instr te (Ivpc v ty a) s t
   | EIjoin v ah al s t :
-      S.Upd v (cat (eval_atomic al s) (eval_atomic ah s)) s t ->
+      S.Upd v (cat (eval_atom al s) (eval_atom ah s)) s t ->
       eval_instr te (Ijoin v ah al) s t
   | EIassume e s :
       eval_bexp e te s -> eval_instr te (Iassume e) s s
@@ -1877,74 +1879,74 @@ Module MakeDSL
   Definition well_typed_bexp (te : TE.env) (e : bexp) : bool :=
     (well_typed_ebexp te (eqn_bexp e)) && (well_typed_rbexp te (rng_bexp e)).
 
-  (* The size of an atomic must be larger than 0. *)
-  Definition well_sized_atomic E (a : atomic) : bool :=
+  (* The size of an atom must be larger than 0. *)
+  Definition well_sized_atom E (a : atom) : bool :=
     if is_unsigned (atyp a E) then 0 < asize a E
     else 1 < asize a E.
 
   (*
-   * If an atomic is a constant, size of the constant must match
-   * the type of the atomic.
+   * If an atom is a constant, size of the constant must match
+   * the type of the atom.
    *)
-  Definition size_matched_atomic (a : atomic) : bool :=
+  Definition size_matched_atom (a : atom) : bool :=
     match a with
     | Avar _ => true
     | Aconst t n => size n == sizeof_typ t
     end.
 
-  Definition well_typed_atomic (E : TE.env) (a : atomic) : bool :=
-    well_sized_atomic E a && size_matched_atomic a.
+  Definition well_typed_atom (E : TE.env) (a : atom) : bool :=
+    well_sized_atom E a && size_matched_atom a.
 
   Definition well_typed_instr (E : TE.env) (i : instr) : bool :=
     match i with
-    | Imov v a => well_typed_atomic E a
-    | Ishl v a n => (well_typed_atomic E a) && (n < asize a E)
+    | Imov v a => well_typed_atom E a
+    | Ishl v a n => (well_typed_atom E a) && (n < asize a E)
     | Icshl v1 v2 a1 a2 n => is_unsigned (atyp a2 E) &&
                              compatible (atyp a1 E) (atyp a2 E) &&
-                             (well_typed_atomic E a1) && (well_typed_atomic E a2) &&
+                             (well_typed_atom E a1) && (well_typed_atom E a2) &&
                              (n <= asize a2 E)
     | Inondet v t => true
     | Icmov v c a1 a2 => (atyp c E == Tbit) && (atyp a1 E == atyp a2 E) &&
-                         (well_typed_atomic E a1) && (well_typed_atomic E a2) &&
-                         (well_typed_atomic E c)
+                         (well_typed_atom E a1) && (well_typed_atom E a2) &&
+                         (well_typed_atom E c)
     | Inop => true
-    | Inot v t a => compatible t (atyp a E) && (well_typed_atomic E a)
+    | Inot v t a => compatible t (atyp a E) && (well_typed_atom E a)
     | Iadd v a1 a2
-    | Iadds _ v a1 a2 => (atyp a1 E == atyp a2 E) && (well_typed_atomic E a1) &&
-                         (well_typed_atomic E a2)
+    | Iadds _ v a1 a2 => (atyp a1 E == atyp a2 E) && (well_typed_atom E a1) &&
+                         (well_typed_atom E a2)
     | Iadc v a1 a2 y
     | Iadcs _ v a1 a2 y => (atyp a1 E == atyp a2 E) && (atyp y E == Tbit) &&
-                           (well_typed_atomic E a1) && (well_typed_atomic E a2) &&
-                           (well_typed_atomic E y)
+                           (well_typed_atom E a1) && (well_typed_atom E a2) &&
+                           (well_typed_atom E y)
     | Isub v a1 a2
     | Isubc _ v a1 a2
-    | Isubb _ v a1 a2 => (atyp a1 E == atyp a2 E) && (well_typed_atomic E a1) &&
-                         (well_typed_atomic E a2)
+    | Isubb _ v a1 a2 => (atyp a1 E == atyp a2 E) && (well_typed_atom E a1) &&
+                         (well_typed_atom E a2)
     | Isbc v a1 a2 y
     | Isbcs _ v a1 a2 y => (atyp a1 E == atyp a2 E) && (atyp y E == Tbit) &&
-                           (well_typed_atomic E a1) && (well_typed_atomic E a2) &&
-                           (well_typed_atomic E y)
+                           (well_typed_atom E a1) && (well_typed_atom E a2) &&
+                           (well_typed_atom E y)
     | Isbb v a1 a2 y
     | Isbbs _ v a1 a2 y => (atyp a1 E == atyp a2 E) && (atyp y E == Tbit) &&
-                           (well_typed_atomic E a1) && (well_typed_atomic E a2) &&
-                           (well_typed_atomic E y)
+                           (well_typed_atom E a1) && (well_typed_atom E a2) &&
+                           (well_typed_atom E y)
     | Imul v a1 a2 => (atyp a1 E == atyp a2 E) &&
-                      (well_typed_atomic E a1) && (well_typed_atomic E a2)
+                      (well_typed_atom E a1) && (well_typed_atom E a2)
     | Imull vh vl a1 a2 => (atyp a1 E == atyp a2 E) &&
-                           (well_typed_atomic E a1) && (well_typed_atomic E a2)
+                           (well_typed_atom E a1) && (well_typed_atom E a2)
     | Imulj v a1 a2 => (atyp a1 E == atyp a2 E) &&
-                       (well_typed_atomic E a1) && (well_typed_atomic E a2)
-    | Isplit vh vl a n => (well_typed_atomic E a) && (n < asize a E)
+                       (well_typed_atom E a1) && (well_typed_atom E a2)
+    | Isplit vh vl a n => (well_typed_atom E a) && (n < asize a E)
     | Iand v t a1 a2
     | Ior v t a1 a2
     | Ixor v t a1 a2 =>
       compatible t (atyp a1 E) && compatible t (atyp a2 E) &&
-      (well_typed_atomic E a1) && (well_typed_atomic E a2)
+      (well_typed_atom E a1) && (well_typed_atom E a2)
     | Icast v t a
-    | Ivpc v t a => (well_typed_atomic E a)
+    | Ivpc v t a => (well_typed_atom E a)
     | Ijoin v ah al =>
       is_unsigned (atyp al E) && compatible (atyp ah E) (atyp al E) &&
-      (well_typed_atomic E ah) && (well_typed_atomic E al)
+      (well_typed_atom E ah) && (well_typed_atom E al)
     | Iassume e => well_typed_bexp E e
     end.
 
@@ -1991,65 +1993,65 @@ Module MakeDSL
 
   Definition well_defined_instr (te : TE.env) (i : instr) : bool :=
     match i with
-    | Imov v a => are_defined (vars_atomic a) te
-    | Ishl v a _ => are_defined (vars_atomic a) te
+    | Imov v a => are_defined (vars_atom a) te
+    | Ishl v a _ => are_defined (vars_atom a) te
     | Icshl v1 v2 a1 a2 _ =>
-      (v1 != v2) && are_defined (vars_atomic a1) te
-                 && are_defined (vars_atomic a2) te
+      (v1 != v2) && are_defined (vars_atom a1) te
+                 && are_defined (vars_atom a2) te
     | Inondet v t => true
     | Icmov v c a1 a2 =>
-      (are_defined (vars_atomic c) te) && are_defined (vars_atomic a1) te
-                                       && are_defined (vars_atomic a2) te
+      (are_defined (vars_atom c) te) && are_defined (vars_atom a1) te
+                                       && are_defined (vars_atom a2) te
     | Inop => true
-    | Inot v t a => are_defined (vars_atomic a) te
+    | Inot v t a => are_defined (vars_atom a) te
     | Iadd v a1 a2 =>
-      are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
+      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
     | Iadds c v a1 a2 =>
-      (c != v) && are_defined (vars_atomic a1) te
-               && are_defined (vars_atomic a2) te
+      (c != v) && are_defined (vars_atom a1) te
+               && are_defined (vars_atom a2) te
     | Iadc v a1 a2 y =>
-      are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
-                  && are_defined (vars_atomic y) te
+      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
+                  && are_defined (vars_atom y) te
     | Iadcs c v a1 a2 y =>
-      (c != v) && are_defined (vars_atomic a1) te
-               && are_defined (vars_atomic a2) te
-               && are_defined (vars_atomic y) te
+      (c != v) && are_defined (vars_atom a1) te
+               && are_defined (vars_atom a2) te
+               && are_defined (vars_atom y) te
     | Isub v a1 a2 =>
-      are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
+      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
     | Isubc c v a1 a2
     | Isubb c v a1 a2 =>
-      (c != v) && are_defined (vars_atomic a1) te
-               && are_defined (vars_atomic a2) te
+      (c != v) && are_defined (vars_atom a1) te
+               && are_defined (vars_atom a2) te
     | Isbc v a1 a2 y =>
-      are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
-                  && are_defined (vars_atomic y) te
+      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
+                  && are_defined (vars_atom y) te
     | Isbcs c v a1 a2 y =>
-      (c != v) && are_defined (vars_atomic a1) te
-               && are_defined (vars_atomic a2) te
-               && are_defined (vars_atomic y) te
+      (c != v) && are_defined (vars_atom a1) te
+               && are_defined (vars_atom a2) te
+               && are_defined (vars_atom y) te
     | Isbb v a1 a2 y =>
-      are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
-                  && are_defined (vars_atomic y) te
+      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
+                  && are_defined (vars_atom y) te
     | Isbbs c v a1 a2 y =>
-      (c != v) && are_defined (vars_atomic a1) te
-               && are_defined (vars_atomic a2) te
-               && are_defined (vars_atomic y) te
+      (c != v) && are_defined (vars_atom a1) te
+               && are_defined (vars_atom a2) te
+               && are_defined (vars_atom y) te
     | Imul v a1 a2 =>
-      are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
+      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
     | Imull vh vl a1 a2 =>
-      (vh != vl) && are_defined (vars_atomic a1) te
-                 && are_defined (vars_atomic a2) te
+      (vh != vl) && are_defined (vars_atom a1) te
+                 && are_defined (vars_atom a2) te
     | Imulj v a1 a2 =>
-      are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
-    | Isplit vh vl a n => (vh != vl) && are_defined (vars_atomic a) te
+      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
+    | Isplit vh vl a n => (vh != vl) && are_defined (vars_atom a) te
     | Iand v t a1 a2
     | Ior v t a1 a2
     | Ixor v t a1 a2 =>
-      are_defined (vars_atomic a1) te && are_defined (vars_atomic a2) te
+      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
     | Icast v t a
-    | Ivpc v t a => are_defined (vars_atomic a) te
+    | Ivpc v t a => are_defined (vars_atom a) te
     | Ijoin v ah al =>
-      are_defined (vars_atomic ah) te && are_defined (vars_atomic al) te
+      are_defined (vars_atom ah) te && are_defined (vars_atom al) te
     | Iassume e => are_defined (vars_bexp e) te
     end.
 
@@ -2201,7 +2203,7 @@ Module MakeDSL
   Qed.
 
   Lemma atyp_add_mem a x t E :
-    VS.mem x (vars_atomic a) -> atyp a (TE.add x t E) = t.
+    VS.mem x (vars_atom a) -> atyp a (TE.add x t E) = t.
   Proof.
     case: a => /= [v Hmem | tb bs Hmem].
     - move: (VSLemmas.mem_singleton1 Hmem) => /idP Heq. rewrite eq_sym in Heq.
@@ -2210,7 +2212,7 @@ Module MakeDSL
   Qed.
 
   Lemma atyp_add_not_mem a x t E :
-    ~~ VS.mem x (vars_atomic a) -> atyp a (TE.add x t E) = atyp a E.
+    ~~ VS.mem x (vars_atom a) -> atyp a (TE.add x t E) = atyp a E.
   Proof.
     case: a => /= [v Hmem | tb bs Hmem].
     - move: (VSLemmas.not_mem_singleton1 Hmem) => /negP Hne. rewrite eq_sym in Hne.
@@ -2588,7 +2590,7 @@ Module MakeDSL
 
   Lemma atyp_submap a te1 te2:
     TELemmas.submap te1 te2 ->
-    are_defined (vars_atomic a) te1 ->
+    are_defined (vars_atom a) te1 ->
     atyp a te1 = atyp a te2.
   Proof.
     case: a => //=. move=> v. rewrite are_defined_singleton=> Hsubmap Hdef1.
@@ -2600,62 +2602,62 @@ Module MakeDSL
 
   Lemma asize_submap a E1 E2 :
     TELemmas.submap E1 E2 ->
-    are_defined (vars_atomic a) E1 ->
+    are_defined (vars_atom a) E1 ->
     asize a E1 = asize a E2.
   Proof.
     move=> H1 H2. rewrite /asize (atyp_submap H1 H2). reflexivity.
   Qed.
 
-  Lemma well_typed_atomic_well_sized E a :
-    well_typed_atomic E a -> well_sized_atomic E a.
+  Lemma well_typed_atom_well_sized E a :
+    well_typed_atom E a -> well_sized_atom E a.
   Proof. by move/andP=> [? ?]. Qed.
 
-  Lemma well_typed_atomic_size_matched E a :
-    well_typed_atomic E a -> size_matched_atomic a.
+  Lemma well_typed_atom_size_matched E a :
+    well_typed_atom E a -> size_matched_atom a.
   Proof. by move/andP=> [? ?]. Qed.
 
-  Lemma well_sized_atomic_unsigned E a :
-    is_unsigned (atyp a E) -> well_sized_atomic E a ->
+  Lemma well_sized_atom_unsigned E a :
+    is_unsigned (atyp a E) -> well_sized_atom E a ->
     0 < asize a E.
-  Proof. rewrite /well_sized_atomic => ->. by apply. Qed.
+  Proof. rewrite /well_sized_atom => ->. by apply. Qed.
 
-  Lemma well_sized_atomic_signed E a :
-    is_signed (atyp a E) -> well_sized_atomic E a ->
+  Lemma well_sized_atom_signed E a :
+    is_signed (atyp a E) -> well_sized_atom E a ->
     1 < asize a E.
   Proof.
-    rewrite /well_sized_atomic -not_unsigned_is_signed. move/negPf => ->.
+    rewrite /well_sized_atom -not_unsigned_is_signed. move/negPf => ->.
       by apply.
   Qed.
 
-  Lemma well_sized_atomic_gt0 E a : well_sized_atomic E a -> 0 < asize a E.
+  Lemma well_sized_atom_gt0 E a : well_sized_atom E a -> 0 < asize a E.
   Proof.
-    rewrite /well_sized_atomic. case: (is_unsigned (atyp a E)).
+    rewrite /well_sized_atom. case: (is_unsigned (atyp a E)).
     - by apply.
     - move=> H. have H01: (0 < 1) by done. exact: (ltn_trans H01 H).
   Qed.
 
-  Lemma well_sized_atomic_submap a E1 E2 :
+  Lemma well_sized_atom_submap a E1 E2 :
     TELemmas.submap E1 E2 ->
-    are_defined (vars_atomic a) E1 ->
-    well_sized_atomic E1 a = well_sized_atomic E2 a.
+    are_defined (vars_atom a) E1 ->
+    well_sized_atom E1 a = well_sized_atom E2 a.
   Proof.
-    move=> Hsub Hdef. rewrite /well_sized_atomic /asize.
+    move=> Hsub Hdef. rewrite /well_sized_atom /asize.
     rewrite (atyp_submap Hsub Hdef). reflexivity.
   Qed.
 
-  Lemma well_typed_atomic_submap a E1 E2 :
+  Lemma well_typed_atom_submap a E1 E2 :
     TELemmas.submap E1 E2 ->
-    are_defined (vars_atomic a) E1 ->
-    well_typed_atomic E1 a = well_typed_atomic E2 a.
+    are_defined (vars_atom a) E1 ->
+    well_typed_atom E1 a = well_typed_atom E2 a.
   Proof.
-    move=> Hsub Hdef. rewrite /well_typed_atomic.
-    rewrite (well_sized_atomic_submap Hsub Hdef). reflexivity.
+    move=> Hsub Hdef. rewrite /well_typed_atom.
+    rewrite (well_sized_atom_submap Hsub Hdef). reflexivity.
   Qed.
 
-  Lemma well_sized_atomic_atyp_eq E a1 a2 :
-    atyp a1 E = atyp a2 E -> well_sized_atomic E a1 = well_sized_atomic E a2.
+  Lemma well_sized_atom_atyp_eq E a1 a2 :
+    atyp a1 E = atyp a2 E -> well_sized_atom E a1 = well_sized_atom E a2.
   Proof.
-    rewrite /well_sized_atomic /asize. by move=> ->.
+    rewrite /well_sized_atom /asize. by move=> ->.
   Qed.
 
   Lemma well_typed_eexp_submap e te1 te2:
@@ -2704,7 +2706,7 @@ Module MakeDSL
   Proof.
     elim: r te1 te2 => //=.
     move=> x te1 te2 Hsm Hwd.
-    replace (VS.singleton x) with (vars_atomic (Avar x)) in Hwd by reflexivity.
+    replace (VS.singleton x) with (vars_atom (Avar x)) in Hwd by reflexivity.
     move: (atyp_submap Hsm Hwd) => /= Htyp.
     rewrite (TE.vtyp_vsize Htyp). move: (Logic.eq_sym Htyp) => {Htyp} Htyp.
     rewrite (TE.vtyp_vsize Htyp). rewrite Htyp. exact: eqxx.
@@ -2880,9 +2882,9 @@ Module MakeDSL
              |- context [asize ?a ?te2] =>
              rewrite -(asize_submap Hsub Hwd); tac
            | Hsub : TELemmas.submap ?E1 ?E2,
-                    Hdef : is_true (are_defined (vars_atomic ?a) ?E1)
-             |- is_true (well_typed_atomic ?E2 ?a) =>
-             rewrite -(well_typed_atomic_submap Hsub Hdef); tac
+                    Hdef : is_true (are_defined (vars_atom ?a) ?E1)
+             |- is_true (well_typed_atom ?E2 ?a) =>
+             rewrite -(well_typed_atom_submap Hsub Hdef); tac
            | |- _ => idtac
            end
        in tac).
@@ -2953,7 +2955,7 @@ Module MakeDSL
              |- is_true (are_defined ?vs ?te2) =>
              exact: (are_defined_submap Hsub Hwd); tac
            | Hsub: TELemmas.submap ?te1 ?te2,
-             Hwd: is_true (are_defined (vars_atomic ?a) ?te1)
+             Hwd: is_true (are_defined (vars_atom ?a) ?te1)
              |- context [atyp ?a ?te2] =>
              rewrite -(atyp_submap Hsub Hwd); tac
            | |- ?e => progress (auto)
@@ -3222,8 +3224,8 @@ Module MakeDSL
 
   Lemma submap_add_atyp a v t E1 E2 :
     TELemmas.submap (TE.add v t E1) E2 ->
-    are_defined (vars_atomic a) E1 ->
-    ~~ VS.mem v (vars_atomic a) ->
+    are_defined (vars_atom a) E1 ->
+    ~~ VS.mem v (vars_atom a) ->
     atyp a E1 = atyp a E2.
   Proof.
     case: a => /=.
@@ -3300,11 +3302,11 @@ Module MakeDSL
       repeat
         match goal with
         | Hsub : TELemmas.submap ?E1 ?E2,
-          Hdef : is_true (are_defined (vars_atomic ?a) ?E1)
+          Hdef : is_true (are_defined (vars_atom ?a) ?E1)
           |- context f [atyp ?a ?E2] =>
           rewrite -(atyp_submap Hsub Hdef)
         | Hsub : TELemmas.submap ?E1 ?E2,
-          Hdef : is_true (are_defined (vars_atomic ?a) ?E1),
+          Hdef : is_true (are_defined (vars_atom ?a) ?E1),
           H : context f [atyp ?a ?E2] |- _ =>
           rewrite -(atyp_submap Hsub Hdef) in H
         | H : ?p |- ?p => assumption
@@ -3373,7 +3375,7 @@ Module MakeDSL
       apply: (@EInondet _ _ _ _ _ (((sizeof_typ ty)-bits of 0))).
       + by rewrite size_from_nat.
       + exact: S.Upd_upd.
-    - (* Icmov *) move=> v c a1 a2 _. case H: (to_bool (eval_atomic c s)).
+    - (* Icmov *) move=> v c a1 a2 _. case H: (to_bool (eval_atom c s)).
       + eexists. apply: (EIcmovT _ _ H). exact: S.Upd_upd.
       + move/idP/negP: H=> H. eexists. apply: (EIcmovF _ _ H). exact: S.Upd_upd.
     - (* Inop *) move=> _. exists s. exact: EInop.
@@ -3433,10 +3435,10 @@ Module MakeDSL
     TELemmas.submap E1 E2 -> S.conform s E2 -> S.conform s E1.
   Proof. exact: S.conform_submap. Qed.
 
-  Lemma conform_size_eval_atomic te s a :
-    VS.subset (vars_atomic a) (vars_env te) -> S.conform s te ->
-    size_matched_atomic a ->
-    size (eval_atomic a s) = Typ.sizeof_typ (atyp a te).
+  Lemma conform_size_eval_atom te s a :
+    VS.subset (vars_atom a) (vars_env te) -> S.conform s te ->
+    size_matched_atom a ->
+    size (eval_atom a s) = Typ.sizeof_typ (atyp a te).
   Proof.
     case: a => /=.
     - move => v. rewrite VSLemmas.subset_singleton => /memenvP Hmem Hcon _.
@@ -3444,12 +3446,12 @@ Module MakeDSL
     - move => t b _ _ H. exact: (eqP H).
   Qed.
 
-  Lemma size_eval_atomic_asize te a s :
-    VS.subset (vars_atomic a) (vars_env te) -> S.conform s te ->
-    size_matched_atomic a ->
-    size (eval_atomic a s) = asize a te.
+  Lemma size_eval_atom_asize te a s :
+    VS.subset (vars_atom a) (vars_env te) -> S.conform s te ->
+    size_matched_atom a ->
+    size (eval_atom a s) = asize a te.
   Proof.
-    move => Hsub Hcon Hsm. rewrite (conform_size_eval_atomic Hsub Hcon Hsm).
+    move => Hsub Hcon Hsm. rewrite (conform_size_eval_atom Hsub Hcon Hsm).
     reflexivity.
   Qed.
 
@@ -3469,35 +3471,35 @@ Module MakeDSL
     move=> _; by exists b1.
   Qed.
 
-  Lemma tbit_atomic_size E s a :
-    S.conform s E -> size_matched_atomic a -> atyp a E = Typ.Tbit ->
-    VS.subset (vars_atomic a) (vars_env E) ->
-    size (eval_atomic a s) = 1.
+  Lemma tbit_atom_size E s a :
+    S.conform s E -> size_matched_atom a -> atyp a E = Typ.Tbit ->
+    VS.subset (vars_atom a) (vars_env E) ->
+    size (eval_atom a s) = 1.
   Proof.
-    move=> Hco Hsm Htyp Hsub. move: (size_eval_atomic_asize Hsub Hco Hsm) => Hsc.
+    move=> Hco Hsm Htyp Hsub. move: (size_eval_atom_asize Hsub Hco Hsm) => Hsc.
     rewrite /asize Htyp /= in Hsc. exact: Hsc.
   Qed.
 
-  Lemma tbit_atomic_singleton E s a :
-    S.conform s E -> size_matched_atomic a -> atyp a E = Typ.Tbit ->
-    VS.subset (vars_atomic a) (vars_env E) ->
-    exists b, eval_atomic a s = [:: b].
+  Lemma tbit_atom_singleton E s a :
+    S.conform s E -> size_matched_atom a -> atyp a E = Typ.Tbit ->
+    VS.subset (vars_atom a) (vars_env E) ->
+    exists b, eval_atom a s = [:: b].
   Proof.
-    move=> Hco Hsm Htyp Hsub. move: (tbit_atomic_size Hco Hsm Htyp Hsub).
-    clear Hco Htyp Hsub. case: (eval_atomic a s) => [| b1 [| b2 bs]] //=.
+    move=> Hco Hsm Htyp Hsub. move: (tbit_atom_size Hco Hsm Htyp Hsub).
+    clear Hco Htyp Hsub. case: (eval_atom a s) => [| b1 [| b2 bs]] //=.
     move=> _. by exists b1.
   Qed.
 
-  Lemma size_eval_atomic_same te s a0 a1 :
-    S.conform s te -> size_matched_atomic a0 -> size_matched_atomic a1 ->
-    VS.subset (vars_atomic a0) (vars_env te) ->
-    VS.subset (vars_atomic a1) (vars_env te) ->
+  Lemma size_eval_atom_same te s a0 a1 :
+    S.conform s te -> size_matched_atom a0 -> size_matched_atom a1 ->
+    VS.subset (vars_atom a0) (vars_env te) ->
+    VS.subset (vars_atom a1) (vars_env te) ->
     sizeof_typ (atyp a0 te) = sizeof_typ (atyp a1 te) ->
-    size (eval_atomic a0 s) = size (eval_atomic a1 s) .
+    size (eval_atom a0 s) = size (eval_atom a1 s) .
   Proof .
     move => Hcon Hsm0 Hsm1 Hsub0 Hsub1 Hatypeq .
-    move : (conform_size_eval_atomic Hsub0 Hcon Hsm0)
-             (conform_size_eval_atomic Hsub1 Hcon Hsm1) .
+    move : (conform_size_eval_atom Hsub0 Hcon Hsm0)
+             (conform_size_eval_atom Hsub1 Hcon Hsm1) .
     rewrite Hatypeq. by move=> -> ->.
   Qed .
 
@@ -3510,8 +3512,8 @@ Module MakeDSL
   Proof .
     move => Hcon /=; rewrite are_defined_subset_env => Hdef Hsm Hev.
     inversion_clear Hev. apply : (conform_Upd _ Hcon H).
-      by rewrite (size_eval_atomic_asize
-                    Hdef Hcon (well_typed_atomic_size_matched Hsm)).
+      by rewrite (size_eval_atom_asize
+                    Hdef Hcon (well_typed_atom_size_matched Hsm)).
   Qed.
 
   Lemma conform_eval_succ_typenv_Ishl te t a n s1 s2 :
@@ -3525,8 +3527,8 @@ Module MakeDSL
     Hdef /andP [Hsm _] Hev . inversion_clear Hev .
     apply : (conform_Upd _ Hcon H) .
       by rewrite size_shlB
-                 (size_eval_atomic_asize Hdef Hcon
-                                         (well_typed_atomic_size_matched Hsm)) .
+                 (size_eval_atom_asize Hdef Hcon
+                                         (well_typed_atom_size_matched Hsm)) .
   Qed .
 
   Lemma conform_eval_succ_typenv_Icshl te t t0 a a0 n s1 s2 :
@@ -3541,11 +3543,11 @@ Module MakeDSL
     inversion_clear Hev .
     apply : (conform_Upd2 Hneq _ _ H Hcon) .
     + by rewrite size_high
-                 (size_eval_atomic_asize Hdef0 Hcon
-                                         (well_typed_atomic_size_matched Hsm0)) .
+                 (size_eval_atom_asize Hdef0 Hcon
+                                         (well_typed_atom_size_matched Hsm0)) .
     + by rewrite size_shrB size_low
-                 (size_eval_atomic_asize Hdef1 Hcon
-                                         (well_typed_atomic_size_matched Hsm1)).
+                 (size_eval_atom_asize Hdef1 Hcon
+                                         (well_typed_atom_size_matched Hsm1)).
   Qed .
 
   Lemma conform_eval_succ_typenv_Inondet te t t0 s1 s2 :
@@ -3571,10 +3573,10 @@ Module MakeDSL
     /andP [/andP [Hdefc Hdef0] Hdef1]
      /andP [/andP [/andP [/andP [_ Hty] Hsm0] Hsm1] _] Hev.
     inversion_clear Hev; apply : (conform_Upd _ Hcon H0);
-      [ by rewrite (size_eval_atomic_asize Hdef0 Hcon
-                                           (well_typed_atomic_size_matched Hsm0))
-      | rewrite (size_eval_atomic_asize Hdef1 Hcon
-                                        (well_typed_atomic_size_matched Hsm1)) //;
+      [ by rewrite (size_eval_atom_asize Hdef0 Hcon
+                                           (well_typed_atom_size_matched Hsm0))
+      | rewrite (size_eval_atom_asize Hdef1 Hcon
+                                        (well_typed_atom_size_matched Hsm1)) //;
         by rewrite (eqP Hty) ] .
   Qed .
 
@@ -3602,8 +3604,8 @@ Module MakeDSL
     inversion_clear Hev .
     apply : (conform_Upd _ Hcon H) => // .
       by rewrite size_invB (eqP Hty)
-                 (size_eval_atomic_asize
-                    Hdef Hcon (well_typed_atomic_size_matched Hsm)).
+                 (size_eval_atom_asize
+                    Hdef Hcon (well_typed_atom_size_matched Hsm)).
   Qed .
 
   Lemma conform_eval_succ_typenv_Iadd te t a a0 s1 s2 :
@@ -3617,10 +3619,10 @@ Module MakeDSL
     /andP [Hdef0 Hdef1] /andP [/andP [Hty Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite size_addB
-            (size_eval_atomic_asize Hdef0 Hcon
-                                    (well_typed_atomic_size_matched Hsm0)).
-    rewrite (size_eval_atomic_asize
-               Hdef1 Hcon (well_typed_atomic_size_matched Hsm1)).
+            (size_eval_atom_asize Hdef0 Hcon
+                                    (well_typed_atom_size_matched Hsm0)).
+    rewrite (size_eval_atom_asize
+               Hdef1 Hcon (well_typed_atom_size_matched Hsm1)).
       by rewrite /asize !(eqP Hty) minnE subKn.
   Qed .
 
@@ -3636,10 +3638,10 @@ Module MakeDSL
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ H Hcon) .
     + done .
     + (rewrite size_addB
-              (size_eval_atomic_asize
-                 Hdef0 Hcon (well_typed_atomic_size_matched Hsm0)));
-        (rewrite (size_eval_atomic_asize
-                    Hdef1 Hcon (well_typed_atomic_size_matched Hsm1)));
+              (size_eval_atom_asize
+                 Hdef0 Hcon (well_typed_atom_size_matched Hsm0)));
+        (rewrite (size_eval_atom_asize
+                    Hdef1 Hcon (well_typed_atom_size_matched Hsm1)));
           by rewrite /asize !(eqP Hty) minnE subKn .
   Qed .
 
@@ -3655,10 +3657,10 @@ Module MakeDSL
      [/andP [/andP [/andP [Hty _] Hsm0] Hsm1] _] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
       by rewrite /adcB /full_adder size_full_adder_zip
-                 (size_eval_atomic_asize
-                    Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
-                 (size_eval_atomic_asize
-                    Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+                 (size_eval_atom_asize
+                    Hdef0 Hcon (well_typed_atom_size_matched Hsm0))
+                 (size_eval_atom_asize
+                    Hdef1 Hcon (well_typed_atom_size_matched Hsm1))
                  /asize !(eqP Hty) minnE subKn .
   Qed .
 
@@ -3675,10 +3677,10 @@ Module MakeDSL
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ H Hcon) .
     + done .
     + by rewrite /adcB /full_adder size_full_adder_zip
-                 (size_eval_atomic_asize
-                    Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
-                 (size_eval_atomic_asize
-                    Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+                 (size_eval_atom_asize
+                    Hdef0 Hcon (well_typed_atom_size_matched Hsm0))
+                 (size_eval_atom_asize
+                    Hdef1 Hcon (well_typed_atom_size_matched Hsm1))
                  /asize !(eqP Hty) minnE subKn .
   Qed .
 
@@ -3693,10 +3695,10 @@ Module MakeDSL
     /andP [Hdef0 Hdef1] /andP [/andP [Hty Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
       by rewrite size_subB
-                 (size_eval_atomic_asize
-                    Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
-                 (size_eval_atomic_asize
-                    Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+                 (size_eval_atom_asize
+                    Hdef0 Hcon (well_typed_atom_size_matched Hsm0))
+                 (size_eval_atom_asize
+                    Hdef1 Hcon (well_typed_atom_size_matched Hsm1))
                  /asize !(eqP Hty) minnE subKn .
   Qed .
 
@@ -3713,8 +3715,8 @@ Module MakeDSL
     + done .
     + by rewrite
            size_adcB size_invB
-           (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
-           (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+           (size_eval_atom_asize Hdef0 Hcon (well_typed_atom_size_matched Hsm0))
+           (size_eval_atom_asize Hdef1 Hcon (well_typed_atom_size_matched Hsm1))
            /asize !(eqP Hty) minnE subKn .
   Qed .
 
@@ -3731,8 +3733,8 @@ Module MakeDSL
     + done .
     + by rewrite
            size_subB
-           (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
-           (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+           (size_eval_atom_asize Hdef0 Hcon (well_typed_atom_size_matched Hsm0))
+           (size_eval_atom_asize Hdef1 Hcon (well_typed_atom_size_matched Hsm1))
            /asize !(eqP Hty) minnE subKn .
   Qed .
 
@@ -3749,8 +3751,8 @@ Module MakeDSL
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
       by rewrite /adcB /full_adder size_full_adder_zip
          size_invB
-            (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
-            (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+            (size_eval_atom_asize Hdef0 Hcon (well_typed_atom_size_matched Hsm0))
+            (size_eval_atom_asize Hdef1 Hcon (well_typed_atom_size_matched Hsm1))
             /asize !(eqP Hty) minnE subKn .
   Qed .
 
@@ -3768,8 +3770,8 @@ Module MakeDSL
     + done .
     + by rewrite /adcB /full_adder size_full_adder_zip
          size_invB
-            (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
-            (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+            (size_eval_atom_asize Hdef0 Hcon (well_typed_atom_size_matched Hsm0))
+            (size_eval_atom_asize Hdef1 Hcon (well_typed_atom_size_matched Hsm1))
             /asize !(eqP Hty) minnE subKn .
   Qed .
 
@@ -3786,8 +3788,8 @@ Module MakeDSL
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
       by rewrite
            size_sbbB
-           (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
-           (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+           (size_eval_atom_asize Hdef0 Hcon (well_typed_atom_size_matched Hsm0))
+           (size_eval_atom_asize Hdef1 Hcon (well_typed_atom_size_matched Hsm1))
            /asize !(eqP Hty) minnE subKn .
   Qed .
 
@@ -3804,8 +3806,8 @@ Module MakeDSL
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ H Hcon); first done .
       by rewrite
            size_sbbB
-           (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
-           (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+           (size_eval_atom_asize Hdef0 Hcon (well_typed_atom_size_matched Hsm0))
+           (size_eval_atom_asize Hdef1 Hcon (well_typed_atom_size_matched Hsm1))
            /asize !(eqP Hty) minnE subKn .
   Qed .
 
@@ -3821,7 +3823,7 @@ Module MakeDSL
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
       by rewrite
            size_mulB
-           (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0)).
+           (size_eval_atom_asize Hdef0 Hcon (well_typed_atom_size_matched Hsm0)).
   Qed .
 
   Lemma conform_eval_succ_typenv_Imull te t t0 a a0 s1 s2 :
@@ -3836,16 +3838,16 @@ Module MakeDSL
     inversion_clear Hev; apply : (conform_Upd2 Hneq _ _ H0 Hcon);
       [ by rewrite
              size_high
-             (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+             (size_eval_atom_asize Hdef0 Hcon (well_typed_atom_size_matched Hsm0))
       | rewrite
           size_low
-          (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+          (size_eval_atom_asize Hdef1 Hcon (well_typed_atom_size_matched Hsm1))
       | by rewrite
              size_high
-             (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+             (size_eval_atom_asize Hdef0 Hcon (well_typed_atom_size_matched Hsm0))
       | rewrite
           size_low
-          (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))];
+          (size_eval_atom_asize Hdef1 Hcon (well_typed_atom_size_matched Hsm1))];
       by rewrite size_unsigned_typ .
   Qed .
 
@@ -3860,7 +3862,7 @@ Module MakeDSL
     /andP [Hdef0 Hdef1] /andP [/andP [Hty Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H0);
       rewrite size_mulB ?size_zext ?size_sext
-              (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
+              (size_eval_atom_asize Hdef0 Hcon (well_typed_atom_size_matched Hsm0))
               /asize /Typ.double_typ;
       by case (atyp a te) => /= // n; rewrite mul2n addnn // .
   Qed .
@@ -3877,16 +3879,16 @@ Module MakeDSL
     inversion_clear Hev; apply: (conform_Upd2 Hneq _ _ H0 Hcon);
       [ by rewrite
              size_shrB
-             (size_eval_atomic_asize Hdef Hcon (well_typed_atomic_size_matched Hsm))
+             (size_eval_atom_asize Hdef Hcon (well_typed_atom_size_matched Hsm))
       | by rewrite
              size_shrB size_shlB size_unsigned_typ
-             (size_eval_atomic_asize Hdef Hcon (well_typed_atomic_size_matched Hsm))
+             (size_eval_atom_asize Hdef Hcon (well_typed_atom_size_matched Hsm))
       | by rewrite
              size_sarB
-             (size_eval_atomic_asize Hdef Hcon (well_typed_atomic_size_matched Hsm))
+             (size_eval_atom_asize Hdef Hcon (well_typed_atom_size_matched Hsm))
       | by rewrite
              size_shrB size_shlB size_unsigned_typ
-             (size_eval_atomic_asize Hdef Hcon (well_typed_atomic_size_matched Hsm)) ].
+             (size_eval_atom_asize Hdef Hcon (well_typed_atom_size_matched Hsm)) ].
   Qed.
 
   Lemma conform_eval_succ_typenv_Iand te t t0 a a0 s1 s2 :
@@ -3902,8 +3904,8 @@ Module MakeDSL
     rewrite /compatible in Hty1 Hty2.
       by rewrite
            size_lift
-           (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
-           (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+           (size_eval_atom_asize Hdef0 Hcon (well_typed_atom_size_matched Hsm0))
+           (size_eval_atom_asize Hdef1 Hcon (well_typed_atom_size_matched Hsm1))
            /asize -(eqP Hty1) -(eqP Hty2) maxnn.
   Qed .
 
@@ -3920,8 +3922,8 @@ Module MakeDSL
     rewrite /compatible in Hty1 Hty2.
       by rewrite
            size_lift
-           (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
-           (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+           (size_eval_atom_asize Hdef0 Hcon (well_typed_atom_size_matched Hsm0))
+           (size_eval_atom_asize Hdef1 Hcon (well_typed_atom_size_matched Hsm1))
            /asize -(eqP Hty1) -(eqP Hty2) maxnn .
   Qed .
 
@@ -3938,8 +3940,8 @@ Module MakeDSL
     rewrite /compatible in Hty1 Hty2.
       by rewrite
            size_lift
-           (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
-           (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+           (size_eval_atom_asize Hdef0 Hcon (well_typed_atom_size_matched Hsm0))
+           (size_eval_atom_asize Hdef1 Hcon (well_typed_atom_size_matched Hsm1))
            /asize -(eqP Hty1) -(eqP Hty2) maxnn .
   Qed .
 
@@ -3978,8 +3980,8 @@ Module MakeDSL
     /andP [Hdef0 Hdef1] /andP [/andP [/andP [Hun Hty] Hsm0] Hsm1] Hev .
     inversion_clear Hev; apply : (conform_Upd _ Hcon H) .
     rewrite size_cat
-            (size_eval_atomic_asize Hdef0 Hcon (well_typed_atomic_size_matched Hsm0))
-            (size_eval_atomic_asize Hdef1 Hcon (well_typed_atomic_size_matched Hsm1))
+            (size_eval_atom_asize Hdef0 Hcon (well_typed_atom_size_matched Hsm0))
+            (size_eval_atom_asize Hdef1 Hcon (well_typed_atom_size_matched Hsm1))
             /asize -(eqP Hty) /Typ.double_typ .
       by ((case (atyp a te) => /= n); rewrite mul2n addnn).
   Qed .
@@ -4084,9 +4086,9 @@ Module MakeDSL
       move=> Heqi Hmem. rewrite /acc2z. rewrite (Heqi x Hmem). reflexivity.
     Qed.
 
-    Lemma bvs_eqi_eval_atomic E s1 s2 a :
-      bvs_eqi E s1 s2 -> are_defined (vars_atomic a) E ->
-      eval_atomic a s1 = eval_atomic a s2.
+    Lemma bvs_eqi_eval_atom E s1 s2 a :
+      bvs_eqi E s1 s2 -> are_defined (vars_atom a) E ->
+      eval_atom a s1 = eval_atom a s2.
     Proof.
       move=> Heqi. case: a => //=. move=> x. rewrite are_defined_singleton => Hdef.
       exact: (Heqi x Hdef).
@@ -4234,14 +4236,14 @@ Module MakeDSL
           Hev : eval_instr _ _ ?s1 _ |- _ =>
           let H := fresh "Heqi" in
           move: Heqi; inversion_clear Hev; move=> H
-        | Hdef : is_true (are_defined (vars_atomic ?a) ?E),
+        | Hdef : is_true (are_defined (vars_atom ?a) ?E),
           Heqi : bvs_eqi ?E ?s1 ?s2
-          |- context f [eval_atomic ?a ?s1] =>
-          rewrite (bvs_eqi_eval_atomic Heqi Hdef)
-        | Hdef : is_true (are_defined (vars_atomic ?a) ?E),
+          |- context f [eval_atom ?a ?s1] =>
+          rewrite (bvs_eqi_eval_atom Heqi Hdef)
+        | Hdef : is_true (are_defined (vars_atom ?a) ?E),
           Heqi : bvs_eqi ?E ?s1 ?s2,
-          H : context f [eval_atomic ?a ?s1] |- _ =>
-          rewrite (bvs_eqi_eval_atomic Heqi Hdef) in H
+          H : context f [eval_atom ?a ?s1] |- _ =>
+          rewrite (bvs_eqi_eval_atom Heqi Hdef) in H
         | Heqi : bvs_eqi ?E ?s1 ?t1,
           Hupd : S.Upd ?x ?v ?s1 ?s2
           |- exists _ : S.t, _ =>

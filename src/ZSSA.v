@@ -1,4 +1,6 @@
 
+(** Root entailment problem. *)
+
 From Coq Require Import List ZArith.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From ssrlib Require Import Var Types SsrOrder ZAriths Store FSets FMaps Tactics.
@@ -44,17 +46,16 @@ Module ZSSA.
     | Eand e1 e2 => eval_zbexp e1 s /\ eval_zbexp e2 s
     end.
 
-  Definition zentails (f g : zbexp) : Prop :=
+  Definition entails (f g : zbexp) : Prop :=
     forall s, eval_zbexp f s -> eval_zbexp g s.
 
   (* Specification *)
 
-  Record zspec : Type :=
-    mkSpec { zspre : zbexp;
-             zspost : zbexp }.
+  (** A root entailment problem checks if the premise entails the consequence. *)
+  Record rep : Type := { premise : zbexp; conseq : zbexp }.
 
-  Definition valid_zspec (s : zspec) : Prop :=
-    zentails (zspre s) (zspost s).
+  Definition valid_rep (s : rep) : Prop :=
+    entails (premise s) (conseq s).
 
   Lemma eval_zbexp_eands_cons e es s :
     eval_zbexp (SSA.eands (e::es)) s <-> eval_zbexp e s /\ eval_zbexp (SSA.eands es) s.

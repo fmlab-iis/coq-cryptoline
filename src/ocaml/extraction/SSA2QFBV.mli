@@ -5,8 +5,6 @@ open Eqtype
 open Seq
 open Ssrnat
 
-val qfbv_atomic : SSA.SSA.atomic -> QFBV.QFBV.exp
-
 val qfbv_true : QFBV.QFBV.bexp
 
 val qfbv_var : SSAVarOrder.t -> QFBV.QFBV.exp
@@ -101,6 +99,8 @@ val qfbv_conjs_rec : QFBV.QFBV.bexp -> QFBV.QFBV.bexp list -> QFBV.QFBV.bexp
 
 val qfbv_conjs_la : QFBV.QFBV.bexp list -> QFBV.QFBV.bexp
 
+val qfbv_atom : SSA.SSA.atom -> QFBV.QFBV.exp
+
 val bexp_instr : TypEnv.SSATE.env -> SSA.SSA.instr -> QFBV.QFBV.bexp
 
 val bexp_program : TypEnv.SSATE.env -> SSA.SSA.program -> QFBV.QFBV.bexp list
@@ -110,96 +110,91 @@ type bexp_spec = { binputs : TypEnv.SSATE.env; bpre : QFBV.QFBV.bexp;
 
 val bexp_of_rspec : TypEnv.SSATE.env -> SSA.SSA.rspec -> bexp_spec
 
-val qfbv_bexp_spec_split_la : SSA.SSA.spec -> QFBV.QFBV.bexp list
+val rngred_rspec_split_la : SSA.SSA.spec -> QFBV.QFBV.bexp list
 
-val bexp_atomic_uaddB_safe :
-  SSA.SSA.atomic -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_uaddB_algsnd : SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_atomic_saddB_safe :
-  SSA.SSA.atomic -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_saddB_algsnd : SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_atomic_addB_safe :
-  TypEnv.SSATE.env -> SSA.SSA.atomic -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_addB_algsnd :
+  TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_atomic_adds_safe :
-  TypEnv.SSATE.env -> SSA.SSA.atomic -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_adds_algsnd :
+  TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_atomic_uadcB_safe :
-  int -> SSA.SSA.atomic -> SSA.SSA.atomic -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_uadcB_algsnd :
+  int -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_atomic_sadcB_safe :
-  int -> SSA.SSA.atomic -> SSA.SSA.atomic -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_sadcB_algsnd :
+  int -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_atomic_adcB_safe :
-  TypEnv.SSATE.env -> SSA.SSA.atomic -> SSA.SSA.atomic -> SSA.SSA.atomic ->
+val bexp_atom_adcB_algsnd :
+  TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom ->
   QFBV.QFBV.bexp
 
-val bexp_atomic_adcs_safe :
-  TypEnv.SSATE.env -> SSA.SSA.atomic -> SSA.SSA.atomic -> SSA.SSA.atomic ->
+val bexp_atom_adcs_algsnd :
+  TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom ->
   QFBV.QFBV.bexp
 
-val bexp_atomic_usubB_safe :
-  SSA.SSA.atomic -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_usubB_algsnd : SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_atomic_ssubB_safe :
-  SSA.SSA.atomic -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_ssubB_algsnd : SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_atomic_subB_safe :
-  TypEnv.SSATE.env -> SSA.SSA.atomic -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_subB_algsnd :
+  TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_atomic_subc_safe :
-  TypEnv.SSATE.env -> SSA.SSA.atomic -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_subc_algsnd :
+  TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_atomic_subb_safe :
-  TypEnv.SSATE.env -> SSA.SSA.atomic -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_subb_algsnd :
+  TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_atomic_usbbB_safe :
-  int -> SSA.SSA.atomic -> SSA.SSA.atomic -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_usbbB_algsnd :
+  int -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_atomic_ssbbB_safe :
-  int -> SSA.SSA.atomic -> SSA.SSA.atomic -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_ssbbB_algsnd :
+  int -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_atomic_sbbB_safe :
-  TypEnv.SSATE.env -> SSA.SSA.atomic -> SSA.SSA.atomic -> SSA.SSA.atomic ->
+val bexp_atom_sbbB_algsnd :
+  TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom ->
   QFBV.QFBV.bexp
 
-val bexp_atomic_sbbs_safe :
-  TypEnv.SSATE.env -> SSA.SSA.atomic -> SSA.SSA.atomic -> SSA.SSA.atomic ->
+val bexp_atom_sbbs_algsnd :
+  TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom ->
   QFBV.QFBV.bexp
 
-val bexp_atomic_usbcB_safe :
-  int -> SSA.SSA.atomic -> SSA.SSA.atomic -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_usbcB_algsnd :
+  int -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_atomic_ssbcB_safe :
-  int -> SSA.SSA.atomic -> SSA.SSA.atomic -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_ssbcB_algsnd :
+  int -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_atomic_sbcB_safe :
-  TypEnv.SSATE.env -> SSA.SSA.atomic -> SSA.SSA.atomic -> SSA.SSA.atomic ->
+val bexp_atom_sbcB_algsnd :
+  TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom ->
   QFBV.QFBV.bexp
 
-val bexp_atomic_sbcs_safe :
-  TypEnv.SSATE.env -> SSA.SSA.atomic -> SSA.SSA.atomic -> SSA.SSA.atomic ->
+val bexp_atom_sbcs_algsnd :
+  TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom ->
   QFBV.QFBV.bexp
 
-val bexp_atomic_mulB_safe :
-  TypEnv.SSATE.env -> SSA.SSA.atomic -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_mulB_algsnd :
+  TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_atomic_shl_safe :
-  TypEnv.SSATE.env -> SSA.SSA.atomic -> int -> QFBV.QFBV.bexp
+val bexp_atom_shl_algsnd :
+  TypEnv.SSATE.env -> SSA.SSA.atom -> int -> QFBV.QFBV.bexp
 
-val bexp_atomic_cshl_safe :
-  TypEnv.SSATE.env -> SSA.SSA.atomic -> SSA.SSA.atomic -> int ->
-  QFBV.QFBV.bexp
+val bexp_atom_cshl_algsnd :
+  TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> int -> QFBV.QFBV.bexp
 
-val bexp_atomic_vpc_safe :
-  TypEnv.SSATE.env -> typ -> SSA.SSA.atomic -> QFBV.QFBV.bexp
+val bexp_atom_vpc_algsnd :
+  TypEnv.SSATE.env -> typ -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
-val bexp_instr_safe : TypEnv.SSATE.env -> SSA.SSA.instr -> QFBV.QFBV.bexp
+val bexp_instr_algsnd : TypEnv.SSATE.env -> SSA.SSA.instr -> QFBV.QFBV.bexp
 
-val bexp_program_safe_split_fixed_final_rec :
+val bexp_program_algsnd_split_fixed_final_rec :
   TypEnv.SSATE.env -> QFBV.QFBV.bexp list -> SSA.SSA.instr list ->
   (QFBV.QFBV.bexp list * QFBV.QFBV.bexp) list
 
-val bexp_program_safe_split_fixed_final :
+val bexp_program_algsnd_split_fixed_final :
   TypEnv.SSATE.env -> SSA.SSA.instr list -> (QFBV.QFBV.bexp
   list * QFBV.QFBV.bexp) list

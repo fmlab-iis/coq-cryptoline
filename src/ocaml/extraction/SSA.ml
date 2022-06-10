@@ -53,9 +53,9 @@ let ssa_var m v =
 let svar x =
   fst (Obj.magic x)
 
-(** val ssa_atomic : vmap -> DSL.DSL.atomic -> SSA.atomic **)
+(** val ssa_atom : vmap -> DSL.DSL.atom -> SSA.atom **)
 
-let ssa_atomic m = function
+let ssa_atom m = function
 | DSL.DSL.Avar v -> SSA.Avar (ssa_var m (Obj.magic v))
 | DSL.DSL.Aconst (ty, n) -> SSA.Aconst (ty, n)
 
@@ -106,16 +106,16 @@ let ssa_bexp m e =
 
 let ssa_instr m = function
 | DSL.DSL.Imov (v, a) ->
-  let a0 = ssa_atomic m a in
+  let a0 = ssa_atom m a in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Imov ((ssa_var m0 (Obj.magic v)), a0)))
 | DSL.DSL.Ishl (v, a, p) ->
-  let a0 = ssa_atomic m a in
+  let a0 = ssa_atom m a in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Ishl ((ssa_var m0 (Obj.magic v)), a0, p)))
 | DSL.DSL.Icshl (vh, vl, a1, a2, p) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
   let ml = upd_index (Obj.magic vl) m in
   let mh = upd_index (Obj.magic vh) ml in
   (mh, (SSA.Icshl ((ssa_var mh (Obj.magic vh)), (ssa_var ml (Obj.magic vl)),
@@ -124,138 +124,138 @@ let ssa_instr m = function
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Inondet ((ssa_var m0 (Obj.magic v)), ty)))
 | DSL.DSL.Icmov (v, c, a1, a2) ->
-  let c0 = ssa_atomic m c in
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
+  let c0 = ssa_atom m c in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Icmov ((ssa_var m0 (Obj.magic v)), c0, a3, a4)))
 | DSL.DSL.Inop -> (m, SSA.Inop)
 | DSL.DSL.Inot (v, ty, a) ->
-  let a0 = ssa_atomic m a in
+  let a0 = ssa_atom m a in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Inot ((ssa_var m0 (Obj.magic v)), ty, a0)))
 | DSL.DSL.Iadd (v, a1, a2) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Iadd ((ssa_var m0 (Obj.magic v)), a3, a4)))
 | DSL.DSL.Iadds (c, v, a1, a2) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
   let mv = upd_index (Obj.magic v) m in
   let mc = upd_index (Obj.magic c) mv in
   (mc, (SSA.Iadds ((ssa_var mc (Obj.magic c)), (ssa_var mv (Obj.magic v)),
   a3, a4)))
 | DSL.DSL.Iadc (v, a1, a2, y) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
-  let y0 = ssa_atomic m y in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
+  let y0 = ssa_atom m y in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Iadc ((ssa_var m0 (Obj.magic v)), a3, a4, y0)))
 | DSL.DSL.Iadcs (c, v, a1, a2, y) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
-  let y0 = ssa_atomic m y in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
+  let y0 = ssa_atom m y in
   let mv = upd_index (Obj.magic v) m in
   let mc = upd_index (Obj.magic c) mv in
   (mc, (SSA.Iadcs ((ssa_var mc (Obj.magic c)), (ssa_var mv (Obj.magic v)),
   a3, a4, y0)))
 | DSL.DSL.Isub (v, a1, a2) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Isub ((ssa_var m0 (Obj.magic v)), a3, a4)))
 | DSL.DSL.Isubc (c, v, a1, a2) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
   let mv = upd_index (Obj.magic v) m in
   let mc = upd_index (Obj.magic c) mv in
   (mc, (SSA.Isubc ((ssa_var mc (Obj.magic c)), (ssa_var mv (Obj.magic v)),
   a3, a4)))
 | DSL.DSL.Isubb (c, v, a1, a2) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
   let mv = upd_index (Obj.magic v) m in
   let mc = upd_index (Obj.magic c) mv in
   (mc, (SSA.Isubb ((ssa_var mc (Obj.magic c)), (ssa_var mv (Obj.magic v)),
   a3, a4)))
 | DSL.DSL.Isbc (v, a1, a2, y) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
-  let y0 = ssa_atomic m y in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
+  let y0 = ssa_atom m y in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Isbc ((ssa_var m0 (Obj.magic v)), a3, a4, y0)))
 | DSL.DSL.Isbcs (c, v, a1, a2, y) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
-  let y0 = ssa_atomic m y in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
+  let y0 = ssa_atom m y in
   let mv = upd_index (Obj.magic v) m in
   let mc = upd_index (Obj.magic c) mv in
   (mc, (SSA.Isbcs ((ssa_var mc (Obj.magic c)), (ssa_var mv (Obj.magic v)),
   a3, a4, y0)))
 | DSL.DSL.Isbb (v, a1, a2, y) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
-  let y0 = ssa_atomic m y in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
+  let y0 = ssa_atom m y in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Isbb ((ssa_var m0 (Obj.magic v)), a3, a4, y0)))
 | DSL.DSL.Isbbs (c, v, a1, a2, y) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
-  let y0 = ssa_atomic m y in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
+  let y0 = ssa_atom m y in
   let mv = upd_index (Obj.magic v) m in
   let mc = upd_index (Obj.magic c) mv in
   (mc, (SSA.Isbbs ((ssa_var mc (Obj.magic c)), (ssa_var mv (Obj.magic v)),
   a3, a4, y0)))
 | DSL.DSL.Imul (v, a1, a2) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Imul ((ssa_var m0 (Obj.magic v)), a3, a4)))
 | DSL.DSL.Imull (vh, vl, a1, a2) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
   let ml = upd_index (Obj.magic vl) m in
   let mh = upd_index (Obj.magic vh) ml in
   (mh, (SSA.Imull ((ssa_var mh (Obj.magic vh)), (ssa_var ml (Obj.magic vl)),
   a3, a4)))
 | DSL.DSL.Imulj (v, a1, a2) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Imulj ((ssa_var m0 (Obj.magic v)), a3, a4)))
 | DSL.DSL.Isplit (vh, vl, a, n) ->
-  let a0 = ssa_atomic m a in
+  let a0 = ssa_atom m a in
   let ml = upd_index (Obj.magic vl) m in
   let mh = upd_index (Obj.magic vh) ml in
   (mh, (SSA.Isplit ((ssa_var mh (Obj.magic vh)), (ssa_var ml (Obj.magic vl)),
   a0, n)))
 | DSL.DSL.Iand (v, ty, a1, a2) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Iand ((ssa_var m0 (Obj.magic v)), ty, a3, a4)))
 | DSL.DSL.Ior (v, ty, a1, a2) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Ior ((ssa_var m0 (Obj.magic v)), ty, a3, a4)))
 | DSL.DSL.Ixor (v, ty, a1, a2) ->
-  let a3 = ssa_atomic m a1 in
-  let a4 = ssa_atomic m a2 in
+  let a3 = ssa_atom m a1 in
+  let a4 = ssa_atom m a2 in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Ixor ((ssa_var m0 (Obj.magic v)), ty, a3, a4)))
 | DSL.DSL.Icast (v, ty, a) ->
-  let a0 = ssa_atomic m a in
+  let a0 = ssa_atom m a in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Icast ((ssa_var m0 (Obj.magic v)), ty, a0)))
 | DSL.DSL.Ivpc (v, ty, a) ->
-  let a0 = ssa_atomic m a in
+  let a0 = ssa_atom m a in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Ivpc ((ssa_var m0 (Obj.magic v)), ty, a0)))
 | DSL.DSL.Ijoin (v, ah, al) ->
-  let ah0 = ssa_atomic m ah in
-  let al0 = ssa_atomic m al in
+  let ah0 = ssa_atom m ah in
+  let al0 = ssa_atom m al in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Ijoin ((ssa_var m0 (Obj.magic v)), ah0, al0)))
 | DSL.DSL.Iassume e -> (m, (SSA.Iassume (ssa_bexp m e)))

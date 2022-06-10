@@ -1,4 +1,6 @@
 
+(** Ideal membership problem together with the validator of CAS answers. *)
+
 From Coq Require Import List Arith ZArith.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From ssrlib Require Import Var Types SsrOrder Nats ZAriths Seqs Store Tactics.
@@ -9,97 +11,97 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
-Section PSpec.
+(** An atomic root entailment problem is a root entailment where the
+    consequence contains no conjunction. *)
+Section AtomicRootEntailment.
 
-  (* Singleton zbexp *)
+  (* Atomic zbexp *)
 
-  Inductive szbexp : Type :=
-  | Seq : ZSSA.zexp -> ZSSA.zexp -> szbexp
-  | Seqmod : ZSSA.zexp -> ZSSA.zexp -> ZSSA.zexp -> szbexp.
+  Inductive azbexp : Type :=
+  | Seq : ZSSA.zexp -> ZSSA.zexp -> azbexp
+  | Seqmod : ZSSA.zexp -> ZSSA.zexp -> ZSSA.zexp -> azbexp.
 
-  Definition szbexp_eqn (e1 e2 : szbexp) : bool :=
+  Definition azbexp_eqn (e1 e2 : azbexp) : bool :=
     match e1, e2 with
     | Seq e1 e2, Seq e3 e4 => (Eeq e1 e2) == (Eeq e3 e4)
     | Seqmod e1 e2 p1, Seqmod e3 e4 p2 => (Eeqmod e1 e2 p1) == (Eeqmod e3 e4 p2)
     | _, _ => false
     end.
 
-  Lemma szbexp_eqn_eq (e1 e2 : szbexp) : szbexp_eqn e1 e2 -> e1 = e2.
+  Lemma azbexp_eqn_eq (e1 e2 : azbexp) : azbexp_eqn e1 e2 -> e1 = e2.
   Proof.
     elim: e1 e2 => [e1 e2 | e1 e2 p1] [] //=.
     - by move=> ? ? /eqP [] -> ->.
     - by move=> ? ? ? /eqP [] -> -> ->.
   Qed.
 
-  Lemma szbexp_eqn_refl (e : szbexp) : szbexp_eqn e e.
+  Lemma azbexp_eqn_refl (e : azbexp) : azbexp_eqn e e.
   Proof. by elim: e => /=. Qed.
 
-  Lemma szbexp_eqn_sym {e1 e2 : szbexp} : szbexp_eqn e1 e2 -> szbexp_eqn e2 e1.
-  Proof. move=> H; rewrite (szbexp_eqn_eq H); exact: szbexp_eqn_refl. Qed.
+  Lemma azbexp_eqn_sym {e1 e2 : azbexp} : azbexp_eqn e1 e2 -> azbexp_eqn e2 e1.
+  Proof. move=> H; rewrite (azbexp_eqn_eq H); exact: azbexp_eqn_refl. Qed.
 
-  Lemma szbexp_eqn_trans {e1 e2 e3 : szbexp} :
-    szbexp_eqn e1 e2 -> szbexp_eqn e2 e3 -> szbexp_eqn e1 e3.
+  Lemma azbexp_eqn_trans {e1 e2 e3 : azbexp} :
+    azbexp_eqn e1 e2 -> azbexp_eqn e2 e3 -> azbexp_eqn e1 e3.
   Proof.
-    move=> H1 H2. rewrite (szbexp_eqn_eq H1) (szbexp_eqn_eq H2).
-    exact: szbexp_eqn_refl.
+    move=> H1 H2. rewrite (azbexp_eqn_eq H1) (azbexp_eqn_eq H2).
+    exact: azbexp_eqn_refl.
   Qed.
 
-  Lemma szbexp_eqP (e1 e2 : szbexp) : reflect (e1 = e2) (szbexp_eqn e1 e2).
+  Lemma azbexp_eqP (e1 e2 : azbexp) : reflect (e1 = e2) (azbexp_eqn e1 e2).
   Proof.
-    case H: (szbexp_eqn e1 e2).
-    - apply: ReflectT. exact: (szbexp_eqn_eq H).
-    - apply: ReflectF => Heq. move/negP: H; apply. rewrite Heq. exact: szbexp_eqn_refl.
+    case H: (azbexp_eqn e1 e2).
+    - apply: ReflectT. exact: (azbexp_eqn_eq H).
+    - apply: ReflectF => Heq. move/negP: H; apply. rewrite Heq. exact: azbexp_eqn_refl.
   Qed.
 
-  Definition szbexp_eqMixin := EqMixin szbexp_eqP.
-  Canonical szbexp_eqType := Eval hnf in EqType szbexp szbexp_eqMixin.
+  Definition azbexp_eqMixin := EqMixin azbexp_eqP.
+  Canonical azbexp_eqType := Eval hnf in EqType azbexp azbexp_eqMixin.
 
-  Definition eval_szbexp (e : szbexp) (s : ZSSAStore.t) : Prop :=
+  Definition eval_azbexp (e : azbexp) (s : ZSSAStore.t) : Prop :=
     match e with
     | Seq e1 e2 => ZSSA.eval_zbexp (Eeq e1 e2) s
     | Seqmod e1 e2 p => ZSSA.eval_zbexp (Eeqmod e1 e2 p) s
     end.
 
-  (* Algebraic specification as polynomial equations *)
+  (** Atomic root entailment problem *)
+  Record arep : Type := { apremises : seq azbexp; aconseq : azbexp }.
 
-  Record pspec : Type := mkPolySpec { ppremises : seq szbexp;
-                                      pconseq : szbexp }.
+  Definition arep_eqn (ps1 ps2 : arep) : bool :=
+    (apremises ps1 == apremises ps2) && (aconseq ps1 == aconseq ps2).
 
-  Definition pspec_eqn (ps1 ps2 : pspec) : bool :=
-    (ppremises ps1 == ppremises ps2) && (pconseq ps1 == pconseq ps2).
-
-  Lemma pspec_eqn_eq ps1 ps2 : pspec_eqn ps1 ps2 -> ps1 = ps2.
+  Lemma arep_eqn_eq ps1 ps2 : arep_eqn ps1 ps2 -> ps1 = ps2.
   Proof.
-    case: ps1 => [pres1 post1]. case: ps2 => [pres2 post2]. rewrite /pspec_eqn /=.
+    case: ps1 => [pres1 post1]. case: ps2 => [pres2 post2]. rewrite /arep_eqn /=.
     move/andP=> [/eqP -> /eqP ->]. reflexivity.
   Qed.
 
-  Lemma pspec_eqn_refl ps : pspec_eqn ps ps.
-  Proof. by rewrite /pspec_eqn 2!eqxx. Qed.
+  Lemma arep_eqn_refl ps : arep_eqn ps ps.
+  Proof. by rewrite /arep_eqn 2!eqxx. Qed.
 
-  Lemma pspec_eqP (ps1 ps2 : pspec) : reflect (ps1 = ps2) (pspec_eqn ps1 ps2).
+  Lemma arep_eqP (ps1 ps2 : arep) : reflect (ps1 = ps2) (arep_eqn ps1 ps2).
   Proof.
-    case H: (pspec_eqn ps1 ps2).
-    - apply: ReflectT. exact: (pspec_eqn_eq H).
-    - apply: ReflectF => Heq. move/negP: H; apply. rewrite Heq. exact: pspec_eqn_refl.
+    case H: (arep_eqn ps1 ps2).
+    - apply: ReflectT. exact: (arep_eqn_eq H).
+    - apply: ReflectF => Heq. move/negP: H; apply. rewrite Heq. exact: arep_eqn_refl.
   Qed.
 
-  Definition pspec_eqMixin := EqMixin pspec_eqP.
-  Canonical pspec_eqType := Eval hnf in EqType pspec pspec_eqMixin.
+  Definition arep_eqMixin := EqMixin arep_eqP.
+  Canonical arep_eqType := Eval hnf in EqType arep arep_eqMixin.
 
-  Definition valid_pspec (s : pspec) : Prop :=
+  Definition valid_arep (s : arep) : Prop :=
     forall st : ZSSAStore.t,
-      (forall e : szbexp, e \in (ppremises s) -> eval_szbexp e st) ->
-      eval_szbexp (pconseq s) st.
+      (forall e : azbexp, e \in (apremises s) -> eval_azbexp e st) ->
+      eval_azbexp (aconseq s) st.
 
-End PSpec.
+End AtomicRootEntailment.
 
 
 
 From Coq Require Import Recdef.
 
-(* Simplification of pspec *)
-Section PSpecSimpl.
+(* Simplification of arep *)
+Section AtomicRootEntailmentSimpl.
 
   Import SSA ZSSA.
 
@@ -113,15 +115,15 @@ Section PSpecSimpl.
          | _ => e
          end.
 
-  Definition szbexp_subst (p : ZSSA.zexp) (r : ZSSA.zexp) (e : szbexp) :=
+  Definition azbexp_subst (p : ZSSA.zexp) (r : ZSSA.zexp) (e : azbexp) :=
     match e with
     | Seq e1 e2 => Seq (zexp_subst p r e1) (zexp_subst p r e2)
     | Seqmod e1 e2 e3 => Seqmod (zexp_subst p r e1) (zexp_subst p r e2)
                                 (zexp_subst p r e3)
     end.
 
-  Definition subst_szbexps (p r : zexp) (es : seq szbexp) : seq szbexp :=
-    map (szbexp_subst p r) es.
+  Definition subst_azbexps (p r : zexp) (es : seq azbexp) : seq azbexp :=
+    map (azbexp_subst p r) es.
 
   Lemma zexp_subst_valid (e p r : ZSSA.zexp) s :
     eval_zexp p s = eval_zexp r s ->
@@ -142,37 +144,37 @@ Section PSpecSimpl.
       + rewrite /=. rewrite (IH1 Hev) (IH2 Hev). reflexivity.
   Qed.
 
-  Lemma szbexp_subst_valid e p r s :
+  Lemma azbexp_subst_valid e p r s :
     eval_zexp p s = eval_zexp r s ->
-    eval_szbexp e s <-> eval_szbexp (szbexp_subst p r e) s.
+    eval_azbexp e s <-> eval_azbexp (azbexp_subst p r e) s.
   Proof.
     case: e.
     - move=> e1 e2 /= Hev. rewrite -!(zexp_subst_valid _ Hev). tauto.
     - move=> e1 e2 e3 /= Hev. rewrite -!(zexp_subst_valid _ Hev). tauto.
   Qed.
 
-  Lemma subst_szbexps_cat es1 es2 p r :
-    subst_szbexps p r (es1 ++ es2) = subst_szbexps p r es1 ++ subst_szbexps p r es2.
-  Proof. rewrite /subst_szbexps. exact: map_cat. Qed.
+  Lemma subst_azbexps_cat es1 es2 p r :
+    subst_azbexps p r (es1 ++ es2) = subst_azbexps p r es1 ++ subst_azbexps p r es2.
+  Proof. rewrite /subst_azbexps. exact: map_cat. Qed.
 
-  Lemma subst_szbexps_valid es p r s :
+  Lemma subst_azbexps_valid es p r s :
     eval_zexp p s = eval_zexp r s ->
-    (forall e, e \in es -> eval_szbexp e s) <->
-    (forall e, e \in (subst_szbexps p r es) -> eval_szbexp e s).
+    (forall e, e \in es -> eval_azbexp e s) <->
+    (forall e, e \in (subst_azbexps p r es) -> eval_azbexp e s).
   Proof.
     move=> Hpr. elim: es => [| e es IH] //=. split.
     - move=> Hev f Hin_f. rewrite in_cons in Hin_f. case/orP: Hin_f => Hin_f.
-      + rewrite (eqP Hin_f). apply/(szbexp_subst_valid e Hpr). apply: Hev.
+      + rewrite (eqP Hin_f). apply/(azbexp_subst_valid e Hpr). apply: Hev.
         rewrite in_cons eqxx orTb. exact: is_true_true.
-      + have Hev': (forall e : szbexp, e \in es -> eval_szbexp e s).
+      + have Hev': (forall e : azbexp, e \in es -> eval_azbexp e s).
         { move=> g Hin_g; apply: Hev. rewrite in_cons Hin_g orbT.
           exact: is_true_true. }
         case: IH => IH1 IH2. exact: (IH1 Hev' _ Hin_f).
     - move=> Hev f Hin_f. rewrite in_cons in Hin_f. case/orP: Hin_f => Hin_f.
-      + rewrite (eqP Hin_f). apply/(szbexp_subst_valid e Hpr). apply: Hev.
+      + rewrite (eqP Hin_f). apply/(azbexp_subst_valid e Hpr). apply: Hev.
         rewrite in_cons eqxx orTb. exact: is_true_true.
-      + have Hev': (forall e : szbexp_eqType, e \in subst_szbexps p r es ->
-                                                    eval_szbexp e s).
+      + have Hev': (forall e : azbexp_eqType, e \in subst_azbexps p r es ->
+                                                    eval_azbexp e s).
         { move=> g Hin_g; apply: Hev. rewrite in_cons Hin_g orbT.
           exact: is_true_true. }
         case: IH => IH1 IH2. exact: (IH2 Hev' _ Hin_f).
@@ -180,7 +182,7 @@ Section PSpecSimpl.
 
 
 
-  Definition is_assignment (e : szbexp) : option (ssavar * ZSSA.zexp) :=
+  Definition is_assignment (e : azbexp) : option (ssavar * ZSSA.zexp) :=
     match e with
     | Seq (Evar v) e => Some (v, e)
     | Seq e (Evar v) => Some (v, e)
@@ -214,17 +216,17 @@ Section PSpecSimpl.
 
   Lemma is_assignment_equal e p r s :
     is_assignment e = Some (p, r) ->
-    eval_szbexp e s -> eval_zexp (evar p) s = eval_zexp r s.
+    eval_azbexp e s -> eval_zexp (evar p) s = eval_zexp r s.
   Proof.
     case: e => //=. move=> left right.
     (case: left; case: right => //=); intros; by mytac.
   Qed.
 
   Corollary subst_assignment_valid e p r e' s :
-    is_assignment e = Some (p, r) -> eval_szbexp e s ->
-    eval_szbexp e' s <-> eval_szbexp (szbexp_subst (evar p) r e') s.
+    is_assignment e = Some (p, r) -> eval_azbexp e s ->
+    eval_azbexp e' s <-> eval_azbexp (azbexp_subst (evar p) r e') s.
   Proof.
-    move=> His Hev. exact: (szbexp_subst_valid _ (is_assignment_equal His Hev)).
+    move=> His Hev. exact: (azbexp_subst_valid _ (is_assignment_equal His Hev)).
   Qed.
 
 
@@ -232,71 +234,71 @@ Section PSpecSimpl.
   Definition size_lt {A : Type} (es1 es2 : seq A) : Prop :=
     (size es1 < size es2)%coq_nat.
 
-  Function simplify_pspec_rec
-          (visited : seq szbexp) (premises : seq szbexp) (conseq : szbexp)
-          {wf (@size_lt szbexp) premises} :=
+  Function simplify_arep_rec
+          (visited : seq azbexp) (premises : seq azbexp) (conseq : azbexp)
+          {wf (@size_lt azbexp) premises} :=
     match premises with
     | [::] => (rev visited, conseq)
     | e::es =>
       match is_assignment e with
-      | None => simplify_pspec_rec (e::visited) es conseq
-      | Some (p, r) => simplify_pspec_rec (subst_szbexps (evar p) r visited)
-                                          (subst_szbexps (evar p) r es)
-                                          (szbexp_subst (evar p) r conseq)
+      | None => simplify_arep_rec (e::visited) es conseq
+      | Some (p, r) => simplify_arep_rec (subst_azbexps (evar p) r visited)
+                                          (subst_azbexps (evar p) r es)
+                                          (azbexp_subst (evar p) r conseq)
       end
     end.
   Proof.
     - move=> _ premises _ e es ? [p' r'] p r [] ? ? Ha.
-      rewrite /size_lt /subst_szbexps size_map /=. exact: Nat.lt_succ_diag_r.
+      rewrite /size_lt /subst_azbexps size_map /=. exact: Nat.lt_succ_diag_r.
     - move=> _ premises _ e es ? Ha. rewrite /size_lt /=. exact: Nat.lt_succ_diag_r.
-    - exact: (well_founded_ltof (seq szbexp) size).
+    - exact: (well_founded_ltof (seq azbexp) size).
   Defined.
 
-  Lemma simplify_pspec_rec_cons_is_assignment visited e es q p r :
+  Lemma simplify_arep_rec_cons_is_assignment visited e es q p r :
     is_assignment e = Some (p, r) ->
-    simplify_pspec_rec visited (e::es) q =
-    simplify_pspec_rec (subst_szbexps (evar p) r visited)
-                       (subst_szbexps (evar p) r es)
-                       (szbexp_subst (evar p) r q).
+    simplify_arep_rec visited (e::es) q =
+    simplify_arep_rec (subst_azbexps (evar p) r visited)
+                       (subst_azbexps (evar p) r es)
+                       (azbexp_subst (evar p) r q).
   Proof.
     move=> Ha.
-    dcase (simplify_pspec_rec (subst_szbexps (evar p) r visited)
-                              (subst_szbexps (evar p) r es)
-                              (szbexp_subst (evar p) r q)) => [[visited' q'] Hs].
+    dcase (simplify_arep_rec (subst_azbexps (evar p) r visited)
+                              (subst_azbexps (evar p) r es)
+                              (azbexp_subst (evar p) r q)) => [[visited' q'] Hs].
     move: (Logic.eq_sym Hs) => {Hs} Hs.
-    move: (R_simplify_pspec_rec_correct Hs) => {Hs} H.
-    symmetry. apply: R_simplify_pspec_rec_complete.
-    apply: (R_simplify_pspec_rec_2 _ _ _ _ _ _ _ _ Ha _ H). reflexivity.
+    move: (R_simplify_arep_rec_correct Hs) => {Hs} H.
+    symmetry. apply: R_simplify_arep_rec_complete.
+    apply: (R_simplify_arep_rec_2 _ _ _ _ _ _ _ _ Ha _ H). reflexivity.
   Qed.
 
-  Lemma simplify_pspec_rec_cons_not_assignment visited e es q :
+  Lemma simplify_arep_rec_cons_not_assignment visited e es q :
     is_assignment e = None ->
-    simplify_pspec_rec visited (e::es) q =
-    simplify_pspec_rec (e::visited) es q.
+    simplify_arep_rec visited (e::es) q =
+    simplify_arep_rec (e::visited) es q.
   Proof.
-    move=> Ha. dcase (simplify_pspec_rec (e :: visited) es q) => [[visited' q'] Hs].
+    move=> Ha. dcase (simplify_arep_rec (e :: visited) es q) => [[visited' q'] Hs].
     move: (Logic.eq_sym Hs) => {Hs} Hs.
-    move: (R_simplify_pspec_rec_correct Hs) => {Hs} H.
-    symmetry. apply: R_simplify_pspec_rec_complete.
-    apply: (R_simplify_pspec_rec_1 _ _ _ _ _ _ Ha _ H). reflexivity.
+    move: (R_simplify_arep_rec_correct Hs) => {Hs} H.
+    symmetry. apply: R_simplify_arep_rec_complete.
+    apply: (R_simplify_arep_rec_1 _ _ _ _ _ _ Ha _ H). reflexivity.
   Qed.
 
-  Lemma simplify_pspec_rec_empty visited q :
-    simplify_pspec_rec visited [::] q = (rev visited, q).
+  Lemma simplify_arep_rec_empty visited q :
+    simplify_arep_rec visited [::] q = (rev visited, q).
   Proof. reflexivity. Qed.
 
-  Lemma simplify_pspec_rec_sound pre ps q ps' q' :
-    simplify_pspec_rec pre ps q = (ps', q') ->
+  Lemma simplify_arep_rec_sound pre ps q ps' q' :
+    simplify_arep_rec pre ps q = (ps', q') ->
     (forall s,
-        (forall e : szbexp, e \in ps' -> eval_szbexp e s) ->
-        eval_szbexp q' s) ->
+        (forall e : azbexp, e \in ps' -> eval_azbexp e s) ->
+        eval_azbexp q' s) ->
     (forall s,
-        (forall e : szbexp, e \in pre ++ ps -> eval_szbexp e s) ->
-        eval_szbexp q s).
+        (forall e : azbexp, e \in pre ++ ps -> eval_azbexp e s) ->
+        eval_azbexp q s).
   Proof.
     have ->: ps' = (ps', q').1 by reflexivity.
     have ->: q' = (ps', q').2 by reflexivity.
-    move: (ps', q'). clear ps' q'. eapply simplify_pspec_rec_ind.
+    move: (ps', q'). clear ps' q'. eapply simplify_arep_rec_ind.
     - move=> {pre ps q} pre ps q Hps [ps' q'] [] ? ?; subst => /=.
       move=> Hs s Hev. rewrite cats0 in Hev. apply: Hs.
       move=> e Hin; apply: Hev. rewrite mem_rev in Hin. assumption.
@@ -305,156 +307,156 @@ Section PSpecSimpl.
       rewrite mem_cat in_cons in Hin. (case/orP: Hin; [case/orP|] => -> //=);
                                         rewrite !orbT; exact: is_true_true.
     - move=> {pre ps q} pre ps q e es Hps pat rep Ha IH [ps' q'] /= Hrec Hs s He.
-      have Hes: eval_szbexp e s.
+      have Hes: eval_azbexp e s.
       { apply: He. rewrite mem_cat in_cons eqxx /=. by rewrite orbT. }
       move: (is_assignment_equal Ha Hes) => Hpr.
       apply/(subst_assignment_valid q Ha Hes). apply: (IH _ Hrec Hs).
-      move=> f. rewrite -subst_szbexps_cat. move: f.
-      apply/(subst_szbexps_valid (pre++es) Hpr). move=> f Hin.
+      move=> f. rewrite -subst_azbexps_cat. move: f.
+      apply/(subst_azbexps_valid (pre++es) Hpr). move=> f Hin.
       apply: He. rewrite mem_cat in_cons. rewrite mem_cat in Hin.
       case/orP: Hin => -> //=; rewrite !orbT; exact: is_true_true.
   Qed.
 
 
-  Definition simplify_pspec (s : pspec) : pspec :=
-    let (ps, q) := simplify_pspec_rec [::] (ppremises s) (pconseq s) in
-    {| ppremises := ps; pconseq := q |}.
+  Definition simplify_arep (s : arep) : arep :=
+    let (ps, q) := simplify_arep_rec [::] (apremises s) (aconseq s) in
+    {| apremises := ps; aconseq := q |}.
 
-  Lemma simplify_pspec_sound (s : pspec) :
-    valid_pspec (simplify_pspec s) -> valid_pspec s.
+  Lemma simplify_arep_sound (s : arep) :
+    valid_arep (simplify_arep s) -> valid_arep s.
   Proof.
-    rewrite /valid_pspec. case: s => ps q /=. rewrite /simplify_pspec /=.
-    dcase (simplify_pspec_rec [::] ps q) => [[ps' q'] Hs] /=.
-    rewrite -(cat0s ps). exact: (simplify_pspec_rec_sound Hs).
+    rewrite /valid_arep. case: s => ps q /=. rewrite /simplify_arep /=.
+    dcase (simplify_arep_rec [::] ps q) => [[ps' q'] Hs] /=.
+    rewrite -(cat0s ps). exact: (simplify_arep_rec_sound Hs).
   Qed.
 
 
 
   (* Rewrite an expression if the pattern appears in the expression *)
 
-  Definition szbexp_subst_vars_cache
-             (p : ssavar) (r : ZSSA.zexp) vspr (ve : SSAVS.t * szbexp) :=
+  Definition azbexp_subst_vars_cache
+             (p : ssavar) (r : ZSSA.zexp) vspr (ve : SSAVS.t * azbexp) :=
     let vs := ve.1 in
     let e := ve.2 in
     if SSAVS.mem p vs then (SSAVS.remove p (SSAVS.union vs vspr),
-                            szbexp_subst (evar p) r e)
+                            azbexp_subst (evar p) r e)
     else ve.
 
-  Definition subst_szbexps_vars_cache
-             (p : ssavar) (r : ZSSA.zexp) vspr (ves : seq (SSAVS.t * szbexp)) :=
-    map (szbexp_subst_vars_cache p r vspr) ves.
+  Definition subst_azbexps_vars_cache
+             (p : ssavar) (r : ZSSA.zexp) vspr (ves : seq (SSAVS.t * azbexp)) :=
+    map (azbexp_subst_vars_cache p r vspr) ves.
 
   Lemma subst_assignment_vars_cache_valid e p r e' vspr s :
-    is_assignment e = Some (p, r) -> eval_szbexp e s ->
-    eval_szbexp e'.2 s <-> eval_szbexp (szbexp_subst_vars_cache p r vspr e').2 s.
+    is_assignment e = Some (p, r) -> eval_azbexp e s ->
+    eval_azbexp e'.2 s <-> eval_azbexp (azbexp_subst_vars_cache p r vspr e').2 s.
   Proof.
-    move=> His Hev. rewrite /szbexp_subst_vars_cache. case: (SSAVS.mem p e'.1) => /=.
-    - exact: (szbexp_subst_valid _ (is_assignment_equal His Hev)).
+    move=> His Hev. rewrite /azbexp_subst_vars_cache. case: (SSAVS.mem p e'.1) => /=.
+    - exact: (azbexp_subst_valid _ (is_assignment_equal His Hev)).
     - tauto.
   Qed.
 
-  Lemma subst_szbexps_vars_cache_cat es1 es2 p r vspr :
-    subst_szbexps_vars_cache p r vspr (es1 ++ es2) =
-    subst_szbexps_vars_cache p r vspr es1 ++ subst_szbexps_vars_cache p r vspr es2.
-  Proof. rewrite /subst_szbexps_vars_cache. exact: map_cat. Qed.
+  Lemma subst_azbexps_vars_cache_cat es1 es2 p r vspr :
+    subst_azbexps_vars_cache p r vspr (es1 ++ es2) =
+    subst_azbexps_vars_cache p r vspr es1 ++ subst_azbexps_vars_cache p r vspr es2.
+  Proof. rewrite /subst_azbexps_vars_cache. exact: map_cat. Qed.
 
-  Lemma subst_szbexps_vars_cache_valid es p r vspr s :
+  Lemma subst_azbexps_vars_cache_valid es p r vspr s :
     eval_zexp (evar p) s = eval_zexp r s ->
-    (forall e, e \in (split es).2 -> eval_szbexp e s) <->
-    (forall e, e \in (split (subst_szbexps_vars_cache p r vspr es)).2 ->
-                     eval_szbexp e s).
+    (forall e, e \in (split es).2 -> eval_azbexp e s) <->
+    (forall e, e \in (split (subst_azbexps_vars_cache p r vspr es)).2 ->
+                     eval_azbexp e s).
   Proof.
     move=> H. elim: es => [| [el er] es IH] //=. case Hses: (split es) => [esl esr] /=.
-    case Hsube: (szbexp_subst_vars_cache p r vspr (el, er)) => [sel ser].
-    case Hsubes: (split (subst_szbexps_vars_cache p r vspr es)) => [sesl sesr] /=.
+    case Hsube: (azbexp_subst_vars_cache p r vspr (el, er)) => [sel ser].
+    case Hsubes: (split (subst_azbexps_vars_cache p r vspr es)) => [sesl sesr] /=.
     case: IH => [IH1 IH2]. split=> Hs e Hin.
     - case/orP: Hin=> Hin.
-      + move: Hsube. rewrite /szbexp_subst_vars_cache /=.
+      + move: Hsube. rewrite /azbexp_subst_vars_cache /=.
         case: (SSAVS.mem p el) => /=.
         * case=> ? ?; subst. rewrite (eqP Hin).
-          apply/(@szbexp_subst_valid er _ _ _ H). apply: Hs. by rewrite in_cons eqxx.
+          apply/(@azbexp_subst_valid er _ _ _ H). apply: Hs. by rewrite in_cons eqxx.
         * case=> ? ?; subst. apply: Hs. by rewrite in_cons Hin.
       + apply: IH1.
         * rewrite Hses /=. move=> f Hinf; apply: Hs. by rewrite in_cons Hinf orbT.
         * rewrite Hsubes /=. assumption.
     - case/orP: Hin=> Hin.
-      + move: Hsube. rewrite /szbexp_subst_vars_cache /=.
+      + move: Hsube. rewrite /azbexp_subst_vars_cache /=.
         case: (SSAVS.mem p el) => /=.
         * case=> ? ?; subst. rewrite (eqP Hin).
-          apply/(@szbexp_subst_valid er _ _ _ H). apply: Hs. by rewrite in_cons eqxx.
+          apply/(@azbexp_subst_valid er _ _ _ H). apply: Hs. by rewrite in_cons eqxx.
         * case=> ? ?; subst. apply: Hs. by rewrite in_cons Hin.
       + apply: IH2.
         * rewrite Hsubes /=. move=> f Hinf; apply: Hs. by rewrite in_cons Hinf orbT.
         * rewrite Hses /=. assumption.
   Qed.
 
-  Function simplify_pspec_vars_cache_rec
-           (visited : seq (SSAVS.t * szbexp)) (premises : seq (SSAVS.t * szbexp))
-           (conseq : (SSAVS.t * szbexp))
-           {wf (@size_lt (SSAVS.t * szbexp)) premises} :=
+  Function simplify_arep_vars_cache_rec
+           (visited : seq (SSAVS.t * azbexp)) (premises : seq (SSAVS.t * azbexp))
+           (conseq : (SSAVS.t * azbexp))
+           {wf (@size_lt (SSAVS.t * azbexp)) premises} :=
     match premises with
     | [::] => (rev visited, conseq)
     | ve::ves =>
       match is_assignment ve.2 with
-      | None => simplify_pspec_vars_cache_rec (ve::visited) ves conseq
+      | None => simplify_arep_vars_cache_rec (ve::visited) ves conseq
       | Some (p, r) =>
-        simplify_pspec_vars_cache_rec (subst_szbexps_vars_cache p r ve.1 visited)
-                                      (subst_szbexps_vars_cache p r ve.1 ves)
-                                      (szbexp_subst_vars_cache p r ve.1 conseq)
+        simplify_arep_vars_cache_rec (subst_azbexps_vars_cache p r ve.1 visited)
+                                      (subst_azbexps_vars_cache p r ve.1 ves)
+                                      (azbexp_subst_vars_cache p r ve.1 conseq)
       end
     end.
   Proof.
     - move=> _ premises _ ve ves ? [p' r'] p r [] ? ? Ha.
-      rewrite /size_lt /subst_szbexps size_map /=. exact: Nat.lt_succ_diag_r.
+      rewrite /size_lt /subst_azbexps size_map /=. exact: Nat.lt_succ_diag_r.
     - move=> _ premises _ e es ? Ha. rewrite /size_lt /=. exact: Nat.lt_succ_diag_r.
-    - exact: (well_founded_ltof (seq (SSAVS.t * szbexp)) size).
+    - exact: (well_founded_ltof (seq (SSAVS.t * azbexp)) size).
   Defined.
 
-  Lemma simplify_pspec_vars_cache_rec_cons_is_assignment visited ve ves q p r :
+  Lemma simplify_arep_vars_cache_rec_cons_is_assignment visited ve ves q p r :
     is_assignment ve.2 = Some (p, r) ->
-    simplify_pspec_vars_cache_rec visited (ve::ves) q =
-    simplify_pspec_vars_cache_rec (subst_szbexps_vars_cache p r ve.1 visited)
-                                  (subst_szbexps_vars_cache p r ve.1 ves)
-                                  (szbexp_subst_vars_cache p r ve.1 q).
+    simplify_arep_vars_cache_rec visited (ve::ves) q =
+    simplify_arep_vars_cache_rec (subst_azbexps_vars_cache p r ve.1 visited)
+                                  (subst_azbexps_vars_cache p r ve.1 ves)
+                                  (azbexp_subst_vars_cache p r ve.1 q).
   Proof.
     move=> Ha.
-    dcase (simplify_pspec_vars_cache_rec (subst_szbexps_vars_cache p r ve.1 visited)
-                                         (subst_szbexps_vars_cache p r ve.1 ves)
-                                         (szbexp_subst_vars_cache p r ve.1 q)) =>
+    dcase (simplify_arep_vars_cache_rec (subst_azbexps_vars_cache p r ve.1 visited)
+                                         (subst_azbexps_vars_cache p r ve.1 ves)
+                                         (azbexp_subst_vars_cache p r ve.1 q)) =>
     [[visited' q'] Hs]. move: (Logic.eq_sym Hs) => {Hs} Hs.
-    move: (R_simplify_pspec_vars_cache_rec_correct Hs) => {Hs} H.
-    symmetry. apply: R_simplify_pspec_vars_cache_rec_complete.
-    exact: (R_simplify_pspec_vars_cache_rec_2 _ _ _ _ _ (Logic.eq_refl _) _ _ Ha _ H).
+    move: (R_simplify_arep_vars_cache_rec_correct Hs) => {Hs} H.
+    symmetry. apply: R_simplify_arep_vars_cache_rec_complete.
+    exact: (R_simplify_arep_vars_cache_rec_2 _ _ _ _ _ (Logic.eq_refl _) _ _ Ha _ H).
   Qed.
 
-  Lemma simplify_pspec_vars_cache_rec_cons_not_assignment visited ve ves q :
+  Lemma simplify_arep_vars_cache_rec_cons_not_assignment visited ve ves q :
     is_assignment ve.2 = None ->
-    simplify_pspec_vars_cache_rec visited (ve::ves) q =
-    simplify_pspec_vars_cache_rec (ve::visited) ves q.
+    simplify_arep_vars_cache_rec visited (ve::ves) q =
+    simplify_arep_vars_cache_rec (ve::visited) ves q.
   Proof.
-    move=> Ha. dcase (simplify_pspec_vars_cache_rec (ve :: visited) ves q) =>
+    move=> Ha. dcase (simplify_arep_vars_cache_rec (ve :: visited) ves q) =>
                [[visited' q'] Hs]. move: (Logic.eq_sym Hs) => {Hs} Hs.
-    move: (R_simplify_pspec_vars_cache_rec_correct Hs) => {Hs} H.
-    symmetry. apply: R_simplify_pspec_vars_cache_rec_complete.
-    exact: (R_simplify_pspec_vars_cache_rec_1 _ _ _ _ _ (Logic.eq_refl _) Ha _ H).
+    move: (R_simplify_arep_vars_cache_rec_correct Hs) => {Hs} H.
+    symmetry. apply: R_simplify_arep_vars_cache_rec_complete.
+    exact: (R_simplify_arep_vars_cache_rec_1 _ _ _ _ _ (Logic.eq_refl _) Ha _ H).
   Qed.
 
-  Lemma simplify_pspec_vars_cache_rec_empty visited q :
-    simplify_pspec_vars_cache_rec visited [::] q = (rev visited, q).
+  Lemma simplify_arep_vars_cache_rec_empty visited q :
+    simplify_arep_vars_cache_rec visited [::] q = (rev visited, q).
   Proof. reflexivity. Qed.
 
-  Lemma simplify_pspec_vars_cache_rec_sound pre ps q ps' q' :
-    simplify_pspec_vars_cache_rec pre ps q = (ps', q') ->
+  Lemma simplify_arep_vars_cache_rec_sound pre ps q ps' q' :
+    simplify_arep_vars_cache_rec pre ps q = (ps', q') ->
     (forall s,
-        (forall e : szbexp, e \in (split ps').2 -> eval_szbexp e s) ->
-        eval_szbexp q'.2 s) ->
+        (forall e : azbexp, e \in (split ps').2 -> eval_azbexp e s) ->
+        eval_azbexp q'.2 s) ->
     (forall s,
-        (forall e : szbexp, e \in (split (pre ++ ps)).2 -> eval_szbexp e s) ->
-        eval_szbexp q.2 s).
+        (forall e : azbexp, e \in (split (pre ++ ps)).2 -> eval_azbexp e s) ->
+        eval_azbexp q.2 s).
   Proof.
     have ->: ps' = (ps', q').1 by reflexivity.
     have ->: q' = (ps', q').2 by reflexivity.
-    move: (ps', q'). clear ps' q'. eapply simplify_pspec_vars_cache_rec_ind.
+    move: (ps', q'). clear ps' q'. eapply simplify_arep_vars_cache_rec_ind.
     - move=> {pre ps q} pre ps q Hps [ps' q'] [] ? ?; subst => /=.
       move=> Hs s Hev. rewrite cats0 in Hev. apply: Hs.
       move=> e Hin; apply: Hev. rewrite in_split_rev_r in Hin. assumption.
@@ -464,30 +466,30 @@ Section PSpecSimpl.
       rewrite Bool.orb_assoc. rewrite (Bool.orb_comm _ (f == e.2)).
       rewrite -in_cons. rewrite split_cons /= in Hin. assumption.
     - move=> {pre ps q} pre ps q e es Hps pat rep Ha IH [ps' q'] /= Hrec Hs s He.
-      have Hes: eval_szbexp (e.2) s.
+      have Hes: eval_azbexp (e.2) s.
       { apply: He. rewrite split_cat mem_cat split_cons in_cons eqxx orbT /=.
         reflexivity. }
       move: (is_assignment_equal Ha Hes) => Hpr.
       apply/(subst_assignment_vars_cache_valid _ _ Ha Hes). apply: (IH _ Hrec Hs).
-      move=> f. rewrite -subst_szbexps_vars_cache_cat. move: f.
-      apply/(subst_szbexps_vars_cache_valid (pre++es) _ Hpr). move=> f Hin.
+      move=> f. rewrite -subst_azbexps_vars_cache_cat. move: f.
+      apply/(subst_azbexps_vars_cache_valid (pre++es) _ Hpr). move=> f Hin.
       apply: He. rewrite 2!split_cat 2!mem_cat in Hin *.
       rewrite split_cons in_cons. rewrite (Bool.orb_comm (f == e.2)).
       rewrite Bool.orb_assoc. by rewrite Hin.
   Qed.
 
 
-  Definition vars_szbexp (e : szbexp) : SSAVS.t :=
+  Definition vars_azbexp (e : azbexp) : SSAVS.t :=
     match e with
     | Seq e1 e2 => SSAVS.union (vars_eexp e1) (vars_eexp e2)
     | Seqmod e1 e2 e3 => SSAVS.union (SSAVS.union (vars_eexp e1) (vars_eexp e2))
                                      (vars_eexp e3)
     end.
 
-  Definition pair_with_vars (e : szbexp) : SSAVS.t * szbexp :=
-    (vars_szbexp e, e).
+  Definition pair_with_vars (e : azbexp) : SSAVS.t * azbexp :=
+    (vars_azbexp e, e).
 
-  Lemma split_map_pair_with_vars (es : seq szbexp) :
+  Lemma split_map_pair_with_vars (es : seq azbexp) :
     (split (map pair_with_vars es)).2 = es.
   Proof.
     elim: es => [| e es IH] //=. move: IH.
@@ -495,32 +497,32 @@ Section PSpecSimpl.
     rewrite Hs /=. move=> ->. reflexivity.
   Qed.
 
-  Definition simplify_pspec_vars_cache (s : pspec) : pspec :=
-    let vs_ps := map pair_with_vars (ppremises s) in
-    let vs_q := pair_with_vars (pconseq s) in
-    let (vs_ps', vs_q') := simplify_pspec_vars_cache_rec [::] vs_ps vs_q in
-    {| ppremises := (split vs_ps').2; pconseq := vs_q'.2 |}.
+  Definition simplify_arep_vars_cache (s : arep) : arep :=
+    let vs_ps := map pair_with_vars (apremises s) in
+    let vs_q := pair_with_vars (aconseq s) in
+    let (vs_ps', vs_q') := simplify_arep_vars_cache_rec [::] vs_ps vs_q in
+    {| apremises := (split vs_ps').2; aconseq := vs_q'.2 |}.
 
-  Lemma simplify_pspec_vars_cache_sound (s : pspec) :
-    valid_pspec (simplify_pspec_vars_cache s) -> valid_pspec s.
+  Lemma simplify_arep_vars_cache_sound (s : arep) :
+    valid_arep (simplify_arep_vars_cache s) -> valid_arep s.
   Proof.
-    rewrite /valid_pspec. case: s => ps q /=. rewrite /simplify_pspec_vars_cache /=.
-    dcase (simplify_pspec_vars_cache_rec [::] [seq pair_with_vars i | i <- ps]
+    rewrite /valid_arep. case: s => ps q /=. rewrite /simplify_arep_vars_cache /=.
+    dcase (simplify_arep_vars_cache_rec [::] [seq pair_with_vars i | i <- ps]
                                          (pair_with_vars q)) => [[vs_ps' vs_q'] Hsp].
     rewrite Hsp /=. move=> H s Hs.
-    apply: (simplify_pspec_vars_cache_rec_sound Hsp H). rewrite cat0s.
+    apply: (simplify_arep_vars_cache_rec_sound Hsp H). rewrite cat0s.
     rewrite split_map_pair_with_vars. assumption.
   Qed.
 
-End PSpecSimpl.
+End AtomicRootEntailmentSimpl.
 
 
 
-(* Convert zspec to pspec *)
+(* Convert rep to arep *)
 
-Section ZSpec2Spec.
+Section REP2AREP.
 
-  Fixpoint split_zbexp (e : ZSSA.zbexp) : seq szbexp :=
+  Fixpoint split_zbexp (e : ZSSA.zbexp) : seq azbexp :=
     match e with
     | Etrue => [::]
     | Eeq e1 e2 => [::Seq e1 e2]
@@ -528,20 +530,20 @@ Section ZSpec2Spec.
     | Eand e1 e2 => split_zbexp e1 ++ split_zbexp e2
     end.
 
-  Definition pspecs_of_zspec (s : ZSSA.zspec) : seq pspec :=
-    let premises := split_zbexp (ZSSA.zspre s) in
-    let conseqs := split_zbexp (ZSSA.zspost s) in
-    map (fun conseq => {| ppremises := premises; pconseq := conseq |}) conseqs.
+  Definition areps_of_rep (s : ZSSA.rep) : seq arep :=
+    let premises := split_zbexp (ZSSA.premise s) in
+    let conseqs := split_zbexp (ZSSA.conseq s) in
+    map (fun conseq => {| apremises := premises; aconseq := conseq |}) conseqs.
 
-  Definition pspecs_of_zspec_simplified (o : options) (s : ZSSA.zspec) : seq pspec :=
+  Definition areps_of_rep_simplified (o : options) (s : ZSSA.rep) : seq arep :=
     if vars_cache_in_rewrite_assignments o then
-      map simplify_pspec_vars_cache (pspecs_of_zspec s)
+      map simplify_arep_vars_cache (areps_of_rep s)
     else
-      map simplify_pspec (pspecs_of_zspec s).
+      map simplify_arep (areps_of_rep s).
 
   Lemma split_zbexp_mem ze s :
     ZSSA.eval_zbexp ze s ->
-    forall pe, pe \in split_zbexp ze -> eval_szbexp pe s.
+    forall pe, pe \in split_zbexp ze -> eval_azbexp pe s.
   Proof.
     elim: ze => //=.
     - move=> ze1 ze2 Hze pe. case/orP=> [/eqP -> | H]; [assumption | discriminate].
@@ -553,7 +555,7 @@ Section ZSpec2Spec.
   Qed.
 
   Lemma split_zbexp_all ze s :
-    (forall pe, pe \in split_zbexp ze -> eval_szbexp pe s) ->
+    (forall pe, pe \in split_zbexp ze -> eval_azbexp pe s) ->
     ZSSA.eval_zbexp ze s.
   Proof.
     elim: ze => //=.
@@ -565,20 +567,20 @@ Section ZSpec2Spec.
       + apply: IH2 => pe Hmem. apply: Hpe. by rewrite mem_cat Hmem orbT.
   Qed.
 
-  Theorem pspecs_of_zspec_sound zs :
-    (forall ps, ps \in pspecs_of_zspec zs -> valid_pspec ps) ->
-    ZSSA.valid_zspec zs.
+  Theorem areps_of_rep_sound zs :
+    (forall ps, ps \in areps_of_rep zs -> valid_arep ps) ->
+    ZSSA.valid_rep zs.
   Proof.
     case: zs => zf zq. elim: zq zf => //=.
-    - move=> e1 e2 zf /= Hps s /= Hzf. rewrite /pspecs_of_zspec /= in Hps.
-      apply: (Hps {| ppremises := split_zbexp zf; pconseq := Seq e1 e2 |});
+    - move=> e1 e2 zf /= Hps s /= Hzf. rewrite /areps_of_rep /= in Hps.
+      apply: (Hps {| apremises := split_zbexp zf; aconseq := Seq e1 e2 |});
         first by rewrite in_cons eqxx.
       move=> {Hps} pe /= Hmem. exact: (split_zbexp_mem Hzf Hmem).
-    - move=> e1 e2 m zf Hps s /= Hzf. rewrite /pspecs_of_zspec /= in Hps.
-      apply: (Hps {| ppremises := split_zbexp zf; pconseq := Seqmod e1 e2 m |});
+    - move=> e1 e2 m zf Hps s /= Hzf. rewrite /areps_of_rep /= in Hps.
+      apply: (Hps {| apremises := split_zbexp zf; aconseq := Seqmod e1 e2 m |});
         first by rewrite in_cons eqxx.
       move=> {Hps} pe /= Hmem. exact: (split_zbexp_mem Hzf Hmem).
-    - move=> e1 IH1 e2 IH2 zf Hps s /= Hzf. rewrite /pspecs_of_zspec /= in Hps.
+    - move=> e1 IH1 e2 IH2 zf Hps s /= Hzf. rewrite /areps_of_rep /= in Hps.
       split.
       + apply: (IH1 zf _ s Hzf) => /=. move=> ps Hin. apply: Hps.
         rewrite map_cat mem_cat. apply/orP; left. assumption.
@@ -586,19 +588,19 @@ Section ZSpec2Spec.
         rewrite map_cat mem_cat. apply/orP; right. assumption.
   Qed.
 
-  Theorem pspecs_of_zspec_simplified_sound o zs :
-    (forall ps, ps \in pspecs_of_zspec_simplified o zs -> valid_pspec ps) ->
-    ZSSA.valid_zspec zs.
+  Theorem areps_of_rep_simplified_sound o zs :
+    (forall ps, ps \in areps_of_rep_simplified o zs -> valid_arep ps) ->
+    ZSSA.valid_rep zs.
   Proof.
-    move=> H. apply: pspecs_of_zspec_sound. move=> ps Hin.
+    move=> H. apply: areps_of_rep_sound. move=> ps Hin.
     case Ho: (vars_cache_in_rewrite_assignments o).
-    - apply: simplify_pspec_vars_cache_sound. apply: H.
-      rewrite /pspecs_of_zspec_simplified Ho. apply: map_f. assumption.
-    - apply: simplify_pspec_sound. apply: H.
-      rewrite /pspecs_of_zspec_simplified Ho. apply: map_f. assumption.
+    - apply: simplify_arep_vars_cache_sound. apply: H.
+      rewrite /areps_of_rep_simplified Ho. apply: map_f. assumption.
+    - apply: simplify_arep_sound. apply: H.
+      rewrite /areps_of_rep_simplified Ho. apply: map_f. assumption.
   Qed.
 
-End ZSpec2Spec.
+End REP2AREP.
 
 
 
@@ -846,9 +848,9 @@ End BinList.
 
 
 
-(* Convert polynomial equations to polynomials *)
+(** Convert a root entailment problem to an ideal membership problem. *)
 
-Section PExpr.
+Section REP2IMP.
 
   Local Open Scope Z_scope.
 
@@ -891,7 +893,7 @@ Section PExpr.
       (g2, t2, zpexpr_of_ebinop op e1 e2)
     end.
 
-  Definition zpexpr_of_premise (g : positive) (t : SSAVM.t positive) (e : szbexp) :
+  Definition zpexpr_of_premise (g : positive) (t : SSAVM.t positive) (e : azbexp) :
     positive * SSAVM.t positive * PExpr Z :=
     match e with
     | Seq e1 e2 =>
@@ -905,7 +907,7 @@ Section PExpr.
       ((gp + 1)%positive, tp, PEsub (PEsub e1 e2) (PEmul (PEX Z gp) p))
     end.
 
-  Fixpoint zpexprs_of_premises (g : positive) (t : SSAVM.t positive) (es : seq szbexp) :
+  Fixpoint zpexprs_of_premises (g : positive) (t : SSAVM.t positive) (es : seq azbexp) :
     positive * SSAVM.t positive * seq (PExpr Z) :=
     match es with
     | [::] => (g, t, [::])
@@ -914,7 +916,7 @@ Section PExpr.
                (g_tl, t_tl, es_hd::es_tl)
     end.
 
-  Definition zpexpr_of_conseq (g : positive) (t : SSAVM.t positive) (e : szbexp) :
+  Definition zpexpr_of_conseq (g : positive) (t : SSAVM.t positive) (e : azbexp) :
     positive * SSAVM.t positive * PExpr Z * PExpr Z :=
     match e with
     | Seq e1 e2 =>
@@ -931,11 +933,11 @@ Section PExpr.
   (* ps: polynomials that equal 0
      m: modulus
      the goal is to prove that q = cs * ps + c * m for some coefficients cs and c *)
-  Definition zpexprs_of_pspec (s : pspec) : positive * SSAVM.t positive * seq (PExpr Z) * PExpr Z * PExpr Z :=
+  Definition imp_of_arep (s : arep) : positive * SSAVM.t positive * seq (PExpr Z) * PExpr Z * PExpr Z :=
     let g := init_pos in
     let t := init_vm in
-    let '(g_p, t_p, ps) := zpexprs_of_premises g t (ppremises s) in
-    let '(g_q, t_q, q, m) := zpexpr_of_conseq g_p t_p (pconseq s) in
+    let '(g_p, t_p, ps) := zpexprs_of_premises g t (apremises s) in
+    let '(g_q, t_q, q, m) := zpexpr_of_conseq g_p t_p (aconseq s) in
     (g_q, t_q, ps, m, q).
 
   Lemma zpexpr_of_eunop_zpeeval op vl pe :
@@ -1001,7 +1003,7 @@ Section PExpr.
       reflexivity.
   Qed.
 
-  Definition zpexpr_of_premise_vl (s : ZSSAStore.t) (vl : list Z) (g : positive) (t : SSAVM.t positive) (e : szbexp) :
+  Definition zpexpr_of_premise_vl (s : ZSSAStore.t) (vl : list Z) (g : positive) (t : SSAVM.t positive) (e : azbexp) :
     list Z * positive * SSAVM.t positive * PExpr Z :=
     match e with
     | Seq e1 e2 =>
@@ -1041,7 +1043,7 @@ Section PExpr.
       reflexivity.
   Qed.
 
-  Fixpoint zpexprs_of_premises_vl (s : ZSSAStore.t) (vl : list Z) (g : positive) (t : SSAVM.t positive) (es : seq szbexp) :
+  Fixpoint zpexprs_of_premises_vl (s : ZSSAStore.t) (vl : list Z) (g : positive) (t : SSAVM.t positive) (es : seq azbexp) :
     list Z * positive * SSAVM.t positive * seq (PExpr Z) :=
     match es with
     | [::] => (vl, g, t, [::])
@@ -1063,7 +1065,7 @@ Section PExpr.
       rewrite (IH _ _ _ _ _ _ _ Hvl2). reflexivity.
   Qed.
 
-  Definition zpexpr_of_conseq_vl (s : ZSSAStore.t) (vl : list Z) (g : positive) (t : SSAVM.t positive) (e : szbexp) :
+  Definition zpexpr_of_conseq_vl (s : ZSSAStore.t) (vl : list Z) (g : positive) (t : SSAVM.t positive) (e : azbexp) :
     list Z * positive * SSAVM.t positive * PExpr Z * PExpr Z :=
     match e with
     | Seq e1 e2 =>
@@ -1101,22 +1103,22 @@ Section PExpr.
   (* ps: polynomials that equal 0
      m: modulus
      the goal is to prove that q = cs * ps + c * m for some coefficients cs and c *)
-  Definition zpexprs_of_pspec_vl (st : ZSSAStore.t) (s : pspec) : list Z * positive * SSAVM.t positive * seq (PExpr Z) * PExpr Z * PExpr Z :=
+  Definition imp_of_arep_vl (st : ZSSAStore.t) (s : arep) : list Z * positive * SSAVM.t positive * seq (PExpr Z) * PExpr Z * PExpr Z :=
     let g := init_pos in
     let t := init_vm in
     let vl := init_vl in
-    let '(vl_p, g_p, t_p, ps) := zpexprs_of_premises_vl st init_vl g t (ppremises s) in
-    let '(vl_q, g_q, t_q, q, m) := zpexpr_of_conseq_vl st vl_p g_p t_p (pconseq s) in
+    let '(vl_p, g_p, t_p, ps) := zpexprs_of_premises_vl st init_vl g t (apremises s) in
+    let '(vl_q, g_q, t_q, q, m) := zpexpr_of_conseq_vl st vl_p g_p t_p (aconseq s) in
     (vl_q, g_q, t_q, ps, m, q).
 
-  Lemma zpexprs_of_pspec_vl_novl st sp vl g t pps pm pq :
-    zpexprs_of_pspec_vl st sp = (vl, g, t, pps, pm, pq) ->
-    zpexprs_of_pspec sp = (g, t, pps, pm, pq).
+  Lemma imp_of_arep_vl_novl st sp vl g t pps pm pq :
+    imp_of_arep_vl st sp = (vl, g, t, pps, pm, pq) ->
+    imp_of_arep sp = (g, t, pps, pm, pq).
   Proof.
-    rewrite /zpexprs_of_pspec_vl /zpexprs_of_pspec.
-    dcase (zpexprs_of_premises_vl st init_vl init_pos init_vm (ppremises sp)) =>
+    rewrite /imp_of_arep_vl /imp_of_arep.
+    dcase (zpexprs_of_premises_vl st init_vl init_pos init_vm (apremises sp)) =>
     [[[[vl_p g_p] t_p] opps] Hvl_p].
-    dcase (zpexpr_of_conseq_vl st vl_p g_p t_p (pconseq sp)) =>
+    dcase (zpexpr_of_conseq_vl st vl_p g_p t_p (aconseq sp)) =>
     [[[[[vl_q g_q] t_q] opm] opq] Hvl_q].
     case=> ? ? ? ? ? ?; subst. rewrite (zpexprs_of_premises_vl_novl Hvl_p).
     rewrite (zpexpr_of_conseq_vl_novl Hvl_q). reflexivity.
@@ -1809,14 +1811,14 @@ Section PExpr.
       exact: (zpexpr_of_zexp_vl_consistent Hpe1 Hnew Hsize Hcon).
   Qed.
 
-  Lemma zpexprs_of_pspec_vl_consistent st sp vl g t ps m q :
-    zpexprs_of_pspec_vl st sp = (vl, g, t, ps, m, q) ->
+  Lemma imp_of_arep_vl_consistent st sp vl g t ps m q :
+    imp_of_arep_vl st sp = (vl, g, t, ps, m, q) ->
     consistent st vl t.
   Proof.
-    rewrite /zpexprs_of_pspec_vl.
-    dcase (zpexprs_of_premises_vl st init_vl init_pos init_vm (ppremises sp)) =>
+    rewrite /imp_of_arep_vl.
+    dcase (zpexprs_of_premises_vl st init_vl init_pos init_vm (apremises sp)) =>
     [[[[vl_p g_p] t_p] ps_p] Hpe_p].
-    dcase (zpexpr_of_conseq_vl st vl_p g_p t_p (pconseq sp)) =>
+    dcase (zpexpr_of_conseq_vl st vl_p g_p t_p (aconseq sp)) =>
     [[[[[vl_q g_q] t_q] oq] om] Hpe_q].
     case=> ? ? ? ? ? ?; subst.
     move: (zpexprs_of_premises_newer (zpexprs_of_premises_vl_novl Hpe_p)
@@ -1895,7 +1897,7 @@ Section PExpr.
   Lemma zpexpr_of_premise_vl_zpeeval st vl g t e vl' g' t' pe :
     zpexpr_of_premise_vl st vl g t e = (vl', g', t', pe) ->
     newer_than_vm g t -> vl_size_bounded vl g -> consistent st vl t ->
-    ZPEeval vl' pe = 0 <-> eval_szbexp e st.
+    ZPEeval vl' pe = 0 <-> eval_azbexp e st.
   Proof.
     elim: e vl g t vl' g' t' pe => /=.
     - move=> e1 e2 ivl ig it ovl og ot pe.
@@ -1967,7 +1969,7 @@ Section PExpr.
   Lemma zpexprs_of_premises_vl_zpeeval st vl g t es vl' g' t' pes :
     zpexprs_of_premises_vl st vl g t es = (vl', g', t', pes) ->
     newer_than_vm g t -> vl_size_bounded vl g -> consistent st vl t ->
-    (forall e : szbexp, e \in es -> eval_szbexp e st) ->
+    (forall e : azbexp, e \in es -> eval_azbexp e st) ->
     zpexpr_all0 vl' pes.
   Proof.
     elim: es vl g t vl' g' t' pes => [| hd tl IH] /=.
@@ -1992,11 +1994,11 @@ Section PExpr.
         apply: Hsz. by rewrite in_cons Hin orbT.
   Qed.
 
-  Lemma zpexpr_of_conseq_vl_eval_szbexp st vl g t e vl' g' t' pe pm :
+  Lemma zpexpr_of_conseq_vl_eval_azbexp st vl g t e vl' g' t' pe pm :
     zpexpr_of_conseq_vl st vl g t e = (vl', g', t', pe, pm) ->
     newer_than_vm g t -> vl_size_bounded vl g -> consistent st vl t ->
     (exists c : Z, ZPEeval vl' pe = c * ZPEeval vl' pm) ->
-    eval_szbexp e st.
+    eval_azbexp e st.
   Proof.
     elim: e vl g t vl' g' t' pe pm => /=.
     - move=> e1 e2 ivl ig it ovl og ot ope opm.
@@ -2049,20 +2051,20 @@ Section PExpr.
 
   (* Convert store to vl *)
 
-  Definition vl_of_store (st : ZSSAStore.t) (sp : pspec) : list Z :=
-    let '(vl, _, _, _, _, _) := zpexprs_of_pspec_vl st sp in
+  Definition vl_of_store (st : ZSSAStore.t) (sp : arep) : list Z :=
+    let '(vl, _, _, _, _, _) := imp_of_arep_vl st sp in
     vl.
 
   Lemma vl_of_store_premises st sp g t ps m q :
-    zpexprs_of_pspec sp = (g, t, ps, m, q) ->
-    (forall e : szbexp, e \in ppremises sp -> eval_szbexp e st) ->
+    imp_of_arep sp = (g, t, ps, m, q) ->
+    (forall e : azbexp, e \in apremises sp -> eval_azbexp e st) ->
     zpexpr_all0 (vl_of_store st sp) ps.
   Proof.
     case: sp => [pres post] /=. rewrite /vl_of_store.
-    dcase (zpexprs_of_pspec_vl st {| ppremises := pres; pconseq := post |}) =>
+    dcase (imp_of_arep_vl st {| apremises := pres; aconseq := post |}) =>
     [[[[[[ovl og] ot] ops] om] oq] Hpe].
-    rewrite (zpexprs_of_pspec_vl_novl Hpe). case=> ? ? ? ? ?; subst.
-    move: Hpe; rewrite /zpexprs_of_pspec_vl /=.
+    rewrite (imp_of_arep_vl_novl Hpe). case=> ? ? ? ? ?; subst.
+    move: Hpe; rewrite /imp_of_arep_vl /=.
     dcase (zpexprs_of_premises_vl st init_vl init_pos init_vm pres) =>
     [[[[vl_p g_p] t_p] ps_p] Hpe_p].
     dcase (zpexpr_of_conseq_vl st vl_p g_p t_p post) =>
@@ -2079,15 +2081,15 @@ Section PExpr.
   Qed.
 
   Lemma vl_of_store_conseq st sp g t ps m q :
-    zpexprs_of_pspec sp = (g, t, ps, m, q) ->
+    imp_of_arep sp = (g, t, ps, m, q) ->
     (exists c, ZPEeval (vl_of_store st sp) q = (c * ZPEeval (vl_of_store st sp) m)) ->
-    eval_szbexp (pconseq sp) st.
+    eval_azbexp (aconseq sp) st.
   Proof.
     case: sp => [pres post] /=. rewrite /vl_of_store.
-    dcase (zpexprs_of_pspec_vl st {| ppremises := pres; pconseq := post |}) =>
+    dcase (imp_of_arep_vl st {| apremises := pres; aconseq := post |}) =>
     [[[[[[ovl og] ot] ops] om] oq] Hpe].
-    rewrite (zpexprs_of_pspec_vl_novl Hpe). case=> ? ? ? ? ?; subst.
-    move: Hpe; rewrite /zpexprs_of_pspec_vl /=.
+    rewrite (imp_of_arep_vl_novl Hpe). case=> ? ? ? ? ?; subst.
+    move: Hpe; rewrite /imp_of_arep_vl /=.
     dcase (zpexprs_of_premises_vl st init_vl init_pos init_vm pres) =>
     [[[[vl_p g_p] t_p] ps_p] Hpe_p].
     dcase (zpexpr_of_conseq_vl st vl_p g_p t_p post) =>
@@ -2099,14 +2101,14 @@ Section PExpr.
     move: (zpexprs_of_premises_vl_consistent
              Hpe_p init_newer_than_vm init_vl_size_bounded (init_consistent _)) =>
     Hcon_p.
-    exact: (zpexpr_of_conseq_vl_eval_szbexp Hpe_q Hnew_p Hsize_p Hcon_p Heval).
+    exact: (zpexpr_of_conseq_vl_eval_azbexp Hpe_q Hnew_p Hsize_p Hcon_p Heval).
   Qed.
 
-End PExpr.
+End REP2IMP.
 
 
 
-Section Checker.
+Section Validator.
 
   Definition combine_coefficients (cs : seq (PExpr Z)) (ps : seq (PExpr Z))
   : seq (PExpr Z) :=
@@ -2122,14 +2124,15 @@ Section Checker.
   Definition zpexpr_eqb (p1 p2 : PExpr Z) : bool :=
     ZPeq (Znorm_subst p1) (Znorm_subst p2).
 
-  (* Check if q = cs * ps + c * m *)
-  Definition coefficients_checker ps m q cs c : bool :=
+  (** Validate the answer (cs, c) of an ideal membership problem given as a
+      tuple (ps, m, q), i.e., check if q = cs * ps + c * m. *)
+  Definition validate_imp_answer ps m q cs c : bool :=
     (size ps == size cs) &&
     zpexpr_eqb q (PEadd (sum_polys (combine_coefficients cs ps)) (PEmul c m)).
 
   (* If q = cs * ps + c * m and for each p \in ps, p = 0, then q = c * m *)
-  Lemma checker_imply_eq ps m q cs c :
-    coefficients_checker ps m q cs c ->
+  Lemma validated_imp_imply_eq ps m q cs c :
+    validate_imp_answer ps m q cs c ->
     zpimply_eq ps q (PEmul c m).
   Proof.
     move/andP=> [Hs Heq] l Heq0. rewrite /ZPEeval.
@@ -2158,9 +2161,9 @@ Section Checker.
         * split; [exact: Hhd | exact: Htl_tl].
   Qed.
 
-  Lemma zimply_eq_valid_pspec sp g t ps m q c :
-    zpexprs_of_pspec sp = (g, t, ps, m, q) -> zpimply_eq ps q (PEmul c m) ->
-    valid_pspec sp.
+  Lemma zimply_eq_valid_arep sp g t ps m q c :
+    imp_of_arep sp = (g, t, ps, m, q) -> zpimply_eq ps q (PEmul c m) ->
+    valid_arep sp.
   Proof.
     move=> Hpoly Himp st Hzpre. move: (Himp (vl_of_store st sp)) => {Himp} Himp.
     move: (vl_of_store_premises Hpoly Hzpre) => Hall0.
@@ -2168,17 +2171,19 @@ Section Checker.
     exists (ZPEeval (vl_of_store st sp) c). exact: Hqcm.
   Qed.
 
-  (* If the coefficients are verified by the checker, the pspec is valid *)
-  Theorem checker_valid_pspec s g t ps m q cs c :
-    zpexprs_of_pspec s = (g, t, ps, m, q) ->
-    coefficients_checker ps m q cs c ->
-    valid_pspec s.
+  (* If the answer of an ideal membership problem reduced from an atomic root
+     entailment problem are verified by the validator, the atomic root
+     entailment problem is valid *)
+  Theorem validated_imp_valid_arep s g t ps m q cs c :
+    imp_of_arep s = (g, t, ps, m, q) ->
+    validate_imp_answer ps m q cs c ->
+    valid_arep s.
   Proof.
-    move=> Hpoly Hch. exact: (zimply_eq_valid_pspec Hpoly (checker_imply_eq Hch)).
+    move=> Hpoly Hch. exact: (zimply_eq_valid_arep Hpoly (validated_imp_imply_eq Hch)).
   Qed.
 
 
-  (* Tail-recursive checker *)
+  (* Tail-recursive validator *)
 
   Definition combine_coefficients_tr (cs : seq (PExpr Z)) (ps : seq (PExpr Z))
   : seq (PExpr Z) :=
@@ -2216,14 +2221,16 @@ Section Checker.
     move=> _. rewrite sum_polys_rec_rcons. reflexivity.
   Qed.
 
-  (* Check if q = cs * ps + c * m *)
-  Definition coefficients_checker_tr ps m q cs c : bool :=
+  (** Validate the answer (cs, c) of an ideal membership problem given as a
+      tuple (ps, m, q), i.e., check if q = cs * ps + c * m. This is a
+      tail-recursive version of validate_imp_answer. *)
+  Definition validate_imp_answer_tr ps m q cs c : bool :=
     (size ps == size cs) &&
     zpexpr_eqb q (PEadd (sum_polys_tr (combine_coefficients_tr cs ps)) (PEmul c m)).
 
   (* If q = cs * ps + c * m and for each p \in ps, p = 0, then q = c * m *)
-  Lemma checker_tr_imply_eq ps m q cs c :
-    coefficients_checker_tr ps m q cs c ->
+  Lemma validated_imp_tr_imply_eq ps m q cs c :
+    validate_imp_answer_tr ps m q cs c ->
     zpimply_eq ps q (PEmul c m).
   Proof.
     move/andP=> [Hs Heq] l Heq0. rewrite /ZPEeval.
@@ -2263,13 +2270,15 @@ Section Checker.
           rewrite !Z.mul_0_r. reflexivity.
   Qed.
 
-  (* If the coefficients are verified by the checker, the pspec is valid *)
-  Theorem checker_tr_valid_pspec s g t ps m q cs c :
-    zpexprs_of_pspec s = (g, t, ps, m, q) ->
-    coefficients_checker_tr ps m q cs c ->
-    valid_pspec s.
+  (* If the answer of an ideal membership problem reduced from an atomic root
+     entailment problem are verified by the validator, the atomic root
+     entailment problem is valid *)
+  Theorem validated_imp_tr_valid_arep s g t ps m q cs c :
+    imp_of_arep s = (g, t, ps, m, q) ->
+    validate_imp_answer_tr ps m q cs c ->
+    valid_arep s.
   Proof.
-    move=> Hpoly Hch. exact: (zimply_eq_valid_pspec Hpoly (checker_tr_imply_eq Hch)).
+    move=> Hpoly Hch. exact: (zimply_eq_valid_arep Hpoly (validated_imp_tr_imply_eq Hch)).
   Qed.
 
-End Checker.
+End Validator.

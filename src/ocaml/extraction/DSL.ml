@@ -1538,85 +1538,81 @@ module MakeDSL =
   let vars_bexp e =
     VS.union (vars_ebexp (eqn_bexp e)) (vars_rbexp (rng_bexp e))
 
-  type atomic =
+  type atom =
   | Avar of V.t
   | Aconst of typ * bits
 
-  (** val atomic_rect :
-      (V.t -> 'a1) -> (typ -> bits -> 'a1) -> atomic -> 'a1 **)
+  (** val atom_rect : (V.t -> 'a1) -> (typ -> bits -> 'a1) -> atom -> 'a1 **)
 
-  let atomic_rect f f0 = function
+  let atom_rect f f0 = function
   | Avar x -> f x
   | Aconst (x, x0) -> f0 x x0
 
-  (** val atomic_rec :
-      (V.t -> 'a1) -> (typ -> bits -> 'a1) -> atomic -> 'a1 **)
+  (** val atom_rec : (V.t -> 'a1) -> (typ -> bits -> 'a1) -> atom -> 'a1 **)
 
-  let atomic_rec f f0 = function
+  let atom_rec f f0 = function
   | Avar x -> f x
   | Aconst (x, x0) -> f0 x x0
 
-  (** val atyp : atomic -> TE.env -> typ **)
+  (** val atyp : atom -> TE.env -> typ **)
 
   let atyp a te =
     match a with
     | Avar v -> TE.vtyp v te
     | Aconst (ty, _) -> ty
 
-  (** val asize : atomic -> TE.env -> int **)
+  (** val asize : atom -> TE.env -> int **)
 
   let asize a te =
     sizeof_typ (atyp a te)
 
   type instr =
-  | Imov of V.t * atomic
-  | Ishl of V.t * atomic * int
-  | Icshl of V.t * V.t * atomic * atomic * int
+  | Imov of V.t * atom
+  | Ishl of V.t * atom * int
+  | Icshl of V.t * V.t * atom * atom * int
   | Inondet of V.t * typ
-  | Icmov of V.t * atomic * atomic * atomic
+  | Icmov of V.t * atom * atom * atom
   | Inop
-  | Inot of V.t * typ * atomic
-  | Iadd of V.t * atomic * atomic
-  | Iadds of V.t * V.t * atomic * atomic
-  | Iadc of V.t * atomic * atomic * atomic
-  | Iadcs of V.t * V.t * atomic * atomic * atomic
-  | Isub of V.t * atomic * atomic
-  | Isubc of V.t * V.t * atomic * atomic
-  | Isubb of V.t * V.t * atomic * atomic
-  | Isbc of V.t * atomic * atomic * atomic
-  | Isbcs of V.t * V.t * atomic * atomic * atomic
-  | Isbb of V.t * atomic * atomic * atomic
-  | Isbbs of V.t * V.t * atomic * atomic * atomic
-  | Imul of V.t * atomic * atomic
-  | Imull of V.t * V.t * atomic * atomic
-  | Imulj of V.t * atomic * atomic
-  | Isplit of V.t * V.t * atomic * int
-  | Iand of V.t * typ * atomic * atomic
-  | Ior of V.t * typ * atomic * atomic
-  | Ixor of V.t * typ * atomic * atomic
-  | Icast of V.t * typ * atomic
-  | Ivpc of V.t * typ * atomic
-  | Ijoin of V.t * atomic * atomic
+  | Inot of V.t * typ * atom
+  | Iadd of V.t * atom * atom
+  | Iadds of V.t * V.t * atom * atom
+  | Iadc of V.t * atom * atom * atom
+  | Iadcs of V.t * V.t * atom * atom * atom
+  | Isub of V.t * atom * atom
+  | Isubc of V.t * V.t * atom * atom
+  | Isubb of V.t * V.t * atom * atom
+  | Isbc of V.t * atom * atom * atom
+  | Isbcs of V.t * V.t * atom * atom * atom
+  | Isbb of V.t * atom * atom * atom
+  | Isbbs of V.t * V.t * atom * atom * atom
+  | Imul of V.t * atom * atom
+  | Imull of V.t * V.t * atom * atom
+  | Imulj of V.t * atom * atom
+  | Isplit of V.t * V.t * atom * int
+  | Iand of V.t * typ * atom * atom
+  | Ior of V.t * typ * atom * atom
+  | Ixor of V.t * typ * atom * atom
+  | Icast of V.t * typ * atom
+  | Ivpc of V.t * typ * atom
+  | Ijoin of V.t * atom * atom
   | Iassume of bexp
 
   (** val instr_rect :
-      (V.t -> atomic -> 'a1) -> (V.t -> atomic -> int -> 'a1) -> (V.t -> V.t
-      -> atomic -> atomic -> int -> 'a1) -> (V.t -> typ -> 'a1) -> (V.t ->
-      atomic -> atomic -> atomic -> 'a1) -> 'a1 -> (V.t -> typ -> atomic ->
-      'a1) -> (V.t -> atomic -> atomic -> 'a1) -> (V.t -> V.t -> atomic ->
-      atomic -> 'a1) -> (V.t -> atomic -> atomic -> atomic -> 'a1) -> (V.t ->
-      V.t -> atomic -> atomic -> atomic -> 'a1) -> (V.t -> atomic -> atomic
-      -> 'a1) -> (V.t -> V.t -> atomic -> atomic -> 'a1) -> (V.t -> V.t ->
-      atomic -> atomic -> 'a1) -> (V.t -> atomic -> atomic -> atomic -> 'a1)
-      -> (V.t -> V.t -> atomic -> atomic -> atomic -> 'a1) -> (V.t -> atomic
-      -> atomic -> atomic -> 'a1) -> (V.t -> V.t -> atomic -> atomic ->
-      atomic -> 'a1) -> (V.t -> atomic -> atomic -> 'a1) -> (V.t -> V.t ->
-      atomic -> atomic -> 'a1) -> (V.t -> atomic -> atomic -> 'a1) -> (V.t ->
-      V.t -> atomic -> int -> 'a1) -> (V.t -> typ -> atomic -> atomic -> 'a1)
-      -> (V.t -> typ -> atomic -> atomic -> 'a1) -> (V.t -> typ -> atomic ->
-      atomic -> 'a1) -> (V.t -> typ -> atomic -> 'a1) -> (V.t -> typ ->
-      atomic -> 'a1) -> (V.t -> atomic -> atomic -> 'a1) -> (bexp -> 'a1) ->
-      instr -> 'a1 **)
+      (V.t -> atom -> 'a1) -> (V.t -> atom -> int -> 'a1) -> (V.t -> V.t ->
+      atom -> atom -> int -> 'a1) -> (V.t -> typ -> 'a1) -> (V.t -> atom ->
+      atom -> atom -> 'a1) -> 'a1 -> (V.t -> typ -> atom -> 'a1) -> (V.t ->
+      atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom -> 'a1) -> (V.t ->
+      atom -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom -> atom ->
+      'a1) -> (V.t -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom ->
+      'a1) -> (V.t -> V.t -> atom -> atom -> 'a1) -> (V.t -> atom -> atom ->
+      atom -> 'a1) -> (V.t -> V.t -> atom -> atom -> atom -> 'a1) -> (V.t ->
+      atom -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom -> atom ->
+      'a1) -> (V.t -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom ->
+      'a1) -> (V.t -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> int ->
+      'a1) -> (V.t -> typ -> atom -> atom -> 'a1) -> (V.t -> typ -> atom ->
+      atom -> 'a1) -> (V.t -> typ -> atom -> atom -> 'a1) -> (V.t -> typ ->
+      atom -> 'a1) -> (V.t -> typ -> atom -> 'a1) -> (V.t -> atom -> atom ->
+      'a1) -> (bexp -> 'a1) -> instr -> 'a1 **)
 
   let instr_rect f f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15 f16 f17 f18 f19 f20 f21 f22 f23 f24 f25 f26 f27 = function
   | Imov (x, x0) -> f x x0
@@ -1650,23 +1646,21 @@ module MakeDSL =
   | Iassume x -> f27 x
 
   (** val instr_rec :
-      (V.t -> atomic -> 'a1) -> (V.t -> atomic -> int -> 'a1) -> (V.t -> V.t
-      -> atomic -> atomic -> int -> 'a1) -> (V.t -> typ -> 'a1) -> (V.t ->
-      atomic -> atomic -> atomic -> 'a1) -> 'a1 -> (V.t -> typ -> atomic ->
-      'a1) -> (V.t -> atomic -> atomic -> 'a1) -> (V.t -> V.t -> atomic ->
-      atomic -> 'a1) -> (V.t -> atomic -> atomic -> atomic -> 'a1) -> (V.t ->
-      V.t -> atomic -> atomic -> atomic -> 'a1) -> (V.t -> atomic -> atomic
-      -> 'a1) -> (V.t -> V.t -> atomic -> atomic -> 'a1) -> (V.t -> V.t ->
-      atomic -> atomic -> 'a1) -> (V.t -> atomic -> atomic -> atomic -> 'a1)
-      -> (V.t -> V.t -> atomic -> atomic -> atomic -> 'a1) -> (V.t -> atomic
-      -> atomic -> atomic -> 'a1) -> (V.t -> V.t -> atomic -> atomic ->
-      atomic -> 'a1) -> (V.t -> atomic -> atomic -> 'a1) -> (V.t -> V.t ->
-      atomic -> atomic -> 'a1) -> (V.t -> atomic -> atomic -> 'a1) -> (V.t ->
-      V.t -> atomic -> int -> 'a1) -> (V.t -> typ -> atomic -> atomic -> 'a1)
-      -> (V.t -> typ -> atomic -> atomic -> 'a1) -> (V.t -> typ -> atomic ->
-      atomic -> 'a1) -> (V.t -> typ -> atomic -> 'a1) -> (V.t -> typ ->
-      atomic -> 'a1) -> (V.t -> atomic -> atomic -> 'a1) -> (bexp -> 'a1) ->
-      instr -> 'a1 **)
+      (V.t -> atom -> 'a1) -> (V.t -> atom -> int -> 'a1) -> (V.t -> V.t ->
+      atom -> atom -> int -> 'a1) -> (V.t -> typ -> 'a1) -> (V.t -> atom ->
+      atom -> atom -> 'a1) -> 'a1 -> (V.t -> typ -> atom -> 'a1) -> (V.t ->
+      atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom -> 'a1) -> (V.t ->
+      atom -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom -> atom ->
+      'a1) -> (V.t -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom ->
+      'a1) -> (V.t -> V.t -> atom -> atom -> 'a1) -> (V.t -> atom -> atom ->
+      atom -> 'a1) -> (V.t -> V.t -> atom -> atom -> atom -> 'a1) -> (V.t ->
+      atom -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom -> atom ->
+      'a1) -> (V.t -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom ->
+      'a1) -> (V.t -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> int ->
+      'a1) -> (V.t -> typ -> atom -> atom -> 'a1) -> (V.t -> typ -> atom ->
+      atom -> 'a1) -> (V.t -> typ -> atom -> atom -> 'a1) -> (V.t -> typ ->
+      atom -> 'a1) -> (V.t -> typ -> atom -> 'a1) -> (V.t -> atom -> atom ->
+      'a1) -> (bexp -> 'a1) -> instr -> 'a1 **)
 
   let instr_rec f f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15 f16 f17 f18 f19 f20 f21 f22 f23 f24 f25 f26 f27 = function
   | Imov (x, x0) -> f x x0
@@ -1701,71 +1695,61 @@ module MakeDSL =
 
   type program = instr list
 
-  (** val vars_atomic : atomic -> VS.t **)
+  (** val vars_atom : atom -> VS.t **)
 
-  let vars_atomic = function
+  let vars_atom = function
   | Avar v -> VS.singleton v
   | Aconst (_, _) -> VS.empty
 
   (** val vars_instr : instr -> VS.t **)
 
   let vars_instr = function
-  | Imov (v, a) -> VS.add v (vars_atomic a)
-  | Ishl (v, a, _) -> VS.add v (vars_atomic a)
+  | Imov (v, a) -> VS.add v (vars_atom a)
+  | Ishl (v, a, _) -> VS.add v (vars_atom a)
   | Icshl (vh, vl, a1, a2, _) ->
-    VS.add vh (VS.add vl (VS.union (vars_atomic a1) (vars_atomic a2)))
+    VS.add vh (VS.add vl (VS.union (vars_atom a1) (vars_atom a2)))
   | Inondet (v, _) -> VS.singleton v
   | Icmov (v, c, a1, a2) ->
-    VS.add v
-      (VS.union (vars_atomic c) (VS.union (vars_atomic a1) (vars_atomic a2)))
+    VS.add v (VS.union (vars_atom c) (VS.union (vars_atom a1) (vars_atom a2)))
   | Inop -> VS.empty
-  | Inot (v, _, a) -> VS.add v (vars_atomic a)
-  | Iadd (v, a1, a2) -> VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
+  | Inot (v, _, a) -> VS.add v (vars_atom a)
+  | Iadd (v, a1, a2) -> VS.add v (VS.union (vars_atom a1) (vars_atom a2))
   | Iadds (c, v, a1, a2) ->
-    VS.add c (VS.add v (VS.union (vars_atomic a1) (vars_atomic a2)))
+    VS.add c (VS.add v (VS.union (vars_atom a1) (vars_atom a2)))
   | Iadc (v, a1, a2, y) ->
-    VS.add v
-      (VS.union (vars_atomic a1) (VS.union (vars_atomic a2) (vars_atomic y)))
+    VS.add v (VS.union (vars_atom a1) (VS.union (vars_atom a2) (vars_atom y)))
   | Iadcs (c, v, a1, a2, y) ->
     VS.add c
       (VS.add v
-        (VS.union (vars_atomic a1)
-          (VS.union (vars_atomic a2) (vars_atomic y))))
-  | Isub (v, a1, a2) -> VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
+        (VS.union (vars_atom a1) (VS.union (vars_atom a2) (vars_atom y))))
+  | Isub (v, a1, a2) -> VS.add v (VS.union (vars_atom a1) (vars_atom a2))
   | Isubc (c, v, a1, a2) ->
-    VS.add c (VS.add v (VS.union (vars_atomic a1) (vars_atomic a2)))
+    VS.add c (VS.add v (VS.union (vars_atom a1) (vars_atom a2)))
   | Isubb (c, v, a1, a2) ->
-    VS.add c (VS.add v (VS.union (vars_atomic a1) (vars_atomic a2)))
+    VS.add c (VS.add v (VS.union (vars_atom a1) (vars_atom a2)))
   | Isbc (v, a1, a2, y) ->
-    VS.add v
-      (VS.union (vars_atomic a1) (VS.union (vars_atomic a2) (vars_atomic y)))
+    VS.add v (VS.union (vars_atom a1) (VS.union (vars_atom a2) (vars_atom y)))
   | Isbcs (c, v, a1, a2, y) ->
     VS.add c
       (VS.add v
-        (VS.union (vars_atomic a1)
-          (VS.union (vars_atomic a2) (vars_atomic y))))
+        (VS.union (vars_atom a1) (VS.union (vars_atom a2) (vars_atom y))))
   | Isbb (v, a1, a2, y) ->
-    VS.add v
-      (VS.union (vars_atomic a1) (VS.union (vars_atomic a2) (vars_atomic y)))
+    VS.add v (VS.union (vars_atom a1) (VS.union (vars_atom a2) (vars_atom y)))
   | Isbbs (c, v, a1, a2, y) ->
     VS.add c
       (VS.add v
-        (VS.union (vars_atomic a1)
-          (VS.union (vars_atomic a2) (vars_atomic y))))
-  | Imul (v, a1, a2) -> VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
+        (VS.union (vars_atom a1) (VS.union (vars_atom a2) (vars_atom y))))
+  | Imul (v, a1, a2) -> VS.add v (VS.union (vars_atom a1) (vars_atom a2))
   | Imull (vh, vl, a1, a2) ->
-    VS.add vh (VS.add vl (VS.union (vars_atomic a1) (vars_atomic a2)))
-  | Imulj (v, a1, a2) -> VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
-  | Isplit (vh, vl, a, _) -> VS.add vh (VS.add vl (vars_atomic a))
-  | Iand (v, _, a1, a2) ->
-    VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
-  | Ior (v, _, a1, a2) ->
-    VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
-  | Ixor (v, _, a1, a2) ->
-    VS.add v (VS.union (vars_atomic a1) (vars_atomic a2))
-  | Icast (v, _, a) -> VS.add v (vars_atomic a)
-  | Ivpc (v, _, a) -> VS.add v (vars_atomic a)
-  | Ijoin (v, ah, al) -> VS.add v (VS.union (vars_atomic ah) (vars_atomic al))
+    VS.add vh (VS.add vl (VS.union (vars_atom a1) (vars_atom a2)))
+  | Imulj (v, a1, a2) -> VS.add v (VS.union (vars_atom a1) (vars_atom a2))
+  | Isplit (vh, vl, a, _) -> VS.add vh (VS.add vl (vars_atom a))
+  | Iand (v, _, a1, a2) -> VS.add v (VS.union (vars_atom a1) (vars_atom a2))
+  | Ior (v, _, a1, a2) -> VS.add v (VS.union (vars_atom a1) (vars_atom a2))
+  | Ixor (v, _, a1, a2) -> VS.add v (VS.union (vars_atom a1) (vars_atom a2))
+  | Icast (v, _, a) -> VS.add v (vars_atom a)
+  | Ivpc (v, _, a) -> VS.add v (vars_atom a)
+  | Ijoin (v, ah, al) -> VS.add v (VS.union (vars_atom ah) (vars_atom al))
   | Iassume e -> vars_bexp e
 
   (** val lvs_instr : instr -> VS.t **)
@@ -1803,39 +1787,39 @@ module MakeDSL =
   (** val rvs_instr : instr -> VS.t **)
 
   let rvs_instr = function
-  | Imov (_, a) -> vars_atomic a
-  | Ishl (_, a, _) -> vars_atomic a
-  | Icshl (_, _, a1, a2, _) -> VS.union (vars_atomic a1) (vars_atomic a2)
+  | Imov (_, a) -> vars_atom a
+  | Ishl (_, a, _) -> vars_atom a
+  | Icshl (_, _, a1, a2, _) -> VS.union (vars_atom a1) (vars_atom a2)
   | Icmov (_, c, a1, a2) ->
-    VS.union (vars_atomic c) (VS.union (vars_atomic a1) (vars_atomic a2))
-  | Inot (_, _, a) -> vars_atomic a
-  | Iadd (_, a1, a2) -> VS.union (vars_atomic a1) (vars_atomic a2)
-  | Iadds (_, _, a1, a2) -> VS.union (vars_atomic a1) (vars_atomic a2)
+    VS.union (vars_atom c) (VS.union (vars_atom a1) (vars_atom a2))
+  | Inot (_, _, a) -> vars_atom a
+  | Iadd (_, a1, a2) -> VS.union (vars_atom a1) (vars_atom a2)
+  | Iadds (_, _, a1, a2) -> VS.union (vars_atom a1) (vars_atom a2)
   | Iadc (_, a1, a2, y) ->
-    VS.union (vars_atomic a1) (VS.union (vars_atomic a2) (vars_atomic y))
+    VS.union (vars_atom a1) (VS.union (vars_atom a2) (vars_atom y))
   | Iadcs (_, _, a1, a2, y) ->
-    VS.union (vars_atomic a1) (VS.union (vars_atomic a2) (vars_atomic y))
-  | Isub (_, a1, a2) -> VS.union (vars_atomic a1) (vars_atomic a2)
-  | Isubc (_, _, a1, a2) -> VS.union (vars_atomic a1) (vars_atomic a2)
-  | Isubb (_, _, a1, a2) -> VS.union (vars_atomic a1) (vars_atomic a2)
+    VS.union (vars_atom a1) (VS.union (vars_atom a2) (vars_atom y))
+  | Isub (_, a1, a2) -> VS.union (vars_atom a1) (vars_atom a2)
+  | Isubc (_, _, a1, a2) -> VS.union (vars_atom a1) (vars_atom a2)
+  | Isubb (_, _, a1, a2) -> VS.union (vars_atom a1) (vars_atom a2)
   | Isbc (_, a1, a2, y) ->
-    VS.union (vars_atomic a1) (VS.union (vars_atomic a2) (vars_atomic y))
+    VS.union (vars_atom a1) (VS.union (vars_atom a2) (vars_atom y))
   | Isbcs (_, _, a1, a2, y) ->
-    VS.union (vars_atomic a1) (VS.union (vars_atomic a2) (vars_atomic y))
+    VS.union (vars_atom a1) (VS.union (vars_atom a2) (vars_atom y))
   | Isbb (_, a1, a2, y) ->
-    VS.union (vars_atomic a1) (VS.union (vars_atomic a2) (vars_atomic y))
+    VS.union (vars_atom a1) (VS.union (vars_atom a2) (vars_atom y))
   | Isbbs (_, _, a1, a2, y) ->
-    VS.union (vars_atomic a1) (VS.union (vars_atomic a2) (vars_atomic y))
-  | Imul (_, a1, a2) -> VS.union (vars_atomic a1) (vars_atomic a2)
-  | Imull (_, _, a1, a2) -> VS.union (vars_atomic a1) (vars_atomic a2)
-  | Imulj (_, a1, a2) -> VS.union (vars_atomic a1) (vars_atomic a2)
-  | Isplit (_, _, a, _) -> vars_atomic a
-  | Iand (_, _, a1, a2) -> VS.union (vars_atomic a1) (vars_atomic a2)
-  | Ior (_, _, a1, a2) -> VS.union (vars_atomic a1) (vars_atomic a2)
-  | Ixor (_, _, a1, a2) -> VS.union (vars_atomic a1) (vars_atomic a2)
-  | Icast (_, _, a) -> vars_atomic a
-  | Ivpc (_, _, a) -> vars_atomic a
-  | Ijoin (_, ah, al) -> VS.union (vars_atomic ah) (vars_atomic al)
+    VS.union (vars_atom a1) (VS.union (vars_atom a2) (vars_atom y))
+  | Imul (_, a1, a2) -> VS.union (vars_atom a1) (vars_atom a2)
+  | Imull (_, _, a1, a2) -> VS.union (vars_atom a1) (vars_atom a2)
+  | Imulj (_, a1, a2) -> VS.union (vars_atom a1) (vars_atom a2)
+  | Isplit (_, _, a, _) -> vars_atom a
+  | Iand (_, _, a1, a2) -> VS.union (vars_atom a1) (vars_atom a2)
+  | Ior (_, _, a1, a2) -> VS.union (vars_atom a1) (vars_atom a2)
+  | Ixor (_, _, a1, a2) -> VS.union (vars_atom a1) (vars_atom a2)
+  | Icast (_, _, a) -> vars_atom a
+  | Ivpc (_, _, a) -> vars_atom a
+  | Ijoin (_, ah, al) -> VS.union (vars_atom ah) (vars_atom al)
   | Iassume e -> vars_bexp e
   | _ -> VS.empty
 
@@ -2056,9 +2040,9 @@ module MakeDSL =
     | Rand (e1, e2) -> (&&) (eval_rbexp e1 s) (eval_rbexp e2 s)
     | Ror (e1, e2) -> (||) (eval_rbexp e1 s) (eval_rbexp e2 s)
 
-  (** val eval_atomic : atomic -> S.t -> bits **)
+  (** val eval_atom : atom -> S.t -> bits **)
 
-  let eval_atomic a s =
+  let eval_atom a s =
     match a with
     | Avar v -> S.acc v s
     | Aconst (_, n) -> n
@@ -2172,55 +2156,55 @@ module MakeDSL =
   let well_typed_bexp te e =
     (&&) (well_typed_ebexp te (eqn_bexp e)) (well_typed_rbexp te (rng_bexp e))
 
-  (** val well_sized_atomic : TE.env -> atomic -> bool **)
+  (** val well_sized_atom : TE.env -> atom -> bool **)
 
-  let well_sized_atomic e a =
+  let well_sized_atom e a =
     if is_unsigned (atyp a e)
     then leq (Pervasives.succ 0) (asize a e)
     else leq (Pervasives.succ (Pervasives.succ 0)) (asize a e)
 
-  (** val size_matched_atomic : atomic -> bool **)
+  (** val size_matched_atom : atom -> bool **)
 
-  let size_matched_atomic = function
+  let size_matched_atom = function
   | Avar _ -> true
   | Aconst (t0, n) ->
     eq_op nat_eqType (Obj.magic size n) (Obj.magic sizeof_typ t0)
 
-  (** val well_typed_atomic : TE.env -> atomic -> bool **)
+  (** val well_typed_atom : TE.env -> atom -> bool **)
 
-  let well_typed_atomic e a =
-    (&&) (well_sized_atomic e a) (size_matched_atomic a)
+  let well_typed_atom e a =
+    (&&) (well_sized_atom e a) (size_matched_atom a)
 
   (** val well_typed_instr : TE.env -> instr -> bool **)
 
   let well_typed_instr e = function
-  | Imov (_, a) -> well_typed_atomic e a
+  | Imov (_, a) -> well_typed_atom e a
   | Ishl (_, a, n) ->
-    (&&) (well_typed_atomic e a) (leq (Pervasives.succ n) (asize a e))
+    (&&) (well_typed_atom e a) (leq (Pervasives.succ n) (asize a e))
   | Icshl (_, _, a1, a2, n) ->
     (&&)
       ((&&)
         ((&&)
           ((&&) (is_unsigned (atyp a2 e))
-            (compatible (atyp a1 e) (atyp a2 e))) (well_typed_atomic e a1))
-        (well_typed_atomic e a2)) (leq n (asize a2 e))
+            (compatible (atyp a1 e) (atyp a2 e))) (well_typed_atom e a1))
+        (well_typed_atom e a2)) (leq n (asize a2 e))
   | Icmov (_, c, a1, a2) ->
     (&&)
       ((&&)
         ((&&)
           ((&&) (eq_op typ_eqType (Obj.magic atyp c e) (Obj.magic coq_Tbit))
             (eq_op typ_eqType (Obj.magic atyp a1 e) (Obj.magic atyp a2 e)))
-          (well_typed_atomic e a1)) (well_typed_atomic e a2))
-      (well_typed_atomic e c)
-  | Inot (_, t0, a) -> (&&) (compatible t0 (atyp a e)) (well_typed_atomic e a)
+          (well_typed_atom e a1)) (well_typed_atom e a2))
+      (well_typed_atom e c)
+  | Inot (_, t0, a) -> (&&) (compatible t0 (atyp a e)) (well_typed_atom e a)
   | Iadd (_, a1, a2) ->
     (&&)
       ((&&) (eq_op typ_eqType (Obj.magic atyp a1 e) (Obj.magic atyp a2 e))
-        (well_typed_atomic e a1)) (well_typed_atomic e a2)
+        (well_typed_atom e a1)) (well_typed_atom e a2)
   | Iadds (_, _, a1, a2) ->
     (&&)
       ((&&) (eq_op typ_eqType (Obj.magic atyp a1 e) (Obj.magic atyp a2 e))
-        (well_typed_atomic e a1)) (well_typed_atomic e a2)
+        (well_typed_atom e a1)) (well_typed_atom e a2)
   | Iadc (_, a1, a2, y) ->
     (&&)
       ((&&)
@@ -2228,8 +2212,8 @@ module MakeDSL =
           ((&&)
             (eq_op typ_eqType (Obj.magic atyp a1 e) (Obj.magic atyp a2 e))
             (eq_op typ_eqType (Obj.magic atyp y e) (Obj.magic coq_Tbit)))
-          (well_typed_atomic e a1)) (well_typed_atomic e a2))
-      (well_typed_atomic e y)
+          (well_typed_atom e a1)) (well_typed_atom e a2))
+      (well_typed_atom e y)
   | Iadcs (_, _, a1, a2, y) ->
     (&&)
       ((&&)
@@ -2237,20 +2221,20 @@ module MakeDSL =
           ((&&)
             (eq_op typ_eqType (Obj.magic atyp a1 e) (Obj.magic atyp a2 e))
             (eq_op typ_eqType (Obj.magic atyp y e) (Obj.magic coq_Tbit)))
-          (well_typed_atomic e a1)) (well_typed_atomic e a2))
-      (well_typed_atomic e y)
+          (well_typed_atom e a1)) (well_typed_atom e a2))
+      (well_typed_atom e y)
   | Isub (_, a1, a2) ->
     (&&)
       ((&&) (eq_op typ_eqType (Obj.magic atyp a1 e) (Obj.magic atyp a2 e))
-        (well_typed_atomic e a1)) (well_typed_atomic e a2)
+        (well_typed_atom e a1)) (well_typed_atom e a2)
   | Isubc (_, _, a1, a2) ->
     (&&)
       ((&&) (eq_op typ_eqType (Obj.magic atyp a1 e) (Obj.magic atyp a2 e))
-        (well_typed_atomic e a1)) (well_typed_atomic e a2)
+        (well_typed_atom e a1)) (well_typed_atom e a2)
   | Isubb (_, _, a1, a2) ->
     (&&)
       ((&&) (eq_op typ_eqType (Obj.magic atyp a1 e) (Obj.magic atyp a2 e))
-        (well_typed_atomic e a1)) (well_typed_atomic e a2)
+        (well_typed_atom e a1)) (well_typed_atom e a2)
   | Isbc (_, a1, a2, y) ->
     (&&)
       ((&&)
@@ -2258,8 +2242,8 @@ module MakeDSL =
           ((&&)
             (eq_op typ_eqType (Obj.magic atyp a1 e) (Obj.magic atyp a2 e))
             (eq_op typ_eqType (Obj.magic atyp y e) (Obj.magic coq_Tbit)))
-          (well_typed_atomic e a1)) (well_typed_atomic e a2))
-      (well_typed_atomic e y)
+          (well_typed_atom e a1)) (well_typed_atom e a2))
+      (well_typed_atom e y)
   | Isbcs (_, _, a1, a2, y) ->
     (&&)
       ((&&)
@@ -2267,8 +2251,8 @@ module MakeDSL =
           ((&&)
             (eq_op typ_eqType (Obj.magic atyp a1 e) (Obj.magic atyp a2 e))
             (eq_op typ_eqType (Obj.magic atyp y e) (Obj.magic coq_Tbit)))
-          (well_typed_atomic e a1)) (well_typed_atomic e a2))
-      (well_typed_atomic e y)
+          (well_typed_atom e a1)) (well_typed_atom e a2))
+      (well_typed_atom e y)
   | Isbb (_, a1, a2, y) ->
     (&&)
       ((&&)
@@ -2276,8 +2260,8 @@ module MakeDSL =
           ((&&)
             (eq_op typ_eqType (Obj.magic atyp a1 e) (Obj.magic atyp a2 e))
             (eq_op typ_eqType (Obj.magic atyp y e) (Obj.magic coq_Tbit)))
-          (well_typed_atomic e a1)) (well_typed_atomic e a2))
-      (well_typed_atomic e y)
+          (well_typed_atom e a1)) (well_typed_atom e a2))
+      (well_typed_atom e y)
   | Isbbs (_, _, a1, a2, y) ->
     (&&)
       ((&&)
@@ -2285,41 +2269,41 @@ module MakeDSL =
           ((&&)
             (eq_op typ_eqType (Obj.magic atyp a1 e) (Obj.magic atyp a2 e))
             (eq_op typ_eqType (Obj.magic atyp y e) (Obj.magic coq_Tbit)))
-          (well_typed_atomic e a1)) (well_typed_atomic e a2))
-      (well_typed_atomic e y)
+          (well_typed_atom e a1)) (well_typed_atom e a2))
+      (well_typed_atom e y)
   | Imul (_, a1, a2) ->
     (&&)
       ((&&) (eq_op typ_eqType (Obj.magic atyp a1 e) (Obj.magic atyp a2 e))
-        (well_typed_atomic e a1)) (well_typed_atomic e a2)
+        (well_typed_atom e a1)) (well_typed_atom e a2)
   | Imull (_, _, a1, a2) ->
     (&&)
       ((&&) (eq_op typ_eqType (Obj.magic atyp a1 e) (Obj.magic atyp a2 e))
-        (well_typed_atomic e a1)) (well_typed_atomic e a2)
+        (well_typed_atom e a1)) (well_typed_atom e a2)
   | Imulj (_, a1, a2) ->
     (&&)
       ((&&) (eq_op typ_eqType (Obj.magic atyp a1 e) (Obj.magic atyp a2 e))
-        (well_typed_atomic e a1)) (well_typed_atomic e a2)
+        (well_typed_atom e a1)) (well_typed_atom e a2)
   | Isplit (_, _, a, n) ->
-    (&&) (well_typed_atomic e a) (leq (Pervasives.succ n) (asize a e))
+    (&&) (well_typed_atom e a) (leq (Pervasives.succ n) (asize a e))
   | Iand (_, t0, a1, a2) ->
     (&&)
       ((&&) ((&&) (compatible t0 (atyp a1 e)) (compatible t0 (atyp a2 e)))
-        (well_typed_atomic e a1)) (well_typed_atomic e a2)
+        (well_typed_atom e a1)) (well_typed_atom e a2)
   | Ior (_, t0, a1, a2) ->
     (&&)
       ((&&) ((&&) (compatible t0 (atyp a1 e)) (compatible t0 (atyp a2 e)))
-        (well_typed_atomic e a1)) (well_typed_atomic e a2)
+        (well_typed_atom e a1)) (well_typed_atom e a2)
   | Ixor (_, t0, a1, a2) ->
     (&&)
       ((&&) ((&&) (compatible t0 (atyp a1 e)) (compatible t0 (atyp a2 e)))
-        (well_typed_atomic e a1)) (well_typed_atomic e a2)
-  | Icast (_, _, a) -> well_typed_atomic e a
-  | Ivpc (_, _, a) -> well_typed_atomic e a
+        (well_typed_atom e a1)) (well_typed_atom e a2)
+  | Icast (_, _, a) -> well_typed_atom e a
+  | Ivpc (_, _, a) -> well_typed_atom e a
   | Ijoin (_, ah, al) ->
     (&&)
       ((&&)
         ((&&) (is_unsigned (atyp al e)) (compatible (atyp ah e) (atyp al e)))
-        (well_typed_atomic e ah)) (well_typed_atomic e al)
+        (well_typed_atom e ah)) (well_typed_atom e al)
   | Iassume e0 -> well_typed_bexp e e0
   | _ -> true
 
@@ -2350,77 +2334,72 @@ module MakeDSL =
   (** val well_defined_instr : TE.env -> instr -> bool **)
 
   let well_defined_instr te = function
-  | Imov (_, a) -> are_defined (vars_atomic a) te
-  | Ishl (_, a, _) -> are_defined (vars_atomic a) te
+  | Imov (_, a) -> are_defined (vars_atom a) te
+  | Ishl (_, a, _) -> are_defined (vars_atom a) te
   | Icshl (v1, v2, a1, a2, _) ->
-    (&&)
-      ((&&) (negb (eq_op V.coq_T v1 v2)) (are_defined (vars_atomic a1) te))
-      (are_defined (vars_atomic a2) te)
+    (&&) ((&&) (negb (eq_op V.coq_T v1 v2)) (are_defined (vars_atom a1) te))
+      (are_defined (vars_atom a2) te)
   | Icmov (_, c, a1, a2) ->
     (&&)
-      ((&&) (are_defined (vars_atomic c) te)
-        (are_defined (vars_atomic a1) te)) (are_defined (vars_atomic a2) te)
-  | Inot (_, _, a) -> are_defined (vars_atomic a) te
+      ((&&) (are_defined (vars_atom c) te) (are_defined (vars_atom a1) te))
+      (are_defined (vars_atom a2) te)
+  | Inot (_, _, a) -> are_defined (vars_atom a) te
   | Iadd (_, a1, a2) ->
-    (&&) (are_defined (vars_atomic a1) te) (are_defined (vars_atomic a2) te)
+    (&&) (are_defined (vars_atom a1) te) (are_defined (vars_atom a2) te)
   | Iadds (c, v, a1, a2) ->
-    (&&) ((&&) (negb (eq_op V.coq_T c v)) (are_defined (vars_atomic a1) te))
-      (are_defined (vars_atomic a2) te)
+    (&&) ((&&) (negb (eq_op V.coq_T c v)) (are_defined (vars_atom a1) te))
+      (are_defined (vars_atom a2) te)
   | Iadc (_, a1, a2, y) ->
     (&&)
-      ((&&) (are_defined (vars_atomic a1) te)
-        (are_defined (vars_atomic a2) te)) (are_defined (vars_atomic y) te)
+      ((&&) (are_defined (vars_atom a1) te) (are_defined (vars_atom a2) te))
+      (are_defined (vars_atom y) te)
   | Iadcs (c, v, a1, a2, y) ->
     (&&)
-      ((&&)
-        ((&&) (negb (eq_op V.coq_T c v)) (are_defined (vars_atomic a1) te))
-        (are_defined (vars_atomic a2) te)) (are_defined (vars_atomic y) te)
+      ((&&) ((&&) (negb (eq_op V.coq_T c v)) (are_defined (vars_atom a1) te))
+        (are_defined (vars_atom a2) te)) (are_defined (vars_atom y) te)
   | Isub (_, a1, a2) ->
-    (&&) (are_defined (vars_atomic a1) te) (are_defined (vars_atomic a2) te)
+    (&&) (are_defined (vars_atom a1) te) (are_defined (vars_atom a2) te)
   | Isubc (c, v, a1, a2) ->
-    (&&) ((&&) (negb (eq_op V.coq_T c v)) (are_defined (vars_atomic a1) te))
-      (are_defined (vars_atomic a2) te)
+    (&&) ((&&) (negb (eq_op V.coq_T c v)) (are_defined (vars_atom a1) te))
+      (are_defined (vars_atom a2) te)
   | Isubb (c, v, a1, a2) ->
-    (&&) ((&&) (negb (eq_op V.coq_T c v)) (are_defined (vars_atomic a1) te))
-      (are_defined (vars_atomic a2) te)
+    (&&) ((&&) (negb (eq_op V.coq_T c v)) (are_defined (vars_atom a1) te))
+      (are_defined (vars_atom a2) te)
   | Isbc (_, a1, a2, y) ->
     (&&)
-      ((&&) (are_defined (vars_atomic a1) te)
-        (are_defined (vars_atomic a2) te)) (are_defined (vars_atomic y) te)
+      ((&&) (are_defined (vars_atom a1) te) (are_defined (vars_atom a2) te))
+      (are_defined (vars_atom y) te)
   | Isbcs (c, v, a1, a2, y) ->
     (&&)
-      ((&&)
-        ((&&) (negb (eq_op V.coq_T c v)) (are_defined (vars_atomic a1) te))
-        (are_defined (vars_atomic a2) te)) (are_defined (vars_atomic y) te)
+      ((&&) ((&&) (negb (eq_op V.coq_T c v)) (are_defined (vars_atom a1) te))
+        (are_defined (vars_atom a2) te)) (are_defined (vars_atom y) te)
   | Isbb (_, a1, a2, y) ->
     (&&)
-      ((&&) (are_defined (vars_atomic a1) te)
-        (are_defined (vars_atomic a2) te)) (are_defined (vars_atomic y) te)
+      ((&&) (are_defined (vars_atom a1) te) (are_defined (vars_atom a2) te))
+      (are_defined (vars_atom y) te)
   | Isbbs (c, v, a1, a2, y) ->
     (&&)
-      ((&&)
-        ((&&) (negb (eq_op V.coq_T c v)) (are_defined (vars_atomic a1) te))
-        (are_defined (vars_atomic a2) te)) (are_defined (vars_atomic y) te)
+      ((&&) ((&&) (negb (eq_op V.coq_T c v)) (are_defined (vars_atom a1) te))
+        (are_defined (vars_atom a2) te)) (are_defined (vars_atom y) te)
   | Imul (_, a1, a2) ->
-    (&&) (are_defined (vars_atomic a1) te) (are_defined (vars_atomic a2) te)
+    (&&) (are_defined (vars_atom a1) te) (are_defined (vars_atom a2) te)
   | Imull (vh, vl, a1, a2) ->
-    (&&)
-      ((&&) (negb (eq_op V.coq_T vh vl)) (are_defined (vars_atomic a1) te))
-      (are_defined (vars_atomic a2) te)
+    (&&) ((&&) (negb (eq_op V.coq_T vh vl)) (are_defined (vars_atom a1) te))
+      (are_defined (vars_atom a2) te)
   | Imulj (_, a1, a2) ->
-    (&&) (are_defined (vars_atomic a1) te) (are_defined (vars_atomic a2) te)
+    (&&) (are_defined (vars_atom a1) te) (are_defined (vars_atom a2) te)
   | Isplit (vh, vl, a, _) ->
-    (&&) (negb (eq_op V.coq_T vh vl)) (are_defined (vars_atomic a) te)
+    (&&) (negb (eq_op V.coq_T vh vl)) (are_defined (vars_atom a) te)
   | Iand (_, _, a1, a2) ->
-    (&&) (are_defined (vars_atomic a1) te) (are_defined (vars_atomic a2) te)
+    (&&) (are_defined (vars_atom a1) te) (are_defined (vars_atom a2) te)
   | Ior (_, _, a1, a2) ->
-    (&&) (are_defined (vars_atomic a1) te) (are_defined (vars_atomic a2) te)
+    (&&) (are_defined (vars_atom a1) te) (are_defined (vars_atom a2) te)
   | Ixor (_, _, a1, a2) ->
-    (&&) (are_defined (vars_atomic a1) te) (are_defined (vars_atomic a2) te)
-  | Icast (_, _, a) -> are_defined (vars_atomic a) te
-  | Ivpc (_, _, a) -> are_defined (vars_atomic a) te
+    (&&) (are_defined (vars_atom a1) te) (are_defined (vars_atom a2) te)
+  | Icast (_, _, a) -> are_defined (vars_atom a) te
+  | Ivpc (_, _, a) -> are_defined (vars_atom a) te
   | Ijoin (_, ah, al) ->
-    (&&) (are_defined (vars_atomic ah) te) (are_defined (vars_atomic al) te)
+    (&&) (are_defined (vars_atom ah) te) (are_defined (vars_atom al) te)
   | Iassume e -> are_defined (vars_bexp e) te
   | _ -> true
 

@@ -20,32 +20,32 @@ let max_svar vs =
 let new_svar vs =
   Obj.magic N.succ (max_svar vs)
 
-(** val bv2z_atomic : SSA.SSA.atomic -> SSA.SSA.eexp **)
+(** val algred_atom : SSA.SSA.atom -> SSA.SSA.eexp **)
 
-let bv2z_atomic = function
+let algred_atom = function
 | SSA.SSA.Avar v -> SSA.SSA.evar v
 | SSA.SSA.Aconst (ty, bs) -> SSA.SSA.econst (SSA.SSA.bv2z ty bs)
 
-(** val bv2z_assign : ssavar -> SSA.SSA.eexp -> SSA.SSA.ebexp **)
+(** val algred_assign : ssavar -> SSA.SSA.eexp -> SSA.SSA.ebexp **)
 
-let bv2z_assign v e =
+let algred_assign v e =
   SSA.SSA.eeq (SSA.SSA.evar v) e
 
-(** val bv2z_join :
+(** val algred_join :
     SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp -> int -> SSA.SSA.ebexp **)
 
-let bv2z_join e h l p =
+let algred_join e h l p =
   SSA.SSA.eeq (SSA.SSA.eadd l (SSA.SSA.emul2p h (Z.of_nat p))) e
 
-(** val bv2z_split :
+(** val algred_split :
     ssavar -> ssavar -> SSA.SSA.eexp -> int -> SSA.SSA.ebexp **)
 
-let bv2z_split vh vl e p =
-  bv2z_join e (SSA.SSA.evar vh) (SSA.SSA.evar vl) p
+let algred_split vh vl e p =
+  algred_join e (SSA.SSA.evar vh) (SSA.SSA.evar vl) p
 
-(** val bv2z_is_carry : ssavar -> SSA.SSA.ebexp **)
+(** val algred_is_carry : ssavar -> SSA.SSA.ebexp **)
 
-let bv2z_is_carry c =
+let algred_is_carry c =
   SSA.SSA.eeq
     (SSA.SSA.emul (SSA.SSA.evar c)
       (SSA.SSA.esub (SSA.SSA.evar c) (SSA.SSA.econst (Zpos Coq_xH))))
@@ -54,73 +54,73 @@ let bv2z_is_carry c =
 (** val carry_constr : options -> ssavar -> SSA.SSA.ebexp list **)
 
 let carry_constr options0 c =
-  if options0.add_carry_constraints then (bv2z_is_carry c) :: [] else []
+  if options0.add_carry_constraints then (algred_is_carry c) :: [] else []
 
-(** val bv2z_cast :
-    VarOrder.t -> coq_N -> SSAVarOrder.t -> typ -> SSA.SSA.atomic -> typ ->
+(** val algred_cast :
+    VarOrder.t -> coq_N -> SSAVarOrder.t -> typ -> SSA.SSA.atom -> typ ->
     coq_N * DSL.ebexp list **)
 
-let bv2z_cast avn g v vtyp a atyp0 =
+let algred_cast avn g v vtyp a atyp0 =
   match vtyp with
   | Tuint wv ->
     (match atyp0 with
      | Tuint wa ->
        if leq wa wv
-       then (g, ((DSL.Eeq ((SSA.SSA.evar v), (bv2z_atomic a))) :: []))
+       then (g, ((DSL.Eeq ((SSA.SSA.evar v), (algred_atom a))) :: []))
        else let discarded = (avn, g) in
             let g' = N.succ g in
             (g',
-            ((bv2z_split (Obj.magic discarded) v (bv2z_atomic a) wv) :: []))
+            ((algred_split (Obj.magic discarded) v (algred_atom a) wv) :: []))
      | Tsint wa ->
        if leq wa wv
        then let a_sign = (avn, g) in
             let g' = N.succ g in
             (g',
-            ((bv2z_join (SSA.SSA.evar v) (SSA.SSA.evar (Obj.magic a_sign))
-               (bv2z_atomic a) wv) :: []))
+            ((algred_join (SSA.SSA.evar v) (SSA.SSA.evar (Obj.magic a_sign))
+               (algred_atom a) wv) :: []))
        else let discarded = (avn, g) in
             let g' = N.succ g in
             (g',
-            ((bv2z_split (Obj.magic discarded) v (bv2z_atomic a) wv) :: [])))
+            ((algred_split (Obj.magic discarded) v (algred_atom a) wv) :: [])))
   | Tsint wv ->
     (match atyp0 with
      | Tuint wa ->
        if leq (Pervasives.succ wa) wv
-       then (g, ((DSL.Eeq ((SSA.SSA.evar v), (bv2z_atomic a))) :: []))
+       then (g, ((DSL.Eeq ((SSA.SSA.evar v), (algred_atom a))) :: []))
        else let discarded = (avn, g) in
             let g' = N.succ g in
             (g',
-            ((bv2z_split (Obj.magic discarded) v (bv2z_atomic a) wv) :: []))
+            ((algred_split (Obj.magic discarded) v (algred_atom a) wv) :: []))
      | Tsint wa ->
        if leq wa wv
-       then (g, ((DSL.Eeq ((SSA.SSA.evar v), (bv2z_atomic a))) :: []))
+       then (g, ((DSL.Eeq ((SSA.SSA.evar v), (algred_atom a))) :: []))
        else let discarded = (avn, g) in
             let g' = N.succ g in
             (g',
-            ((bv2z_split (Obj.magic discarded) v (bv2z_atomic a) wv) :: [])))
+            ((algred_split (Obj.magic discarded) v (algred_atom a) wv) :: [])))
 
-(** val bv2z_vpc :
-    VarOrder.t -> coq_N -> ssavar -> SSA.SSA.atomic -> coq_N * DSL.ebexp list **)
+(** val algred_vpc :
+    VarOrder.t -> coq_N -> ssavar -> SSA.SSA.atom -> coq_N * DSL.ebexp list **)
 
-let bv2z_vpc _ g v a =
-  (g, ((DSL.Eeq ((SSA.SSA.evar v), (bv2z_atomic a))) :: []))
+let algred_vpc _ g v a =
+  (g, ((DSL.Eeq ((SSA.SSA.evar v), (algred_atom a))) :: []))
 
-(** val bv2z_instr :
+(** val algred_instr :
     options -> TypEnv.SSATE.env -> VarOrder.t -> coq_N -> SSA.SSA.instr ->
     coq_N * SSA.SSA.ebexp list **)
 
-let bv2z_instr options0 te avn g = function
+let algred_instr options0 te avn g = function
 | SSA.SSA.Imov (v, a) ->
-  let za = bv2z_atomic a in (g, ((bv2z_assign v za) :: []))
+  let za = algred_atom a in (g, ((algred_assign v za) :: []))
 | SSA.SSA.Ishl (v, a, n) ->
-  let za = bv2z_atomic a in
-  (g, ((bv2z_assign v (SSA.SSA.emul2p za (Z.of_nat n))) :: []))
+  let za = algred_atom a in
+  (g, ((algred_assign v (SSA.SSA.emul2p za (Z.of_nat n))) :: []))
 | SSA.SSA.Icshl (vh, vl, a1, a2, n) ->
-  let za1 = bv2z_atomic a1 in
-  let za2 = bv2z_atomic a2 in
+  let za1 = algred_atom a1 in
+  let za2 = algred_atom a2 in
   let a2size = SSA.SSA.asize a2 te in
   (g,
-  ((bv2z_split vh vl
+  ((algred_split vh vl
      (SSA.SSA.eadd (SSA.SSA.emul2p za1 (Z.of_nat a2size)) za2)
      (subn a2size n)) :: []))
 | SSA.SSA.Inondet (v, t0) ->
@@ -128,22 +128,22 @@ let bv2z_instr options0 te avn g = function
   then (g, (carry_constr options0 v))
   else (g, [])
 | SSA.SSA.Icmov (v, c, a1, a2) ->
-  let zc = bv2z_atomic c in
-  let za1 = bv2z_atomic a1 in
-  let za2 = bv2z_atomic a2 in
+  let zc = algred_atom c in
+  let za1 = algred_atom a1 in
+  let za2 = algred_atom a2 in
   (g,
-  ((bv2z_assign v
+  ((algred_assign v
      (SSA.SSA.eadd (SSA.SSA.emul zc za1)
        (SSA.SSA.emul (SSA.SSA.esub (SSA.SSA.econst Z.one) zc) za2))) :: []))
 | SSA.SSA.Inot (v, t0, a) ->
-  let za = bv2z_atomic a in
+  let za = algred_atom a in
   let ta = SSA.SSA.atyp a te in
   (match t0 with
    | Tuint w ->
      (match ta with
       | Tuint _ ->
         (g,
-          ((bv2z_assign v
+          ((algred_assign v
              (SSA.SSA.esub
                (SSA.SSA.econst (Z.sub (SSA.SSA.z2expn (Z.of_nat w)) Z.one))
                za)) :: []))
@@ -153,142 +153,142 @@ let bv2z_instr options0 te avn g = function
       | Tuint _ -> (g, [])
       | Tsint _ ->
         (g,
-          ((bv2z_assign v
+          ((algred_assign v
              (SSA.SSA.esub (SSA.SSA.eneg za) (SSA.SSA.econst Z.one))) :: []))))
 | SSA.SSA.Iadd (v, a1, a2) ->
-  let za1 = bv2z_atomic a1 in
-  let za2 = bv2z_atomic a2 in
-  (g, ((bv2z_assign v (SSA.SSA.eadd za1 za2)) :: []))
+  let za1 = algred_atom a1 in
+  let za2 = algred_atom a2 in
+  (g, ((algred_assign v (SSA.SSA.eadd za1 za2)) :: []))
 | SSA.SSA.Iadds (c, v, a1, a2) ->
-  let za1 = bv2z_atomic a1 in
-  let za2 = bv2z_atomic a2 in
+  let za1 = algred_atom a1 in
+  let za2 = algred_atom a2 in
   (match SSA.SSA.atyp a1 te with
    | Tuint w ->
      (g,
-       (cat ((bv2z_split c v (SSA.SSA.eadd za1 za2) w) :: [])
+       (cat ((algred_split c v (SSA.SSA.eadd za1 za2) w) :: [])
          (carry_constr options0 c)))
-   | Tsint _ -> (g, ((bv2z_assign v (SSA.SSA.eadd za1 za2)) :: [])))
+   | Tsint _ -> (g, ((algred_assign v (SSA.SSA.eadd za1 za2)) :: [])))
 | SSA.SSA.Iadc (v, a1, a2, y) ->
-  let za1 = bv2z_atomic a1 in
-  let za2 = bv2z_atomic a2 in
-  let zy = bv2z_atomic y in
-  (g, ((bv2z_assign v (SSA.SSA.eadd (SSA.SSA.eadd za1 za2) zy)) :: []))
+  let za1 = algred_atom a1 in
+  let za2 = algred_atom a2 in
+  let zy = algred_atom y in
+  (g, ((algred_assign v (SSA.SSA.eadd (SSA.SSA.eadd za1 za2) zy)) :: []))
 | SSA.SSA.Iadcs (c, v, a1, a2, y) ->
-  let za1 = bv2z_atomic a1 in
-  let za2 = bv2z_atomic a2 in
-  let zy = bv2z_atomic y in
+  let za1 = algred_atom a1 in
+  let za2 = algred_atom a2 in
+  let zy = algred_atom y in
   (match SSA.SSA.atyp a1 te with
    | Tuint w ->
      (g,
        (cat
-         ((bv2z_split c v (SSA.SSA.eadd (SSA.SSA.eadd za1 za2) zy) w) :: [])
+         ((algred_split c v (SSA.SSA.eadd (SSA.SSA.eadd za1 za2) zy) w) :: [])
          (carry_constr options0 c)))
    | Tsint _ ->
-     (g, ((bv2z_assign v (SSA.SSA.eadd (SSA.SSA.eadd za1 za2) zy)) :: [])))
+     (g, ((algred_assign v (SSA.SSA.eadd (SSA.SSA.eadd za1 za2) zy)) :: [])))
 | SSA.SSA.Isub (v, a1, a2) ->
-  let za1 = bv2z_atomic a1 in
-  let za2 = bv2z_atomic a2 in
-  (g, ((bv2z_assign v (SSA.SSA.esub za1 za2)) :: []))
+  let za1 = algred_atom a1 in
+  let za2 = algred_atom a2 in
+  (g, ((algred_assign v (SSA.SSA.esub za1 za2)) :: []))
 | SSA.SSA.Isubc (c, v, a1, a2) ->
-  let za1 = bv2z_atomic a1 in
-  let za2 = bv2z_atomic a2 in
+  let za1 = algred_atom a1 in
+  let za2 = algred_atom a2 in
   (match SSA.SSA.atyp a1 te with
    | Tuint w ->
      (g,
        (cat
-         ((bv2z_join (SSA.SSA.evar v)
+         ((algred_join (SSA.SSA.evar v)
             (SSA.SSA.esub (SSA.SSA.econst Z.one) (SSA.SSA.evar c))
             (SSA.SSA.esub za1 za2) w) :: []) (carry_constr options0 c)))
-   | Tsint _ -> (g, ((bv2z_assign v (SSA.SSA.esub za1 za2)) :: [])))
+   | Tsint _ -> (g, ((algred_assign v (SSA.SSA.esub za1 za2)) :: [])))
 | SSA.SSA.Isubb (c, v, a1, a2) ->
-  let za1 = bv2z_atomic a1 in
-  let za2 = bv2z_atomic a2 in
+  let za1 = algred_atom a1 in
+  let za2 = algred_atom a2 in
   (match SSA.SSA.atyp a1 te with
    | Tuint w ->
      (g,
        (cat
-         ((bv2z_join (SSA.SSA.evar v) (SSA.SSA.evar c) (SSA.SSA.esub za1 za2)
-            w) :: []) (carry_constr options0 c)))
-   | Tsint _ -> (g, ((bv2z_assign v (SSA.SSA.esub za1 za2)) :: [])))
+         ((algred_join (SSA.SSA.evar v) (SSA.SSA.evar c)
+            (SSA.SSA.esub za1 za2) w) :: []) (carry_constr options0 c)))
+   | Tsint _ -> (g, ((algred_assign v (SSA.SSA.esub za1 za2)) :: [])))
 | SSA.SSA.Isbc (v, a1, a2, y) ->
-  let za1 = bv2z_atomic a1 in
-  let za2 = bv2z_atomic a2 in
-  let zy = bv2z_atomic y in
+  let za1 = algred_atom a1 in
+  let za2 = algred_atom a2 in
+  let zy = algred_atom y in
   (g,
-  ((bv2z_assign v
+  ((algred_assign v
      (SSA.SSA.esub (SSA.SSA.esub za1 za2)
        (SSA.SSA.esub (SSA.SSA.econst Z.one) zy))) :: []))
 | SSA.SSA.Isbcs (c, v, a1, a2, y) ->
-  let za1 = bv2z_atomic a1 in
-  let za2 = bv2z_atomic a2 in
-  let zy = bv2z_atomic y in
+  let za1 = algred_atom a1 in
+  let za2 = algred_atom a2 in
+  let zy = algred_atom y in
   (match SSA.SSA.atyp a1 te with
    | Tuint w ->
      (g,
        (cat
-         ((bv2z_join (SSA.SSA.evar v)
+         ((algred_join (SSA.SSA.evar v)
             (SSA.SSA.esub (SSA.SSA.econst Z.one) (SSA.SSA.evar c))
             (SSA.SSA.esub (SSA.SSA.esub za1 za2)
               (SSA.SSA.esub (SSA.SSA.econst Z.one) zy)) w) :: [])
          (carry_constr options0 c)))
    | Tsint _ ->
      (g,
-       ((bv2z_assign v
+       ((algred_assign v
           (SSA.SSA.esub (SSA.SSA.esub za1 za2)
             (SSA.SSA.esub (SSA.SSA.econst Z.one) zy))) :: [])))
 | SSA.SSA.Isbb (v, a1, a2, y) ->
-  let za1 = bv2z_atomic a1 in
-  let za2 = bv2z_atomic a2 in
-  let zy = bv2z_atomic y in
-  (g, ((bv2z_assign v (SSA.SSA.esub (SSA.SSA.esub za1 za2) zy)) :: []))
+  let za1 = algred_atom a1 in
+  let za2 = algred_atom a2 in
+  let zy = algred_atom y in
+  (g, ((algred_assign v (SSA.SSA.esub (SSA.SSA.esub za1 za2) zy)) :: []))
 | SSA.SSA.Isbbs (c, v, a1, a2, y) ->
-  let za1 = bv2z_atomic a1 in
-  let za2 = bv2z_atomic a2 in
-  let zy = bv2z_atomic y in
+  let za1 = algred_atom a1 in
+  let za2 = algred_atom a2 in
+  let zy = algred_atom y in
   (match SSA.SSA.atyp a1 te with
    | Tuint w ->
      (g,
        (cat
-         ((bv2z_join (SSA.SSA.esub (SSA.SSA.esub za1 za2) zy)
+         ((algred_join (SSA.SSA.esub (SSA.SSA.esub za1 za2) zy)
             (SSA.SSA.eneg (SSA.SSA.evar c)) (SSA.SSA.evar v) w) :: [])
          (carry_constr options0 c)))
    | Tsint _ ->
-     (g, ((bv2z_assign v (SSA.SSA.esub (SSA.SSA.esub za1 za2) zy)) :: [])))
+     (g, ((algred_assign v (SSA.SSA.esub (SSA.SSA.esub za1 za2) zy)) :: [])))
 | SSA.SSA.Imul (v, a1, a2) ->
-  let za1 = bv2z_atomic a1 in
-  let za2 = bv2z_atomic a2 in
-  (g, ((bv2z_assign v (SSA.SSA.emul za1 za2)) :: []))
+  let za1 = algred_atom a1 in
+  let za2 = algred_atom a2 in
+  (g, ((algred_assign v (SSA.SSA.emul za1 za2)) :: []))
 | SSA.SSA.Imull (vh, vl, a1, a2) ->
-  let za1 = bv2z_atomic a1 in
-  let za2 = bv2z_atomic a2 in
+  let za1 = algred_atom a1 in
+  let za2 = algred_atom a2 in
   let a2size = SSA.SSA.asize a2 te in
-  (g, ((bv2z_split vh vl (SSA.SSA.emul za1 za2) a2size) :: []))
+  (g, ((algred_split vh vl (SSA.SSA.emul za1 za2) a2size) :: []))
 | SSA.SSA.Imulj (v, a1, a2) ->
-  let za1 = bv2z_atomic a1 in
-  let za2 = bv2z_atomic a2 in
-  (g, ((bv2z_assign v (SSA.SSA.emul za1 za2)) :: []))
+  let za1 = algred_atom a1 in
+  let za2 = algred_atom a2 in
+  (g, ((algred_assign v (SSA.SSA.emul za1 za2)) :: []))
 | SSA.SSA.Isplit (vh, vl, a, n) ->
-  let za = bv2z_atomic a in (g, ((bv2z_split vh vl za n) :: []))
-| SSA.SSA.Icast (v, t0, a) -> bv2z_cast avn g v t0 a (SSA.SSA.atyp a te)
-| SSA.SSA.Ivpc (v, _, a) -> bv2z_vpc avn g v a
+  let za = algred_atom a in (g, ((algred_split vh vl za n) :: []))
+| SSA.SSA.Icast (v, t0, a) -> algred_cast avn g v t0 a (SSA.SSA.atyp a te)
+| SSA.SSA.Ivpc (v, _, a) -> algred_vpc avn g v a
 | SSA.SSA.Ijoin (v, ah, al) ->
-  let zah = bv2z_atomic ah in
-  let zal = bv2z_atomic al in
+  let zah = algred_atom ah in
+  let zal = algred_atom al in
   let alsize = SSA.SSA.asize al te in
-  (g, ((bv2z_join (SSA.SSA.evar v) zah zal alsize) :: []))
+  (g, ((algred_join (SSA.SSA.evar v) zah zal alsize) :: []))
 | SSA.SSA.Iassume e -> (g, (SSA.SSA.split_eand (SSA.SSA.eqn_bexp e)))
 | _ -> (g, [])
 
-(** val bv2z_program :
+(** val algred_program :
     options -> TypEnv.SSATE.env -> VarOrder.t -> coq_N -> SSA.SSA.program ->
     coq_N * SSA.SSA.ebexp list **)
 
-let rec bv2z_program options0 te avn g = function
+let rec algred_program options0 te avn g = function
 | [] -> (g, [])
 | hd :: tl ->
-  let (g_hd, zhd) = bv2z_instr options0 te avn g hd in
+  let (g_hd, zhd) = algred_instr options0 te avn g hd in
   let (g_tl, ztl) =
-    bv2z_program options0 (SSA.SSA.instr_succ_typenv hd te) avn g_hd tl
+    algred_program options0 (SSA.SSA.instr_succ_typenv hd te) avn g_hd tl
   in
   (g_tl, (cat zhd ztl))
 
@@ -301,14 +301,14 @@ let new_svar_spec s =
         (SSAVS.union (SSA.SSA.vars_program (SSA.SSA.sprog s))
           (SSA.SSA.vars_bexp (SSA.SSA.spost s)))))
 
-(** val bv2z_espec :
-    options -> VarOrder.t -> SSA.SSA.espec -> ZSSA.ZSSA.zspec **)
+(** val algred_espec :
+    options -> VarOrder.t -> SSA.SSA.espec -> ZSSA.ZSSA.rep **)
 
-let bv2z_espec options0 avn s =
+let algred_espec options0 avn s =
   let (_, eprogs) =
-    bv2z_program options0 (SSA.SSA.esinputs s) avn SSA.initial_index
+    algred_program options0 (SSA.SSA.esinputs s) avn SSA.initial_index
       (SSA.SSA.esprog s)
   in
-  { ZSSA.ZSSA.zspre =
+  { ZSSA.ZSSA.premise =
   (SSA.SSA.eand (SSA.SSA.eqn_bexp (SSA.SSA.espre s)) (SSA.SSA.eands eprogs));
-  ZSSA.ZSSA.zspost = (SSA.SSA.espost s) }
+  ZSSA.ZSSA.conseq = (SSA.SSA.espost s) }

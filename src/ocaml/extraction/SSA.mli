@@ -865,102 +865,97 @@ module SSA :
 
   val vars_bexp : bexp -> SSAVS.t
 
-  type atomic =
+  type atom =
   | Avar of SSAVarOrder.t
   | Aconst of typ * bits
 
-  val atomic_rect :
-    (SSAVarOrder.t -> 'a1) -> (typ -> bits -> 'a1) -> atomic -> 'a1
+  val atom_rect :
+    (SSAVarOrder.t -> 'a1) -> (typ -> bits -> 'a1) -> atom -> 'a1
 
-  val atomic_rec :
-    (SSAVarOrder.t -> 'a1) -> (typ -> bits -> 'a1) -> atomic -> 'a1
+  val atom_rec : (SSAVarOrder.t -> 'a1) -> (typ -> bits -> 'a1) -> atom -> 'a1
 
-  val atyp : atomic -> TypEnv.SSATE.env -> typ
+  val atyp : atom -> TypEnv.SSATE.env -> typ
 
-  val asize : atomic -> TypEnv.SSATE.env -> int
+  val asize : atom -> TypEnv.SSATE.env -> int
 
   type instr =
-  | Imov of SSAVarOrder.t * atomic
-  | Ishl of SSAVarOrder.t * atomic * int
-  | Icshl of SSAVarOrder.t * SSAVarOrder.t * atomic * atomic * int
+  | Imov of SSAVarOrder.t * atom
+  | Ishl of SSAVarOrder.t * atom * int
+  | Icshl of SSAVarOrder.t * SSAVarOrder.t * atom * atom * int
   | Inondet of SSAVarOrder.t * typ
-  | Icmov of SSAVarOrder.t * atomic * atomic * atomic
+  | Icmov of SSAVarOrder.t * atom * atom * atom
   | Inop
-  | Inot of SSAVarOrder.t * typ * atomic
-  | Iadd of SSAVarOrder.t * atomic * atomic
-  | Iadds of SSAVarOrder.t * SSAVarOrder.t * atomic * atomic
-  | Iadc of SSAVarOrder.t * atomic * atomic * atomic
-  | Iadcs of SSAVarOrder.t * SSAVarOrder.t * atomic * atomic * atomic
-  | Isub of SSAVarOrder.t * atomic * atomic
-  | Isubc of SSAVarOrder.t * SSAVarOrder.t * atomic * atomic
-  | Isubb of SSAVarOrder.t * SSAVarOrder.t * atomic * atomic
-  | Isbc of SSAVarOrder.t * atomic * atomic * atomic
-  | Isbcs of SSAVarOrder.t * SSAVarOrder.t * atomic * atomic * atomic
-  | Isbb of SSAVarOrder.t * atomic * atomic * atomic
-  | Isbbs of SSAVarOrder.t * SSAVarOrder.t * atomic * atomic * atomic
-  | Imul of SSAVarOrder.t * atomic * atomic
-  | Imull of SSAVarOrder.t * SSAVarOrder.t * atomic * atomic
-  | Imulj of SSAVarOrder.t * atomic * atomic
-  | Isplit of SSAVarOrder.t * SSAVarOrder.t * atomic * int
-  | Iand of SSAVarOrder.t * typ * atomic * atomic
-  | Ior of SSAVarOrder.t * typ * atomic * atomic
-  | Ixor of SSAVarOrder.t * typ * atomic * atomic
-  | Icast of SSAVarOrder.t * typ * atomic
-  | Ivpc of SSAVarOrder.t * typ * atomic
-  | Ijoin of SSAVarOrder.t * atomic * atomic
+  | Inot of SSAVarOrder.t * typ * atom
+  | Iadd of SSAVarOrder.t * atom * atom
+  | Iadds of SSAVarOrder.t * SSAVarOrder.t * atom * atom
+  | Iadc of SSAVarOrder.t * atom * atom * atom
+  | Iadcs of SSAVarOrder.t * SSAVarOrder.t * atom * atom * atom
+  | Isub of SSAVarOrder.t * atom * atom
+  | Isubc of SSAVarOrder.t * SSAVarOrder.t * atom * atom
+  | Isubb of SSAVarOrder.t * SSAVarOrder.t * atom * atom
+  | Isbc of SSAVarOrder.t * atom * atom * atom
+  | Isbcs of SSAVarOrder.t * SSAVarOrder.t * atom * atom * atom
+  | Isbb of SSAVarOrder.t * atom * atom * atom
+  | Isbbs of SSAVarOrder.t * SSAVarOrder.t * atom * atom * atom
+  | Imul of SSAVarOrder.t * atom * atom
+  | Imull of SSAVarOrder.t * SSAVarOrder.t * atom * atom
+  | Imulj of SSAVarOrder.t * atom * atom
+  | Isplit of SSAVarOrder.t * SSAVarOrder.t * atom * int
+  | Iand of SSAVarOrder.t * typ * atom * atom
+  | Ior of SSAVarOrder.t * typ * atom * atom
+  | Ixor of SSAVarOrder.t * typ * atom * atom
+  | Icast of SSAVarOrder.t * typ * atom
+  | Ivpc of SSAVarOrder.t * typ * atom
+  | Ijoin of SSAVarOrder.t * atom * atom
   | Iassume of bexp
 
   val instr_rect :
-    (SSAVarOrder.t -> atomic -> 'a1) -> (SSAVarOrder.t -> atomic -> int ->
-    'a1) -> (SSAVarOrder.t -> SSAVarOrder.t -> atomic -> atomic -> int ->
-    'a1) -> (SSAVarOrder.t -> typ -> 'a1) -> (SSAVarOrder.t -> atomic ->
-    atomic -> atomic -> 'a1) -> 'a1 -> (SSAVarOrder.t -> typ -> atomic ->
-    'a1) -> (SSAVarOrder.t -> atomic -> atomic -> 'a1) -> (SSAVarOrder.t ->
-    SSAVarOrder.t -> atomic -> atomic -> 'a1) -> (SSAVarOrder.t -> atomic ->
-    atomic -> atomic -> 'a1) -> (SSAVarOrder.t -> SSAVarOrder.t -> atomic ->
-    atomic -> atomic -> 'a1) -> (SSAVarOrder.t -> atomic -> atomic -> 'a1) ->
-    (SSAVarOrder.t -> SSAVarOrder.t -> atomic -> atomic -> 'a1) ->
-    (SSAVarOrder.t -> SSAVarOrder.t -> atomic -> atomic -> 'a1) ->
-    (SSAVarOrder.t -> atomic -> atomic -> atomic -> 'a1) -> (SSAVarOrder.t ->
-    SSAVarOrder.t -> atomic -> atomic -> atomic -> 'a1) -> (SSAVarOrder.t ->
-    atomic -> atomic -> atomic -> 'a1) -> (SSAVarOrder.t -> SSAVarOrder.t ->
-    atomic -> atomic -> atomic -> 'a1) -> (SSAVarOrder.t -> atomic -> atomic
-    -> 'a1) -> (SSAVarOrder.t -> SSAVarOrder.t -> atomic -> atomic -> 'a1) ->
-    (SSAVarOrder.t -> atomic -> atomic -> 'a1) -> (SSAVarOrder.t ->
-    SSAVarOrder.t -> atomic -> int -> 'a1) -> (SSAVarOrder.t -> typ -> atomic
-    -> atomic -> 'a1) -> (SSAVarOrder.t -> typ -> atomic -> atomic -> 'a1) ->
-    (SSAVarOrder.t -> typ -> atomic -> atomic -> 'a1) -> (SSAVarOrder.t ->
-    typ -> atomic -> 'a1) -> (SSAVarOrder.t -> typ -> atomic -> 'a1) ->
-    (SSAVarOrder.t -> atomic -> atomic -> 'a1) -> (bexp -> 'a1) -> instr ->
-    'a1
+    (SSAVarOrder.t -> atom -> 'a1) -> (SSAVarOrder.t -> atom -> int -> 'a1)
+    -> (SSAVarOrder.t -> SSAVarOrder.t -> atom -> atom -> int -> 'a1) ->
+    (SSAVarOrder.t -> typ -> 'a1) -> (SSAVarOrder.t -> atom -> atom -> atom
+    -> 'a1) -> 'a1 -> (SSAVarOrder.t -> typ -> atom -> 'a1) -> (SSAVarOrder.t
+    -> atom -> atom -> 'a1) -> (SSAVarOrder.t -> SSAVarOrder.t -> atom ->
+    atom -> 'a1) -> (SSAVarOrder.t -> atom -> atom -> atom -> 'a1) ->
+    (SSAVarOrder.t -> SSAVarOrder.t -> atom -> atom -> atom -> 'a1) ->
+    (SSAVarOrder.t -> atom -> atom -> 'a1) -> (SSAVarOrder.t -> SSAVarOrder.t
+    -> atom -> atom -> 'a1) -> (SSAVarOrder.t -> SSAVarOrder.t -> atom ->
+    atom -> 'a1) -> (SSAVarOrder.t -> atom -> atom -> atom -> 'a1) ->
+    (SSAVarOrder.t -> SSAVarOrder.t -> atom -> atom -> atom -> 'a1) ->
+    (SSAVarOrder.t -> atom -> atom -> atom -> 'a1) -> (SSAVarOrder.t ->
+    SSAVarOrder.t -> atom -> atom -> atom -> 'a1) -> (SSAVarOrder.t -> atom
+    -> atom -> 'a1) -> (SSAVarOrder.t -> SSAVarOrder.t -> atom -> atom ->
+    'a1) -> (SSAVarOrder.t -> atom -> atom -> 'a1) -> (SSAVarOrder.t ->
+    SSAVarOrder.t -> atom -> int -> 'a1) -> (SSAVarOrder.t -> typ -> atom ->
+    atom -> 'a1) -> (SSAVarOrder.t -> typ -> atom -> atom -> 'a1) ->
+    (SSAVarOrder.t -> typ -> atom -> atom -> 'a1) -> (SSAVarOrder.t -> typ ->
+    atom -> 'a1) -> (SSAVarOrder.t -> typ -> atom -> 'a1) -> (SSAVarOrder.t
+    -> atom -> atom -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1
 
   val instr_rec :
-    (SSAVarOrder.t -> atomic -> 'a1) -> (SSAVarOrder.t -> atomic -> int ->
-    'a1) -> (SSAVarOrder.t -> SSAVarOrder.t -> atomic -> atomic -> int ->
-    'a1) -> (SSAVarOrder.t -> typ -> 'a1) -> (SSAVarOrder.t -> atomic ->
-    atomic -> atomic -> 'a1) -> 'a1 -> (SSAVarOrder.t -> typ -> atomic ->
-    'a1) -> (SSAVarOrder.t -> atomic -> atomic -> 'a1) -> (SSAVarOrder.t ->
-    SSAVarOrder.t -> atomic -> atomic -> 'a1) -> (SSAVarOrder.t -> atomic ->
-    atomic -> atomic -> 'a1) -> (SSAVarOrder.t -> SSAVarOrder.t -> atomic ->
-    atomic -> atomic -> 'a1) -> (SSAVarOrder.t -> atomic -> atomic -> 'a1) ->
-    (SSAVarOrder.t -> SSAVarOrder.t -> atomic -> atomic -> 'a1) ->
-    (SSAVarOrder.t -> SSAVarOrder.t -> atomic -> atomic -> 'a1) ->
-    (SSAVarOrder.t -> atomic -> atomic -> atomic -> 'a1) -> (SSAVarOrder.t ->
-    SSAVarOrder.t -> atomic -> atomic -> atomic -> 'a1) -> (SSAVarOrder.t ->
-    atomic -> atomic -> atomic -> 'a1) -> (SSAVarOrder.t -> SSAVarOrder.t ->
-    atomic -> atomic -> atomic -> 'a1) -> (SSAVarOrder.t -> atomic -> atomic
-    -> 'a1) -> (SSAVarOrder.t -> SSAVarOrder.t -> atomic -> atomic -> 'a1) ->
-    (SSAVarOrder.t -> atomic -> atomic -> 'a1) -> (SSAVarOrder.t ->
-    SSAVarOrder.t -> atomic -> int -> 'a1) -> (SSAVarOrder.t -> typ -> atomic
-    -> atomic -> 'a1) -> (SSAVarOrder.t -> typ -> atomic -> atomic -> 'a1) ->
-    (SSAVarOrder.t -> typ -> atomic -> atomic -> 'a1) -> (SSAVarOrder.t ->
-    typ -> atomic -> 'a1) -> (SSAVarOrder.t -> typ -> atomic -> 'a1) ->
-    (SSAVarOrder.t -> atomic -> atomic -> 'a1) -> (bexp -> 'a1) -> instr ->
-    'a1
+    (SSAVarOrder.t -> atom -> 'a1) -> (SSAVarOrder.t -> atom -> int -> 'a1)
+    -> (SSAVarOrder.t -> SSAVarOrder.t -> atom -> atom -> int -> 'a1) ->
+    (SSAVarOrder.t -> typ -> 'a1) -> (SSAVarOrder.t -> atom -> atom -> atom
+    -> 'a1) -> 'a1 -> (SSAVarOrder.t -> typ -> atom -> 'a1) -> (SSAVarOrder.t
+    -> atom -> atom -> 'a1) -> (SSAVarOrder.t -> SSAVarOrder.t -> atom ->
+    atom -> 'a1) -> (SSAVarOrder.t -> atom -> atom -> atom -> 'a1) ->
+    (SSAVarOrder.t -> SSAVarOrder.t -> atom -> atom -> atom -> 'a1) ->
+    (SSAVarOrder.t -> atom -> atom -> 'a1) -> (SSAVarOrder.t -> SSAVarOrder.t
+    -> atom -> atom -> 'a1) -> (SSAVarOrder.t -> SSAVarOrder.t -> atom ->
+    atom -> 'a1) -> (SSAVarOrder.t -> atom -> atom -> atom -> 'a1) ->
+    (SSAVarOrder.t -> SSAVarOrder.t -> atom -> atom -> atom -> 'a1) ->
+    (SSAVarOrder.t -> atom -> atom -> atom -> 'a1) -> (SSAVarOrder.t ->
+    SSAVarOrder.t -> atom -> atom -> atom -> 'a1) -> (SSAVarOrder.t -> atom
+    -> atom -> 'a1) -> (SSAVarOrder.t -> SSAVarOrder.t -> atom -> atom ->
+    'a1) -> (SSAVarOrder.t -> atom -> atom -> 'a1) -> (SSAVarOrder.t ->
+    SSAVarOrder.t -> atom -> int -> 'a1) -> (SSAVarOrder.t -> typ -> atom ->
+    atom -> 'a1) -> (SSAVarOrder.t -> typ -> atom -> atom -> 'a1) ->
+    (SSAVarOrder.t -> typ -> atom -> atom -> 'a1) -> (SSAVarOrder.t -> typ ->
+    atom -> 'a1) -> (SSAVarOrder.t -> typ -> atom -> 'a1) -> (SSAVarOrder.t
+    -> atom -> atom -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1
 
   type program = instr list
 
-  val vars_atomic : atomic -> SSAVS.t
+  val vars_atom : atom -> SSAVS.t
 
   val vars_instr : instr -> SSAVS.t
 
@@ -1039,7 +1034,7 @@ module SSA :
 
   val eval_rbexp : rbexp -> SSAStore.t -> bool
 
-  val eval_atomic : atomic -> SSAStore.t -> bits
+  val eval_atom : atom -> SSAStore.t -> bits
 
   val instr_succ_typenv : instr -> TypEnv.SSATE.env -> TypEnv.SSATE.env
 
@@ -1055,11 +1050,11 @@ module SSA :
 
   val well_typed_bexp : TypEnv.SSATE.env -> bexp -> bool
 
-  val well_sized_atomic : TypEnv.SSATE.env -> atomic -> bool
+  val well_sized_atom : TypEnv.SSATE.env -> atom -> bool
 
-  val size_matched_atomic : atomic -> bool
+  val size_matched_atom : atom -> bool
 
-  val well_typed_atomic : TypEnv.SSATE.env -> atomic -> bool
+  val well_typed_atom : TypEnv.SSATE.env -> atom -> bool
 
   val well_typed_instr : TypEnv.SSATE.env -> instr -> bool
 
@@ -1804,7 +1799,7 @@ val ssa_var : vmap -> var -> ssavar
 
 val svar : ssavar -> Equality.sort
 
-val ssa_atomic : vmap -> DSL.DSL.atomic -> SSA.atomic
+val ssa_atom : vmap -> DSL.DSL.atom -> SSA.atom
 
 val ssa_eexp : vmap -> DSL.DSL.eexp -> SSA.eexp
 

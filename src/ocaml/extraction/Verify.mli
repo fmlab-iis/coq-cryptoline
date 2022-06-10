@@ -12,33 +12,35 @@ open Ssrnat
 
 val ext_all_unsat : cnf list -> bool
 
-val verify_rspec_safety : SSA.SSA.spec -> bool
+val verify_rspec_algsnd : SSA.SSA.spec -> bool
 
-val ext_find_coefficients :
+val ext_solve_imp :
   coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z coq_PExpr -> coq_Z
   coq_PExpr list * coq_Z coq_PExpr
 
-val verify_pspec : pspec -> bool
+val verify_arep : arep -> bool
 
-val verify_pspecs : pspec list -> bool
+val verify_areps : arep list -> bool
 
-val verify_zspec : options -> ZSSA.ZSSA.zspec -> bool
+val verify_rep : options -> ZSSA.ZSSA.rep -> bool
 
-val ext_find_coefficients_list :
+val ext_solve_imp_list :
   ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr) list -> (coq_Z
   coq_PExpr list * coq_Z coq_PExpr) list
 
-val polys_of_pspecs :
-  pspec list -> ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr)
+val polys_of_areps :
+  arep list -> ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr)
   list
 
-val coefficients_checker_tr_list :
+val validate_imp_answer_tr_list :
   ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr) list -> (coq_Z
   coq_PExpr list * coq_Z coq_PExpr) list -> bool
 
-val verify_pspecs_list : pspec list -> bool
+val verify_areps_list : arep list -> bool
 
-val verify_zspec_list : options -> ZSSA.ZSSA.zspec -> bool
+val verify_rep_list : options -> ZSSA.ZSSA.rep -> bool
+
+val verify_espec : options -> SSA.SSA.spec -> bool
 
 val verify_ssa : options -> SSA.SSA.spec -> bool
 

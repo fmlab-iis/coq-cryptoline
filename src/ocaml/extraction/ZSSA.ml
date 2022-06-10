@@ -1,15 +1,15 @@
 
 module ZSSA =
  struct
-  type zspec = { zspre : SSA.SSA.ebexp; zspost : SSA.SSA.ebexp }
+  type rep = { premise : SSA.SSA.ebexp; conseq : SSA.SSA.ebexp }
 
-  (** val zspre : zspec -> SSA.SSA.ebexp **)
+  (** val premise : rep -> SSA.SSA.ebexp **)
 
-  let zspre z =
-    z.zspre
+  let premise r =
+    r.premise
 
-  (** val zspost : zspec -> SSA.SSA.ebexp **)
+  (** val conseq : rep -> SSA.SSA.ebexp **)
 
-  let zspost z =
-    z.zspost
+  let conseq r =
+    r.conseq
  end

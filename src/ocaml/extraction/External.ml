@@ -877,7 +877,7 @@ let coq_compute_coefficients_by_lift (vars, p, gs) =
   else
     create_dummy (List.length gs)
 
-let ext_find_coefficients_impl gs p m =
+let ext_solve_imp_impl gs p m =
   let _ = vprint ("Finding polynomial coefficients\t\t") in
   let t1 = Unix.gettimeofday() in
   let (c_m, cs_gs) =
@@ -1070,7 +1070,7 @@ let coq_compute_coefficients_lwt poly_with_id_list =
   let coef_list_unordered = finish_pending delivered_helper coef_list_unordered pending in
   snd (List.split (List.sort (fun (id1, _) (id2, _) -> compare id1 id2) coef_list_unordered))
 
-let rec ext_find_coefficients_list_impl polys =
+let rec ext_solve_imp_list_impl polys =
   let _ = vprint ("Finding polynomial coefficients\n") in
   let t1 = Unix.gettimeofday() in
   let coef_list = coq_compute_coefficients_lwt (List.mapi (fun id poly -> (id, poly)) polys) in

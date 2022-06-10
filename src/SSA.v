@@ -1,3 +1,6 @@
+
+(** SSA transformation. *)
+
 From Coq Require Import List ZArith FSets OrderedType.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
@@ -71,7 +74,7 @@ Section MakeSSA.
   Definition ssa_vars (m : vmap) (vs : VS.t) : SSAVS.t :=
     M2.map2 (ssa_var m) vs.
 
-  Definition ssa_atomic (m : vmap) (a : DSL.atomic) : SSA.atomic :=
+  Definition ssa_atom (m : vmap) (a : DSL.atom) : SSA.atom :=
     match a with
     | DSL.Avar v => SSA.Avar (ssa_var m v)
     | DSL.Aconst ty n => SSA.Aconst ty n
@@ -119,16 +122,16 @@ Section MakeSSA.
   Definition ssa_instr (m : vmap) (i : DSL.instr) : vmap * SSA.instr :=
     match i with
     | DSL.Imov v a =>
-      let a := ssa_atomic m a in
+      let a := ssa_atom m a in
       let m := upd_index v m in
       (m, SSA.Imov (ssa_var m v) a)
     | DSL.Ishl v a p =>
-      let a := ssa_atomic m a in
+      let a := ssa_atom m a in
       let m := upd_index v m in
       (m, SSA.Ishl (ssa_var m v) a p)
     | DSL.Icshl vh vl a1 a2 p =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
       let ml := upd_index vl m in
       let mh := upd_index vh ml in
       (mh, SSA.Icshl (ssa_var mh vh) (ssa_var ml vl) a1 a2 p)
@@ -136,130 +139,130 @@ Section MakeSSA.
       let m := upd_index v m in
       (m, SSA.Inondet (ssa_var m v) ty)
     | DSL.Icmov v c a1 a2 =>
-      let c := ssa_atomic m c in
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
+      let c := ssa_atom m c in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
       let m := upd_index v m in
       (m, SSA.Icmov (ssa_var m v) c a1 a2)
     | DSL.Inop => (m, SSA.Inop)
     | DSL.Inot v ty a =>
-      let a := ssa_atomic m a in
+      let a := ssa_atom m a in
       let m := upd_index v m in
       (m, SSA.Inot (ssa_var m v) ty a)
     | DSL.Iadd v a1 a2 =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
       let m := upd_index v m in
       (m, SSA.Iadd (ssa_var m v) a1 a2)
     | DSL.Iadds c v a1 a2 =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
       let mv := upd_index v m in
       let mc := upd_index c mv in
       (mc, SSA.Iadds (ssa_var mc c) (ssa_var mv v) a1 a2)
     | DSL.Iadc v a1 a2 y =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
-      let y := ssa_atomic m y in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
+      let y := ssa_atom m y in
       let m := upd_index v m in
       (m, SSA.Iadc (ssa_var m v) a1 a2 y)
     | DSL.Iadcs c v a1 a2 y =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
-      let y := ssa_atomic m y in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
+      let y := ssa_atom m y in
       let mv := upd_index v m in
       let mc := upd_index c mv in
       (mc, SSA.Iadcs (ssa_var mc c) (ssa_var mv v) a1 a2 y)
     | DSL.Isub v a1 a2 =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
       let m := upd_index v m in
       (m, SSA.Isub (ssa_var m v) a1 a2)
     | DSL.Isubc c v a1 a2 =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
       let mv := upd_index v m in
       let mc := upd_index c mv in
       (mc, SSA.Isubc (ssa_var mc c) (ssa_var mv v) a1 a2)
     | DSL.Isubb c v a1 a2 =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
       let mv := upd_index v m in
       let mc := upd_index c mv in
       (mc, SSA.Isubb (ssa_var mc c) (ssa_var mv v) a1 a2)
     | DSL.Isbc v a1 a2 y =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
-      let y := ssa_atomic m y in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
+      let y := ssa_atom m y in
       let m := upd_index v m in
       (m, SSA.Isbc (ssa_var m v) a1 a2 y)
     | DSL.Isbcs c v a1 a2 y =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
-      let y := ssa_atomic m y in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
+      let y := ssa_atom m y in
       let mv := upd_index v m in
       let mc := upd_index c mv in
       (mc, SSA.Isbcs (ssa_var mc c) (ssa_var mv v) a1 a2 y)
     | DSL.Isbb v a1 a2 y =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
-      let y := ssa_atomic m y in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
+      let y := ssa_atom m y in
       let m := upd_index v m in
       (m, SSA.Isbb (ssa_var m v) a1 a2 y)
     | DSL.Isbbs c v a1 a2 y =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
-      let y := ssa_atomic m y in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
+      let y := ssa_atom m y in
       let mv := upd_index v m in
       let mc := upd_index c mv in
       (mc, SSA.Isbbs (ssa_var mc c) (ssa_var mv v) a1 a2 y)
     | DSL.Imul v a1 a2 =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
       let m := upd_index v m in
       (m, SSA.Imul (ssa_var m v) a1 a2)
     | DSL.Imull vh vl a1 a2 =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
       let ml := upd_index vl m in
       let mh := upd_index vh ml in
       (mh, SSA.Imull (ssa_var mh vh) (ssa_var ml vl) a1 a2)
     | DSL.Imulj v a1 a2 =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
       let m := upd_index v m in
       (m, SSA.Imulj (ssa_var m v) a1 a2)
     | DSL.Isplit vh vl a n =>
-      let a := ssa_atomic m a in
+      let a := ssa_atom m a in
       let ml := upd_index vl m in
       let mh := upd_index vh ml in
       (mh, SSA.Isplit (ssa_var mh vh) (ssa_var ml vl) a n)
     | DSL.Iand v ty a1 a2 =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
       let m := upd_index v m in
       (m, SSA.Iand (ssa_var m v) ty a1 a2)
     | DSL.Ior v ty a1 a2 =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
       let m := upd_index v m in
       (m, SSA.Ior (ssa_var m v) ty a1 a2)
     | DSL.Ixor v ty a1 a2 =>
-      let a1 := ssa_atomic m a1 in
-      let a2 := ssa_atomic m a2 in
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
       let m := upd_index v m in
       (m, SSA.Ixor (ssa_var m v) ty a1 a2)
     | DSL.Icast v ty a =>
-      let a := ssa_atomic m a in
+      let a := ssa_atom m a in
       let m := upd_index v m in
       (m, SSA.Icast (ssa_var m v) ty a)
     | DSL.Ivpc v ty a =>
-      let a := ssa_atomic m a in
+      let a := ssa_atom m a in
       let m := upd_index v m in
       (m, SSA.Ivpc (ssa_var m v) ty a)
     | DSL.Ijoin v ah al =>
-      let ah := ssa_atomic m ah in
-      let al := ssa_atomic m al in
+      let ah := ssa_atom m ah in
+      let al := ssa_atom m al in
       let m := upd_index v m in
       (m, SSA.Ijoin (ssa_var m v) ah al)
     | DSL.Iassume e => (m, SSA.Iassume (ssa_bexp m e))
@@ -633,9 +636,9 @@ Section MakeSSA.
     reflexivity.
   Qed.
 
-  Lemma ssa_vars_atomic_comm  m (e : DSL.atomic) :
-    SSAVS.Equal (ssa_vars m (DSL.vars_atomic e))
-                (SSA.vars_atomic (ssa_atomic m e)).
+  Lemma ssa_vars_atom_comm  m (e : DSL.atom) :
+    SSAVS.Equal (ssa_vars m (DSL.vars_atom e))
+                (SSA.vars_atom (ssa_atom m e)).
   Proof.
     case: e.
     - move=> v.
@@ -770,9 +773,9 @@ Section MakeSSA.
     reflexivity.
   Qed.
 
-  Lemma ssa_vars_atomic_subset m e vs :
-    SSAVS.subset (SSA.vars_atomic (ssa_atomic m e)) (ssa_vars m vs) =
-    VS.subset (DSL.vars_atomic e) vs.
+  Lemma ssa_vars_atom_subset m e vs :
+    SSAVS.subset (SSA.vars_atom (ssa_atom m e)) (ssa_vars m vs) =
+    VS.subset (DSL.vars_atom e) vs.
   Proof.
     case: e => /=.
     - move=> v.
@@ -945,7 +948,6 @@ Section MakeSSA.
   Proof.
     move/eqP=> -> {i}. have Hfk: (ssa_store_key m v = Some (v, get_index v m)) by reflexivity.
     rewrite /ssa_state /SSAStore.acc /Store.acc. case Hf: (Store.M.find v s).
-    Check M2SSA.map2map_find_some.
     - rewrite (M2SSA.map2map_find_some (@ssa_store_key_eq_none m)
                                        (@ssa_store_key_eq_some m)
                                        (@ssa_store_key_neq_some m)
@@ -1659,19 +1661,19 @@ Section MakeSSA.
       exact: ssa_typenv_add_submap.
   Qed.
 
-  Lemma ssa_atomic_atyp m a te:
+  Lemma ssa_atom_atyp m a te:
     DSL.atyp a te =
-    SSA.atyp (ssa_atomic m a) (ssa_typenv m te).
+    SSA.atyp (ssa_atom m a) (ssa_typenv m te).
   Proof.
     elim: a m te; intros; rewrite /=.
     - exact: ssa_typenv_preserve.
     - reflexivity.
   Qed.
 
-  Lemma ssa_atomic_asize m a E :
-    DSL.asize a E = SSA.asize (ssa_atomic m a) (ssa_typenv m E).
+  Lemma ssa_atom_asize m a E :
+    DSL.asize a E = SSA.asize (ssa_atom m a) (ssa_typenv m E).
   Proof.
-    rewrite /DSL.asize /SSA.asize. rewrite -ssa_atomic_atyp. reflexivity.
+    rewrite /DSL.asize /SSA.asize. rewrite -ssa_atom_atyp. reflexivity.
   Qed.
 
   Lemma ssa_instr_succ_typenv_submap m1 m2 i si te:
@@ -1688,8 +1690,8 @@ Section MakeSSA.
                                     let H2 := fresh in
                                     move/andP: H => [H1 H2]; tac
                                   | |- is_true (_ && _) => apply/andP; split; tac
-                                  | |- context [SSA.atyp (ssa_atomic ?m ?a) (ssa_typenv ?m ?te)]
-                                    => rewrite -ssa_atomic_atyp; tac
+                                  | |- context [SSA.atyp (ssa_atom ?m ?a) (ssa_typenv ?m ?te)]
+                                    => rewrite -ssa_atom_atyp; tac
                                   | |- SSA.TELemmas.submap (ssa_typenv (upd_index ?x ?m) (TE.add ?x ?ty ?te))
                                                            ( SSATE.add (ssa_var (upd_index ?x ?m) ?x) ?ty (ssa_typenv ?m ?te) )
                                     => exact: ssa_typenv_add_submap
@@ -1756,9 +1758,9 @@ Section MakeSSA.
     rewrite (Ht v). reflexivity.
   Qed.
 
-  Lemma ssa_eval_atomic m s ss a :
+  Lemma ssa_eval_atom m s ss a :
     state_equiv m s ss ->
-    SSA.eval_atomic (ssa_atomic m a) ss = DSL.eval_atomic a s.
+    SSA.eval_atom (ssa_atom m a) ss = DSL.eval_atom a s.
   Proof.
     move=> Heq; elim: a => /=.
     - move=> v.
@@ -2003,7 +2005,7 @@ Section MakeSSA.
 
   Lemma ssa_atyp m a te ste:
     typenv_equiv m te ste ->
-    SSA.atyp (ssa_atomic m a) ste = DSL.atyp a te.
+    SSA.atyp (ssa_atom m a) ste = DSL.atyp a te.
   Proof.
     elim: a m te ste => /=; intros.
     - by rewrite H.
@@ -2018,9 +2020,9 @@ Section MakeSSA.
     | |- exists ss2 , _ => eexists
     | H: ?e |- ?e => exact: H
     | |- context [SSA.instr_succ_typenv _ _] => rewrite /=
-    | Heq: state_equiv ?m ?s ?ss |- context [SSA.eval_atomic (ssa_atomic ?m ?a) ?ss]
-      => rewrite (ssa_eval_atomic a Heq)
-    | Heq: typenv_equiv ?m1 ?te1 ?ste1 |- context[SSA.atyp (ssa_atomic ?m1 ?a) ?ste1]
+    | Heq: state_equiv ?m ?s ?ss |- context [SSA.eval_atom (ssa_atom ?m ?a) ?ss]
+      => rewrite (ssa_eval_atom a Heq)
+    | Heq: typenv_equiv ?m1 ?te1 ?ste1 |- context[SSA.atyp (ssa_atom ?m1 ?a) ?ste1]
       => rewrite (ssa_atyp a Heq)
     | |- SSA.eval_instr _ _ _ _ => econstructor
     | |- SSAStore.Upd ?x ?v ?s ?s => exact: SSAStore.Upd_upd
@@ -2250,8 +2252,8 @@ Section MakeSSA.
     | |- exists s2 , _ => eexists
     | H: ?e |- ?e => exact: H
     | |- context [DSL.instr_succ_typenv _ _] => rewrite /=
-    | Heq: state_equiv ?m ?s ?ss |- context [DSL.eval_atomic ?a ?s]
-      => rewrite -(ssa_eval_atomic a Heq)
+    | Heq: state_equiv ?m ?s ?ss |- context [DSL.eval_atom ?a ?s]
+      => rewrite -(ssa_eval_atom a Heq)
     | Heq: typenv_equiv ?m1 ?te1 ?ste1 |- context[DSL.atyp ?a ?te1]
       => rewrite -(ssa_atyp a Heq)
     | |- DSL.eval_instr _ _ _ _ => econstructor
@@ -3322,10 +3324,10 @@ Section MakeSSA.
     rewrite (ssa_unchanged_instr_eval_singleton Hun Hei). reflexivity.
   Qed.
 
-  Lemma ssa_unchanged_instr_eval_atomic a te s1 s2 i :
-    ssa_vars_unchanged_instr (SSA.vars_atomic a) i ->
+  Lemma ssa_unchanged_instr_eval_atom a te s1 s2 i :
+    ssa_vars_unchanged_instr (SSA.vars_atom a) i ->
     SSA.eval_instr te i s1 s2 ->
-    SSA.eval_atomic a s1 = SSA.eval_atomic a s2.
+    SSA.eval_atom a s1 = SSA.eval_atom a s2.
   Proof.
     case: a => /=.
     - move=> v. exact: ssa_unchanged_instr_eval_singleton.
@@ -3382,10 +3384,10 @@ Section MakeSSA.
     rewrite (ssa_unchanged_program_eval_singleton Hun Hep). reflexivity.
   Qed.
 
-  Lemma ssa_unchanged_program_eval_atomic a te s1 s2 p :
-    ssa_vars_unchanged_program (SSA.vars_atomic a) p ->
+  Lemma ssa_unchanged_program_eval_atom a te s1 s2 p :
+    ssa_vars_unchanged_program (SSA.vars_atom a) p ->
     SSA.eval_program te p s1 s2 ->
-    SSA.eval_atomic a s1 = SSA.eval_atomic a s2.
+    SSA.eval_atom a s1 = SSA.eval_atom a s2.
   Proof.
     case: a => /=.
     - move=> v. exact: ssa_unchanged_program_eval_singleton.
@@ -4148,7 +4150,7 @@ Section MakeSSA.
           | H : is_true (SSATE.vtyp _ _ == _) |- _ => move: H
           | |- context f [SSATE.vtyp _ _] => rewrite /SSATE.vtyp
           | Hsub : TELemmas.submap ?E1 ?E2,
-            Hdef : is_true (are_defined (vars_atomic ?a) ?E1)
+            Hdef : is_true (are_defined (vars_atom ?a) ?E1)
             |- context f [atyp ?a ?E1] =>
             rewrite (atyp_submap Hsub Hdef)
           | H : SSAVM.find ?t ?E = Some _ |- context f [SSAVM.find ?t ?E] =>
@@ -4221,7 +4223,7 @@ Section MakeSSA.
             |- context f [SSATE.vtyp ?t1 (SSATE.add ?t2 _ ?E)] =>
             rewrite SSATE.vtyp_add_neq; last by rewrite eq_sym
           | Hmem : is_true (~~ SSAVS.mem ?t (vars_env ?E)),
-            Hsub : is_true (SSAVS.subset (vars_atomic ?a) (vars_env ?E))
+            Hsub : is_true (SSAVS.subset (vars_atom ?a) (vars_env ?E))
             |- context f [atyp ?a (SSATE.add ?t _ _)] =>
             rewrite (atyp_add_not_mem _ _ (VSLemmas.not_mem_subset Hmem Hsub))
           | |- context f [?e == ?e] => rewrite eqxx /=
@@ -4450,9 +4452,9 @@ Section MakeSSA.
         exact: Ht.
   Qed.
 
-  Lemma ssa_vars_are_defined_atomic m a te:
-    DSL.are_defined (DSL.vars_atomic a) te <->
-    SSA.are_defined (SSA.vars_atomic (ssa_atomic m a)) (ssa_typenv m te).
+  Lemma ssa_vars_are_defined_atom m a te:
+    DSL.are_defined (DSL.vars_atom a) te <->
+    SSA.are_defined (SSA.vars_atom (ssa_atom m a)) (ssa_typenv m te).
   Proof.
     split.
     - elim: a m te; rewrite /=; intros.
@@ -4600,11 +4602,11 @@ Section MakeSSA.
                         let H2 := fresh in
                         move/andP: H => [H1 H2]; tac
                       | |- is_true (_ && _) => apply/andP; split; tac
-                      | H : is_true (VS.subset (DSL.vars_atomic ?a) ?vs)
+                      | H : is_true (VS.subset (DSL.vars_atom ?a) ?vs)
                         |- is_true (SSAVS.subset
-                                      (SSA.vars_atomic (ssa_atomic ?m ?a))
+                                      (SSA.vars_atom (ssa_atom ?m ?a))
                                       (ssa_vars ?m ?vs)) =>
-                        rewrite ssa_vars_atomic_subset; assumption
+                        rewrite ssa_vars_atom_subset; assumption
                       | H : is_true (?v1 != ?v2)
                         |- is_true (ssa_var (upd_index ?v1 (upd_index ?v2 ?m)) ?v1 !=
                                             ssa_var (upd_index ?v2 ?m) ?v2) =>
@@ -4612,9 +4614,9 @@ Section MakeSSA.
                       | H : is_true (VS.mem ?v ?vs) |-
                         is_true (SSAVS.mem (ssa_var ?m ?v) (ssa_vars ?m ?vs)) =>
                         rewrite ssa_vars_mem1; exact: H
-                      | H: is_true (DSL.are_defined (DSL.vars_atomic ?a) ?te)
-                        |- is_true (SSA.are_defined (SSA.vars_atomic (ssa_atomic ?m ?a))
-                                                    (ssa_typenv ?m ?te)) => rewrite -ssa_vars_are_defined_atomic; exact: H
+                      | H: is_true (DSL.are_defined (DSL.vars_atom ?a) ?te)
+                        |- is_true (SSA.are_defined (SSA.vars_atom (ssa_atom ?m ?a))
+                                                    (ssa_typenv ?m ?te)) => rewrite -ssa_vars_are_defined_atom; exact: H
                       | |- is_true(true) => done
                       | |- ?e => progress (auto)
                       | |- ?e => idtac
@@ -4765,25 +4767,25 @@ Section MakeSSA.
       + by apply (ssa_well_typed_rbexp m).
   Qed.
 
-  Lemma ssa_size_matched_atomic m a :
-    DSL.size_matched_atomic a =
-    SSA.size_matched_atomic (ssa_atomic m a).
+  Lemma ssa_size_matched_atom m a :
+    DSL.size_matched_atom a =
+    SSA.size_matched_atom (ssa_atom m a).
   Proof. by case: a. Qed.
 
-  Lemma ssa_well_sized_atomic m E a :
-    DSL.well_sized_atomic E a =
-    SSA.well_sized_atomic (ssa_typenv m E) (ssa_atomic m a).
+  Lemma ssa_well_sized_atom m E a :
+    DSL.well_sized_atom E a =
+    SSA.well_sized_atom (ssa_typenv m E) (ssa_atom m a).
   Proof.
-    rewrite /DSL.well_sized_atomic /SSA.well_sized_atomic.
-    rewrite -ssa_atomic_asize -ssa_atomic_atyp. reflexivity.
+    rewrite /DSL.well_sized_atom /SSA.well_sized_atom.
+    rewrite -ssa_atom_asize -ssa_atom_atyp. reflexivity.
   Qed.
 
-  Lemma ssa_well_typed_atomic m E a :
-    DSL.well_typed_atomic E a =
-    SSA.well_typed_atomic (ssa_typenv m E) (ssa_atomic m a).
+  Lemma ssa_well_typed_atom m E a :
+    DSL.well_typed_atom E a =
+    SSA.well_typed_atom (ssa_typenv m E) (ssa_atom m a).
   Proof.
-    rewrite /DSL.well_typed_atomic /SSA.well_typed_atomic.
-    rewrite -ssa_size_matched_atomic -ssa_well_sized_atomic. reflexivity.
+    rewrite /DSL.well_typed_atom /SSA.well_typed_atom.
+    rewrite -ssa_size_matched_atom -ssa_well_sized_atom. reflexivity.
   Qed.
 
   Lemma ssa_instr_well_typed te m1 m2 i si :
@@ -4802,11 +4804,11 @@ Section MakeSSA.
              let H2 := fresh in
              move/andP: H => [H1 H2]; tac
            | |- is_true (_ && _) => apply/andP; split; tac
-           | H : is_true (VS.subset (DSL.vars_atomic ?a) ?vs)
+           | H : is_true (VS.subset (DSL.vars_atom ?a) ?vs)
              |- is_true (SSAVS.subset
-                           (SSA.vars_atomic (ssa_atomic ?m ?a))
+                           (SSA.vars_atom (ssa_atom ?m ?a))
                            (ssa_vars ?m ?vs)) =>
-             rewrite ssa_vars_atomic_subset; assumption
+             rewrite ssa_vars_atom_subset; assumption
            | H : is_true (?v1 != ?v2)
              |- is_true (ssa_var (upd_index ?v1 (upd_index ?v2 ?m)) ?v1 !=
                                  ssa_var (upd_index ?v2 ?m) ?v2) =>
@@ -4814,20 +4816,20 @@ Section MakeSSA.
            | H : is_true (VS.mem ?v ?vs) |-
              is_true (SSAVS.mem (ssa_var ?m ?v) (ssa_vars ?m ?vs)) =>
              rewrite ssa_vars_mem1; exact: H
-           | |- context [SSA.atyp (ssa_atomic ?m ?a) (ssa_typenv ?m ?te)]
-             => rewrite -ssa_atomic_atyp; tac
-           | H: is_true (DSL.are_defined (DSL.vars_atomic ?a) ?te)
-             |- is_true (SSA.are_defined (SSA.vars_atomic (ssa_atomic ?m ?a))
+           | |- context [SSA.atyp (ssa_atom ?m ?a) (ssa_typenv ?m ?te)]
+             => rewrite -ssa_atom_atyp; tac
+           | H: is_true (DSL.are_defined (DSL.vars_atom ?a) ?te)
+             |- is_true (SSA.are_defined (SSA.vars_atom (ssa_atom ?m ?a))
                                          (ssa_typenv ?m ?te)) =>
-             rewrite -ssa_vars_are_defined_atomic; exact: H
+             rewrite -ssa_vars_are_defined_atom; exact: H
            | H : is_true (?v1 != ?v2)
              |- is_true (ssa_var (upd_index ?v1 (upd_index ?v2 ?m)) ?v1 !=
                                  ssa_var (upd_index ?v2 ?m) ?v2) =>
              exact: (pair_neq1 _ _ H)
-           | |- is_true (SSA.well_typed_atomic _ _) =>
-             rewrite -ssa_well_typed_atomic; tac
-           | |- context f [SSA.asize (ssa_atomic ?m ?a) (ssa_typenv ?m ?E)%N] =>
-             rewrite -(ssa_atomic_asize m a E); tac
+           | |- is_true (SSA.well_typed_atom _ _) =>
+             rewrite -ssa_well_typed_atom; tac
+           | |- context f [SSA.asize (ssa_atom ?m ?a) (ssa_typenv ?m ?E)%N] =>
+             rewrite -(ssa_atom_asize m a E); tac
            | |- is_true(true) => done
            | |- ?e => progress (auto)
            | |- ?e => idtac
@@ -4918,8 +4920,8 @@ Section MakeSSA.
     reflexivity.
   Qed.
 
-  Lemma ssa_atomic_var_index m a v i :
-    SSAVS.mem (v, i) (SSA.vars_atomic (ssa_atomic m a)) ->
+  Lemma ssa_atom_var_index m a v i :
+    SSAVS.mem (v, i) (SSA.vars_atom (ssa_atom m a)) ->
     get_index v m = i.
   Proof.
     case: a => /=.

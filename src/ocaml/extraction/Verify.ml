@@ -14,64 +14,63 @@ open Ssrnat
 
 let ext_all_unsat = External.ext_all_unsat_impl
 
-(** val verify_rspec_safety : SSA.SSA.spec -> bool **)
+(** val verify_rspec_algsnd : SSA.SSA.spec -> bool **)
 
-let verify_rspec_safety s =
+let verify_rspec_algsnd s =
   let fE = SSA.SSA.program_succ_typenv (SSA.SSA.sprog s) (SSA.SSA.sinputs s)
   in
-  let es = bb_range_safety_la_simplified_filtered s in
+  let es = bb_range_algsnd_la_simplified_filtered s in
   let (_, cnfs) = bb_hbexps_cache fE (map (Obj.magic hash_bexp) es) in
   ext_all_unsat cnfs
 
-(** val ext_find_coefficients :
+(** val ext_solve_imp :
     coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z coq_PExpr -> coq_Z
     coq_PExpr list * coq_Z coq_PExpr **)
 
-let ext_find_coefficients = External.ext_find_coefficients_impl
+let ext_solve_imp = External.ext_solve_imp_impl
 
-(** val verify_pspec : pspec -> bool **)
+(** val verify_arep : arep -> bool **)
 
-let verify_pspec ps =
-  let (p, q) = zpexprs_of_pspec ps in
+let verify_arep ps =
+  let (p, q) = imp_of_arep ps in
   let (p0, m) = p in
   let (_, ps0) = p0 in
-  let (cs, c) = ext_find_coefficients ps0 q m in
-  coefficients_checker_tr ps0 m q cs c
+  let (cs, c) = ext_solve_imp ps0 q m in validate_imp_answer_tr ps0 m q cs c
 
-(** val verify_pspecs : pspec list -> bool **)
+(** val verify_areps : arep list -> bool **)
 
-let verify_pspecs pss =
-  all verify_pspec pss
+let verify_areps pss =
+  all verify_arep pss
 
-(** val verify_zspec : options -> ZSSA.ZSSA.zspec -> bool **)
+(** val verify_rep : options -> ZSSA.ZSSA.rep -> bool **)
 
-let verify_zspec o zs =
+let verify_rep o zs =
   if o.rewrite_assignments
-  then verify_pspecs (pspecs_of_zspec_simplified o zs)
-  else verify_pspecs (pspecs_of_zspec zs)
+  then verify_areps (areps_of_rep_simplified o zs)
+  else verify_areps (areps_of_rep zs)
 
-(** val ext_find_coefficients_list :
+(** val ext_solve_imp_list :
     ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr) list ->
     (coq_Z coq_PExpr list * coq_Z coq_PExpr) list **)
 
-let ext_find_coefficients_list = External.ext_find_coefficients_list_impl
+let ext_solve_imp_list = External.ext_solve_imp_list_impl
 
-(** val polys_of_pspecs :
-    pspec list -> ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z
-    coq_PExpr) list **)
+(** val polys_of_areps :
+    arep list -> ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr)
+    list **)
 
-let polys_of_pspecs pss =
+let polys_of_areps pss =
   let f = fun ps ->
-    let (p, q) = zpexprs_of_pspec ps in
+    let (p, q) = imp_of_arep ps in
     let (p0, m) = p in let (_, ps0) = p0 in ((ps0, q), m)
   in
   map f pss
 
-(** val coefficients_checker_tr_list :
+(** val validate_imp_answer_tr_list :
     ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr) list ->
     (coq_Z coq_PExpr list * coq_Z coq_PExpr) list -> bool **)
 
-let rec coefficients_checker_tr_list polys coefs =
+let rec validate_imp_answer_tr_list polys coefs =
   match polys with
   | [] -> (match coefs with
            | [] -> true
@@ -83,35 +82,39 @@ let rec coefficients_checker_tr_list polys coefs =
      | [] -> false
      | y1 :: tlc ->
        let (cs, c) = y1 in
-       if coefficients_checker_tr ps m q cs c
-       then coefficients_checker_tr_list tlp tlc
+       if validate_imp_answer_tr ps m q cs c
+       then validate_imp_answer_tr_list tlp tlc
        else false)
 
-(** val verify_pspecs_list : pspec list -> bool **)
+(** val verify_areps_list : arep list -> bool **)
 
-let verify_pspecs_list pss =
-  let poly_list = polys_of_pspecs pss in
-  let coef_list = ext_find_coefficients_list poly_list in
+let verify_areps_list pss =
+  let poly_list = polys_of_areps pss in
+  let coef_list = ext_solve_imp_list poly_list in
   if eq_op nat_eqType (Obj.magic size poly_list) (Obj.magic size coef_list)
-  then coefficients_checker_tr_list poly_list coef_list
+  then validate_imp_answer_tr_list poly_list coef_list
   else false
 
-(** val verify_zspec_list : options -> ZSSA.ZSSA.zspec -> bool **)
+(** val verify_rep_list : options -> ZSSA.ZSSA.rep -> bool **)
 
-let verify_zspec_list o zs =
+let verify_rep_list o zs =
   if o.rewrite_assignments
-  then verify_pspecs_list (pspecs_of_zspec_simplified o zs)
-  else verify_pspecs_list (pspecs_of_zspec zs)
+  then verify_areps_list (areps_of_rep_simplified o zs)
+  else verify_areps_list (areps_of_rep zs)
+
+(** val verify_espec : options -> SSA.SSA.spec -> bool **)
+
+let verify_espec o s =
+  if o.compute_coefficients_one_by_one
+  then verify_rep o
+         (algred_espec o (new_svar_spec s) (SSA.SSA.espec_of_spec s))
+  else verify_rep_list o
+         (algred_espec o (new_svar_spec s) (SSA.SSA.espec_of_spec s))
 
 (** val verify_ssa : options -> SSA.SSA.spec -> bool **)
 
 let verify_ssa o s =
-  (&&) (verify_rspec_safety s)
-    (if o.compute_coefficients_one_by_one
-     then verify_zspec o
-            (bv2z_espec o (new_svar_spec s) (SSA.SSA.espec_of_spec s))
-     else verify_zspec_list o
-            (bv2z_espec o (new_svar_spec s) (SSA.SSA.espec_of_spec s)))
+  (&&) (verify_rspec_algsnd s) (verify_espec o s)
 
 (** val verify_dsl : options -> DSL.DSL.spec -> bool **)
 

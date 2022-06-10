@@ -1360,88 +1360,86 @@ module MakeDSL :
 
   val vars_bexp : bexp -> VS.t
 
-  type atomic =
+  type atom =
   | Avar of V.t
   | Aconst of typ * bits
 
-  val atomic_rect : (V.t -> 'a1) -> (typ -> bits -> 'a1) -> atomic -> 'a1
+  val atom_rect : (V.t -> 'a1) -> (typ -> bits -> 'a1) -> atom -> 'a1
 
-  val atomic_rec : (V.t -> 'a1) -> (typ -> bits -> 'a1) -> atomic -> 'a1
+  val atom_rec : (V.t -> 'a1) -> (typ -> bits -> 'a1) -> atom -> 'a1
 
-  val atyp : atomic -> TE.env -> typ
+  val atyp : atom -> TE.env -> typ
 
-  val asize : atomic -> TE.env -> int
+  val asize : atom -> TE.env -> int
 
   type instr =
-  | Imov of V.t * atomic
-  | Ishl of V.t * atomic * int
-  | Icshl of V.t * V.t * atomic * atomic * int
+  | Imov of V.t * atom
+  | Ishl of V.t * atom * int
+  | Icshl of V.t * V.t * atom * atom * int
   | Inondet of V.t * typ
-  | Icmov of V.t * atomic * atomic * atomic
+  | Icmov of V.t * atom * atom * atom
   | Inop
-  | Inot of V.t * typ * atomic
-  | Iadd of V.t * atomic * atomic
-  | Iadds of V.t * V.t * atomic * atomic
-  | Iadc of V.t * atomic * atomic * atomic
-  | Iadcs of V.t * V.t * atomic * atomic * atomic
-  | Isub of V.t * atomic * atomic
-  | Isubc of V.t * V.t * atomic * atomic
-  | Isubb of V.t * V.t * atomic * atomic
-  | Isbc of V.t * atomic * atomic * atomic
-  | Isbcs of V.t * V.t * atomic * atomic * atomic
-  | Isbb of V.t * atomic * atomic * atomic
-  | Isbbs of V.t * V.t * atomic * atomic * atomic
-  | Imul of V.t * atomic * atomic
-  | Imull of V.t * V.t * atomic * atomic
-  | Imulj of V.t * atomic * atomic
-  | Isplit of V.t * V.t * atomic * int
-  | Iand of V.t * typ * atomic * atomic
-  | Ior of V.t * typ * atomic * atomic
-  | Ixor of V.t * typ * atomic * atomic
-  | Icast of V.t * typ * atomic
-  | Ivpc of V.t * typ * atomic
-  | Ijoin of V.t * atomic * atomic
+  | Inot of V.t * typ * atom
+  | Iadd of V.t * atom * atom
+  | Iadds of V.t * V.t * atom * atom
+  | Iadc of V.t * atom * atom * atom
+  | Iadcs of V.t * V.t * atom * atom * atom
+  | Isub of V.t * atom * atom
+  | Isubc of V.t * V.t * atom * atom
+  | Isubb of V.t * V.t * atom * atom
+  | Isbc of V.t * atom * atom * atom
+  | Isbcs of V.t * V.t * atom * atom * atom
+  | Isbb of V.t * atom * atom * atom
+  | Isbbs of V.t * V.t * atom * atom * atom
+  | Imul of V.t * atom * atom
+  | Imull of V.t * V.t * atom * atom
+  | Imulj of V.t * atom * atom
+  | Isplit of V.t * V.t * atom * int
+  | Iand of V.t * typ * atom * atom
+  | Ior of V.t * typ * atom * atom
+  | Ixor of V.t * typ * atom * atom
+  | Icast of V.t * typ * atom
+  | Ivpc of V.t * typ * atom
+  | Ijoin of V.t * atom * atom
   | Iassume of bexp
 
   val instr_rect :
-    (V.t -> atomic -> 'a1) -> (V.t -> atomic -> int -> 'a1) -> (V.t -> V.t ->
-    atomic -> atomic -> int -> 'a1) -> (V.t -> typ -> 'a1) -> (V.t -> atomic
-    -> atomic -> atomic -> 'a1) -> 'a1 -> (V.t -> typ -> atomic -> 'a1) ->
-    (V.t -> atomic -> atomic -> 'a1) -> (V.t -> V.t -> atomic -> atomic ->
-    'a1) -> (V.t -> atomic -> atomic -> atomic -> 'a1) -> (V.t -> V.t ->
-    atomic -> atomic -> atomic -> 'a1) -> (V.t -> atomic -> atomic -> 'a1) ->
-    (V.t -> V.t -> atomic -> atomic -> 'a1) -> (V.t -> V.t -> atomic ->
-    atomic -> 'a1) -> (V.t -> atomic -> atomic -> atomic -> 'a1) -> (V.t ->
-    V.t -> atomic -> atomic -> atomic -> 'a1) -> (V.t -> atomic -> atomic ->
-    atomic -> 'a1) -> (V.t -> V.t -> atomic -> atomic -> atomic -> 'a1) ->
-    (V.t -> atomic -> atomic -> 'a1) -> (V.t -> V.t -> atomic -> atomic ->
-    'a1) -> (V.t -> atomic -> atomic -> 'a1) -> (V.t -> V.t -> atomic -> int
-    -> 'a1) -> (V.t -> typ -> atomic -> atomic -> 'a1) -> (V.t -> typ ->
-    atomic -> atomic -> 'a1) -> (V.t -> typ -> atomic -> atomic -> 'a1) ->
-    (V.t -> typ -> atomic -> 'a1) -> (V.t -> typ -> atomic -> 'a1) -> (V.t ->
-    atomic -> atomic -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1
+    (V.t -> atom -> 'a1) -> (V.t -> atom -> int -> 'a1) -> (V.t -> V.t ->
+    atom -> atom -> int -> 'a1) -> (V.t -> typ -> 'a1) -> (V.t -> atom ->
+    atom -> atom -> 'a1) -> 'a1 -> (V.t -> typ -> atom -> 'a1) -> (V.t ->
+    atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom -> 'a1) -> (V.t ->
+    atom -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom -> atom ->
+    'a1) -> (V.t -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom ->
+    'a1) -> (V.t -> V.t -> atom -> atom -> 'a1) -> (V.t -> atom -> atom ->
+    atom -> 'a1) -> (V.t -> V.t -> atom -> atom -> atom -> 'a1) -> (V.t ->
+    atom -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom -> atom ->
+    'a1) -> (V.t -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom ->
+    'a1) -> (V.t -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> int ->
+    'a1) -> (V.t -> typ -> atom -> atom -> 'a1) -> (V.t -> typ -> atom ->
+    atom -> 'a1) -> (V.t -> typ -> atom -> atom -> 'a1) -> (V.t -> typ ->
+    atom -> 'a1) -> (V.t -> typ -> atom -> 'a1) -> (V.t -> atom -> atom ->
+    'a1) -> (bexp -> 'a1) -> instr -> 'a1
 
   val instr_rec :
-    (V.t -> atomic -> 'a1) -> (V.t -> atomic -> int -> 'a1) -> (V.t -> V.t ->
-    atomic -> atomic -> int -> 'a1) -> (V.t -> typ -> 'a1) -> (V.t -> atomic
-    -> atomic -> atomic -> 'a1) -> 'a1 -> (V.t -> typ -> atomic -> 'a1) ->
-    (V.t -> atomic -> atomic -> 'a1) -> (V.t -> V.t -> atomic -> atomic ->
-    'a1) -> (V.t -> atomic -> atomic -> atomic -> 'a1) -> (V.t -> V.t ->
-    atomic -> atomic -> atomic -> 'a1) -> (V.t -> atomic -> atomic -> 'a1) ->
-    (V.t -> V.t -> atomic -> atomic -> 'a1) -> (V.t -> V.t -> atomic ->
-    atomic -> 'a1) -> (V.t -> atomic -> atomic -> atomic -> 'a1) -> (V.t ->
-    V.t -> atomic -> atomic -> atomic -> 'a1) -> (V.t -> atomic -> atomic ->
-    atomic -> 'a1) -> (V.t -> V.t -> atomic -> atomic -> atomic -> 'a1) ->
-    (V.t -> atomic -> atomic -> 'a1) -> (V.t -> V.t -> atomic -> atomic ->
-    'a1) -> (V.t -> atomic -> atomic -> 'a1) -> (V.t -> V.t -> atomic -> int
-    -> 'a1) -> (V.t -> typ -> atomic -> atomic -> 'a1) -> (V.t -> typ ->
-    atomic -> atomic -> 'a1) -> (V.t -> typ -> atomic -> atomic -> 'a1) ->
-    (V.t -> typ -> atomic -> 'a1) -> (V.t -> typ -> atomic -> 'a1) -> (V.t ->
-    atomic -> atomic -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1
+    (V.t -> atom -> 'a1) -> (V.t -> atom -> int -> 'a1) -> (V.t -> V.t ->
+    atom -> atom -> int -> 'a1) -> (V.t -> typ -> 'a1) -> (V.t -> atom ->
+    atom -> atom -> 'a1) -> 'a1 -> (V.t -> typ -> atom -> 'a1) -> (V.t ->
+    atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom -> 'a1) -> (V.t ->
+    atom -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom -> atom ->
+    'a1) -> (V.t -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom ->
+    'a1) -> (V.t -> V.t -> atom -> atom -> 'a1) -> (V.t -> atom -> atom ->
+    atom -> 'a1) -> (V.t -> V.t -> atom -> atom -> atom -> 'a1) -> (V.t ->
+    atom -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom -> atom ->
+    'a1) -> (V.t -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> atom ->
+    'a1) -> (V.t -> atom -> atom -> 'a1) -> (V.t -> V.t -> atom -> int ->
+    'a1) -> (V.t -> typ -> atom -> atom -> 'a1) -> (V.t -> typ -> atom ->
+    atom -> 'a1) -> (V.t -> typ -> atom -> atom -> 'a1) -> (V.t -> typ ->
+    atom -> 'a1) -> (V.t -> typ -> atom -> 'a1) -> (V.t -> atom -> atom ->
+    'a1) -> (bexp -> 'a1) -> instr -> 'a1
 
   type program = instr list
 
-  val vars_atomic : atomic -> VS.t
+  val vars_atom : atom -> VS.t
 
   val vars_instr : instr -> VS.t
 
@@ -1519,7 +1517,7 @@ module MakeDSL :
 
   val eval_rbexp : rbexp -> S.t -> bool
 
-  val eval_atomic : atomic -> S.t -> bits
+  val eval_atom : atom -> S.t -> bits
 
   val instr_succ_typenv : instr -> TE.env -> TE.env
 
@@ -1535,11 +1533,11 @@ module MakeDSL :
 
   val well_typed_bexp : TE.env -> bexp -> bool
 
-  val well_sized_atomic : TE.env -> atomic -> bool
+  val well_sized_atom : TE.env -> atom -> bool
 
-  val size_matched_atomic : atomic -> bool
+  val size_matched_atom : atom -> bool
 
-  val well_typed_atomic : TE.env -> atomic -> bool
+  val well_typed_atom : TE.env -> atom -> bool
 
   val well_typed_instr : TE.env -> instr -> bool
 
@@ -3013,98 +3011,92 @@ module DSL :
 
   val vars_bexp : bexp -> VS.t
 
-  type atomic =
+  type atom =
   | Avar of VarOrder.t
   | Aconst of typ * bits
 
-  val atomic_rect :
-    (VarOrder.t -> 'a1) -> (typ -> bits -> 'a1) -> atomic -> 'a1
+  val atom_rect : (VarOrder.t -> 'a1) -> (typ -> bits -> 'a1) -> atom -> 'a1
 
-  val atomic_rec :
-    (VarOrder.t -> 'a1) -> (typ -> bits -> 'a1) -> atomic -> 'a1
+  val atom_rec : (VarOrder.t -> 'a1) -> (typ -> bits -> 'a1) -> atom -> 'a1
 
-  val atyp : atomic -> TypEnv.TE.env -> typ
+  val atyp : atom -> TypEnv.TE.env -> typ
 
-  val asize : atomic -> TypEnv.TE.env -> int
+  val asize : atom -> TypEnv.TE.env -> int
 
   type instr =
-  | Imov of VarOrder.t * atomic
-  | Ishl of VarOrder.t * atomic * int
-  | Icshl of VarOrder.t * VarOrder.t * atomic * atomic * int
+  | Imov of VarOrder.t * atom
+  | Ishl of VarOrder.t * atom * int
+  | Icshl of VarOrder.t * VarOrder.t * atom * atom * int
   | Inondet of VarOrder.t * typ
-  | Icmov of VarOrder.t * atomic * atomic * atomic
+  | Icmov of VarOrder.t * atom * atom * atom
   | Inop
-  | Inot of VarOrder.t * typ * atomic
-  | Iadd of VarOrder.t * atomic * atomic
-  | Iadds of VarOrder.t * VarOrder.t * atomic * atomic
-  | Iadc of VarOrder.t * atomic * atomic * atomic
-  | Iadcs of VarOrder.t * VarOrder.t * atomic * atomic * atomic
-  | Isub of VarOrder.t * atomic * atomic
-  | Isubc of VarOrder.t * VarOrder.t * atomic * atomic
-  | Isubb of VarOrder.t * VarOrder.t * atomic * atomic
-  | Isbc of VarOrder.t * atomic * atomic * atomic
-  | Isbcs of VarOrder.t * VarOrder.t * atomic * atomic * atomic
-  | Isbb of VarOrder.t * atomic * atomic * atomic
-  | Isbbs of VarOrder.t * VarOrder.t * atomic * atomic * atomic
-  | Imul of VarOrder.t * atomic * atomic
-  | Imull of VarOrder.t * VarOrder.t * atomic * atomic
-  | Imulj of VarOrder.t * atomic * atomic
-  | Isplit of VarOrder.t * VarOrder.t * atomic * int
-  | Iand of VarOrder.t * typ * atomic * atomic
-  | Ior of VarOrder.t * typ * atomic * atomic
-  | Ixor of VarOrder.t * typ * atomic * atomic
-  | Icast of VarOrder.t * typ * atomic
-  | Ivpc of VarOrder.t * typ * atomic
-  | Ijoin of VarOrder.t * atomic * atomic
+  | Inot of VarOrder.t * typ * atom
+  | Iadd of VarOrder.t * atom * atom
+  | Iadds of VarOrder.t * VarOrder.t * atom * atom
+  | Iadc of VarOrder.t * atom * atom * atom
+  | Iadcs of VarOrder.t * VarOrder.t * atom * atom * atom
+  | Isub of VarOrder.t * atom * atom
+  | Isubc of VarOrder.t * VarOrder.t * atom * atom
+  | Isubb of VarOrder.t * VarOrder.t * atom * atom
+  | Isbc of VarOrder.t * atom * atom * atom
+  | Isbcs of VarOrder.t * VarOrder.t * atom * atom * atom
+  | Isbb of VarOrder.t * atom * atom * atom
+  | Isbbs of VarOrder.t * VarOrder.t * atom * atom * atom
+  | Imul of VarOrder.t * atom * atom
+  | Imull of VarOrder.t * VarOrder.t * atom * atom
+  | Imulj of VarOrder.t * atom * atom
+  | Isplit of VarOrder.t * VarOrder.t * atom * int
+  | Iand of VarOrder.t * typ * atom * atom
+  | Ior of VarOrder.t * typ * atom * atom
+  | Ixor of VarOrder.t * typ * atom * atom
+  | Icast of VarOrder.t * typ * atom
+  | Ivpc of VarOrder.t * typ * atom
+  | Ijoin of VarOrder.t * atom * atom
   | Iassume of bexp
 
   val instr_rect :
-    (VarOrder.t -> atomic -> 'a1) -> (VarOrder.t -> atomic -> int -> 'a1) ->
-    (VarOrder.t -> VarOrder.t -> atomic -> atomic -> int -> 'a1) ->
-    (VarOrder.t -> typ -> 'a1) -> (VarOrder.t -> atomic -> atomic -> atomic
-    -> 'a1) -> 'a1 -> (VarOrder.t -> typ -> atomic -> 'a1) -> (VarOrder.t ->
-    atomic -> atomic -> 'a1) -> (VarOrder.t -> VarOrder.t -> atomic -> atomic
-    -> 'a1) -> (VarOrder.t -> atomic -> atomic -> atomic -> 'a1) ->
-    (VarOrder.t -> VarOrder.t -> atomic -> atomic -> atomic -> 'a1) ->
-    (VarOrder.t -> atomic -> atomic -> 'a1) -> (VarOrder.t -> VarOrder.t ->
-    atomic -> atomic -> 'a1) -> (VarOrder.t -> VarOrder.t -> atomic -> atomic
-    -> 'a1) -> (VarOrder.t -> atomic -> atomic -> atomic -> 'a1) ->
-    (VarOrder.t -> VarOrder.t -> atomic -> atomic -> atomic -> 'a1) ->
-    (VarOrder.t -> atomic -> atomic -> atomic -> 'a1) -> (VarOrder.t ->
-    VarOrder.t -> atomic -> atomic -> atomic -> 'a1) -> (VarOrder.t -> atomic
-    -> atomic -> 'a1) -> (VarOrder.t -> VarOrder.t -> atomic -> atomic ->
-    'a1) -> (VarOrder.t -> atomic -> atomic -> 'a1) -> (VarOrder.t ->
-    VarOrder.t -> atomic -> int -> 'a1) -> (VarOrder.t -> typ -> atomic ->
-    atomic -> 'a1) -> (VarOrder.t -> typ -> atomic -> atomic -> 'a1) ->
-    (VarOrder.t -> typ -> atomic -> atomic -> 'a1) -> (VarOrder.t -> typ ->
-    atomic -> 'a1) -> (VarOrder.t -> typ -> atomic -> 'a1) -> (VarOrder.t ->
-    atomic -> atomic -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1
+    (VarOrder.t -> atom -> 'a1) -> (VarOrder.t -> atom -> int -> 'a1) ->
+    (VarOrder.t -> VarOrder.t -> atom -> atom -> int -> 'a1) -> (VarOrder.t
+    -> typ -> 'a1) -> (VarOrder.t -> atom -> atom -> atom -> 'a1) -> 'a1 ->
+    (VarOrder.t -> typ -> atom -> 'a1) -> (VarOrder.t -> atom -> atom -> 'a1)
+    -> (VarOrder.t -> VarOrder.t -> atom -> atom -> 'a1) -> (VarOrder.t ->
+    atom -> atom -> atom -> 'a1) -> (VarOrder.t -> VarOrder.t -> atom -> atom
+    -> atom -> 'a1) -> (VarOrder.t -> atom -> atom -> 'a1) -> (VarOrder.t ->
+    VarOrder.t -> atom -> atom -> 'a1) -> (VarOrder.t -> VarOrder.t -> atom
+    -> atom -> 'a1) -> (VarOrder.t -> atom -> atom -> atom -> 'a1) ->
+    (VarOrder.t -> VarOrder.t -> atom -> atom -> atom -> 'a1) -> (VarOrder.t
+    -> atom -> atom -> atom -> 'a1) -> (VarOrder.t -> VarOrder.t -> atom ->
+    atom -> atom -> 'a1) -> (VarOrder.t -> atom -> atom -> 'a1) ->
+    (VarOrder.t -> VarOrder.t -> atom -> atom -> 'a1) -> (VarOrder.t -> atom
+    -> atom -> 'a1) -> (VarOrder.t -> VarOrder.t -> atom -> int -> 'a1) ->
+    (VarOrder.t -> typ -> atom -> atom -> 'a1) -> (VarOrder.t -> typ -> atom
+    -> atom -> 'a1) -> (VarOrder.t -> typ -> atom -> atom -> 'a1) ->
+    (VarOrder.t -> typ -> atom -> 'a1) -> (VarOrder.t -> typ -> atom -> 'a1)
+    -> (VarOrder.t -> atom -> atom -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1
 
   val instr_rec :
-    (VarOrder.t -> atomic -> 'a1) -> (VarOrder.t -> atomic -> int -> 'a1) ->
-    (VarOrder.t -> VarOrder.t -> atomic -> atomic -> int -> 'a1) ->
-    (VarOrder.t -> typ -> 'a1) -> (VarOrder.t -> atomic -> atomic -> atomic
-    -> 'a1) -> 'a1 -> (VarOrder.t -> typ -> atomic -> 'a1) -> (VarOrder.t ->
-    atomic -> atomic -> 'a1) -> (VarOrder.t -> VarOrder.t -> atomic -> atomic
-    -> 'a1) -> (VarOrder.t -> atomic -> atomic -> atomic -> 'a1) ->
-    (VarOrder.t -> VarOrder.t -> atomic -> atomic -> atomic -> 'a1) ->
-    (VarOrder.t -> atomic -> atomic -> 'a1) -> (VarOrder.t -> VarOrder.t ->
-    atomic -> atomic -> 'a1) -> (VarOrder.t -> VarOrder.t -> atomic -> atomic
-    -> 'a1) -> (VarOrder.t -> atomic -> atomic -> atomic -> 'a1) ->
-    (VarOrder.t -> VarOrder.t -> atomic -> atomic -> atomic -> 'a1) ->
-    (VarOrder.t -> atomic -> atomic -> atomic -> 'a1) -> (VarOrder.t ->
-    VarOrder.t -> atomic -> atomic -> atomic -> 'a1) -> (VarOrder.t -> atomic
-    -> atomic -> 'a1) -> (VarOrder.t -> VarOrder.t -> atomic -> atomic ->
-    'a1) -> (VarOrder.t -> atomic -> atomic -> 'a1) -> (VarOrder.t ->
-    VarOrder.t -> atomic -> int -> 'a1) -> (VarOrder.t -> typ -> atomic ->
-    atomic -> 'a1) -> (VarOrder.t -> typ -> atomic -> atomic -> 'a1) ->
-    (VarOrder.t -> typ -> atomic -> atomic -> 'a1) -> (VarOrder.t -> typ ->
-    atomic -> 'a1) -> (VarOrder.t -> typ -> atomic -> 'a1) -> (VarOrder.t ->
-    atomic -> atomic -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1
+    (VarOrder.t -> atom -> 'a1) -> (VarOrder.t -> atom -> int -> 'a1) ->
+    (VarOrder.t -> VarOrder.t -> atom -> atom -> int -> 'a1) -> (VarOrder.t
+    -> typ -> 'a1) -> (VarOrder.t -> atom -> atom -> atom -> 'a1) -> 'a1 ->
+    (VarOrder.t -> typ -> atom -> 'a1) -> (VarOrder.t -> atom -> atom -> 'a1)
+    -> (VarOrder.t -> VarOrder.t -> atom -> atom -> 'a1) -> (VarOrder.t ->
+    atom -> atom -> atom -> 'a1) -> (VarOrder.t -> VarOrder.t -> atom -> atom
+    -> atom -> 'a1) -> (VarOrder.t -> atom -> atom -> 'a1) -> (VarOrder.t ->
+    VarOrder.t -> atom -> atom -> 'a1) -> (VarOrder.t -> VarOrder.t -> atom
+    -> atom -> 'a1) -> (VarOrder.t -> atom -> atom -> atom -> 'a1) ->
+    (VarOrder.t -> VarOrder.t -> atom -> atom -> atom -> 'a1) -> (VarOrder.t
+    -> atom -> atom -> atom -> 'a1) -> (VarOrder.t -> VarOrder.t -> atom ->
+    atom -> atom -> 'a1) -> (VarOrder.t -> atom -> atom -> 'a1) ->
+    (VarOrder.t -> VarOrder.t -> atom -> atom -> 'a1) -> (VarOrder.t -> atom
+    -> atom -> 'a1) -> (VarOrder.t -> VarOrder.t -> atom -> int -> 'a1) ->
+    (VarOrder.t -> typ -> atom -> atom -> 'a1) -> (VarOrder.t -> typ -> atom
+    -> atom -> 'a1) -> (VarOrder.t -> typ -> atom -> atom -> 'a1) ->
+    (VarOrder.t -> typ -> atom -> 'a1) -> (VarOrder.t -> typ -> atom -> 'a1)
+    -> (VarOrder.t -> atom -> atom -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1
 
   type program = instr list
 
-  val vars_atomic : atomic -> VS.t
+  val vars_atom : atom -> VS.t
 
   val vars_instr : instr -> VS.t
 
@@ -3183,7 +3175,7 @@ module DSL :
 
   val eval_rbexp : rbexp -> Store.t -> bool
 
-  val eval_atomic : atomic -> Store.t -> bits
+  val eval_atom : atom -> Store.t -> bits
 
   val instr_succ_typenv : instr -> TypEnv.TE.env -> TypEnv.TE.env
 
@@ -3199,11 +3191,11 @@ module DSL :
 
   val well_typed_bexp : TypEnv.TE.env -> bexp -> bool
 
-  val well_sized_atomic : TypEnv.TE.env -> atomic -> bool
+  val well_sized_atom : TypEnv.TE.env -> atom -> bool
 
-  val size_matched_atomic : atomic -> bool
+  val size_matched_atom : atom -> bool
 
-  val well_typed_atomic : TypEnv.TE.env -> atomic -> bool
+  val well_typed_atom : TypEnv.TE.env -> atom -> bool
 
   val well_typed_instr : TypEnv.TE.env -> instr -> bool
 

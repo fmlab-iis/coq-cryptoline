@@ -12,11 +12,11 @@ open Eqtype
 open Seq
 open Ssrnat
 
-type szbexp =
+type azbexp =
 | Seq of SSA.SSA.eexp * SSA.SSA.eexp
 | Seqmod of SSA.SSA.eexp * SSA.SSA.eexp * SSA.SSA.eexp
 
-type pspec = { ppremises : szbexp list; pconseq : szbexp }
+type arep = { apremises : azbexp list; aconseq : azbexp }
 
 (** val zexp_subst :
     SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp -> DSL.eexp **)
@@ -30,20 +30,20 @@ let rec zexp_subst p r e =
           DSL.Ebinop (op, (zexp_subst p r e1), (zexp_subst p r e2))
         | _ -> e)
 
-(** val szbexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> szbexp -> szbexp **)
+(** val azbexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> azbexp -> azbexp **)
 
-let szbexp_subst p r = function
+let azbexp_subst p r = function
 | Seq (e1, e2) -> Seq ((zexp_subst p r e1), (zexp_subst p r e2))
 | Seqmod (e1, e2, e3) ->
   Seqmod ((zexp_subst p r e1), (zexp_subst p r e2), (zexp_subst p r e3))
 
-(** val subst_szbexps :
-    SSA.SSA.eexp -> SSA.SSA.eexp -> szbexp list -> szbexp list **)
+(** val subst_azbexps :
+    SSA.SSA.eexp -> SSA.SSA.eexp -> azbexp list -> azbexp list **)
 
-let subst_szbexps p r es =
-  map (szbexp_subst p r) es
+let subst_azbexps p r es =
+  map (azbexp_subst p r) es
 
-(** val is_assignment : szbexp -> (ssavar * SSA.SSA.eexp) option **)
+(** val is_assignment : azbexp -> (ssavar * SSA.SSA.eexp) option **)
 
 let is_assignment = function
 | Seq (el, er) ->
@@ -125,85 +125,85 @@ let is_assignment = function
          | _ -> None)))
 | Seqmod (_, _, _) -> None
 
-(** val simplify_pspec_rec :
-    szbexp list -> szbexp list -> szbexp -> szbexp list * szbexp **)
+(** val simplify_arep_rec :
+    azbexp list -> azbexp list -> azbexp -> azbexp list * azbexp **)
 
-let rec simplify_pspec_rec visited premises conseq =
+let rec simplify_arep_rec visited premises conseq0 =
   match premises with
-  | [] -> ((rev visited), conseq)
+  | [] -> ((rev visited), conseq0)
   | e :: es ->
     (match is_assignment e with
      | Some p0 ->
        let (p, r) = p0 in
-       simplify_pspec_rec (subst_szbexps (SSA.SSA.evar p) r visited)
-         (subst_szbexps (SSA.SSA.evar p) r es)
-         (szbexp_subst (SSA.SSA.evar p) r conseq)
-     | None -> simplify_pspec_rec (e :: visited) es conseq)
+       simplify_arep_rec (subst_azbexps (SSA.SSA.evar p) r visited)
+         (subst_azbexps (SSA.SSA.evar p) r es)
+         (azbexp_subst (SSA.SSA.evar p) r conseq0)
+     | None -> simplify_arep_rec (e :: visited) es conseq0)
 
-(** val simplify_pspec : pspec -> pspec **)
+(** val simplify_arep : arep -> arep **)
 
-let simplify_pspec s =
-  let (ps, q) = simplify_pspec_rec [] s.ppremises s.pconseq in
-  { ppremises = ps; pconseq = q }
+let simplify_arep s =
+  let (ps, q) = simplify_arep_rec [] s.apremises s.aconseq in
+  { apremises = ps; aconseq = q }
 
-(** val szbexp_subst_vars_cache :
-    ssavar -> SSA.SSA.eexp -> SSAVS.t -> (SSAVS.t * szbexp) ->
-    SSAVS.t * szbexp **)
+(** val azbexp_subst_vars_cache :
+    ssavar -> SSA.SSA.eexp -> SSAVS.t -> (SSAVS.t * azbexp) ->
+    SSAVS.t * azbexp **)
 
-let szbexp_subst_vars_cache p r vspr ve =
+let azbexp_subst_vars_cache p r vspr ve =
   let vs = fst ve in
   let e = snd ve in
   if SSAVS.mem p vs
   then ((SSAVS.remove p (SSAVS.union vs vspr)),
-         (szbexp_subst (SSA.SSA.evar p) r e))
+         (azbexp_subst (SSA.SSA.evar p) r e))
   else ve
 
-(** val subst_szbexps_vars_cache :
-    ssavar -> SSA.SSA.eexp -> SSAVS.t -> (SSAVS.t * szbexp) list ->
-    (SSAVS.t * szbexp) list **)
+(** val subst_azbexps_vars_cache :
+    ssavar -> SSA.SSA.eexp -> SSAVS.t -> (SSAVS.t * azbexp) list ->
+    (SSAVS.t * azbexp) list **)
 
-let subst_szbexps_vars_cache p r vspr ves =
-  map (szbexp_subst_vars_cache p r vspr) ves
+let subst_azbexps_vars_cache p r vspr ves =
+  map (azbexp_subst_vars_cache p r vspr) ves
 
-(** val simplify_pspec_vars_cache_rec :
-    (SSAVS.t * szbexp) list -> (SSAVS.t * szbexp) list -> (SSAVS.t * szbexp)
-    -> (SSAVS.t * szbexp) list * (SSAVS.t * szbexp) **)
+(** val simplify_arep_vars_cache_rec :
+    (SSAVS.t * azbexp) list -> (SSAVS.t * azbexp) list -> (SSAVS.t * azbexp)
+    -> (SSAVS.t * azbexp) list * (SSAVS.t * azbexp) **)
 
-let rec simplify_pspec_vars_cache_rec visited premises conseq =
+let rec simplify_arep_vars_cache_rec visited premises conseq0 =
   match premises with
-  | [] -> ((rev visited), conseq)
+  | [] -> ((rev visited), conseq0)
   | ve :: ves ->
     (match is_assignment (snd ve) with
      | Some p0 ->
        let (p, r) = p0 in
-       simplify_pspec_vars_cache_rec
-         (subst_szbexps_vars_cache p r (fst ve) visited)
-         (subst_szbexps_vars_cache p r (fst ve) ves)
-         (szbexp_subst_vars_cache p r (fst ve) conseq)
-     | None -> simplify_pspec_vars_cache_rec (ve :: visited) ves conseq)
+       simplify_arep_vars_cache_rec
+         (subst_azbexps_vars_cache p r (fst ve) visited)
+         (subst_azbexps_vars_cache p r (fst ve) ves)
+         (azbexp_subst_vars_cache p r (fst ve) conseq0)
+     | None -> simplify_arep_vars_cache_rec (ve :: visited) ves conseq0)
 
-(** val vars_szbexp : szbexp -> SSAVS.t **)
+(** val vars_azbexp : azbexp -> SSAVS.t **)
 
-let vars_szbexp = function
+let vars_azbexp = function
 | Seq (e1, e2) -> SSAVS.union (SSA.SSA.vars_eexp e1) (SSA.SSA.vars_eexp e2)
 | Seqmod (e1, e2, e3) ->
   SSAVS.union (SSAVS.union (SSA.SSA.vars_eexp e1) (SSA.SSA.vars_eexp e2))
     (SSA.SSA.vars_eexp e3)
 
-(** val pair_with_vars : szbexp -> SSAVS.t * szbexp **)
+(** val pair_with_vars : azbexp -> SSAVS.t * azbexp **)
 
 let pair_with_vars e =
-  ((vars_szbexp e), e)
+  ((vars_azbexp e), e)
 
-(** val simplify_pspec_vars_cache : pspec -> pspec **)
+(** val simplify_arep_vars_cache : arep -> arep **)
 
-let simplify_pspec_vars_cache s =
-  let vs_ps = map pair_with_vars s.ppremises in
-  let vs_q = pair_with_vars s.pconseq in
-  let (vs_ps', vs_q') = simplify_pspec_vars_cache_rec [] vs_ps vs_q in
-  { ppremises = (snd (split vs_ps')); pconseq = (snd vs_q') }
+let simplify_arep_vars_cache s =
+  let vs_ps = map pair_with_vars s.apremises in
+  let vs_q = pair_with_vars s.aconseq in
+  let (vs_ps', vs_q') = simplify_arep_vars_cache_rec [] vs_ps vs_q in
+  { apremises = (snd (split vs_ps')); aconseq = (snd vs_q') }
 
-(** val split_zbexp : SSA.SSA.ebexp -> szbexp list **)
+(** val split_zbexp : SSA.SSA.ebexp -> azbexp list **)
 
 let rec split_zbexp = function
 | DSL.Etrue -> []
@@ -211,20 +211,19 @@ let rec split_zbexp = function
 | DSL.Eeqmod (e1, e2, p) -> (Seqmod (e1, e2, p)) :: []
 | DSL.Eand (e1, e2) -> cat (split_zbexp e1) (split_zbexp e2)
 
-(** val pspecs_of_zspec : ZSSA.ZSSA.zspec -> pspec list **)
+(** val areps_of_rep : ZSSA.ZSSA.rep -> arep list **)
 
-let pspecs_of_zspec s =
-  let premises = split_zbexp s.ZSSA.ZSSA.zspre in
-  let conseqs = split_zbexp s.ZSSA.ZSSA.zspost in
-  map (fun conseq -> { ppremises = premises; pconseq = conseq }) conseqs
+let areps_of_rep s =
+  let premises = split_zbexp s.ZSSA.ZSSA.premise in
+  let conseqs = split_zbexp s.ZSSA.ZSSA.conseq in
+  map (fun conseq0 -> { apremises = premises; aconseq = conseq0 }) conseqs
 
-(** val pspecs_of_zspec_simplified :
-    options -> ZSSA.ZSSA.zspec -> pspec list **)
+(** val areps_of_rep_simplified : options -> ZSSA.ZSSA.rep -> arep list **)
 
-let pspecs_of_zspec_simplified o s =
+let areps_of_rep_simplified o s =
   if o.vars_cache_in_rewrite_assignments
-  then map simplify_pspec_vars_cache (pspecs_of_zspec s)
-  else map simplify_pspec (pspecs_of_zspec s)
+  then map simplify_arep_vars_cache (areps_of_rep s)
+  else map simplify_arep (areps_of_rep s)
 
 (** val coq_Znorm_subst : coq_Z coq_PExpr -> coq_Z coq_Pol **)
 
@@ -291,7 +290,7 @@ let rec zpexpr_of_zexp g t0 = function
   let (p0, e4) = zpexpr_of_zexp g1 t1 e2 in (p0, (zpexpr_of_ebinop op e3 e4))
 
 (** val zpexpr_of_premise :
-    positive -> positive SSAVM.t -> szbexp -> (positive * positive
+    positive -> positive SSAVM.t -> azbexp -> (positive * positive
     SSAVM.t) * coq_Z coq_PExpr **)
 
 let zpexpr_of_premise g t0 = function
@@ -310,7 +309,7 @@ let zpexpr_of_premise g t0 = function
   p3)))))
 
 (** val zpexprs_of_premises :
-    positive -> positive SSAVM.t -> szbexp list -> (positive * positive
+    positive -> positive SSAVM.t -> azbexp list -> (positive * positive
     SSAVM.t) * coq_Z coq_PExpr list **)
 
 let rec zpexprs_of_premises g t0 = function
@@ -322,7 +321,7 @@ let rec zpexprs_of_premises g t0 = function
   (p0, (es_hd :: es_tl))
 
 (** val zpexpr_of_conseq :
-    positive -> positive SSAVM.t -> szbexp -> ((positive * positive
+    positive -> positive SSAVM.t -> azbexp -> ((positive * positive
     SSAVM.t) * coq_Z coq_PExpr) * coq_Z coq_PExpr **)
 
 let zpexpr_of_conseq g t0 = function
@@ -337,14 +336,14 @@ let zpexpr_of_conseq g t0 = function
   let (g2, t2) = p1 in
   let (p2, p3) = zpexpr_of_zexp g2 t2 p in ((p2, (PEsub (e3, e4))), p3)
 
-(** val zpexprs_of_pspec :
-    pspec -> (((positive * positive SSAVM.t) * coq_Z coq_PExpr list) * coq_Z
+(** val imp_of_arep :
+    arep -> (((positive * positive SSAVM.t) * coq_Z coq_PExpr list) * coq_Z
     coq_PExpr) * coq_Z coq_PExpr **)
 
-let zpexprs_of_pspec s =
-  let (p, ps) = zpexprs_of_premises init_pos init_vm s.ppremises in
+let imp_of_arep s =
+  let (p, ps) = zpexprs_of_premises init_pos init_vm s.apremises in
   let (g_p, t_p) = p in
-  let (p0, m) = zpexpr_of_conseq g_p t_p s.pconseq in
+  let (p0, m) = zpexpr_of_conseq g_p t_p s.aconseq in
   let (p1, q) = p0 in (((p1, ps), m), q)
 
 (** val zpexpr_eqb : coq_Z coq_PExpr -> coq_Z coq_PExpr -> bool **)
@@ -371,11 +370,11 @@ let sum_polys_tr = function
 | [] -> PEO
 | hd :: tl -> sum_polys_rec hd tl
 
-(** val coefficients_checker_tr :
+(** val validate_imp_answer_tr :
     coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z coq_PExpr -> coq_Z
     coq_PExpr list -> coq_Z coq_PExpr -> bool **)
 
-let coefficients_checker_tr ps m q cs c =
+let validate_imp_answer_tr ps m q cs c =
   (&&) (eq_op nat_eqType (Obj.magic size ps) (Obj.magic size cs))
     (zpexpr_eqb q (PEadd ((sum_polys_tr (combine_coefficients_tr cs ps)),
       (PEmul (c, m)))))
