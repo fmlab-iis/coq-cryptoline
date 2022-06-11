@@ -1294,6 +1294,14 @@ Section SplitSpec.
       rewrite (IH1 Hdef1) (IH2 Hdef2). reflexivity.
   Qed.
 
+  Lemma bvz_eqi_eval_eexps E es bs zs :
+    bvz_eqi E bs zs -> are_defined (ZSSA.vars_zexps es) E ->
+    eval_eexps es E bs = ZSSA.eval_zexps es zs.
+  Proof.
+    elim: es => [| e es IH] //=. rewrite are_defined_union => Heqi /andP [Hdef1 Hdef2].
+    rewrite (bvz_eqi_eval_eexp Heqi Hdef1) (IH Heqi Hdef2). reflexivity.
+  Qed.
+
   Lemma bvz_eqi_eval_ebexp E e bs zs :
     bvz_eqi E bs zs -> are_defined (vars_ebexp e) E ->
     eval_ebexp e E bs <-> ZSSA.eval_zbexp (eands (split_eand e)) zs.
@@ -1301,10 +1309,10 @@ Section SplitSpec.
     move=> Heq. elim: e => //=.
     - move=> e1 e2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
       rewrite (bvz_eqi_eval_eexp Heq Hdef1) (bvz_eqi_eval_eexp Heq Hdef2). tauto.
-    - move=> e1 e2 e3.
-      rewrite !are_defined_union => /andP [Hdef1 /andP [Hdef2 Hdef3]].
+    - move=> e1 e2 ms.
+      rewrite !are_defined_union => /andP [Hdef1 /andP [Hdef2 Hdefms]].
       rewrite (bvz_eqi_eval_eexp Heq Hdef1) (bvz_eqi_eval_eexp Heq Hdef2)
-              (bvz_eqi_eval_eexp Heq Hdef3). tauto.
+              (bvz_eqi_eval_eexps Heq Hdefms). tauto.
     - move=> e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
       move: (IH1 Hdef1) (IH2 Hdef2) => H1 H2. split.
       + move=> [He1 He2]. apply/ZSSA.eval_zbexp_eands_cat. tauto.
@@ -1733,6 +1741,15 @@ Section SplitSpec.
       rewrite (IH1 Hnew1) (IH2 Hnew2). reflexivity.
   Qed.
 
+  Lemma algred_upd_avars_instr_eval_zexps E avn i g1 g2 zs1 zs2 es :
+    avars_newer_than avn g1 (ZSSA.vars_zexps es) ->
+    algred_upd_avars_instr E avn g1 i zs1 = (g2, zs2) ->
+    ZSSA.eval_zexps es zs1 = ZSSA.eval_zexps es zs2.
+  Proof.
+    elim: es => [| e es IH] //=. rewrite avars_newer_than_union. move=> [Hnew1 Hnew2] Hupd.
+    rewrite (algred_upd_avars_instr_eval_zexp Hnew1 Hupd) (IH Hnew2 Hupd). reflexivity.
+  Qed.
+
   Lemma algred_upd_avars_program_eval_zexp E avn p g1 g2 zs1 zs2 e :
     avars_newer_than avn g1 (ZSSA.vars_zexp e) ->
     algred_upd_avars_program E avn g1 p zs1 = (g2, zs2) ->
@@ -1748,6 +1765,15 @@ Section SplitSpec.
       exact: (algred_upd_avars_instr_eval_zexp Hnew Hhd).
   Qed.
 
+  Lemma algred_upd_avars_program_eval_zexps E avn p g1 g2 zs1 zs2 es :
+    avars_newer_than avn g1 (ZSSA.vars_zexps es) ->
+    algred_upd_avars_program E avn g1 p zs1 = (g2, zs2) ->
+    ZSSA.eval_zexps es zs1 = ZSSA.eval_zexps es zs2.
+  Proof.
+    elim: es => [| e es IH] //=. rewrite avars_newer_than_union. move=> [Hnew1 Hnew2] Hupd.
+    rewrite (algred_upd_avars_program_eval_zexp Hnew1 Hupd) (IH Hnew2 Hupd). reflexivity.
+  Qed.
+
   Lemma algred_upd_avars_eval_zexp E avn p g zs1 zs2 e :
     avars_newer_than avn g (ZSSA.vars_zexp e) ->
     algred_upd_avars E avn g p zs1 = zs2 ->
@@ -1758,6 +1784,16 @@ Section SplitSpec.
     exact: (algred_upd_avars_program_eval_zexp Hnew Hupd).
   Qed.
 
+  Lemma algred_upd_avars_eval_zexps E avn p g zs1 zs2 es :
+    avars_newer_than avn g (ZSSA.vars_zexps es) ->
+    algred_upd_avars E avn g p zs1 = zs2 ->
+    ZSSA.eval_zexps es zs1 = ZSSA.eval_zexps es zs2.
+  Proof.
+    elim: es => [| e es IH] //=. rewrite avars_newer_than_union. move=> [Hnew1 Hnew2] Hupd.
+    rewrite (algred_upd_avars_eval_zexp Hnew1 Hupd) (IH Hnew2 Hupd). reflexivity.
+  Qed.
+
+
   Lemma algred_upd_avars_instr_eval_zbexp E avn i g1 g2 zs1 zs2 e :
     avars_newer_than avn g1 (ZSSA.vars_zbexp e) ->
     algred_upd_avars_instr E avn g1 i zs1 = (g2, zs2) ->
@@ -1767,11 +1803,11 @@ Section SplitSpec.
     - move=> e1 e2 /avars_newer_than_union [Hnew1 Hnew2].
       rewrite (algred_upd_avars_instr_eval_zexp Hnew1 Hupd)
               (algred_upd_avars_instr_eval_zexp Hnew2 Hupd). done.
-    - move=> e1 e2 e3
-                /avars_newer_than_union [Hnew1 /avars_newer_than_union [Hnew2 Hnew3]].
+    - move=> e1 e2 ms
+                /avars_newer_than_union [Hnew1 /avars_newer_than_union [Hnew2 Hnewms]].
       rewrite (algred_upd_avars_instr_eval_zexp Hnew1 Hupd)
               (algred_upd_avars_instr_eval_zexp Hnew2 Hupd)
-              (algred_upd_avars_instr_eval_zexp Hnew3 Hupd). done.
+              (algred_upd_avars_instr_eval_zexps Hnewms Hupd). done.
     - move=> e1 IH1 e2 IH2 /avars_newer_than_union [Hnew1 Hnew2].
       move: (IH1 Hnew1) (IH2 Hnew2) => {IH1 IH2} H1 H2. tauto.
   Qed.
@@ -1816,6 +1852,14 @@ Section SplitSpec.
       rewrite (IH1 Hni1) (IH2 Hni2). reflexivity.
   Qed.
 
+  Lemma svar_notin_eval_zexps {zs n g avn es} :
+    svar_notin avn (ZSSA.vars_zexps es) ->
+    ZSSA.eval_zexps es (ZSSAStore.upd (avn, g) n zs) = ZSSA.eval_zexps es zs.
+  Proof.
+    elim: es => [| e es IH] //=. rewrite svar_notin_union. move=> [Hni1 Hni2].
+    rewrite (svar_notin_eval_zexp Hni1) (IH Hni2). reflexivity.
+  Qed.
+
   Lemma svar_notin_eval_zbexp zs n g avn e :
     svar_notin avn (ZSSA.vars_zbexp e) ->
     ZSSA.eval_zbexp e (ZSSAStore.upd (avn, g) n zs) <-> ZSSA.eval_zbexp e zs.
@@ -1823,9 +1867,9 @@ Section SplitSpec.
     elim: e => //=.
     - move=> e1 e2 /svar_notin_union [Hni1 Hni2].
       rewrite (svar_notin_eval_zexp Hni1) (svar_notin_eval_zexp Hni2). done.
-    - move=> e1 e2 e3 /svar_notin_union [Hni1 /svar_notin_union [Hni2 Hni3]].
+    - move=> e1 e2 ms /svar_notin_union [Hni1 /svar_notin_union [Hni2 Hnims]].
       rewrite (svar_notin_eval_zexp Hni1) (svar_notin_eval_zexp Hni2)
-              (svar_notin_eval_zexp Hni3). done.
+              (svar_notin_eval_zexps Hnims). done.
     - move=> e1 IH1 e2 IH2 /svar_notin_union [Hni1 Hni2].
       move: (IH1 Hni1) (IH2 Hni2) => H1 H2. tauto.
   Qed.
@@ -1838,6 +1882,16 @@ Section SplitSpec.
     case: i => //=; try (intros; case_pairs; reflexivity).
     move=> v tv a Hni. rewrite /algred_upd_avars_cast.
     move=> *; repeat case_pairs; try rewrite (svar_notin_eval_zexp Hni); reflexivity.
+  Qed.
+
+  Lemma svar_notin_algred_upd_avars_instr_eval_zexps E avn g1 i zs1 g2 zs2 es :
+    svar_notin avn (ZSSA.vars_zexps es) ->
+    algred_upd_avars_instr E avn g1 i zs1 = (g2, zs2) ->
+    ZSSA.eval_zexps es zs2 = ZSSA.eval_zexps es zs1.
+  Proof.
+    elim: es => [| e es IH] //=. rewrite svar_notin_union. move=> [Hni1 Hni2] Hupd.
+    rewrite (svar_notin_algred_upd_avars_instr_eval_zexp Hni1 Hupd) (IH Hni2 Hupd).
+    reflexivity.
   Qed.
 
   Lemma svar_notin_algred_upd_avars_program_eval_zexp E avn g1 p zs1 g2 zs2 e :
@@ -2884,6 +2938,16 @@ Section SplitSpec.
               (IH2 _ _ _ _ (svar_notin_union2 Hnotin)). reflexivity.
   Qed.
 
+  Lemma algred_upd_avars_eval_eexps {E avn g p bs es} :
+    svar_notin avn (vars_eexps es) ->
+    ZSSA.eval_zexps es (algred_upd_avars
+                          E avn g p (algred_store (program_succ_typenv p E) bs)) =
+    eval_eexps es (program_succ_typenv p E) bs.
+  Proof.
+    elim: es => [| e es IH] //=. rewrite svar_notin_union. move=> [Hni1 Hni2].
+    rewrite (algred_upd_avars_eval_eexp Hni1) (IH Hni2). reflexivity.
+  Qed.
+
   Lemma algred_upd_avars_eval_ebexp {E avn g p bs e} :
     svar_notin avn (vars_ebexp e) ->
     ZSSA.eval_zbexp e (algred_upd_avars
@@ -2894,11 +2958,11 @@ Section SplitSpec.
     - move=> e1 e2 E g p bs Hnotin.
       rewrite (algred_upd_avars_eval_eexp (svar_notin_union1 Hnotin))
               (algred_upd_avars_eval_eexp (svar_notin_union2 Hnotin)). done.
-    - move=> e1 e2 em E g p bs Hnotin.
+    - move=> e1 e2 ms E g p bs Hnotin.
       move: (svar_notin_union2 Hnotin) => Hnotin2m.
       rewrite (algred_upd_avars_eval_eexp (svar_notin_union1 Hnotin))
               (algred_upd_avars_eval_eexp (svar_notin_union1 Hnotin2m))
-              (algred_upd_avars_eval_eexp (svar_notin_union2 Hnotin2m)). done.
+              (algred_upd_avars_eval_eexps (svar_notin_union2 Hnotin2m)). done.
     - move=> e1 IH1 e2 IH2 E g p bs Hnotin.
       rewrite (IH1 _ _ _ _ (svar_notin_union1 Hnotin))
               (IH2 _ _ _ _ (svar_notin_union2 Hnotin)). done.

@@ -7,6 +7,7 @@ open State
 open Typ
 open Var
 open Eqtype
+open Seq
 
 type __ = Obj.t
 
@@ -717,6 +718,8 @@ module SSA :
 
   val vars_eexp : eexp -> SSAVS.t
 
+  val vars_eexps : eexp list -> SSAVS.t
+
   val eexp_eqP : eexp -> eexp -> reflect
 
   val eexp_eqMixin : eexp Equality.mixin_of
@@ -787,7 +790,7 @@ module SSA :
 
   val eeq : eexp -> eexp -> ebexp
 
-  val eeqmod : eexp -> eexp -> eexp -> ebexp
+  val eeqmod : eexp -> eexp -> eexp list -> ebexp
 
   val eand : ebexp -> ebexp -> ebexp
 
@@ -1030,6 +1033,8 @@ module SSA :
 
   val eval_eexp : eexp -> TypEnv.SSATE.env -> SSAStore.t -> coq_Z
 
+  val eval_eexps : eexp list -> TypEnv.SSATE.env -> SSAStore.t -> coq_Z list
+
   val eval_rexp : rexp -> SSAStore.t -> bits
 
   val eval_rbexp : rbexp -> SSAStore.t -> bool
@@ -1041,6 +1046,8 @@ module SSA :
   val program_succ_typenv : program -> TypEnv.SSATE.env -> TypEnv.SSATE.env
 
   val well_typed_eexp : TypEnv.SSATE.env -> eexp -> bool
+
+  val well_typed_eexps : TypEnv.SSATE.env -> eexp list -> bool
 
   val well_typed_rexp : TypEnv.SSATE.env -> rexp -> bool
 
@@ -1758,6 +1765,8 @@ module SSA :
 
   val well_formed_eexp : TypEnv.SSATE.env -> eexp -> bool
 
+  val well_formed_eexps : TypEnv.SSATE.env -> eexp list -> bool
+
   val well_formed_rexp : TypEnv.SSATE.env -> rexp -> bool
 
   val well_formed_ebexp : TypEnv.SSATE.env -> ebexp -> bool
@@ -1802,6 +1811,8 @@ val svar : ssavar -> Equality.sort
 val ssa_atom : vmap -> DSL.DSL.atom -> SSA.atom
 
 val ssa_eexp : vmap -> DSL.DSL.eexp -> SSA.eexp
+
+val ssa_eexps : vmap -> DSL.DSL.eexp list -> SSA.eexp list
 
 val ssa_rexp : vmap -> DSL.DSL.rexp -> SSA.rexp
 

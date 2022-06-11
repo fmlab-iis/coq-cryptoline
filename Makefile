@@ -19,6 +19,6 @@ clean:
 
 distclean:
 	for lib in $(LIBS); do \
-		make -C $$lib clean; \
+		make -C $$lib distclean; \
 	done
 	make -f $(COQMAKEFILE) clean

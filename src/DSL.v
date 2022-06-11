@@ -2,33 +2,16 @@
 (** Typed CryptoLine. *)
 
 From Coq Require Import List ZArith.
-From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun choice.
+From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
-From ssrlib Require Import Var SsrOrder ZAriths FSets FMaps Tactics.
+From ssrlib Require Import Var SsrOrder ZAriths FSets FMaps Tactics Seqs.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
 Delimit Scope dsl with dsl.
-
-(** Modulo. *)
-Section ZEQM.
-
-  Local Open Scope Z_scope.
-
-  Definition zeqm (x y m : Z) := exists k : Z, x - y == k * m.
-
-  Definition xchoose_zeqm (x y m : Z) (ex : zeqm x y m) : Z :=
-    xchoose ex.
-
-  Lemma xchoose_zeqm_sound x y m (ex : zeqm x y m) :
-    x - y = (xchoose_zeqm ex) * m.
-  Proof. exact: (eqP (xchooseP ex)). Qed.
-
-End ZEQM.
-
 
 Section Operators.
 
@@ -401,12 +384,12 @@ Section DSLRaw.
   Inductive ebexp : Type :=
   | Etrue
   | Eeq : eexp -> eexp -> ebexp
-  | Eeqmod : eexp -> eexp -> eexp -> ebexp
+  | Eeqmod : eexp -> eexp -> seq eexp -> ebexp
   | Eand : ebexp -> ebexp -> ebexp.
 
   Definition etrue := Etrue.
   Definition eeq e1 e2 := Eeq e1 e2.
-  Definition eeqmod e1 e2 m := Eeqmod e1 e2 m.
+  Definition eeqmod e1 e2 ms := Eeqmod e1 e2 ms.
   Definition eand b1 b2 := Eand b1 b2.
 
   Definition eands es := foldr (fun res e => eand res e) Etrue es.
@@ -421,7 +404,7 @@ Section DSLRaw.
     match e1, e2 with
     | Etrue, Etrue => true
     | Eeq e1 e2, Eeq e3 e4 => (e1 == e3) && (e2 == e4)
-    | Eeqmod e1 e2 m1, Eeqmod e3 e4 m2 => (e1 == e3) && (e2 == e4) && (m1 == m2)
+    | Eeqmod e1 e2 ms1, Eeqmod e3 e4 ms2 => (e1 == e3) && (e2 == e4) && (ms1 == ms2)
     | Eand e1 e2, Eand e3 e4 => ebexp_eqn e1 e3 && ebexp_eqn e2 e4
     | _, _ => false
     end.
@@ -614,12 +597,17 @@ Module MakeDSL
     | Ebinop op e1 e2 => VS.union (vars_eexp e1) (vars_eexp e2)
     end.
 
+  Fixpoint vars_eexps (es : seq eexp) : VS.t :=
+    match es with
+    | [::] => VS.empty
+    | e::es => VS.union (vars_eexp e) (vars_eexps es)
+    end.
+
   Definition eexp_eqP (e1 e2 : eexp) : reflect (e1 = e2) (eexp_eqn e1 e2) :=
     eexp_eqP e1 e2.
 
   Definition eexp_eqMixin := EqMixin eexp_eqP.
   Canonical eexp_eqType := Eval hnf in EqType eexp eexp_eqMixin.
-
 
 
   (* Limbs *)
@@ -690,7 +678,7 @@ Module MakeDSL
 
   Definition etrue : ebexp := @Etrue V.T.
   Definition eeq (e1 e2 : eexp) : ebexp := @Eeq V.T e1 e2.
-  Definition eeqmod (e1 e2 m : eexp) : ebexp := @Eeqmod V.T e1 e2 m.
+  Definition eeqmod (e1 e2 : eexp) (ms : seq eexp) : ebexp := @Eeqmod V.T e1 e2 ms.
   Definition eand (b1 b2 : ebexp) : ebexp := @Eand V.T b1 b2.
 
   Definition eands (es : seq ebexp) : ebexp := @eands V.T es.
@@ -701,8 +689,8 @@ Module MakeDSL
     match e with
     | Etrue => VS.empty
     | Eeq e1 e2 => VS.union (vars_eexp e1) (vars_eexp e2)
-    | Eeqmod e1 e2 m =>
-      VS.union (vars_eexp e1) (VS.union (vars_eexp e2) (vars_eexp m))
+    | Eeqmod e1 e2 ms =>
+      VS.union (vars_eexp e1) (VS.union (vars_eexp e2) (vars_eexps ms))
     | Eand e1 e2 => VS.union (vars_ebexp e1) (vars_ebexp e2)
     end.
 
@@ -1321,6 +1309,9 @@ Module MakeDSL
     | Ebinop op e1 e2 => eval_ebinop op (eval_eexp e1 te s) (eval_eexp e2 te s)
     end.
 
+  Definition eval_eexps (es : seq eexp) (te : TE.env) (s : S.t) : seq Z :=
+    map (fun e => eval_eexp e te s) es.
+
   Fixpoint eval_rexp (e : rexp) (s : S.t) : bits :=
     match e with
     | Rvar v => S.acc v s
@@ -1335,8 +1326,8 @@ Module MakeDSL
     match e with
     | Etrue => True
     | Eeq e1 e2 => eval_eexp e1 te s = eval_eexp e2 te s
-    | Eeqmod e1 e2 p =>
-      zeqm (eval_eexp e1 te s) (eval_eexp e2 te s) (eval_eexp p te s)
+    | Eeqmod e1 e2 ms =>
+      zeqms (eval_eexp e1 te s) (eval_eexp e2 te s) (eval_eexps ms te s)
     | Eand e1 e2 => eval_ebexp e1 te s /\ eval_ebexp e2 te s
     end.
 
@@ -1690,7 +1681,7 @@ Module MakeDSL
     elim: e => /=.
     - done.
     - move=> e1 e2 H. apply: (H (Eeq e1 e2)). by rewrite mem_seq1 eqxx.
-    - move=> e1 e2 m H. apply: (H (Eeqmod e1 e2 m)). by rewrite mem_seq1 eqxx.
+    - move=> e1 e2 ms H. apply: (H (Eeqmod e1 e2 ms)). by rewrite mem_seq1 eqxx.
     - move=> e1 IH1 e2 IH2 H; split.
       + apply: IH1 => se Hin. apply: H. by rewrite mem_cat Hin orTb.
       + apply: IH2 => se Hin. apply: H. by rewrite mem_cat Hin orbT.
@@ -1856,6 +1847,12 @@ Module MakeDSL
     | Ebinop op e1 e2 => (well_typed_eexp te e1) && (well_typed_eexp te e2)
     end.
 
+  Fixpoint well_typed_eexps (te : TE.env) (es : seq eexp) : bool :=
+    match es with
+    | [::] => true
+    | e::es => (well_typed_eexp te e) && (well_typed_eexps te es)
+    end.
+
   Fixpoint well_typed_rexp (te : TE.env) (e : rexp) : bool :=
     match e with
     | Rvar v => 0 < TE.vsize v te
@@ -1875,8 +1872,8 @@ Module MakeDSL
     match e with
     | Etrue => true
     | Eeq e1 e2 => (well_typed_eexp te e1) && (well_typed_eexp te e2)
-    | Eeqmod e1 e2 p =>
-      (well_typed_eexp te e1) && (well_typed_eexp te e2) && (well_typed_eexp te p)
+    | Eeqmod e1 e2 ms =>
+      (well_typed_eexp te e1) && (well_typed_eexp te e2) && (well_typed_eexps te ms)
     | Eand e1 e2 => (well_typed_ebexp te e1) && (well_typed_ebexp te e2)
     end.
 
@@ -1972,11 +1969,16 @@ Module MakeDSL
     elim: e => //=. move=> op e1 Hwt1 e2 Hwt2. by rewrite Hwt1 Hwt2.
   Qed.
 
+  Lemma well_typed_eexps_true E es : well_typed_eexps E es.
+  Proof.
+    elim: es => [| e es IH] //=. by rewrite well_typed_eexp_true IH.
+  Qed.
+
   Lemma well_typed_ebexp_true E e : well_typed_ebexp E e.
   Proof.
     elim: e => //=.
     - move=> e1 e2. by rewrite !well_typed_eexp_true.
-    - move=> e1 e2 e3. by rewrite !well_typed_eexp_true.
+    - move=> e1 e2 ms. by rewrite !well_typed_eexp_true well_typed_eexps_true.
     - move=> e1 Hwt1 e2 Hwt2. by rewrite Hwt1 Hwt2.
   Qed.
 
@@ -2103,6 +2105,12 @@ Module MakeDSL
 
   Definition well_formed_eexp (te : TE.env) (e : eexp) :=
     are_defined (vars_eexp e) te && well_typed_eexp te e.
+
+  Fixpoint well_formed_eexps (te : TE.env) (es : seq eexp) :=
+    match es with
+    | [::] => true
+    | e::es => (well_formed_eexp te e) && (well_formed_eexps te es)
+    end.
 
   Definition well_formed_rexp (te : TE.env) (e : rexp) :=
     are_defined (vars_rexp e) te && well_typed_rexp te e.
@@ -2693,6 +2701,17 @@ Module MakeDSL
     - exact: (H0 _ _ H1 H3 Hwte1).
   Qed.
 
+  Lemma well_typed_eexps_submap es te1 te2:
+    TELemmas.submap te1 te2 ->
+    are_defined (vars_eexps es) te1 ->
+    well_typed_eexps te1 es ->
+    well_typed_eexps te2 es.
+  Proof.
+    elim: es => [| e es IH] //=. move=> Hsub Hdef /andP [Hwell1 Hwell2].
+    rewrite are_defined_union in Hdef. move/andP: Hdef => [Hdef1 Hdef2].
+    by rewrite (well_typed_eexp_submap Hsub Hdef1 Hwell1) (IH Hsub Hdef2 Hwell2).
+  Qed.
+
   Lemma well_typed_ebexp_submap e te1 te2:
     TELemmas.submap te1 te2 ->
     are_defined (vars_ebexp e) te1 ->
@@ -2709,7 +2728,7 @@ Module MakeDSL
          apply/andP; split; [apply/andP; split |].
          * exact: (well_typed_eexp_submap H Hdef1 Hwte).
          * exact: (well_typed_eexp_submap H Hdef01 Hwte0).
-         * exact: (well_typed_eexp_submap H Hdef11 Hwte1).
+         * exact: (well_typed_eexps_submap H Hdef11 Hwte1).
     - move/andP: H3 => [Hwte Hwte0]. rewrite are_defined_union in H2.
       move/andP: H2 => [Hdef1 Hdef2]. apply/andP. split.
       + exact: (H _ _ H1 Hdef1 Hwte).
@@ -2842,6 +2861,13 @@ Module MakeDSL
     move=> Hsubm /andP [Hdef1 Hwt1]. rewrite /well_formed_eexp.
     rewrite (are_defined_submap Hsubm Hdef1)
             (well_typed_eexp_submap Hsubm Hdef1 Hwt1). done.
+  Qed.
+
+  Lemma well_formed_eexps_submap E1 E2 es :
+    TELemmas.submap E1 E2 -> well_formed_eexps E1 es -> well_formed_eexps E2 es.
+  Proof.
+    elim: es => [| e es IH] //=. move=> Hsub /andP [Hwf1 Hwf2].
+    by rewrite (well_formed_eexp_submap Hsub Hwf1) (IH Hsub Hwf2).
   Qed.
 
   Lemma well_formed_ebexp_submap E1 E2 e :
@@ -3274,6 +3300,16 @@ Module MakeDSL
       rewrite (IH1 Hdef1) (IH2 Hdef2). reflexivity.
   Qed.
 
+  Lemma submap_eval_eexps {E1 E2 es s} :
+    TELemmas.submap E1 E2 ->
+    are_defined (vars_eexps es) E1 ->
+    eval_eexps es E1 s = eval_eexps es E2 s.
+  Proof.
+    elim: es => [| e es IH] //=. move=> Hsub. rewrite are_defined_union.
+    move/andP => [Hdef1 Hdef2]. rewrite (submap_eval_eexp Hsub Hdef1).
+    rewrite (IH Hsub Hdef2). reflexivity.
+  Qed.
+
   Lemma submap_eval_ebexp {E1 E2 e s} :
     TELemmas.submap E1 E2 ->
     are_defined (vars_ebexp e) E1 ->
@@ -3282,9 +3318,9 @@ Module MakeDSL
     move=> Hsub. elim: e => //=.
     - move=> e1 e2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
       rewrite (submap_eval_eexp Hsub Hdef1) (submap_eval_eexp Hsub Hdef2). done.
-    - move=> e1 e2 em. rewrite !are_defined_union => /andP [Hdef1 /andP [Hdef2 Hdefm]].
+    - move=> e1 e2 ms. rewrite !are_defined_union => /andP [Hdef1 /andP [Hdef2 Hdefms]].
       rewrite (submap_eval_eexp Hsub Hdef1) (submap_eval_eexp Hsub Hdef2)
-              (submap_eval_eexp Hsub Hdefm). done.
+              (submap_eval_eexps Hsub Hdefms). done.
     - move=> e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
       move: (IH1 Hdef1) (IH2 Hdef2) => [H1 H2] [H3 H4]. split; move => [H5 H6].
       + exact: (conj (H1 H5) (H3 H6)).
@@ -4179,6 +4215,15 @@ Module MakeDSL
         rewrite (IH1 Hdef1 Heqi) (IH2 Hdef2 Heqi). reflexivity.
     Qed.
 
+    Lemma bvs_eqi_eval_eexps E es s1 s2 :
+      are_defined (vars_eexps es) E -> bvs_eqi E s1 s2 ->
+      eval_eexps es E s1 = eval_eexps es E s2.
+    Proof.
+      elim: es => [| e es IH] //=. rewrite are_defined_union.
+      move/andP => [Hdef1 Hdef2] Heqi. rewrite (bvs_eqi_eval_eexp Hdef1 Heqi).
+      rewrite (IH Hdef2 Heqi). reflexivity.
+    Qed.
+
     Lemma bvs_eqi_eval_ebexp E e s1 s2 :
       are_defined (vars_ebexp e) E -> bvs_eqi E s1 s2 ->
       eval_ebexp e E s1 <-> eval_ebexp e E s2.
@@ -4187,10 +4232,10 @@ Module MakeDSL
       - move=> e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
         move/andP: Hdef => [Hdef1 Hdef2].
         rewrite (bvs_eqi_eval_eexp Hdef1 Heqi) (bvs_eqi_eval_eexp Hdef2 Heqi). done.
-      - move=> e1 e2 e3 Hdef Heqi. repeat rewrite are_defined_union in Hdef.
-        move/andP: Hdef => [Hdef1 /andP [Hdef2 Hdef3]].
+      - move=> e1 e2 ms Hdef Heqi. repeat rewrite are_defined_union in Hdef.
+        move/andP: Hdef => [Hdef1 /andP [Hdef2 Hdefms]].
         rewrite (bvs_eqi_eval_eexp Hdef1 Heqi) (bvs_eqi_eval_eexp Hdef2 Heqi)
-                (bvs_eqi_eval_eexp Hdef3 Heqi). done.
+                (bvs_eqi_eval_eexps Hdefms Heqi). done.
       - move=> e1 IH1 e2 IH2 Hdef Heqi. rewrite are_defined_union in Hdef.
         move/andP: Hdef => [Hdef1 Hdef2]. move: (IH1 Hdef1 Heqi) (IH2 Hdef2 Heqi).
         tauto.
@@ -4432,6 +4477,15 @@ Module MakeDSL
         rewrite (IH1 Hdef1) (IH2 Hdef2). reflexivity.
     Qed.
 
+    Lemma force_conform_eval_eexps E1 E2 es s :
+       TELemmas.submap E1 E2 -> are_defined (vars_eexps es) E1 ->
+      eval_eexps es E2 (force_conform E1 E2 s) = eval_eexps es E1 s.
+    Proof.
+      elim: es => [| e es IH] //=. rewrite are_defined_union.
+      move=> Hsub /andP [Hdef1 Hdef2]. rewrite (force_conform_eval_eexp s Hsub Hdef1).
+      rewrite (IH Hsub Hdef2). reflexivity.
+    Qed.
+
     Lemma force_conform_eval_ebexp E1 E2 e s :
       TELemmas.submap E1 E2 -> are_defined (vars_ebexp e) E1 ->
       eval_ebexp e E2 (force_conform E1 E2 s) <-> eval_ebexp e E1 s.
@@ -4441,11 +4495,11 @@ Module MakeDSL
         rewrite (force_conform_eval_eexp _ Hsub Hdef1)
                 (force_conform_eval_eexp _ Hsub Hdef2).
         done.
-      - move=> e1 e2 e3.
-        rewrite !are_defined_union => /andP [Hdef1 /andP [Hdef2 Hdef3]].
+      - move=> e1 e2 ms.
+        rewrite !are_defined_union => /andP [Hdef1 /andP [Hdef2 Hdefms]].
         rewrite (force_conform_eval_eexp _ Hsub Hdef1)
                 (force_conform_eval_eexp _ Hsub Hdef2)
-                (force_conform_eval_eexp _ Hsub Hdef3). done.
+                (force_conform_eval_eexps _ Hsub Hdefms). done.
       - move=> e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
         move: (IH1 Hdef1) (IH2 Hdef2) => [H1 H2] [H3 H4]. tauto.
     Qed.

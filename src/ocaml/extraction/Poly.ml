@@ -14,7 +14,7 @@ open Ssrnat
 
 type azbexp =
 | Seq of SSA.SSA.eexp * SSA.SSA.eexp
-| Seqmod of SSA.SSA.eexp * SSA.SSA.eexp * SSA.SSA.eexp
+| Seqmod of SSA.SSA.eexp * SSA.SSA.eexp * SSA.SSA.eexp list
 
 type arep = { apremises : azbexp list; aconseq : azbexp }
 
@@ -30,12 +30,18 @@ let rec zexp_subst p r e =
           DSL.Ebinop (op, (zexp_subst p r e1), (zexp_subst p r e2))
         | _ -> e)
 
+(** val zexps_subst :
+    SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp list -> DSL.eexp list **)
+
+let zexps_subst p r es =
+  map (zexp_subst p r) es
+
 (** val azbexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> azbexp -> azbexp **)
 
 let azbexp_subst p r = function
 | Seq (e1, e2) -> Seq ((zexp_subst p r e1), (zexp_subst p r e2))
-| Seqmod (e1, e2, e3) ->
-  Seqmod ((zexp_subst p r e1), (zexp_subst p r e2), (zexp_subst p r e3))
+| Seqmod (e1, e2, ms) ->
+  Seqmod ((zexp_subst p r e1), (zexp_subst p r e2), (zexps_subst p r ms))
 
 (** val subst_azbexps :
     SSA.SSA.eexp -> SSA.SSA.eexp -> azbexp list -> azbexp list **)
@@ -186,9 +192,9 @@ let rec simplify_arep_vars_cache_rec visited premises conseq0 =
 
 let vars_azbexp = function
 | Seq (e1, e2) -> SSAVS.union (SSA.SSA.vars_eexp e1) (SSA.SSA.vars_eexp e2)
-| Seqmod (e1, e2, e3) ->
+| Seqmod (e1, e2, ms) ->
   SSAVS.union (SSAVS.union (SSA.SSA.vars_eexp e1) (SSA.SSA.vars_eexp e2))
-    (SSA.SSA.vars_eexp e3)
+    (SSA.SSA.vars_eexps ms)
 
 (** val pair_with_vars : azbexp -> SSAVS.t * azbexp **)
 
@@ -208,7 +214,7 @@ let simplify_arep_vars_cache s =
 let rec split_zbexp = function
 | DSL.Etrue -> []
 | DSL.Eeq (e1, e2) -> (Seq (e1, e2)) :: []
-| DSL.Eeqmod (e1, e2, p) -> (Seqmod (e1, e2, p)) :: []
+| DSL.Eeqmod (e1, e2, ms) -> (Seqmod (e1, e2, ms)) :: []
 | DSL.Eand (e1, e2) -> cat (split_zbexp e1) (split_zbexp e2)
 
 (** val areps_of_rep : ZSSA.ZSSA.rep -> arep list **)
@@ -234,6 +240,17 @@ let coq_Znorm_subst =
 
 let coq_ZPeq =
   coq_Peq Z.eqb
+
+(** val peadds : 'a1 coq_PExpr list -> 'a1 coq_PExpr **)
+
+let peadds es =
+  foldl (fun x x0 -> PEadd (x, x0)) PEO es
+
+(** val pemuls :
+    'a1 coq_PExpr list -> 'a1 coq_PExpr list -> 'a1 coq_PExpr list **)
+
+let pemuls es1 es2 =
+  mapr (fun pat -> let (x, y) = pat in PEmul (x, y)) (zipr es1 es2)
 
 (** val zpexpr_is_zero : coq_Z coq_PExpr -> bool **)
 
@@ -289,6 +306,25 @@ let rec zpexpr_of_zexp g t0 = function
   let (g1, t1) = p in
   let (p0, e4) = zpexpr_of_zexp g1 t1 e2 in (p0, (zpexpr_of_ebinop op e3 e4))
 
+(** val zpexprs_of_zexps :
+    positive -> positive SSAVM.t -> SSA.SSA.eexp list -> (positive * positive
+    SSAVM.t) * coq_Z coq_PExpr list **)
+
+let rec zpexprs_of_zexps g t0 = function
+| [] -> ((g, t0), [])
+| hd :: tl ->
+  let (p, pe_hd) = zpexpr_of_zexp g t0 hd in
+  let (g_hd, t_hd) = p in
+  let (p0, pe_tl) = zpexprs_of_zexps g_hd t_hd tl in (p0, (pe_hd :: pe_tl))
+
+(** val pvars : positive -> int -> coq_Z coq_PExpr list **)
+
+let rec pvars g n =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> [])
+    (fun m -> (PEX g) :: (pvars (Pos.add g Coq_xH) m))
+    n
+
 (** val zpexpr_of_premise :
     positive -> positive SSAVM.t -> azbexp -> (positive * positive
     SSAVM.t) * coq_Z coq_PExpr **)
@@ -298,15 +334,20 @@ let zpexpr_of_premise g t0 = function
   let (p, e3) = zpexpr_of_zexp g t0 e1 in
   let (g1, t1) = p in
   let (p0, e4) = zpexpr_of_zexp g1 t1 e2 in (p0, (PEsub (e3, e4)))
-| Seqmod (e1, e2, p) ->
-  let (p0, e3) = zpexpr_of_zexp g t0 e1 in
-  let (g1, t1) = p0 in
-  let (p1, e4) = zpexpr_of_zexp g1 t1 e2 in
-  let (g2, t2) = p1 in
-  let (p2, p3) = zpexpr_of_zexp g2 t2 p in
-  let (gp, tp) = p2 in
-  (((Pos.add gp Coq_xH), tp), (PEsub ((PEsub (e3, e4)), (PEmul ((PEX gp),
-  p3)))))
+| Seqmod (e1, e2, ms) ->
+  let (p, e3) = zpexpr_of_zexp g t0 e1 in
+  let (g1, t1) = p in
+  let (p0, e4) = zpexpr_of_zexp g1 t1 e2 in
+  let (g2, t2) = p0 in
+  let (p1, pms) = zpexprs_of_zexps g2 t2 ms in
+  let (gms, tms) = p1 in
+  let pks = pvars gms (size ms) in
+  let g' =
+    if eq_op nat_eqType (Obj.magic size ms) (Obj.magic 0)
+    then gms
+    else Pos.add gms (Pos.of_nat (size ms))
+  in
+  ((g', tms), (PEsub ((PEsub (e3, e4)), (peadds (pemuls pks pms)))))
 
 (** val zpexprs_of_premises :
     positive -> positive SSAVM.t -> azbexp list -> (positive * positive
@@ -322,59 +363,43 @@ let rec zpexprs_of_premises g t0 = function
 
 (** val zpexpr_of_conseq :
     positive -> positive SSAVM.t -> azbexp -> ((positive * positive
-    SSAVM.t) * coq_Z coq_PExpr) * coq_Z coq_PExpr **)
+    SSAVM.t) * coq_Z coq_PExpr) * coq_Z coq_PExpr list **)
 
 let zpexpr_of_conseq g t0 = function
 | Seq (e1, e2) ->
   let (p, e3) = zpexpr_of_zexp g t0 e1 in
   let (g1, t1) = p in
-  let (p0, e4) = zpexpr_of_zexp g1 t1 e2 in ((p0, (PEsub (e3, e4))), PEO)
-| Seqmod (e1, e2, p) ->
-  let (p0, e3) = zpexpr_of_zexp g t0 e1 in
-  let (g1, t1) = p0 in
-  let (p1, e4) = zpexpr_of_zexp g1 t1 e2 in
-  let (g2, t2) = p1 in
-  let (p2, p3) = zpexpr_of_zexp g2 t2 p in ((p2, (PEsub (e3, e4))), p3)
+  let (p0, e4) = zpexpr_of_zexp g1 t1 e2 in
+  ((p0, (PEsub (e3, e4))), (PEO :: []))
+| Seqmod (e1, e2, ms) ->
+  let (p, e3) = zpexpr_of_zexp g t0 e1 in
+  let (g1, t1) = p in
+  let (p0, e4) = zpexpr_of_zexp g1 t1 e2 in
+  let (g2, t2) = p0 in
+  let (p1, pms) = zpexprs_of_zexps g2 t2 ms in ((p1, (PEsub (e3, e4))), pms)
 
 (** val imp_of_arep :
     arep -> (((positive * positive SSAVM.t) * coq_Z coq_PExpr list) * coq_Z
-    coq_PExpr) * coq_Z coq_PExpr **)
+    coq_PExpr list) * coq_Z coq_PExpr **)
 
 let imp_of_arep s =
   let (p, ps) = zpexprs_of_premises init_pos init_vm s.apremises in
   let (g_p, t_p) = p in
-  let (p0, m) = zpexpr_of_conseq g_p t_p s.aconseq in
-  let (p1, q) = p0 in (((p1, ps), m), q)
+  let (p0, ms) = zpexpr_of_conseq g_p t_p s.aconseq in
+  let (p1, q) = p0 in (((p1, ps), ms), q)
 
 (** val zpexpr_eqb : coq_Z coq_PExpr -> coq_Z coq_PExpr -> bool **)
 
 let zpexpr_eqb p1 p2 =
   coq_ZPeq (coq_Znorm_subst p1) (coq_Znorm_subst p2)
 
-(** val combine_coefficients_tr :
-    coq_Z coq_PExpr list -> coq_Z coq_PExpr list -> coq_Z coq_PExpr list **)
+(** val validate_imp_answer :
+    coq_Z coq_PExpr list -> coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z
+    coq_PExpr list -> coq_Z coq_PExpr list -> bool **)
 
-let combine_coefficients_tr cs ps =
-  mapr (fun pat -> let (c, p) = pat in PEmul (c, p)) (zip cs ps)
-
-(** val sum_polys_rec :
-    coq_Z coq_PExpr -> coq_Z coq_PExpr list -> coq_Z coq_PExpr **)
-
-let rec sum_polys_rec res = function
-| [] -> res
-| hd :: tl -> sum_polys_rec (PEadd (res, hd)) tl
-
-(** val sum_polys_tr : coq_Z coq_PExpr list -> coq_Z coq_PExpr **)
-
-let sum_polys_tr = function
-| [] -> PEO
-| hd :: tl -> sum_polys_rec hd tl
-
-(** val validate_imp_answer_tr :
-    coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z coq_PExpr -> coq_Z
-    coq_PExpr list -> coq_Z coq_PExpr -> bool **)
-
-let validate_imp_answer_tr ps m q cs c =
-  (&&) (eq_op nat_eqType (Obj.magic size ps) (Obj.magic size cs))
-    (zpexpr_eqb q (PEadd ((sum_polys_tr (combine_coefficients_tr cs ps)),
-      (PEmul (c, m)))))
+let validate_imp_answer ps ms q cps cms =
+  (&&)
+    ((&&) (eq_op nat_eqType (Obj.magic size ps) (Obj.magic size cps))
+      (eq_op nat_eqType (Obj.magic size ms) (Obj.magic size cms)))
+    (zpexpr_eqb q (PEadd ((peadds (pemuls cps ps)),
+      (peadds (pemuls cms ms)))))

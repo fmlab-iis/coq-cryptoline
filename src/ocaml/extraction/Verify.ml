@@ -24,8 +24,8 @@ let verify_rspec_algsnd s =
   ext_all_unsat cnfs
 
 (** val ext_solve_imp :
-    coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z coq_PExpr -> coq_Z
-    coq_PExpr list * coq_Z coq_PExpr **)
+    coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z coq_PExpr list -> coq_Z
+    coq_PExpr list * coq_Z coq_PExpr list **)
 
 let ext_solve_imp = External.ext_solve_imp_impl
 
@@ -33,9 +33,10 @@ let ext_solve_imp = External.ext_solve_imp_impl
 
 let verify_arep ps =
   let (p, q) = imp_of_arep ps in
-  let (p0, m) = p in
+  let (p0, ms) = p in
   let (_, ps0) = p0 in
-  let (cs, c) = ext_solve_imp ps0 q m in validate_imp_answer_tr ps0 m q cs c
+  let (cps, cms) = ext_solve_imp ps0 q ms in
+  validate_imp_answer ps0 ms q cps cms
 
 (** val verify_areps : arep list -> bool **)
 
@@ -50,40 +51,40 @@ let verify_rep o zs =
   else verify_areps (areps_of_rep zs)
 
 (** val ext_solve_imp_list :
-    ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr) list ->
-    (coq_Z coq_PExpr list * coq_Z coq_PExpr) list **)
+    ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr list) list ->
+    (coq_Z coq_PExpr list * coq_Z coq_PExpr list) list **)
 
 let ext_solve_imp_list = External.ext_solve_imp_list_impl
 
 (** val polys_of_areps :
-    arep list -> ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr)
-    list **)
+    arep list -> ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr
+    list) list **)
 
 let polys_of_areps pss =
   let f = fun ps ->
     let (p, q) = imp_of_arep ps in
-    let (p0, m) = p in let (_, ps0) = p0 in ((ps0, q), m)
+    let (p0, ms) = p in let (_, ps0) = p0 in ((ps0, q), ms)
   in
   map f pss
 
-(** val validate_imp_answer_tr_list :
-    ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr) list ->
-    (coq_Z coq_PExpr list * coq_Z coq_PExpr) list -> bool **)
+(** val validate_imp_answer_list :
+    ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr list) list ->
+    (coq_Z coq_PExpr list * coq_Z coq_PExpr list) list -> bool **)
 
-let rec validate_imp_answer_tr_list polys coefs =
+let rec validate_imp_answer_list polys coefs =
   match polys with
   | [] -> (match coefs with
            | [] -> true
            | _ :: _ -> false)
   | y :: tlp ->
-    let (y0, m) = y in
+    let (y0, ms) = y in
     let (ps, q) = y0 in
     (match coefs with
      | [] -> false
      | y1 :: tlc ->
-       let (cs, c) = y1 in
-       if validate_imp_answer_tr ps m q cs c
-       then validate_imp_answer_tr_list tlp tlc
+       let (cps, cms) = y1 in
+       if validate_imp_answer ps ms q cps cms
+       then validate_imp_answer_list tlp tlc
        else false)
 
 (** val verify_areps_list : arep list -> bool **)
@@ -92,7 +93,7 @@ let verify_areps_list pss =
   let poly_list = polys_of_areps pss in
   let coef_list = ext_solve_imp_list poly_list in
   if eq_op nat_eqType (Obj.magic size poly_list) (Obj.magic size coef_list)
-  then validate_imp_answer_tr_list poly_list coef_list
+  then validate_imp_answer_list poly_list coef_list
   else false
 
 (** val verify_rep_list : options -> ZSSA.ZSSA.rep -> bool **)

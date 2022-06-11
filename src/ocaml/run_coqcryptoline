@@ -9,7 +9,7 @@ FORK=1                     # 1
 CARRY_CONSTRAINT=0         # 0
 REWRITING=1                # 1
 VARS_CACHE_IN_REWRITING=1  # 1
-DEBUG=0                    # 0
+DEBUG=1                    # 0
 TMPDIR=.                   # .
 LOGDIR=logs                # logs
 

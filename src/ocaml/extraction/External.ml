@@ -877,19 +877,28 @@ let coq_compute_coefficients_by_lift (vars, p, gs) =
   else
     create_dummy (List.length gs)
 
-let ext_solve_imp_impl gs p m =
+let split_list_at xs i =
+  let rec helper l1_rev xs i =
+    if i <= 0 then (l1_rev, xs)
+    else match xs with
+         | [] -> (l1_rev, [])
+         | hd::tl -> helper (hd::l1_rev) tl (i - 1) in
+  let (l1_rev, l2) = helper [] xs i in
+  (List.rev l1_rev, l2)
+
+let ext_solve_imp_impl gs p ms =
   let _ = vprint ("Finding polynomial coefficients\t\t") in
   let t1 = Unix.gettimeofday() in
-  let (c_m, cs_gs) =
-	let vars = coq_vars_in_order (gs@[m]@[p]) in
+  let (c_ms, cs_gs) =
+	let vars = coq_vars_in_order (gs@ms@[p]) in
     let coefs =
-      if gs = [] && not (Poly.zpexpr_is_zero m)
-      then coq_compute_coefficients_by_div (vars, p, m)
-      else coq_compute_coefficients_by_lift (vars, p, (m::gs)) in
-	(List.hd coefs, List.tl coefs) in
+      if gs = [] && List.length ms = 1 && not (Poly.zpexpr_is_zero (List.hd ms))
+      then coq_compute_coefficients_by_div (vars, p, List.hd ms)
+      else coq_compute_coefficients_by_lift (vars, p, (List.rev_append (List.rev ms) gs)) in
+    split_list_at coefs (List.length ms) in
   let t2 = Unix.gettimeofday() in
   let _ = vprintln ("[OK]\t\t" ^ string_of_running_time t1 t2) in
-  (cs_gs, c_m)
+  (cs_gs, c_ms)
 
 
 (* ===== Find coefficients concurrently using Singular ===== *)
@@ -1045,19 +1054,20 @@ let coq_compute_coefficients_by_lift_lwt header (vars, p, gs) =
   Lwt.return (res, string_of_running_time t1 t2)
 
 let coq_compute_coefficients_lwt poly_with_id_list =
-  let mk_promise (id, ((gs, p), m)) =
-    let%lwt (c_m, cs_gs, running_time) =
-	  let%lwt vars = Lwt.return (coq_vars_in_order (gs@[m]@[p])) in
+  let mk_promise (id, ((gs, p), ms)) =
+    let%lwt (cs_ms, cs_gs, running_time) =
+	  let%lwt vars = Lwt.return (coq_vars_in_order (gs@ms@[p])) in
       let%lwt (coefs, running_time) =
-        if gs = [] && not (Poly.zpexpr_is_zero m)
-        then coq_compute_coefficients_by_div_lwt ["Polynomials #" ^ string_of_int id] (vars, p, m)
-        else coq_compute_coefficients_by_lift_lwt ["Polynomials #" ^ string_of_int id] (vars, p, (m::gs)) in
-	  Lwt.return (List.hd coefs, List.tl coefs, running_time) in
-    Lwt.return (id, cs_gs, c_m, running_time) in
-  let delivered_helper coef_list_unordered (id, cs_gs, cs_m, running_time) =
+        if gs = [] && List.length ms = 1 && not (Poly.zpexpr_is_zero (List.hd ms))
+        then coq_compute_coefficients_by_div_lwt ["Polynomials #" ^ string_of_int id] (vars, p, List.hd ms)
+        else coq_compute_coefficients_by_lift_lwt ["Polynomials #" ^ string_of_int id] (vars, p, (List.rev_append (List.rev ms) gs)) in
+      let (cs1, cs2) = split_list_at coefs (List.length ms) in
+	  Lwt.return (cs1, cs2, running_time) in
+    Lwt.return (id, cs_gs, cs_ms, running_time) in
+  let delivered_helper coef_list_unordered (id, cs_gs, cs_ms, running_time) =
     let _ = vprint ("\t Polynomials #" ^ string_of_int id ^ ":\t\t") in
     let _ = vprintln ("[DONE]\t\t" ^ running_time) in
-	(id, (cs_gs, cs_m))::coef_list_unordered in
+	(id, (cs_gs, cs_ms))::coef_list_unordered in
   let fold_fun (coef_list_unordered, pending) (id, poly) =
     if List.length pending < !jobs then
       let promise = mk_promise (id, poly) in

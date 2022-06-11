@@ -448,7 +448,7 @@ module Coq__3 = struct
  type ebexp =
  | Etrue
  | Eeq of eexp * eexp
- | Eeqmod of eexp * eexp * eexp
+ | Eeqmod of eexp * eexp * eexp list
  | Eand of ebexp * ebexp
 end
 include Coq__3
@@ -482,13 +482,14 @@ let rec ebexp_eqn var e1 e2 =
        (&&) (eq_op (eexp_eqType var) (Obj.magic e3) (Obj.magic e5))
          (eq_op (eexp_eqType var) (Obj.magic e4) (Obj.magic e6))
      | _ -> false)
-  | Eeqmod (e3, e4, m1) ->
+  | Eeqmod (e3, e4, ms1) ->
     (match e2 with
-     | Eeqmod (e5, e6, m2) ->
+     | Eeqmod (e5, e6, ms2) ->
        (&&)
          ((&&) (eq_op (eexp_eqType var) (Obj.magic e3) (Obj.magic e5))
            (eq_op (eexp_eqType var) (Obj.magic e4) (Obj.magic e6)))
-         (eq_op (eexp_eqType var) (Obj.magic m1) (Obj.magic m2))
+         (eq_op (seq_eqType (eexp_eqType var)) (Obj.magic ms1)
+           (Obj.magic ms2))
      | _ -> false)
   | Eand (e3, e4) ->
     (match e2 with
@@ -1128,6 +1129,12 @@ module MakeDSL =
   | Eunop (_, e0) -> vars_eexp e0
   | Ebinop (_, e1, e2) -> VS.union (vars_eexp e1) (vars_eexp e2)
 
+  (** val vars_eexps : eexp list -> VS.t **)
+
+  let rec vars_eexps = function
+  | [] -> VS.empty
+  | e :: es0 -> VS.union (vars_eexp e) (vars_eexps es0)
+
   (** val eexp_eqP : eexp -> eexp -> reflect **)
 
   let eexp_eqP e1 e2 =
@@ -1308,10 +1315,10 @@ module MakeDSL =
   let eeq e1 e2 =
     Eeq (e1, e2)
 
-  (** val eeqmod : eexp -> eexp -> eexp -> ebexp **)
+  (** val eeqmod : eexp -> eexp -> eexp list -> ebexp **)
 
-  let eeqmod e1 e2 m =
-    Eeqmod (e1, e2, m)
+  let eeqmod e1 e2 ms =
+    Eeqmod (e1, e2, ms)
 
   (** val eand : ebexp -> ebexp -> ebexp **)
 
@@ -1333,8 +1340,8 @@ module MakeDSL =
   let rec vars_ebexp = function
   | Etrue -> VS.empty
   | Eeq (e1, e2) -> VS.union (vars_eexp e1) (vars_eexp e2)
-  | Eeqmod (e1, e2, m) ->
-    VS.union (vars_eexp e1) (VS.union (vars_eexp e2) (vars_eexp m))
+  | Eeqmod (e1, e2, ms) ->
+    VS.union (vars_eexp e1) (VS.union (vars_eexp e2) (vars_eexps ms))
   | Eand (e1, e2) -> VS.union (vars_ebexp e1) (vars_ebexp e2)
 
   (** val ebexp_eqP : ebexp -> ebexp -> reflect **)
@@ -2014,6 +2021,11 @@ module MakeDSL =
     | Ebinop (op0, e1, e2) ->
       eval_ebinop op0 (eval_eexp e1 te s) (eval_eexp e2 te s)
 
+  (** val eval_eexps : eexp list -> TE.env -> S.t -> coq_Z list **)
+
+  let eval_eexps es te s =
+    map (fun e -> eval_eexp e te s) es
+
   (** val eval_rexp : rexp -> S.t -> bits **)
 
   let rec eval_rexp e s =
@@ -2095,6 +2107,12 @@ module MakeDSL =
   | Ebinop (_, e1, e2) -> (&&) (well_typed_eexp te e1) (well_typed_eexp te e2)
   | _ -> true
 
+  (** val well_typed_eexps : TE.env -> eexp list -> bool **)
+
+  let rec well_typed_eexps te = function
+  | [] -> true
+  | e :: es0 -> (&&) (well_typed_eexp te e) (well_typed_eexps te es0)
+
   (** val well_typed_rexp : TE.env -> rexp -> bool **)
 
   let rec well_typed_rexp te = function
@@ -2124,9 +2142,9 @@ module MakeDSL =
   let rec well_typed_ebexp te = function
   | Etrue -> true
   | Eeq (e1, e2) -> (&&) (well_typed_eexp te e1) (well_typed_eexp te e2)
-  | Eeqmod (e1, e2, p) ->
+  | Eeqmod (e1, e2, ms) ->
     (&&) ((&&) (well_typed_eexp te e1) (well_typed_eexp te e2))
-      (well_typed_eexp te p)
+      (well_typed_eexps te ms)
   | Eand (e1, e2) -> (&&) (well_typed_ebexp te e1) (well_typed_ebexp te e2)
 
   (** val well_typed_rbexp : TE.env -> rbexp -> bool **)
@@ -2429,6 +2447,12 @@ module MakeDSL =
 
   let well_formed_eexp te e =
     (&&) (are_defined (vars_eexp e) te) (well_typed_eexp te e)
+
+  (** val well_formed_eexps : TE.env -> eexp list -> bool **)
+
+  let rec well_formed_eexps te = function
+  | [] -> true
+  | e :: es0 -> (&&) (well_formed_eexp te e) (well_formed_eexps te es0)
 
   (** val well_formed_rexp : TE.env -> rexp -> bool **)
 

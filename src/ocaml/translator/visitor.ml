@@ -112,11 +112,15 @@ let rec visit_ebexp m g e =
       let (m', g', coq_e1') = visit_eexp m g e1 in
       let (m'', g'', coq_e2') = visit_eexp m' g' e2 in
       (m'', g'', Extraction.DSL.Eeq (coq_e1', coq_e2'))
-  | Ast.Cryptoline.Eeqmod (e1, e2, modulus) ->
+  | Ast.Cryptoline.Eeqmod (e1, e2, mes) ->
       let (m', g', coq_e1') = visit_eexp m g e1 in
       let (m'', g'', coq_e2') = visit_eexp m' g' e2 in
-      let (m''', g''', coq_m') = visit_eexp m'' g'' modulus in
-      (m''', g''', Extraction.DSL.Eeqmod (coq_e1', coq_e2', coq_m'))
+      let (m''', g''', coq_mes_rev') = List.fold_left (
+                                           fun (m, g, ms_rev) me ->
+                                           let (m', g', me') = visit_eexp m g me in
+                                           (m', g', me'::ms_rev)
+                                         ) (m'', g'', []) mes in
+      (m''', g''', Extraction.DSL.Eeqmod (coq_e1', coq_e2', List.rev coq_mes_rev'))
   | Ast.Cryptoline.Eand (e1, e2) ->
       let (m', g', coq_e1') = visit_ebexp m g e1 in
       let (m'', g'', coq_e2') = visit_ebexp m' g' e2 in

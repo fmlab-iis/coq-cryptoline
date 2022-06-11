@@ -14,11 +14,14 @@ open Ssrnat
 
 type azbexp =
 | Seq of SSA.SSA.eexp * SSA.SSA.eexp
-| Seqmod of SSA.SSA.eexp * SSA.SSA.eexp * SSA.SSA.eexp
+| Seqmod of SSA.SSA.eexp * SSA.SSA.eexp * SSA.SSA.eexp list
 
 type arep = { apremises : azbexp list; aconseq : azbexp }
 
 val zexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp -> DSL.eexp
+
+val zexps_subst :
+  SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp list -> DSL.eexp list
 
 val azbexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> azbexp -> azbexp
 
@@ -58,6 +61,10 @@ val coq_Znorm_subst : coq_Z coq_PExpr -> coq_Z coq_Pol
 
 val coq_ZPeq : coq_Z coq_Pol -> coq_Z coq_Pol -> bool
 
+val peadds : 'a1 coq_PExpr list -> 'a1 coq_PExpr
+
+val pemuls : 'a1 coq_PExpr list -> 'a1 coq_PExpr list -> 'a1 coq_PExpr list
+
 val zpexpr_is_zero : coq_Z coq_PExpr -> bool
 
 val init_pos : positive
@@ -77,6 +84,12 @@ val zpexpr_of_zexp :
   positive -> positive SSAVM.t -> SSA.SSA.eexp -> (positive * positive
   SSAVM.t) * coq_Z coq_PExpr
 
+val zpexprs_of_zexps :
+  positive -> positive SSAVM.t -> SSA.SSA.eexp list -> (positive * positive
+  SSAVM.t) * coq_Z coq_PExpr list
+
+val pvars : positive -> int -> coq_Z coq_PExpr list
+
 val zpexpr_of_premise :
   positive -> positive SSAVM.t -> azbexp -> (positive * positive
   SSAVM.t) * coq_Z coq_PExpr
@@ -87,21 +100,14 @@ val zpexprs_of_premises :
 
 val zpexpr_of_conseq :
   positive -> positive SSAVM.t -> azbexp -> ((positive * positive
-  SSAVM.t) * coq_Z coq_PExpr) * coq_Z coq_PExpr
+  SSAVM.t) * coq_Z coq_PExpr) * coq_Z coq_PExpr list
 
 val imp_of_arep :
   arep -> (((positive * positive SSAVM.t) * coq_Z coq_PExpr list) * coq_Z
-  coq_PExpr) * coq_Z coq_PExpr
+  coq_PExpr list) * coq_Z coq_PExpr
 
 val zpexpr_eqb : coq_Z coq_PExpr -> coq_Z coq_PExpr -> bool
 
-val combine_coefficients_tr :
-  coq_Z coq_PExpr list -> coq_Z coq_PExpr list -> coq_Z coq_PExpr list
-
-val sum_polys_rec : coq_Z coq_PExpr -> coq_Z coq_PExpr list -> coq_Z coq_PExpr
-
-val sum_polys_tr : coq_Z coq_PExpr list -> coq_Z coq_PExpr
-
-val validate_imp_answer_tr :
-  coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z coq_PExpr -> coq_Z
-  coq_PExpr list -> coq_Z coq_PExpr -> bool
+val validate_imp_answer :
+  coq_Z coq_PExpr list -> coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z
+  coq_PExpr list -> coq_Z coq_PExpr list -> bool

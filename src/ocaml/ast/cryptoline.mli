@@ -187,12 +187,12 @@ val subst_rexp : (var * rexp) list -> rexp -> rexp
 type ebexp =
   | Etrue
   | Eeq of eexp * eexp
-  | Eeqmod of eexp * eexp * eexp
+  | Eeqmod of eexp * eexp * eexp list
   | Eand of ebexp * ebexp
 
 val etrue : ebexp
 val eeq : eexp -> eexp -> ebexp
-val eeqmod : eexp -> eexp -> eexp -> ebexp
+val eeqmod : eexp -> eexp -> eexp list -> ebexp
 val eand : ebexp -> ebexp -> ebexp
 val eands : ebexp list -> ebexp
 

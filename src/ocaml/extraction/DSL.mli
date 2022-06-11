@@ -157,7 +157,7 @@ module Coq__3 : sig
  type ebexp =
  | Etrue
  | Eeq of eexp * eexp
- | Eeqmod of eexp * eexp * eexp
+ | Eeqmod of eexp * eexp * eexp list
  | Eand of ebexp * ebexp
 end
 include module type of struct include Coq__3 end
@@ -1212,6 +1212,8 @@ module MakeDSL :
 
   val vars_eexp : eexp -> VS.t
 
+  val vars_eexps : eexp list -> VS.t
+
   val eexp_eqP : eexp -> eexp -> reflect
 
   val eexp_eqMixin : eexp Equality.mixin_of
@@ -1282,7 +1284,7 @@ module MakeDSL :
 
   val eeq : eexp -> eexp -> ebexp
 
-  val eeqmod : eexp -> eexp -> eexp -> ebexp
+  val eeqmod : eexp -> eexp -> eexp list -> ebexp
 
   val eand : ebexp -> ebexp -> ebexp
 
@@ -1513,6 +1515,8 @@ module MakeDSL :
 
   val eval_eexp : eexp -> TE.env -> S.t -> coq_Z
 
+  val eval_eexps : eexp list -> TE.env -> S.t -> coq_Z list
+
   val eval_rexp : rexp -> S.t -> bits
 
   val eval_rbexp : rbexp -> S.t -> bool
@@ -1524,6 +1528,8 @@ module MakeDSL :
   val program_succ_typenv : program -> TE.env -> TE.env
 
   val well_typed_eexp : TE.env -> eexp -> bool
+
+  val well_typed_eexps : TE.env -> eexp list -> bool
 
   val well_typed_rexp : TE.env -> rexp -> bool
 
@@ -2168,6 +2174,8 @@ module MakeDSL :
   val find_non_well_formed_instr : TE.env -> program -> instr option
 
   val well_formed_eexp : TE.env -> eexp -> bool
+
+  val well_formed_eexps : TE.env -> eexp list -> bool
 
   val well_formed_rexp : TE.env -> rexp -> bool
 
@@ -2863,6 +2871,8 @@ module DSL :
 
   val vars_eexp : eexp -> VS.t
 
+  val vars_eexps : eexp list -> VS.t
+
   val eexp_eqP : eexp -> eexp -> reflect
 
   val eexp_eqMixin : eexp Equality.mixin_of
@@ -2933,7 +2943,7 @@ module DSL :
 
   val eeq : eexp -> eexp -> ebexp
 
-  val eeqmod : eexp -> eexp -> eexp -> ebexp
+  val eeqmod : eexp -> eexp -> eexp list -> ebexp
 
   val eand : ebexp -> ebexp -> ebexp
 
@@ -3171,6 +3181,8 @@ module DSL :
 
   val eval_eexp : eexp -> TypEnv.TE.env -> Store.t -> coq_Z
 
+  val eval_eexps : eexp list -> TypEnv.TE.env -> Store.t -> coq_Z list
+
   val eval_rexp : rexp -> Store.t -> bits
 
   val eval_rbexp : rbexp -> Store.t -> bool
@@ -3182,6 +3194,8 @@ module DSL :
   val program_succ_typenv : program -> TypEnv.TE.env -> TypEnv.TE.env
 
   val well_typed_eexp : TypEnv.TE.env -> eexp -> bool
+
+  val well_typed_eexps : TypEnv.TE.env -> eexp list -> bool
 
   val well_typed_rexp : TypEnv.TE.env -> rexp -> bool
 
@@ -3871,6 +3885,8 @@ module DSL :
   val find_non_well_formed_instr : TypEnv.TE.env -> program -> instr option
 
   val well_formed_eexp : TypEnv.TE.env -> eexp -> bool
+
+  val well_formed_eexps : TypEnv.TE.env -> eexp list -> bool
 
   val well_formed_rexp : TypEnv.TE.env -> rexp -> bool
 

@@ -1,4 +1,6 @@
 
+(** Verification procedures *)
+
 From Coq Require Import List ZArith.
 From mathcomp Require Import ssreflect ssrbool ssrnat eqtype seq ssrfun.
 From ssrlib Require Import Var Types SsrOrder Seqs Tactics.
@@ -63,20 +65,20 @@ Section Verification.
 
 
   (** Solve an ideal membership problems by external computer algebra systems.
-      An ideal membership problem is given as a tuple (ps, m, q). The problem
-      is to check if q is in the ideal of m::ps, i.e., there are cs and c such
-      that q = cs * ps + c * m. ext_solve_imp returns such (cs, c). *)
+      An ideal membership problem is given as a tuple (ps, ms, q). The problem
+      is to check if q is in the ideal of ms++ps, i.e., there are cps and cms such
+      that q = cps * ps + cms * ms. ext_solve_imp returns such (cps, cms). *)
   Parameter ext_solve_imp :
-    seq (PExpr Z) -> PExpr Z -> PExpr Z -> seq (PExpr Z) * (PExpr Z).
+    seq (PExpr Z) -> PExpr Z -> seq (PExpr Z) -> seq (PExpr Z) * seq (PExpr Z).
 
   (** Verify an atomic root entailment problem by reducing the problem to an
       ideal membership problem, solving the ideal membership problem by an
       external computer algebra system, and validating the answer from the
       computer algebra system. *)
   Definition verify_arep (ps : arep) : bool :=
-    let '(_, _, ps, m, q) := imp_of_arep ps in
-    let (cs, c) := ext_solve_imp ps q m in
-    validate_imp_answer_tr ps m q cs c.
+    let '(_, _, ps, ms, q) := imp_of_arep ps in
+    let (cps, cms) := ext_solve_imp ps q ms in
+    validate_imp_answer ps ms q cps cms.
 
   Definition verify_areps (pss : seq arep) : bool := all verify_arep pss.
 
@@ -92,7 +94,7 @@ Section Verification.
   Proof.
     rewrite /verify_arep. dcase (imp_of_arep ps) => [[[[[g t] zps] zm] zq] Hzp].
     dcase (ext_solve_imp zps zq zm) => [[cs c] Hco]. move=> Hch.
-    exact: (validated_imp_tr_valid_arep Hzp Hch).
+    exact: (validated_imp_valid_arep Hzp Hch).
   Qed.
 
   Lemma verify_areps_in ps pss :
@@ -117,30 +119,30 @@ Section Verification.
 
   (* Solve a sequence of ideal membership problems by external computer
      algebra systems. An ideal membership problem is given as a tuple
-     (ps, m, q). The problem is to check if q is in the ideal of m::ps,
-     i.e., there are cs and c such that q = cs * ps + c * m.
-     ext_solve_imp_list returns a sequence of (cs, c). *)
+     (ps, ms, q). The problem is to check if q is in the ideal of ms++ps,
+     i.e., there are cps and cms such that q = cps * ps + cms * ms.
+     ext_solve_imp_list returns a sequence of (cps, cms). *)
   Parameter ext_solve_imp_list :
-    seq (seq (PExpr Z) * PExpr Z * PExpr Z) -> seq (seq (PExpr Z) * (PExpr Z)).
+    seq (seq (PExpr Z) * PExpr Z * seq (PExpr Z)) -> seq (seq (PExpr Z) * seq (PExpr Z)).
 
   Axiom ext_solve_imp_list_cons :
-    forall ps m q tl,
-      ext_solve_imp_list ((ps, m, q)::tl) =
-      (ext_solve_imp ps m q)::(ext_solve_imp_list tl).
+    forall ps q ms tl,
+      ext_solve_imp_list ((ps, q, ms)::tl) =
+      (ext_solve_imp ps q ms)::(ext_solve_imp_list tl).
 
   Definition polys_of_areps (pss : seq arep) :
-    seq (seq (PExpr Z) * PExpr Z * PExpr Z) :=
+    seq (seq (PExpr Z) * PExpr Z * seq (PExpr Z)) :=
     let f ps :=
-        let '(_, _, ps, m, q) := imp_of_arep ps in
-        (ps, q, m) in
+        let '(_, _, ps, ms, q) := imp_of_arep ps in
+        (ps, q, ms) in
     map f pss.
 
-  Fixpoint validate_imp_answer_tr_list polys coefs : bool :=
+  Fixpoint validate_imp_answer_list polys coefs : bool :=
     match polys, coefs with
     | [::], [::] => true
-    | ((ps, q, m)::tlp), ((cs, c)::tlc) => if validate_imp_answer_tr ps m q cs c
-                                           then validate_imp_answer_tr_list tlp tlc
-                                           else false
+    | ((ps, q, ms)::tlp), ((cps, cms)::tlc) => if validate_imp_answer ps ms q cps cms
+                                               then validate_imp_answer_list tlp tlc
+                                               else false
     | _, _ => false
     end.
 
@@ -148,7 +150,7 @@ Section Verification.
     let poly_list := polys_of_areps pss in
     let coef_list := ext_solve_imp_list poly_list in
     if size poly_list == size coef_list
-    then validate_imp_answer_tr_list poly_list coef_list
+    then validate_imp_answer_list poly_list coef_list
     else false.
 
   Definition verify_rep_list (o : options) (zs : ZSSA.rep) : bool :=
@@ -166,9 +168,9 @@ Section Verification.
     rewrite Hhd in Hs. rewrite ext_solve_imp_list_cons /= in Hs.
     rewrite eqSS in Hs. rewrite ext_solve_imp_list_cons.
     dcase (ext_solve_imp ps q m) => [[cs c] Hcs].
-    case Hchk_hd: (validate_imp_answer_tr ps m q cs c) => //=.
+    case Hchk_hd: (validate_imp_answer ps m q cs c) => //=.
     move=> Hchk_tl Hin. rewrite in_cons in Hin. case/orP: Hin => Hin.
-    - rewrite (eqP Hin). exact: (validated_imp_tr_valid_arep Hhd Hchk_hd).
+    - rewrite (eqP Hin). exact: (validated_imp_valid_arep Hhd Hchk_hd).
     - apply: (IH _ Hin). rewrite /verify_areps_list. rewrite Hs. exact: Hchk_tl.
   Qed.
 

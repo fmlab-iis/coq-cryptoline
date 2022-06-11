@@ -7,6 +7,7 @@ open State
 open Typ
 open Var
 open Eqtype
+open Seq
 
 type __ = Obj.t
 
@@ -67,6 +68,11 @@ let rec ssa_eexp m = function
 | DSL.Eunop (op, e0) -> SSA.eunary op (ssa_eexp m e0)
 | DSL.Ebinop (op, e1, e2) -> SSA.ebinary op (ssa_eexp m e1) (ssa_eexp m e2)
 
+(** val ssa_eexps : vmap -> DSL.DSL.eexp list -> SSA.eexp list **)
+
+let ssa_eexps m es =
+  map (ssa_eexp m) es
+
 (** val ssa_rexp : vmap -> DSL.DSL.rexp -> SSA.rexp **)
 
 let rec ssa_rexp m = function
@@ -83,8 +89,8 @@ let rec ssa_rexp m = function
 let rec ssa_ebexp m = function
 | DSL.Etrue -> SSA.etrue
 | DSL.Eeq (e1, e2) -> SSA.eeq (ssa_eexp m e1) (ssa_eexp m e2)
-| DSL.Eeqmod (e1, e2, p) ->
-  SSA.eeqmod (ssa_eexp m e1) (ssa_eexp m e2) (ssa_eexp m p)
+| DSL.Eeqmod (e1, e2, ms) ->
+  SSA.eeqmod (ssa_eexp m e1) (ssa_eexp m e2) (ssa_eexps m ms)
 | DSL.Eand (e1, e2) -> SSA.eand (ssa_ebexp m e1) (ssa_ebexp m e2)
 
 (** val ssa_rbexp : vmap -> DSL.DSL.rbexp -> SSA.rbexp **)

@@ -25,6 +25,8 @@ Module ZSSA.
 
   Notation vars_zexp := SSA.vars_eexp.
 
+  Notation vars_zexps := SSA.vars_eexps.
+
   Notation vars_zbexp := SSA.vars_ebexp.
 
 
@@ -38,11 +40,17 @@ Module ZSSA.
     | Ebinop op e1 e2 => SSA.eval_ebinop op (eval_zexp e1 s) (eval_zexp e2 s)
     end.
 
+  Fixpoint eval_zexps (es : seq zexp) (s : ZSSAStore.t) : seq Z :=
+    match es with
+    | [::] => [::]
+    | e::es => (eval_zexp e s)::(eval_zexps es s)
+    end.
+
   Fixpoint eval_zbexp (e : zbexp) (s : ZSSAStore.t) : Prop :=
     match e with
     | Etrue => True
     | Eeq e1 e2 => eval_zexp e1 s = eval_zexp e2 s
-    | Eeqmod e1 e2 p => zeqm (eval_zexp e1 s) (eval_zexp e2 s) (eval_zexp p s)
+    | Eeqmod e1 e2 ms => zeqms (eval_zexp e1 s) (eval_zexp e2 s) (eval_zexps ms s)
     | Eand e1 e2 => eval_zbexp e1 s /\ eval_zbexp e2 s
     end.
 
@@ -56,6 +64,9 @@ Module ZSSA.
 
   Definition valid_rep (s : rep) : Prop :=
     entails (premise s) (conseq s).
+
+  Lemma size_eval_zexps es s : size (eval_zexps es s) = size es.
+  Proof. elim: es => [| e es IH] //=. by rewrite IH. Qed.
 
   Lemma eval_zbexp_eands_cons e es s :
     eval_zbexp (SSA.eands (e::es)) s <-> eval_zbexp e s /\ eval_zbexp (SSA.eands es) s.
@@ -82,14 +93,21 @@ Module ZSSA.
     - move=> op e1 IH1 e2 IH2 Heq. rewrite (IH1 Heq) (IH2 Heq). reflexivity.
   Qed.
 
+  Lemma steq_eval_zexps es {s1 s2} :
+    ZSSAStore.Equal s1 s2 -> eval_zexps es s1 = eval_zexps es s2.
+  Proof.
+    elim: es => [| e es IH] //= Heq. rewrite (steq_eval_zexp e Heq).
+    rewrite (IH Heq). reflexivity.
+  Qed.
+
   Lemma steq_eval_zbexp e {s1 s2} :
     ZSSAStore.Equal s1 s2 -> eval_zbexp e s1 <-> eval_zbexp e s2.
   Proof.
     elim: e => //=.
     - move=> e1 e2 Heq. rewrite (steq_eval_zexp e1 Heq) (steq_eval_zexp e2 Heq).
       tauto.
-    - move=> e1 e2 e3 Heq. rewrite (steq_eval_zexp e1 Heq) (steq_eval_zexp e2 Heq)
-                                   (steq_eval_zexp e3 Heq). tauto.
+    - move=> e1 e2 ms Heq. rewrite (steq_eval_zexp e1 Heq) (steq_eval_zexp e2 Heq)
+                                   (steq_eval_zexps ms Heq). tauto.
     - move=> e1 IH1 e2 IH2 Heq. move: (IH1 Heq) (IH2 Heq) => {IH1 IH2} IH1 IH2. tauto.
   Qed.
 
@@ -107,6 +125,15 @@ Module ZSSA.
       {Hmem} [Hmem1 Hmem2]. rewrite (IH1 _ _ _ Hmem1) (IH2 _ _ _ Hmem2). reflexivity.
   Qed.
 
+  Lemma eval_zexps_upd {x v s es} :
+    ~~ SSAVS.mem x (vars_zexps es) ->
+    eval_zexps es (ZSSAStore.upd x v s) = eval_zexps es s.
+  Proof.
+    elim: es => [| e es IH] //=. rewrite SSAVS.S.Lemmas.union_b negb_or.
+    move/andP=> [Hmem1 Hmem2]. rewrite (eval_zexp_upd Hmem1). rewrite (IH Hmem2).
+    reflexivity.
+  Qed.
+
   Lemma eval_zbexp_upd {x v s e} :
     ~~ SSAVS.mem x (vars_zbexp e) ->
     eval_zbexp e (ZSSAStore.upd x v s) <-> eval_zbexp e s.
@@ -115,10 +142,10 @@ Module ZSSA.
     - move=> e1 e2 x v s Hmem.
       move: (SSAVS.Lemmas.not_mem_union1 Hmem) => {Hmem} [Hmem1 Hmem2].
       rewrite (eval_zexp_upd Hmem1) (eval_zexp_upd Hmem2). done.
-    - move=> e1 e2 m x v s Hmem.
+    - move=> e1 e2 ms x v s Hmem.
       move: (SSAVS.Lemmas.not_mem_union1 Hmem) => {Hmem} [Hmem1 Hmem2].
-      move: (SSAVS.Lemmas.not_mem_union1 Hmem2) => {Hmem2} [Hmem2 Hmem3].
-      rewrite (eval_zexp_upd Hmem1) (eval_zexp_upd Hmem2) (eval_zexp_upd Hmem3). done.
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem2) => {Hmem2} [Hmem2 Hmemms].
+      rewrite (eval_zexp_upd Hmem1) (eval_zexp_upd Hmem2) (eval_zexps_upd Hmemms). done.
     - move=> e1 IH1 e2 IH2 x v s Hmem.
       move: (SSAVS.Lemmas.not_mem_union1 Hmem) => {Hmem} [Hmem1 Hmem2].
       move: (IH1 x v s Hmem1) (IH2 x v s Hmem2) => {IH1 IH2} IH1 IH2. split; tauto.
@@ -143,6 +170,16 @@ Module ZSSA.
       rewrite (IH1 _ _ _ _ _ Hmem11 Hmem21) (IH2 _ _ _ _ _ Hmem12 Hmem22). reflexivity.
   Qed.
 
+  Lemma eval_zexps_upd2 {x1 x2 v1 v2 s es} :
+    ~~ SSAVS.mem x1 (vars_zexps es) ->
+    ~~ SSAVS.mem x2 (vars_zexps es) ->
+    eval_zexps es (ZSSAStore.upd2 x1 v1 x2 v2 s) = eval_zexps es s.
+  Proof.
+    elim: es => [| e es IH] //=. rewrite 2!SSAVS.S.Lemmas.union_b 2!negb_or.
+    move=> /andP [Hmem1e Hmem1es] /andP [Hmem2e Hmem2es].
+    rewrite (eval_zexp_upd2 Hmem1e Hmem2e) (IH Hmem1es Hmem2es). reflexivity.
+  Qed.
+
   Lemma eval_zbexp_upd2 {x1 v1 x2 v2 s e} :
     ~~ SSAVS.mem x1 (vars_zbexp e) ->
     ~~ SSAVS.mem x2 (vars_zbexp e) ->
@@ -153,13 +190,13 @@ Module ZSSA.
       move: (SSAVS.Lemmas.not_mem_union1 Hmem1) => {Hmem1} [Hmem11 Hmem12].
       move: (SSAVS.Lemmas.not_mem_union1 Hmem2) => {Hmem2} [Hmem21 Hmem22].
       rewrite (eval_zexp_upd2 Hmem11 Hmem21) (eval_zexp_upd2 Hmem12 Hmem22). done.
-    - move=> e1 e2 m x1 v1 x2 v2 s Hmem1 Hmem2.
+    - move=> e1 e2 ms x1 v1 x2 v2 s Hmem1 Hmem2.
       move: (SSAVS.Lemmas.not_mem_union1 Hmem1) => {Hmem1} [Hmem11 Hmem12].
-      move: (SSAVS.Lemmas.not_mem_union1 Hmem12) => {Hmem12} [Hmem12 Hmem13].
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem12) => {Hmem12} [Hmem12 Hmem1ms].
       move: (SSAVS.Lemmas.not_mem_union1 Hmem2) => {Hmem2} [Hmem21 Hmem22].
-      move: (SSAVS.Lemmas.not_mem_union1 Hmem22) => {Hmem22} [Hmem22 Hmem23].
+      move: (SSAVS.Lemmas.not_mem_union1 Hmem22) => {Hmem22} [Hmem22 Hmem2ms].
       rewrite (eval_zexp_upd2 Hmem11 Hmem21) (eval_zexp_upd2 Hmem12 Hmem22)
-              (eval_zexp_upd2 Hmem13 Hmem23). done.
+              (eval_zexps_upd2 Hmem1ms Hmem2ms). done.
     - move=> e1 IH1 e2 IH2 x1 v1 x2 v2 s Hmem1 Hmem2.
       move: (SSAVS.Lemmas.not_mem_union1 Hmem1) => {Hmem1} [Hmem11 Hmem12].
       move: (SSAVS.Lemmas.not_mem_union1 Hmem2) => {Hmem2} [Hmem21 Hmem22].

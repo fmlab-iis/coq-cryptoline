@@ -57,6 +57,8 @@ module Pos :
 
   val to_nat : positive -> int
 
+  val of_nat : int -> positive
+
   val of_succ_nat : int -> positive
 
   val to_little_uint : positive -> uint

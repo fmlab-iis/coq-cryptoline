@@ -88,6 +88,9 @@ Section MakeSSA.
     | Ebinop op e1 e2 => SSA.ebinary op (ssa_eexp m e1) (ssa_eexp m e2)
     end.
 
+  Definition ssa_eexps (m : vmap) (es : seq DSL.eexp) : seq SSA.eexp :=
+    map (ssa_eexp m) es.
+
   Fixpoint ssa_rexp (m : vmap) (e : DSL.rexp) :=
     match e with
     | Rvar v => SSA.rvar (ssa_var m v)
@@ -102,7 +105,7 @@ Section MakeSSA.
     match e with
     | Etrue => SSA.etrue
     | Eeq e1 e2 => SSA.eeq (ssa_eexp m e1) (ssa_eexp m e2)
-    | Eeqmod e1 e2 p => SSA.eeqmod (ssa_eexp m e1) (ssa_eexp m e2) (ssa_eexp m p)
+    | Eeqmod e1 e2 ms => SSA.eeqmod (ssa_eexp m e1) (ssa_eexp m e2) (ssa_eexps m ms)
     | Eand e1 e2 => SSA.eand (ssa_ebexp m e1) (ssa_ebexp m e2)
     end.
 
@@ -660,6 +663,14 @@ Section MakeSSA.
       reflexivity.
   Qed.
 
+  Lemma ssa_vars_eexps_comm m (es : seq DSL.eexp) :
+    SSAVS.Equal (ssa_vars m (DSL.vars_eexps es))
+                (SSA.vars_eexps (ssa_eexps m es)).
+  Proof.
+    elim: es => [| e es IH] //=. rewrite -ssa_vars_eexp_comm.
+    rewrite -IH. rewrite -ssa_vars_union. reflexivity.
+  Qed.
+
   Lemma ssa_vars_rexp_comm m (e : DSL.rexp) :
     SSAVS.Equal (ssa_vars m (DSL.vars_rexp e))
                 (SSA.vars_rexp (ssa_rexp m e)).
@@ -683,6 +694,15 @@ Section MakeSSA.
                              (SSA.vars_eexp (ssa_eexp m e2))).
   Proof.
     rewrite ssa_vars_union -2!ssa_vars_eexp_comm.
+    reflexivity.
+  Qed.
+
+  Lemma ssa_vars_eexps_union m (e : DSL.eexp) (es : seq DSL.eexp) :
+    SSAVS.Equal (ssa_vars m (VS.union (DSL.vars_eexp e) (DSL.vars_eexps es)))
+                (SSAVS.union (SSA.vars_eexp (ssa_eexp m e))
+                             (SSA.vars_eexps (ssa_eexps m es))).
+  Proof.
+    rewrite ssa_vars_union ssa_vars_eexp_comm ssa_vars_eexps_comm.
     reflexivity.
   Qed.
 
@@ -719,8 +739,9 @@ Section MakeSSA.
     elim: e => /=.
     - reflexivity.
     - move=> e1 e2. rewrite ssa_vars_eexp_union; reflexivity.
-    - move=> e1 e2 e3. rewrite ssa_vars_union ssa_vars_eexp_union
-                               ssa_vars_eexp_comm. reflexivity.
+    - move=> e1 e2 ms. rewrite ssa_vars_union. rewrite ssa_vars_union.
+      rewrite 2!ssa_vars_eexp_comm ssa_vars_eexps_comm.
+      reflexivity.
     - move=> e1 IH1 e2 IH2. rewrite -IH1 -IH2 ssa_vars_union; reflexivity.
   Qed.
 
@@ -807,6 +828,15 @@ Section MakeSSA.
       move: (SSAVS.Lemmas.mem_subset Hx Hsub) => Hmem.
       rewrite ssa_vars_mem1 in Hmem.
       assumption.
+  Qed.
+
+  Lemma ssa_vars_eexps_subset m (es : seq DSL.eexp) vs :
+    SSAVS.subset (SSA.vars_eexps (ssa_eexps m es)) (ssa_vars m vs) =
+    VS.subset (DSL.vars_eexps es) vs.
+  Proof.
+    elim: es => [| e es IH] //=. rewrite SSAVS.Lemmas.subset_union6.
+    rewrite VS.Lemmas.subset_union6. rewrite ssa_vars_eexp_subset IH.
+    reflexivity.
   Qed.
 
   Lemma ssa_vars_rexp_subset m (e : DSL.rexp) vs :
@@ -1781,6 +1811,15 @@ Section MakeSSA.
     - move=> op e1 IH1 e2 IH2. rewrite IH1 IH2. reflexivity.
   Qed.
 
+  Lemma ssa_eval_eexps m s ss te ste (es : seq DSL.eexp) :
+    state_equiv m s ss ->
+    typenv_equiv m te ste ->
+    SSA.eval_eexps (ssa_eexps m es) ste ss = DSL.eval_eexps es te s.
+  Proof.
+    elim: es => [| e es IH] Hseq Hteq //=. rewrite (ssa_eval_eexp _ Hseq Hteq).
+    rewrite (IH Hseq Hteq). reflexivity.
+  Qed.
+
   Lemma ssa_eval_rexp m s ss (e : DSL.rexp) :
     state_equiv m s ss ->
     SSA.eval_rexp (ssa_rexp m e) ss = DSL.eval_rexp e s.
@@ -1802,7 +1841,7 @@ Section MakeSSA.
     move=> Hseq Hteq; elim: e => /=.
     - done.
     - move=> e1 e2. rewrite 2!(ssa_eval_eexp _ Hseq Hteq). done.
-    - move=> e1 e2 p. rewrite 3!(ssa_eval_eexp _ Hseq Hteq). done.
+    - move=> e1 e2 ms. rewrite 2!(ssa_eval_eexp _ Hseq Hteq) (ssa_eval_eexps _ Hseq Hteq). done.
     - move=> e1 [IH11 IH12] e2 [IH21 IH22]. tauto.
   Qed.
 
@@ -3348,6 +3387,15 @@ Section MakeSSA.
       rewrite (IH1 Hun1 Hei) (IH2 Hun2 Hei); reflexivity.
   Qed.
 
+  Lemma ssa_unchanged_instr_eval_eexps es te s1 s2 i :
+    ssa_vars_unchanged_instr (SSA.vars_eexps es) i ->
+    SSA.eval_instr te i s1 s2 ->
+    SSA.eval_eexps es te s1 = SSA.eval_eexps es te s2.
+  Proof.
+    elim: es => [| e es IH] //=. rewrite ssa_unchanged_instr_union => /andP [Hun1 Hun2] Hev.
+    rewrite (ssa_unchanged_instr_eval_eexp Hun1 Hev) (IH Hun2 Hev). reflexivity.
+  Qed.
+
   Lemma ssa_unchanged_instr_eval_rexp e te s1 s2 i :
     ssa_vars_unchanged_instr (SSA.vars_rexp e) i ->
     SSA.eval_instr te i s1 s2 ->
@@ -3408,6 +3456,15 @@ Section MakeSSA.
       rewrite (IH1 Hun1 Hep) (IH2 Hun2 Hep); reflexivity.
   Qed.
 
+  Lemma ssa_unchanged_program_eval_eexps es te s1 s2 p :
+    ssa_vars_unchanged_program (SSA.vars_eexps es) p ->
+    SSA.eval_program te p s1 s2 ->
+    SSA.eval_eexps es te s1 = SSA.eval_eexps es te s2.
+  Proof.
+    elim: es => [| e es IH] //=. rewrite ssa_unchanged_program_union => /andP [Hun1 Hun2] Hev.
+    rewrite (ssa_unchanged_program_eval_eexp Hun1 Hev) (IH Hun2 Hev). reflexivity.
+  Qed.
+
   Lemma ssa_unchanged_program_eval_rexp e te s1 s2 p :
     ssa_vars_unchanged_program (SSA.vars_rexp e) p ->
     SSA.eval_program te p s1 s2 ->
@@ -3440,12 +3497,12 @@ Section MakeSSA.
       rewrite (ssa_unchanged_instr_eval_eexp Hun1 Hei)
               (ssa_unchanged_instr_eval_eexp Hun2 Hei).
       done.
-    - move=> e1 e2 p Hun Hei.
+    - move=> e1 e2 ms Hun Hei.
       move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2].
-      move: (ssa_unchanged_instr_union1 Hun2) => {Hun2} [Hun2 Hunp].
+      move: (ssa_unchanged_instr_union1 Hun2) => {Hun2} [Hun2 Hunms].
       rewrite (ssa_unchanged_instr_eval_eexp Hun1 Hei)
               (ssa_unchanged_instr_eval_eexp Hun2 Hei)
-              (ssa_unchanged_instr_eval_eexp Hunp Hei).
+              (ssa_unchanged_instr_eval_eexps Hunms Hei).
       done.
     - move=> e1 IH1 e2 IH2 Hun Hei.
       move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2].
@@ -3502,12 +3559,12 @@ Section MakeSSA.
       rewrite (ssa_unchanged_program_eval_eexp Hun1 Hep)
               (ssa_unchanged_program_eval_eexp Hun2 Hep).
       done.
-    - move=> e1 e2 n Hun Hep.
+    - move=> e1 e2 ms Hun Hep.
       move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
-      move: (ssa_unchanged_program_union1 Hun2) => {Hun2} [Hun2 Hunp].
+      move: (ssa_unchanged_program_union1 Hun2) => {Hun2} [Hun2 Hunms].
       rewrite (ssa_unchanged_program_eval_eexp Hun1 Hep)
               (ssa_unchanged_program_eval_eexp Hun2 Hep)
-              (ssa_unchanged_program_eval_eexp Hunp Hep).
+              (ssa_unchanged_program_eval_eexps Hunms Hep).
       done.
     - move=> e1 IH1 e2 IH2 Hun Hep.
       move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
@@ -4488,6 +4545,16 @@ Section MakeSSA.
       + exact: (H0 _ _ H1_2).
   Qed.
 
+  Lemma ssa_vars_are_defined_eexps m es te:
+    DSL.are_defined (DSL.vars_eexps es) te <->
+    SSA.are_defined (SSA.vars_eexps (ssa_eexps m es)) (ssa_typenv m te).
+  Proof.
+    elim: es => [| e es [IH1 IH2]] //=. rewrite DSL.are_defined_union.
+    rewrite SSA.are_defined_union. split=> /andP [H1 H2].
+    - rewrite (IH1 H2) andbT. apply/ssa_vars_are_defined_eexp. exact: H1.
+    - rewrite (IH2 H2) andbT. apply/ssa_vars_are_defined_eexp. exact: H1.
+  Qed.
+
   Lemma ssa_vars_are_defined_rexp m r te:
     DSL.are_defined (DSL.vars_rexp r) te <->
     SSA.are_defined (SSA.vars_rexp (ssa_rexp m r)) (ssa_typenv m te).
@@ -4526,7 +4593,8 @@ Section MakeSSA.
     - rewrite DSL.are_defined_union in H; move/andP: H => [He H].
       rewrite DSL.are_defined_union in H; move/andP: H => [He0 He1].
       rewrite SSA.are_defined_union; apply/andP; split; first by apply ssa_vars_are_defined_eexp.
-      rewrite SSA.are_defined_union; apply/andP; split; by apply ssa_vars_are_defined_eexp.
+      rewrite SSA.are_defined_union; apply/andP; split; first by apply ssa_vars_are_defined_eexp.
+      by apply/ssa_vars_are_defined_eexps.
     - rewrite SSA.are_defined_union; apply/andP; rewrite /= in H1;
         rewrite DSL.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply H|apply H0].
     - done.
@@ -4535,7 +4603,8 @@ Section MakeSSA.
     - rewrite SSA.are_defined_union in H; move/andP: H => [He H].
       rewrite SSA.are_defined_union in H; move/andP: H => [He0 He1].
       rewrite DSL.are_defined_union; apply/andP; split; first by apply (ssa_vars_are_defined_eexp m).
-      rewrite DSL.are_defined_union; apply/andP; split; by apply (ssa_vars_are_defined_eexp m).
+      rewrite DSL.are_defined_union; apply/andP; split; first by apply (ssa_vars_are_defined_eexp m).
+      apply/ssa_vars_are_defined_eexps. exact: He1.
     - rewrite DSL.are_defined_union; apply/andP; rewrite /= in H1;
         rewrite SSA.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply (H m) |apply (H0 m)].
   Qed.
@@ -4644,6 +4713,15 @@ Section MakeSSA.
       apply/andP; split; by [ apply (H m) | apply (H0 m)].
   Qed.
 
+  Lemma ssa_well_typed_eexps m te es:
+    DSL.well_typed_eexps te es <->
+    SSA.well_typed_eexps (ssa_typenv m te) (ssa_eexps m es).
+  Proof.
+    elim: es => [| e es [IH1 IH2]] //=. split => /andP [H1 H2].
+    - rewrite (IH1 H2) andbT. apply/ssa_well_typed_eexp. exact: H1.
+    - rewrite (IH2 H2) andbT. apply/ssa_well_typed_eexp. exact: H1.
+  Qed.
+
   Lemma ssa_typenv_size_rexp m te r:
     DSL.size_of_rexp r te = SSA.size_of_rexp (ssa_rexp m r) (ssa_typenv m te).
   Proof.
@@ -4703,7 +4781,7 @@ Section MakeSSA.
     - by apply ssa_well_typed_eexp.
     - by apply ssa_well_typed_eexp.
     - by apply ssa_well_typed_eexp.
-    - by apply ssa_well_typed_eexp.
+    - by apply ssa_well_typed_eexps.
     - rewrite /= in H1; split_andb_hyps; by apply H.
     - rewrite /= in H1; split_andb_hyps; by apply H0.
     - done.
@@ -4711,7 +4789,7 @@ Section MakeSSA.
     - by apply (ssa_well_typed_eexp m).
     - by apply (ssa_well_typed_eexp m).
     - by apply (ssa_well_typed_eexp m).
-    - by apply (ssa_well_typed_eexp m).
+    - by apply (ssa_well_typed_eexps m).
     - rewrite /= in H1; split_andb_hyps; by apply (H m).
     - rewrite /= in H1; split_andb_hyps; by apply (H0 m).
   Qed.
@@ -4945,6 +5023,15 @@ Section MakeSSA.
       + exact: IH2.
   Qed.
 
+  Lemma ssa_eexps_var_index m (es : seq DSL.eexp) v i :
+    SSAVS.mem (v, i) (SSA.vars_eexps (ssa_eexps m es)) ->
+    get_index v m = i.
+  Proof.
+    elim: es => [| e es IH] //=. rewrite SSAVS.S.Lemmas.union_b. case/orP => Hmem.
+    - exact: (ssa_eexp_var_index Hmem).
+    - exact: (IH Hmem).
+  Qed.
+
   Lemma ssa_rexp_var_index m (e : DSL.rexp) v i :
     SSAVS.mem (v, i) (SSA.vars_rexp (ssa_rexp m e)) ->
     get_index v m = i.
@@ -4975,7 +5062,7 @@ Section MakeSSA.
     - move=> e1 e2 p m v i Hmem.
       rewrite !SSA.VSLemmas.union_b in Hmem.
       repeat (move/orP: Hmem; case=> Hmem);
-        exact: (ssa_eexp_var_index Hmem).
+        exact: (ssa_eexp_var_index Hmem) || exact: (ssa_eexps_var_index Hmem).
     - move=> e1 IH1 e2 IH2 m v i Hmem.
       rewrite SSA.VSLemmas.union_b in Hmem.
       move/orP: Hmem; case=> Hmem.

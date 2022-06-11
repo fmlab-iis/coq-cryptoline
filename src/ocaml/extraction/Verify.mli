@@ -15,8 +15,8 @@ val ext_all_unsat : cnf list -> bool
 val verify_rspec_algsnd : SSA.SSA.spec -> bool
 
 val ext_solve_imp :
-  coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z coq_PExpr -> coq_Z
-  coq_PExpr list * coq_Z coq_PExpr
+  coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z coq_PExpr list -> coq_Z
+  coq_PExpr list * coq_Z coq_PExpr list
 
 val verify_arep : arep -> bool
 
@@ -25,16 +25,16 @@ val verify_areps : arep list -> bool
 val verify_rep : options -> ZSSA.ZSSA.rep -> bool
 
 val ext_solve_imp_list :
-  ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr) list -> (coq_Z
-  coq_PExpr list * coq_Z coq_PExpr) list
+  ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr list) list ->
+  (coq_Z coq_PExpr list * coq_Z coq_PExpr list) list
 
 val polys_of_areps :
-  arep list -> ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr)
-  list
+  arep list -> ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr
+  list) list
 
-val validate_imp_answer_tr_list :
-  ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr) list -> (coq_Z
-  coq_PExpr list * coq_Z coq_PExpr) list -> bool
+val validate_imp_answer_list :
+  ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr list) list ->
+  (coq_Z coq_PExpr list * coq_Z coq_PExpr list) list -> bool
 
 val verify_areps_list : arep list -> bool
 

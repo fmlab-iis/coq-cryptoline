@@ -233,6 +233,18 @@ module Pos =
   let to_nat x =
     iter_op Nat0.add x (Pervasives.succ 0)
 
+  (** val of_nat : int -> positive **)
+
+  let rec of_nat n =
+    (fun fO fS n -> if n=0 then fO () else fS (n-1))
+      (fun _ -> Coq_xH)
+      (fun x ->
+      (fun fO fS n -> if n=0 then fO () else fS (n-1))
+        (fun _ -> Coq_xH)
+        (fun _ -> succ (of_nat x))
+        x)
+      n
+
   (** val of_succ_nat : int -> positive **)
 
   let rec of_succ_nat n =
