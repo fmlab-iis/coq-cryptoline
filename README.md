@@ -11,15 +11,15 @@ Installation
 To compile the Coq proofs of CoqCryptoLine, the following packages
 are required.
 
-* [Coq](https://coq.inria.fr) 8.11.0
-* [MathComp](https://github.com/math-comp/math-comp) 1.10.0
+* [Coq](https://coq.inria.fr) (>= 8.11.0)
+* [MathComp](https://github.com/math-comp/math-comp) (>= 1.10.0)
 
 To compile the extracted certified OCaml code, the following packages
 are required.
 
-* [OCaml](https://ocaml.org) 4.08.1
-* [Dune](https://dune.build) 2.1.3 (or newer versions)
-* [Zarith](https://github.com/ocaml/Zarith) 1.9.1 (or newer versions)
+* [OCaml](https://ocaml.org) (>= 4.08.1)
+* [Dune](https://dune.build) (>= 2.1.3)
+* [Zarith](https://github.com/ocaml/Zarith) (>= 1.9.1)
 * [Lwt](https://ocsigen.org/lwt/latest/manual/manual)
 
 To run CoqCryptoLine, the following tool is required.
