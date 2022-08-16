@@ -5,6 +5,7 @@ SWITCHES=" \
 	ocaml4.11.2-coq8.12.2-ssr1.11.0 \
 	ocaml4.12.1-coq8.13.2-ssr1.12.0 \
 	ocaml4.13.1-coq8.14.1-ssr1.13.0 \
+	ocaml4.13.1-coq8.15.0-ssr1.14.0 \
 	ocaml4.14.0-coq8.15.2-ssr1.14.0 \
 "
 
@@ -20,7 +21,7 @@ CURRENT=`opam switch show`
 for s in ${SWITCHES}; do
   echo "Building with ${s}"
 
-  echo -n "  * Running 'opam switch'	"
+  echo -n -e "  * Running 'opam switch'\t\t"
   opam switch ${s} &> /dev/null
   status=$?
   if [[ ${status} == 0 ]]; then
@@ -31,17 +32,17 @@ for s in ${SWITCHES}; do
   fi
   eval $(opam env)
 
-  echo -n "  * Copying files		"
+  echo -n -e "  * Copying files\t\t\t"
   mkdir -p ${BUILD_DIR}/${s}
   tar -c --exclude ${BUILD_DIR} --exclude "*.vo" --exclude "*.vok" --exclude "*.vos" --exclude "*.glob" * | tar -x --keep-newer-files -C ${BUILD_DIR}/${s} &> /dev/null
   echo "[DONE]"
 
-  echo -n "  * Compiling Coq code		"
+  echo -n -e "  * Compiling Coq code\t\t\t"
   make -C ${BUILD_DIR}/${s} all >${BUILD_DIR}/${s}.log 2>&1
   status=$?
   if [[ $status == 0 ]]; then
     echo "[DONE]"
-    echo -n "  * Compiling OCaml code		"
+    echo -n -e "  * Compiling OCaml code\t\t"
     pushd ${BUILD_DIR}/${s}/src/ocaml &> /dev/null
     dune build &> /dev/null
     status=$?
