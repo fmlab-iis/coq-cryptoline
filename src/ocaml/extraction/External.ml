@@ -741,12 +741,13 @@ let run_singular ifile ofile =
     trace "" in
   ()
 
+let rec peo_list len =
+  if len = 0 then []
+  else PEO::peo_list (len - 1)
+
 let coq_compute_coefficients_by_div (vars, p, g) =
   let _ = trace "by div" in
   let singular_output_sep = "--" in
-  let rec create_dummy len =
-	if len = 0 then []
-	else PEO::create_dummy (len - 1) in
   let write_to_singular file =
     let input_text =
       let varseq =
@@ -761,18 +762,6 @@ let coq_compute_coefficients_by_div (vars, p, g) =
       ^ "poly c = p / g;\n"
       ^ "\"" ^ singular_output_sep ^ "\";\n"
       ^ "c;\n"
-(*
-      ^ "ideal I = groebner(g);\n"
-      ^ "if (size(I) == 0) {\n"
-      ^ "  \"" ^ singular_output_sep ^ "\";\n"
-      ^ "  \"0\";\n"
-      ^ "} else {\n"
-      ^ "  matrix M = lift(I, p);\n"
-      ^ "  poly h = M[1,1];\n"
-      ^ "  \"" ^ singular_output_sep ^ "\";\n"
-      ^ "  h;\n"
-      ^ "}\n"
- *)
       ^ "exit;\n" in
     let ch = open_out file in
     let _ = output_string ch input_text; close_out ch in
@@ -808,14 +797,11 @@ let coq_compute_coefficients_by_div (vars, p, g) =
   let _ = cleanup [ifile; ofile] in
   match coefs with
   | c::[] -> [coq_term_of_string c]
-  | _ -> create_dummy 1
+  | _ -> peo_list 1
 
 let coq_compute_coefficients_by_lift (vars, p, gs) =
   let _ = trace "by lift" in
   let singular_output_sep = "--" in
-  let rec create_dummy len =
-	if len = 0 then []
-	else PEO::create_dummy (len - 1) in
   let write_to_singular file =
     let input_text =
       let varseq =
@@ -873,9 +859,17 @@ let coq_compute_coefficients_by_lift (vars, p, gs) =
   let _ = trace("= in ideal? =\n" ^ string_of_bool is_in_ideal) in
   if is_in_ideal then
     let p_coef_gs = List.map (fun t -> coq_term_of_string (after_eq_sign t)) p_coef_gs in
-    p_coef_gs
+    (true, p_coef_gs)
   else
-    create_dummy (List.length gs)
+    (false, peo_list (List.length gs))
+
+let coq_compute_coefficients_by_lift (vars, p, gs) =
+  let _ = trace ("Try #0") in
+  let (in_ideal, _) = coq_compute_coefficients_by_lift (vars, p, []) in
+  if in_ideal then peo_list (List.length gs)
+  else let _ = trace ("Try #1") in
+       let (_, coefs) = coq_compute_coefficients_by_lift (vars, p, gs) in
+       coefs
 
 let split_list_at xs i =
   let rec helper l1_rev xs i =
@@ -930,9 +924,6 @@ let coq_compute_coefficients_by_div_lwt header (vars, p, g) =
   let singular_output_sep = "--" in
   let ifile = tmpfile "inputfgb_" "" in
   let ofile = tmpfile "outputfgb_" "" in
-  let rec create_dummy len =
-	if len = 0 then []
-	else PEO::create_dummy (len - 1) in
   let write_to_singular file =
     let input_text =
       let varseq =
@@ -979,7 +970,7 @@ let coq_compute_coefficients_by_div_lwt header (vars, p, g) =
   let%lwt res =
     Lwt.return (match coefs with
                 | c::[] -> [coq_term_of_string c]
-                | _ -> create_dummy 1) in
+                | _ -> peo_list 1) in
   let%lwt t2 = Lwt.return (Unix.gettimeofday()) in
   Lwt.return (res, string_of_running_time t1 t2)
 
@@ -988,9 +979,6 @@ let coq_compute_coefficients_by_lift_lwt header (vars, p, gs) =
   let singular_output_sep = "--" in
   let ifile = tmpfile "inputfgb_" "" in
   let ofile = tmpfile "outputfgb_" "" in
-  let rec create_dummy len =
-	if len = 0 then []
-	else PEO::create_dummy (len - 1) in
   let write_to_singular file =
     let input_text =
       let varseq =
@@ -1047,11 +1035,17 @@ let coq_compute_coefficients_by_lift_lwt header (vars, p, gs) =
   let%lwt res =
     if is_in_ideal then
       let%lwt p_coef_gs = Lwt_list.map_s (fun t -> Lwt.return (coq_term_of_string (after_eq_sign t))) p_coef_gs in
-      Lwt.return p_coef_gs
+      Lwt.return (true, p_coef_gs)
     else
-      Lwt.return (create_dummy (List.length gs)) in
+      Lwt.return (false, (peo_list (List.length gs))) in
   let%lwt t2 = Lwt.return (Unix.gettimeofday()) in
   Lwt.return (res, string_of_running_time t1 t2)
+
+let coq_compute_coefficients_by_lift_lwt header (vars, p, gs) =
+  let%lwt ((in_ideal, _), time) = coq_compute_coefficients_by_lift_lwt header (vars, p, []) in
+  if in_ideal then Lwt.return (peo_list (List.length gs), time)
+  else let%lwt ((_, coefs), time) = coq_compute_coefficients_by_lift_lwt header (vars, p, gs) in
+       Lwt.return (coefs, time)
 
 let coq_compute_coefficients_lwt poly_with_id_list =
   let mk_promise (id, ((gs, p), ms)) =
