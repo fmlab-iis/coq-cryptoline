@@ -27,6 +27,15 @@ val azbexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> azbexp -> azbexp
 
 val subst_azbexps : SSA.SSA.eexp -> SSA.SSA.eexp -> azbexp list -> azbexp list
 
+val single_variables : SSA.SSA.eexp -> SSAVS.t
+
+val num_occurrence : SSAVarOrder.t -> SSA.SSA.eexp -> int
+
+val separate :
+  Equality.sort -> SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp option
+
+val get_rewrite_pattern : SSA.SSA.eexp -> (SSAVS.elt * SSA.SSA.eexp) option
+
 val is_assignment : azbexp -> (ssavar * SSA.SSA.eexp) option
 
 val simplify_arep_rec :

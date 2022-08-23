@@ -49,86 +49,149 @@ let azbexp_subst p r = function
 let subst_azbexps p r es =
   map (azbexp_subst p r) es
 
+(** val single_variables : SSA.SSA.eexp -> SSAVS.t **)
+
+let rec single_variables = function
+| DSL.Evar v -> SSAVS.singleton v
+| DSL.Econst _ -> SSAVS.empty
+| DSL.Eunop (_, e0) -> single_variables e0
+| DSL.Ebinop (op, e1, e2) ->
+  if (||) (eq_op DSL.ebinop_eqType (Obj.magic op) (Obj.magic DSL.Eadd))
+       (eq_op DSL.ebinop_eqType (Obj.magic op) (Obj.magic DSL.Esub))
+  then SSAVS.union (single_variables e1) (single_variables e2)
+  else SSAVS.empty
+
+(** val num_occurrence : SSAVarOrder.t -> SSA.SSA.eexp -> int **)
+
+let rec num_occurrence v = function
+| DSL.Evar x -> if eq_op SSAVarOrder.coq_T x v then Pervasives.succ 0 else 0
+| DSL.Econst _ -> 0
+| DSL.Eunop (_, e0) -> num_occurrence v e0
+| DSL.Ebinop (_, e1, e2) -> addn (num_occurrence v e1) (num_occurrence v e2)
+
+(** val separate :
+    Equality.sort -> SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp option **)
+
+let rec separate v e pat =
+  match e with
+  | DSL.Evar x -> if eq_op SSAVarOrder.coq_T x v then Some pat else None
+  | DSL.Econst _ -> None
+  | DSL.Eunop (_, e0) ->
+    if SSAVS.mem v (SSA.SSA.vars_eexp e0)
+    then separate v e0 (SSA.SSA.eneg pat)
+    else None
+  | DSL.Ebinop (op, e1, e2) ->
+    let in1 = SSAVS.mem v (SSA.SSA.vars_eexp e1) in
+    let in2 = SSAVS.mem v (SSA.SSA.vars_eexp e2) in
+    (match op with
+     | DSL.Eadd ->
+       if in1
+       then if in2 then None else separate v e1 (SSA.SSA.esub pat e2)
+       else if in2 then separate v e2 (SSA.SSA.esub pat e1) else None
+     | DSL.Esub ->
+       if in1
+       then if in2 then None else separate v e1 (SSA.SSA.eadd pat e2)
+       else if in2 then separate v e2 (SSA.SSA.esub e1 pat) else None
+     | DSL.Emul -> None)
+
+(** val get_rewrite_pattern :
+    SSA.SSA.eexp -> (SSAVS.elt * SSA.SSA.eexp) option **)
+
+let get_rewrite_pattern e =
+  let candidates =
+    SSAVS.filter (fun v ->
+      eq_op nat_eqType (Obj.magic num_occurrence v e)
+        (Obj.magic (Pervasives.succ 0))) (single_variables e)
+  in
+  if eq_op nat_eqType (Obj.magic SSAVS.cardinal candidates) (Obj.magic 0)
+  then None
+  else (match SSAVS.min_elt candidates with
+        | Some v ->
+          (match separate v e (SSA.SSA.econst Z.zero) with
+           | Some pat -> Some (v, pat)
+           | None -> None)
+        | None -> None)
+
 (** val is_assignment : azbexp -> (ssavar * SSA.SSA.eexp) option **)
 
 let is_assignment = function
-| Seq (el, er) ->
-  (match el with
-   | DSL.Evar v -> Some (v, er)
+| Seq (e1, e2) ->
+  (match e1 with
+   | DSL.Evar v -> Some (v, e2)
    | DSL.Econst _ ->
-     (match er with
-      | DSL.Evar v -> Some (v, el)
-      | DSL.Ebinop (e0, e1, er0) ->
+     (match e2 with
+      | DSL.Evar v -> Some (v, e1)
+      | DSL.Ebinop (e0, e3, er) ->
         (match e0 with
          | DSL.Eadd ->
-           (match e1 with
-            | DSL.Evar v -> Some (v, (DSL.Ebinop (DSL.Esub, el, er0)))
-            | _ -> None)
-         | _ -> None)
-      | _ -> None)
-   | DSL.Eunop (_, _) ->
-     (match er with
-      | DSL.Evar v -> Some (v, el)
-      | DSL.Ebinop (e2, e3, er0) ->
-        (match e2 with
-         | DSL.Eadd ->
            (match e3 with
-            | DSL.Evar v -> Some (v, (DSL.Ebinop (DSL.Esub, el, er0)))
-            | _ -> None)
-         | _ -> None)
-      | _ -> None)
-   | DSL.Ebinop (e0, e1, el0) ->
+            | DSL.Evar v -> Some (v, (DSL.Ebinop (DSL.Esub, e1, er)))
+            | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+         | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+      | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+   | DSL.Eunop (_, _) ->
+     (match e2 with
+      | DSL.Evar v -> Some (v, e1)
+      | DSL.Ebinop (e4, e5, er) ->
+        (match e4 with
+         | DSL.Eadd ->
+           (match e5 with
+            | DSL.Evar v -> Some (v, (DSL.Ebinop (DSL.Esub, e1, er)))
+            | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+         | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+      | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+   | DSL.Ebinop (e0, e3, el) ->
      (match e0 with
       | DSL.Eadd ->
-        (match e1 with
+        (match e3 with
          | DSL.Evar v ->
-           (match er with
-            | DSL.Evar v0 -> Some (v0, el)
-            | _ -> Some (v, (DSL.Ebinop (DSL.Esub, er, el0))))
+           (match e2 with
+            | DSL.Evar v0 -> Some (v0, e1)
+            | _ -> Some (v, (DSL.Ebinop (DSL.Esub, e2, el))))
          | DSL.Econst _ ->
-           (match er with
-            | DSL.Evar v -> Some (v, el)
-            | DSL.Ebinop (e2, e3, er0) ->
-              (match e2 with
-               | DSL.Eadd ->
-                 (match e3 with
-                  | DSL.Evar v -> Some (v, (DSL.Ebinop (DSL.Esub, el, er0)))
-                  | _ -> None)
-               | _ -> None)
-            | _ -> None)
-         | DSL.Eunop (_, _) ->
-           (match er with
-            | DSL.Evar v -> Some (v, el)
-            | DSL.Ebinop (e4, e5, er0) ->
+           (match e2 with
+            | DSL.Evar v -> Some (v, e1)
+            | DSL.Ebinop (e4, e5, er) ->
               (match e4 with
                | DSL.Eadd ->
                  (match e5 with
-                  | DSL.Evar v -> Some (v, (DSL.Ebinop (DSL.Esub, el, er0)))
-                  | _ -> None)
-               | _ -> None)
-            | _ -> None)
-         | DSL.Ebinop (_, _, _) ->
-           (match er with
-            | DSL.Evar v -> Some (v, el)
-            | DSL.Ebinop (e5, e6, er0) ->
-              (match e5 with
-               | DSL.Eadd ->
-                 (match e6 with
-                  | DSL.Evar v -> Some (v, (DSL.Ebinop (DSL.Esub, el, er0)))
-                  | _ -> None)
-               | _ -> None)
-            | _ -> None))
-      | _ ->
-        (match er with
-         | DSL.Evar v -> Some (v, el)
-         | DSL.Ebinop (e2, e3, er0) ->
+                  | DSL.Evar v -> Some (v, (DSL.Ebinop (DSL.Esub, e1, er)))
+                  | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+               | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+            | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+         | DSL.Eunop (_, _) ->
            (match e2 with
+            | DSL.Evar v -> Some (v, e1)
+            | DSL.Ebinop (e6, e7, er) ->
+              (match e6 with
+               | DSL.Eadd ->
+                 (match e7 with
+                  | DSL.Evar v -> Some (v, (DSL.Ebinop (DSL.Esub, e1, er)))
+                  | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+               | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+            | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+         | DSL.Ebinop (_, _, _) ->
+           (match e2 with
+            | DSL.Evar v -> Some (v, e1)
+            | DSL.Ebinop (e7, e8, er) ->
+              (match e7 with
+               | DSL.Eadd ->
+                 (match e8 with
+                  | DSL.Evar v -> Some (v, (DSL.Ebinop (DSL.Esub, e1, er)))
+                  | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+               | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+            | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2)))
+      | _ ->
+        (match e2 with
+         | DSL.Evar v -> Some (v, e1)
+         | DSL.Ebinop (e4, e5, er) ->
+           (match e4 with
             | DSL.Eadd ->
-              (match e3 with
-               | DSL.Evar v -> Some (v, (DSL.Ebinop (DSL.Esub, el, er0)))
-               | _ -> None)
-            | _ -> None)
-         | _ -> None)))
+              (match e5 with
+               | DSL.Evar v -> Some (v, (DSL.Ebinop (DSL.Esub, e1, er)))
+               | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+            | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+         | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))))
 | Seqmod (_, _, _) -> None
 
 (** val simplify_arep_rec :
@@ -137,14 +200,14 @@ let is_assignment = function
 let rec simplify_arep_rec visited premises conseq0 =
   match premises with
   | [] -> ((rev visited), conseq0)
-  | e :: es ->
-    (match is_assignment e with
-     | Some p0 ->
-       let (p, r) = p0 in
-       simplify_arep_rec (subst_azbexps (SSA.SSA.evar p) r visited)
-         (subst_azbexps (SSA.SSA.evar p) r es)
-         (azbexp_subst (SSA.SSA.evar p) r conseq0)
-     | None -> simplify_arep_rec (e :: visited) es conseq0)
+  | a :: l ->
+    (match is_assignment a with
+     | Some a0 ->
+       let (a1, b) = a0 in
+       simplify_arep_rec (subst_azbexps (SSA.SSA.evar a1) b visited)
+         (subst_azbexps (SSA.SSA.evar a1) b l)
+         (azbexp_subst (SSA.SSA.evar a1) b conseq0)
+     | None -> simplify_arep_rec (a :: visited) l conseq0)
 
 (** val simplify_arep : arep -> arep **)
 
@@ -178,15 +241,15 @@ let subst_azbexps_vars_cache p r vspr ves =
 let rec simplify_arep_vars_cache_rec visited premises conseq0 =
   match premises with
   | [] -> ((rev visited), conseq0)
-  | ve :: ves ->
-    (match is_assignment (snd ve) with
-     | Some p0 ->
-       let (p, r) = p0 in
+  | a :: l ->
+    (match is_assignment (snd a) with
+     | Some a0 ->
+       let (a1, b) = a0 in
        simplify_arep_vars_cache_rec
-         (subst_azbexps_vars_cache p r (fst ve) visited)
-         (subst_azbexps_vars_cache p r (fst ve) ves)
-         (azbexp_subst_vars_cache p r (fst ve) conseq0)
-     | None -> simplify_arep_vars_cache_rec (ve :: visited) ves conseq0)
+         (subst_azbexps_vars_cache a1 b (fst a) visited)
+         (subst_azbexps_vars_cache a1 b (fst a) l)
+         (azbexp_subst_vars_cache a1 b (fst a) conseq0)
+     | None -> simplify_arep_vars_cache_rec (a :: visited) l conseq0)
 
 (** val vars_azbexp : azbexp -> SSAVS.t **)
 

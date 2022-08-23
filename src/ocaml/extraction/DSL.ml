@@ -1552,14 +1552,14 @@ module MakeDSL =
   (** val atom_rect : (V.t -> 'a1) -> (typ -> bits -> 'a1) -> atom -> 'a1 **)
 
   let atom_rect f f0 = function
-  | Avar x -> f x
-  | Aconst (x, x0) -> f0 x x0
+  | Avar t0 -> f t0
+  | Aconst (t0, b) -> f0 t0 b
 
   (** val atom_rec : (V.t -> 'a1) -> (typ -> bits -> 'a1) -> atom -> 'a1 **)
 
   let atom_rec f f0 = function
-  | Avar x -> f x
-  | Aconst (x, x0) -> f0 x x0
+  | Avar t0 -> f t0
+  | Aconst (t0, b) -> f0 t0 b
 
   (** val atyp : atom -> TE.env -> typ **)
 
@@ -1622,35 +1622,35 @@ module MakeDSL =
       'a1) -> (bexp -> 'a1) -> instr -> 'a1 **)
 
   let instr_rect f f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15 f16 f17 f18 f19 f20 f21 f22 f23 f24 f25 f26 f27 = function
-  | Imov (x, x0) -> f x x0
-  | Ishl (x, x0, x1) -> f0 x x0 x1
-  | Icshl (x, x0, x1, x2, x3) -> f1 x x0 x1 x2 x3
-  | Inondet (x, x0) -> f2 x x0
-  | Icmov (x, x0, x1, x2) -> f3 x x0 x1 x2
+  | Imov (t0, a) -> f t0 a
+  | Ishl (t0, a, n) -> f0 t0 a n
+  | Icshl (t0, t1, a, a0, n) -> f1 t0 t1 a a0 n
+  | Inondet (t0, t1) -> f2 t0 t1
+  | Icmov (t0, a, a0, a1) -> f3 t0 a a0 a1
   | Inop -> f4
-  | Inot (x, x0, x1) -> f5 x x0 x1
-  | Iadd (x, x0, x1) -> f6 x x0 x1
-  | Iadds (x, x0, x1, x2) -> f7 x x0 x1 x2
-  | Iadc (x, x0, x1, x2) -> f8 x x0 x1 x2
-  | Iadcs (x, x0, x1, x2, x3) -> f9 x x0 x1 x2 x3
-  | Isub (x, x0, x1) -> f10 x x0 x1
-  | Isubc (x, x0, x1, x2) -> f11 x x0 x1 x2
-  | Isubb (x, x0, x1, x2) -> f12 x x0 x1 x2
-  | Isbc (x, x0, x1, x2) -> f13 x x0 x1 x2
-  | Isbcs (x, x0, x1, x2, x3) -> f14 x x0 x1 x2 x3
-  | Isbb (x, x0, x1, x2) -> f15 x x0 x1 x2
-  | Isbbs (x, x0, x1, x2, x3) -> f16 x x0 x1 x2 x3
-  | Imul (x, x0, x1) -> f17 x x0 x1
-  | Imull (x, x0, x1, x2) -> f18 x x0 x1 x2
-  | Imulj (x, x0, x1) -> f19 x x0 x1
-  | Isplit (x, x0, x1, x2) -> f20 x x0 x1 x2
-  | Iand (x, x0, x1, x2) -> f21 x x0 x1 x2
-  | Ior (x, x0, x1, x2) -> f22 x x0 x1 x2
-  | Ixor (x, x0, x1, x2) -> f23 x x0 x1 x2
-  | Icast (x, x0, x1) -> f24 x x0 x1
-  | Ivpc (x, x0, x1) -> f25 x x0 x1
-  | Ijoin (x, x0, x1) -> f26 x x0 x1
-  | Iassume x -> f27 x
+  | Inot (t0, t1, a) -> f5 t0 t1 a
+  | Iadd (t0, a, a0) -> f6 t0 a a0
+  | Iadds (t0, t1, a, a0) -> f7 t0 t1 a a0
+  | Iadc (t0, a, a0, a1) -> f8 t0 a a0 a1
+  | Iadcs (t0, t1, a, a0, a1) -> f9 t0 t1 a a0 a1
+  | Isub (t0, a, a0) -> f10 t0 a a0
+  | Isubc (t0, t1, a, a0) -> f11 t0 t1 a a0
+  | Isubb (t0, t1, a, a0) -> f12 t0 t1 a a0
+  | Isbc (t0, a, a0, a1) -> f13 t0 a a0 a1
+  | Isbcs (t0, t1, a, a0, a1) -> f14 t0 t1 a a0 a1
+  | Isbb (t0, a, a0, a1) -> f15 t0 a a0 a1
+  | Isbbs (t0, t1, a, a0, a1) -> f16 t0 t1 a a0 a1
+  | Imul (t0, a, a0) -> f17 t0 a a0
+  | Imull (t0, t1, a, a0) -> f18 t0 t1 a a0
+  | Imulj (t0, a, a0) -> f19 t0 a a0
+  | Isplit (t0, t1, a, n) -> f20 t0 t1 a n
+  | Iand (t0, t1, a, a0) -> f21 t0 t1 a a0
+  | Ior (t0, t1, a, a0) -> f22 t0 t1 a a0
+  | Ixor (t0, t1, a, a0) -> f23 t0 t1 a a0
+  | Icast (t0, t1, a) -> f24 t0 t1 a
+  | Ivpc (t0, t1, a) -> f25 t0 t1 a
+  | Ijoin (t0, a, a0) -> f26 t0 a a0
+  | Iassume b -> f27 b
 
   (** val instr_rec :
       (V.t -> atom -> 'a1) -> (V.t -> atom -> int -> 'a1) -> (V.t -> V.t ->
@@ -1670,35 +1670,35 @@ module MakeDSL =
       'a1) -> (bexp -> 'a1) -> instr -> 'a1 **)
 
   let instr_rec f f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15 f16 f17 f18 f19 f20 f21 f22 f23 f24 f25 f26 f27 = function
-  | Imov (x, x0) -> f x x0
-  | Ishl (x, x0, x1) -> f0 x x0 x1
-  | Icshl (x, x0, x1, x2, x3) -> f1 x x0 x1 x2 x3
-  | Inondet (x, x0) -> f2 x x0
-  | Icmov (x, x0, x1, x2) -> f3 x x0 x1 x2
+  | Imov (t0, a) -> f t0 a
+  | Ishl (t0, a, n) -> f0 t0 a n
+  | Icshl (t0, t1, a, a0, n) -> f1 t0 t1 a a0 n
+  | Inondet (t0, t1) -> f2 t0 t1
+  | Icmov (t0, a, a0, a1) -> f3 t0 a a0 a1
   | Inop -> f4
-  | Inot (x, x0, x1) -> f5 x x0 x1
-  | Iadd (x, x0, x1) -> f6 x x0 x1
-  | Iadds (x, x0, x1, x2) -> f7 x x0 x1 x2
-  | Iadc (x, x0, x1, x2) -> f8 x x0 x1 x2
-  | Iadcs (x, x0, x1, x2, x3) -> f9 x x0 x1 x2 x3
-  | Isub (x, x0, x1) -> f10 x x0 x1
-  | Isubc (x, x0, x1, x2) -> f11 x x0 x1 x2
-  | Isubb (x, x0, x1, x2) -> f12 x x0 x1 x2
-  | Isbc (x, x0, x1, x2) -> f13 x x0 x1 x2
-  | Isbcs (x, x0, x1, x2, x3) -> f14 x x0 x1 x2 x3
-  | Isbb (x, x0, x1, x2) -> f15 x x0 x1 x2
-  | Isbbs (x, x0, x1, x2, x3) -> f16 x x0 x1 x2 x3
-  | Imul (x, x0, x1) -> f17 x x0 x1
-  | Imull (x, x0, x1, x2) -> f18 x x0 x1 x2
-  | Imulj (x, x0, x1) -> f19 x x0 x1
-  | Isplit (x, x0, x1, x2) -> f20 x x0 x1 x2
-  | Iand (x, x0, x1, x2) -> f21 x x0 x1 x2
-  | Ior (x, x0, x1, x2) -> f22 x x0 x1 x2
-  | Ixor (x, x0, x1, x2) -> f23 x x0 x1 x2
-  | Icast (x, x0, x1) -> f24 x x0 x1
-  | Ivpc (x, x0, x1) -> f25 x x0 x1
-  | Ijoin (x, x0, x1) -> f26 x x0 x1
-  | Iassume x -> f27 x
+  | Inot (t0, t1, a) -> f5 t0 t1 a
+  | Iadd (t0, a, a0) -> f6 t0 a a0
+  | Iadds (t0, t1, a, a0) -> f7 t0 t1 a a0
+  | Iadc (t0, a, a0, a1) -> f8 t0 a a0 a1
+  | Iadcs (t0, t1, a, a0, a1) -> f9 t0 t1 a a0 a1
+  | Isub (t0, a, a0) -> f10 t0 a a0
+  | Isubc (t0, t1, a, a0) -> f11 t0 t1 a a0
+  | Isubb (t0, t1, a, a0) -> f12 t0 t1 a a0
+  | Isbc (t0, a, a0, a1) -> f13 t0 a a0 a1
+  | Isbcs (t0, t1, a, a0, a1) -> f14 t0 t1 a a0 a1
+  | Isbb (t0, a, a0, a1) -> f15 t0 a a0 a1
+  | Isbbs (t0, t1, a, a0, a1) -> f16 t0 t1 a a0 a1
+  | Imul (t0, a, a0) -> f17 t0 a a0
+  | Imull (t0, t1, a, a0) -> f18 t0 t1 a a0
+  | Imulj (t0, a, a0) -> f19 t0 a a0
+  | Isplit (t0, t1, a, n) -> f20 t0 t1 a n
+  | Iand (t0, t1, a, a0) -> f21 t0 t1 a a0
+  | Ior (t0, t1, a, a0) -> f22 t0 t1 a a0
+  | Ixor (t0, t1, a, a0) -> f23 t0 t1 a a0
+  | Icast (t0, t1, a) -> f24 t0 t1 a
+  | Ivpc (t0, t1, a) -> f25 t0 t1 a
+  | Ijoin (t0, a, a0) -> f26 t0 a a0
+  | Iassume b -> f27 b
 
   type program = instr list
 

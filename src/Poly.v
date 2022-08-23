@@ -192,7 +192,102 @@ Section AtomicRootEntailmentSimpl.
         case: IH => IH1 IH2. exact: (IH2 Hev' _ Hin_f).
   Qed.
 
+  Fixpoint single_variables (e : zexp) :=
+    match e with
+    | Evar v => SSAVS.singleton v
+    | Econst _ => SSAVS.empty
+    | Eunop _ e => single_variables e
+    | Ebinop op e1 e2 =>
+        if (op == Eadd) || (op == Esub) then SSAVS.union (single_variables e1) (single_variables e2)
+        else SSAVS.empty
+    end.
 
+  Fixpoint num_occurrence (v : var) (e : zexp) :=
+    match e with
+    | Evar x => if x == v then 1 else 0
+    | Eunop _ e => num_occurrence v e
+    | Ebinop _ e1 e2 => num_occurrence v e1 + num_occurrence v e2
+    | _ => 0
+    end.
+
+  Fixpoint separate v (e : zexp) (pat : zexp) {struct e} :=
+    match e with
+    | Evar x => if x == v then Some pat
+                else None
+    | Eunop Eneg e => if SSAVS.mem v (vars_zexp e) then separate v e (eneg pat)
+                      else None
+    | Ebinop op e1 e2 =>
+       let in1 := SSAVS.mem v (vars_zexp e1) in
+       let in2 := SSAVS.mem v (vars_zexp e2) in
+       match op, in1, in2 with
+       | Eadd, true, false => separate v e1 (esub pat e2)
+       | Eadd, false, true => separate v e2 (esub pat e1)
+       | Esub, true, false => separate v e1 (eadd pat e2)
+       | Esub, false, true => separate v e2 (esub e1 pat)
+       | _, _, _ => None
+       end
+    | _ => None
+    end.
+
+  Definition get_rewrite_pattern (e : zexp) :=
+    let candidates := SSAVS.filter (fun v => num_occurrence v e == 1) (single_variables e) in
+    if SSAVS.cardinal candidates == 0 then
+      None
+    else
+      match SSAVS.min_elt candidates with
+      | None => None
+      | Some v =>
+          match separate v e (econst Z.zero) with
+          | None => None
+          | Some pat =>
+              (*let pat := simplifylala_eexp pat in*)
+              Some (v, pat)
+          end
+      end.
+
+  Lemma separate_some_eval (v : var) (e : zexp) (pat : zexp) (r : zexp) s :
+    separate v e pat = Some r ->
+    eval_zexp e s = eval_zexp pat s ->
+    eval_zexp (Evar v) s = eval_zexp r s.
+  Proof.
+    elim: e pat r => //=.
+    - move=> v' pat r.
+      (* It is weird that `case Hv: (v' == v)` does not work as expected without
+         the following rewriting with Coq 8.15.2. *)
+      move: (Logic.eq_refl (if v' == v then Some pat else None)) => ->.
+      case Hv: (v' == v); last by done. case=> ->. move/eqP: Hv => ->. by apply.
+    - case. move=> e IH pat r. case Hmem: (SSAVS.mem v (vars_zexp e)); last by done.
+      move=> Hsep /= Hev. apply: (IH _ _ Hsep) => /=. rewrite -Hev. ring.
+    - case; [| | done].
+      + move=> e1 IH1 e2 IH2 pat r.
+        (case Hmem1: (SSAVS.mem v (vars_zexp e1)); case Hmem2: (SSAVS.mem v (vars_zexp e2)));
+        [done | | | done].
+        * move=> Hsep /= Hev. apply: (IH1 _ _ Hsep) => /=. rewrite -Hev. ring.
+        * move=> Hsep /= Hev. apply: (IH2 _ _ Hsep) => /=. rewrite -Hev. ring.
+      + move=> e1 IH1 e2 IH2 pat r.
+        (case Hmem1: (SSAVS.mem v (vars_zexp e1)); case Hmem2: (SSAVS.mem v (vars_zexp e2)));
+        [done | | | done].
+        * move=> Hsep /= Hev. apply: (IH1 _ _ Hsep) => /=. rewrite -Hev. ring.
+        * move=> Hsep /= Hev. apply: (IH2 _ _ Hsep) => /=. rewrite -Hev. ring.
+  Qed.
+
+  Lemma get_rewrite_pattern_eval e v r s :
+    get_rewrite_pattern e = Some (v, r) ->
+    eval_zexp e s = 0%Z ->
+    eval_zexp (Evar v) s = eval_zexp r s.
+  Proof.
+    rewrite /get_rewrite_pattern.
+    case: (SSAVS.cardinal
+             (SSAVS.filter
+                (fun v0 : SSAVS.elt => num_occurrence v0 e == 1) (single_variables e)) == 0);
+      first by done.
+    case: (SSAVS.min_elt
+             (SSAVS.filter
+                (fun v0 : SSAVS.elt => num_occurrence v0 e == 1) (single_variables e)));
+      last by done.
+    move=> v'. case Hsep: (separate v' e (econst Z.zero)); last by done.
+    case=> ? ?; subst. move=> Hev. exact: (separate_some_eval Hsep Hev).
+  Qed.
 
   Definition is_assignment (e : azbexp) : option (ssavar * ZSSA.zexp) :=
     match e with
@@ -200,7 +295,7 @@ Section AtomicRootEntailmentSimpl.
     | Seq e (Evar v) => Some (v, e)
     | Seq (Ebinop Eadd (Evar v) el) er => Some (v, Ebinop Esub er el)
     | Seq el (Ebinop Eadd (Evar v) er) => Some (v, Ebinop Esub el er)
-    | Seq _ _ => None
+    | Seq e1 e2 => get_rewrite_pattern (esub e1 e2)
     | Seqmod _ _ _ => None
     end.
 
@@ -224,6 +319,13 @@ Section AtomicRootEntailmentSimpl.
            | |- context f [(?n + ?m - ?m)%Z] => rewrite Z.add_simpl_r
            | H : ?l = ?r |- context f [?l] => rewrite H /=; clear H
            | H : ?l = ?r |- context f [?r] => rewrite -H /=; clear H
+           | s : ZSSAStore.t, H1 : get_rewrite_pattern ?e = Some _,
+                 H2 : _ = _ |- _ =>
+               let H := fresh in
+               let HH := fresh in
+               (have H: (eval_zexp e s = 0%Z) by (simpl; rewrite -H2; ring));
+               (move: (get_rewrite_pattern_eval H1 H) => /= HH);
+               clear H1 H
            end.
 
   Lemma is_assignment_equal e p r s :
@@ -231,7 +333,7 @@ Section AtomicRootEntailmentSimpl.
     eval_azbexp e s -> eval_zexp (evar p) s = eval_zexp r s.
   Proof.
     case: e => //=. move=> left right.
-    (case: left; case: right => //=); intros; by mytac.
+    (case: left; case: right => //=); intros; mytac; by done.
   Qed.
 
   Corollary subst_assignment_valid e p r e' s :
