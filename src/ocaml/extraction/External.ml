@@ -16,6 +16,12 @@ let keep_temp_files = ref false
 let temp_file_prefix = "coqcryptoline_temp"
 let use_fork = ref false
 
+let starts_with s t =
+  let len_s = String.length s in
+  let len_t = String.length t in
+  if len_t <= len_s then String.sub s 0 len_t = t
+  else false
+
 (** Basic numbers conversion *)
 
 let string_of_bits bs =
@@ -288,7 +294,7 @@ let cleanup_lwt files =
   else Lwt.return_unit
 
 let run_sat_solver_lwt header ifile ofile errfile dratfile =
-  let%lwt t1 = Lwt.return (Unix.gettimeofday()) in
+  let t1 = Unix.gettimeofday() in
   let%lwt cmd =
     Lwt.return (
         match !sat_solver with
@@ -317,7 +323,7 @@ let run_sat_solver_lwt header ifile ofile errfile dratfile =
       )
   in
   let%lwt res = Options.WithLwt.unix cmd in
-  let%lwt t2 = Lwt.return (Unix.gettimeofday()) in
+  let t2 = Unix.gettimeofday() in
   let%lwt _ = Options.WithLwt.lock_log () in
   let%lwt _ = Lwt_list.iter_s (fun h ->
                   let%lwt _ = Options.WithLwt.trace h in
@@ -392,15 +398,15 @@ let coq_cnf_unsat_lwt header cnf : (bool * string * bool * string) Lwt.t =
   let%lwt _ = coq_output_dimacs_lwt ch cnf in
   let%lwt _ = Lwt_io.close ch in
   let%lwt (unsat, unsat_time) =
-    let%lwt t1 = Lwt.return (Unix.gettimeofday()) in
+    let t1 = Unix.gettimeofday() in
     let%lwt res = run_sat_solver_lwt header ifile ofile errfile dratfile in
-    let%lwt t2 = Lwt.return (Unix.gettimeofday()) in
+    let t2 = Unix.gettimeofday() in
     Lwt.return (res, string_of_running_time t1 t2) in
   let%lwt (certified, certified_time) =
     if unsat then
-      let%lwt t1 = Lwt.return (Unix.gettimeofday()) in
+      let t1 = Unix.gettimeofday() in
       let%lwt certified = run_sat_certifier_lwt ifile dratfile in
-      let%lwt t2 = Lwt.return (Unix.gettimeofday()) in
+      let t2 = Unix.gettimeofday() in
       Lwt.return (certified, string_of_running_time t1 t2)
     else
       Lwt.return (false, "N/A") in
@@ -813,8 +819,11 @@ let coq_compute_coefficients_by_lift (vars, p, gs) =
       "ring r = integer, (" ^ varseq ^ "), lp;\n"
       ^ "ideal gs' = " ^ generator ^ ";\n"
       ^ "poly p' = " ^ poly ^ ";\n"
-      ^ "ideal I' = groebner(gs');\n"
-      ^ "poly q' = reduce(p', I');\n"
+      ^ "poly q' = reduce(p', gs');\n"
+      ^ "if (q' != 0) {\n"
+      ^ "  ideal I' = groebner(gs');\n"
+      ^ "  q' = reduce(p', I');\n"
+      ^ "}\n"
       ^ "q';\n"
       ^ "if (q' == 0) {\n"
       ^ "  \"" ^ singular_output_sep ^ "\";\n"
@@ -840,7 +849,8 @@ let coq_compute_coefficients_by_lift (vars, p, gs) =
     let _ =
       try
         while true do
-	      lines := String.trim (input_line ch)::!lines
+          let line = String.trim (input_line ch) in
+          if not (line = "" || starts_with line "//") then lines := line::!lines
         done
       with
         End_of_file -> ()
@@ -962,7 +972,7 @@ let coq_compute_coefficients_by_div_lwt header (vars, p, g) =
     let%lwt lines = Lwt_stream.to_list lines in
     let%lwt _ = Lwt_io.close ch in
     Lwt.return (split ([], false) lines) in
-  let%lwt t1 = Lwt.return (Unix.gettimeofday()) in
+  let t1 = Unix.gettimeofday() in
   let%lwt _ = write_to_singular ifile in
   let%lwt _ = run_singular_lwt header ifile ofile in
   let%lwt coefs = read_singular_output ofile in
@@ -971,7 +981,7 @@ let coq_compute_coefficients_by_div_lwt header (vars, p, g) =
     Lwt.return (match coefs with
                 | c::[] -> [coq_term_of_string c]
                 | _ -> peo_list 1) in
-  let%lwt t2 = Lwt.return (Unix.gettimeofday()) in
+  let t2 = Unix.gettimeofday() in
   Lwt.return (res, string_of_running_time t1 t2)
 
 let coq_compute_coefficients_by_lift_lwt header (vars, p, gs) =
@@ -990,8 +1000,11 @@ let coq_compute_coefficients_by_lift_lwt header (vars, p, gs) =
       "ring r = integer, (" ^ varseq ^ "), lp;\n"
       ^ "ideal gs' = " ^ generator ^ ";\n"
       ^ "poly p' = " ^ poly ^ ";\n"
-      ^ "ideal I' = groebner(gs');\n"
-      ^ "poly q' = reduce(p', I');\n"
+      ^ "poly q' = reduce(p', gs');\n"
+      ^ "if (q' != 0) {\n"
+      ^ "  ideal I' = groebner(gs');\n"
+      ^ "  q' = reduce(p', I');\n"
+      ^ "}\n"
       ^ "q';\n"
       ^ "if (q' == 0) {\n"
       ^ "  \"" ^ singular_output_sep ^ "\";\n"
@@ -1012,7 +1025,7 @@ let coq_compute_coefficients_by_lift_lwt header (vars, p, gs) =
       | hd::tl when hd = singular_output_sep -> split (is_in_ideal, p_coef_gs, i + 1) tl
       | hd::tl ->
          let hd = String.trim hd in
-         if hd = "" then split (is_in_ideal, p_coef_gs, i) tl (* skip empty line *)
+         if hd = "" || starts_with hd "//" then split (is_in_ideal, p_coef_gs, i) tl (* skip empty lines and comments *)
          else if i = 0 then split (hd = "0", p_coef_gs, i) tl
          else split (is_in_ideal, hd::p_coef_gs, i) tl in
     let%lwt ofd = Lwt_unix.openfile ofile [Lwt_unix.O_RDONLY] 0o600 in
@@ -1027,7 +1040,7 @@ let coq_compute_coefficients_by_lift_lwt header (vars, p, gs) =
   let after_eq_sign str =
     let i = String.index str '=' + 1 in
     String.sub str i (String.length str - i) in
-  let%lwt t1 = Lwt.return (Unix.gettimeofday()) in
+  let t1 = Unix.gettimeofday() in
   let%lwt _ = write_to_singular ifile in
   let%lwt _ = run_singular_lwt header ifile ofile in
   let%lwt (is_in_ideal, p_coef_gs) = read_singular_output ofile in
@@ -1038,7 +1051,7 @@ let coq_compute_coefficients_by_lift_lwt header (vars, p, gs) =
       Lwt.return (true, p_coef_gs)
     else
       Lwt.return (false, (peo_list (List.length gs))) in
-  let%lwt t2 = Lwt.return (Unix.gettimeofday()) in
+  let t2 = Unix.gettimeofday() in
   Lwt.return (res, string_of_running_time t1 t2)
 
 let coq_compute_coefficients_by_lift_lwt header (vars, p, gs) =
