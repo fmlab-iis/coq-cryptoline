@@ -1219,7 +1219,11 @@ instr:
                                                     parse_imov_at lno $1 $3 }
   | SHL lval atomic const                         { let lno = !lnum in
                                                     parse_ishl_at lno $2 $3 $4 }
+  | SHL lval atomic const AT typ                  { let lno = !lnum in
+                                                    parse_ishl_at lno $2 $3 $4 }
   | lhs EQOP SHL atomic const                     { let lno = !lnum in
+                                                    parse_ishl_at lno $1 $4 $5 }
+  | lhs EQOP SHL atomic const AT typ              { let lno = !lnum in
                                                     parse_ishl_at lno $1 $4 $5 }
   | CSHL lval lval atomic atomic const            { let lno = !lnum in
                                                     parse_cshl_at lno $2 $3 $4 $5 $6 }
