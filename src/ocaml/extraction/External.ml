@@ -628,7 +628,7 @@ let rec coq_singular_of_pexpr e =
   match e with
   | PEO -> "0"
   | PEI -> "1"
-  | PEc c -> Z.to_string (z_of_coq_z c)
+  | PEc c -> "bigint(" ^ Z.to_string (z_of_coq_z c) ^ ")"
   | PEX v -> coq_pexpr_string_of_var v
   | PEadd (e1, e2) ->
 	  (if not (coq_is_opp e1) then coq_singular_of_pexpr e1 else "(" ^ coq_singular_of_pexpr e1 ^ ")")
