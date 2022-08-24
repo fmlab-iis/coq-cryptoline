@@ -706,6 +706,8 @@ module SSA :
 
   val esq : eexp -> eexp
 
+  val epow : eexp -> coq_N -> DSL.eexp
+
   val eadds : eexp list -> eexp
 
   val emuls : eexp list -> eexp

@@ -7,6 +7,7 @@ let _eq_symbol = "="
 let add_symbol = "+"
 let sub_symbol = "-"
 let mul_symbol = "*"
+let pow_symbol = "**"
 let ult_symbol = "<u"
 let ule_symbol = "<=u"
 let ugt_symbol = ">u"
@@ -140,6 +141,7 @@ type ebinop =
   | Eadd
   | Esub
   | Emul
+  | Epow
 
 type runop =
   | Rnegb
@@ -179,12 +181,14 @@ let string_of_ebinop op =
   | Eadd -> "add"
   | Esub -> "sub"
   | Emul -> "mul"
+  | Epow -> "pow"
 
 let symbol_of_ebinop op =
   match op with
   | Eadd -> add_symbol
   | Esub -> sub_symbol
   | Emul -> mul_symbol
+  | Epow -> pow_symbol
 
 let string_of_rcmpop op =
   match op with
@@ -241,6 +245,10 @@ let eneg e = Eunop (Eneg, e)
 let eadd e1 e2 = Ebinop (Eadd, e1, e2)
 let esub e1 e2 = Ebinop (Esub, e1, e2)
 let emul e1 e2 = Ebinop (Emul, e1, e2)
+let epow e1 e2 =
+  match e2 with
+  | Econst _ -> Ebinop (Epow, e1, e2)
+  | _ -> failwith "Epow must have integer exponentials"
 let esq e = Ebinop (Emul, e, e)
 (*let eadds es = List.fold_left (fun res e -> eadd e res) (econst Z.zero) es
 let emuls es = List.fold_left (fun res e -> emul e res) (econst Z.one) es*)
@@ -332,6 +340,8 @@ let rec simplify_eexp e =
       | Emul, Econst n, _e when Z.equal n Z.zero -> Econst Z.zero
       | Emul, e, Econst n when Z.equal n Z.one -> e
       | Emul, Econst n, e when Z.equal n Z.one -> e
+      | Epow, _, Econst n when Z.equal n Z.zero -> Econst Z.one
+      | Epow, e, Econst n when Z.equal n Z.one -> e
       | _ -> Ebinop (op, e1, e2))
   | _ -> e
 
@@ -364,6 +374,7 @@ let ebinop_precedence op =
   | Eadd -> 0
   | Esub -> 0
   | Emul -> 1
+  | Epow -> 2
 
 let eexp_precedence e =
   match e with
@@ -380,6 +391,7 @@ let ebinop_eexp_open op e =
   | Eadd, Ebinop (op, _, _) -> op = Eadd || op = Esub
   | Esub, Ebinop (_op, _, _) -> false
   | Emul, Ebinop (op, _, _) -> op = Emul
+  | _, Ebinop (_op, _, _) -> false
 
 let eexp_ebinop_open e op =
   match e, op with
@@ -389,6 +401,7 @@ let eexp_ebinop_open e op =
   | Ebinop (op, _, _), Eadd -> op = Eadd || op = Esub
   | Ebinop (op, _, _), Esub -> op = Eadd || op = Esub
   | Ebinop (op, _, _), Emul -> op = Emul
+  | Ebinop (_op, _, _), _ -> false
 
 let is_eexp_atomic e =
   match e with

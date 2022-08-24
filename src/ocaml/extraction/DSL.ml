@@ -232,6 +232,7 @@ module Coq__1 = struct
  | Econst of coq_Z
  | Eunop of eunop * eexp
  | Ebinop of ebinop * eexp * eexp
+ | Epow of eexp * coq_N
 end
 include Coq__1
 
@@ -306,6 +307,12 @@ let rec eexp_eqn var e1 e2 =
        (&&)
          ((&&) (eq_op ebinop_eqType (Obj.magic op1) (Obj.magic op2))
            (eexp_eqn var e3 e5)) (eexp_eqn var e4 e6)
+     | _ -> false)
+  | Epow (e3, n1) ->
+    (match e2 with
+     | Epow (e4, n2) ->
+       (&&) (eexp_eqn var e3 e4)
+         (eq_op bin_nat_eqType (Obj.magic n1) (Obj.magic n2))
      | _ -> false)
 
 (** val eexp_eqP : Equality.coq_type -> eexp -> eexp -> reflect **)
@@ -1096,6 +1103,11 @@ module MakeDSL =
   let esq e =
     Ebinop (Emul, e, e)
 
+  (** val epow : eexp -> coq_N -> Coq__1.eexp **)
+
+  let epow e n =
+    Epow (e, n)
+
   (** val eadds : eexp list -> eexp **)
 
   let eadds es =
@@ -1128,6 +1140,7 @@ module MakeDSL =
   | Econst _ -> VS.empty
   | Eunop (_, e0) -> vars_eexp e0
   | Ebinop (_, e1, e2) -> VS.union (vars_eexp e1) (vars_eexp e2)
+  | Epow (e0, _) -> vars_eexp e0
 
   (** val vars_eexps : eexp list -> VS.t **)
 
@@ -2020,6 +2033,7 @@ module MakeDSL =
     | Eunop (op0, e0) -> eval_eunop op0 (eval_eexp e0 te s)
     | Ebinop (op0, e1, e2) ->
       eval_ebinop op0 (eval_eexp e1 te s) (eval_eexp e2 te s)
+    | Epow (e0, n) -> Z.pow (eval_eexp e0 te s) (Z.of_N n)
 
   (** val eval_eexps : eexp list -> TE.env -> S.t -> coq_Z list **)
 
@@ -2105,6 +2119,7 @@ module MakeDSL =
   let rec well_typed_eexp te = function
   | Eunop (_, e0) -> well_typed_eexp te e0
   | Ebinop (_, e1, e2) -> (&&) (well_typed_eexp te e1) (well_typed_eexp te e2)
+  | Epow (e0, _) -> well_typed_eexp te e0
   | _ -> true
 
   (** val well_typed_eexps : TE.env -> eexp list -> bool **)

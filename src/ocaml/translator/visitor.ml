@@ -58,15 +58,22 @@ let rec visit_eexp m g e =
 		| Ast.Cryptoline.Eneg -> Extraction.DSL.Eneg in
       let (m', g', coq_e') = visit_eexp m g e in
       (m', g', Extraction.DSL.Eunop (cop, coq_e'))
+  | Ast.Cryptoline.Ebinop (op, e, Ast.Cryptoline.Econst n) when op = Ast.Cryptoline.Epow ->
+     let (m', g', coq_e') = visit_eexp m g e in
+     let coq_n' = Extraction.External.coq_n_of_z n in
+     (m', g', Extraction.DSL.Epow (coq_e', coq_n'))
+  | Ast.Cryptoline.Ebinop (op, _, _) when op = Ast.Cryptoline.Epow ->
+     assert false
   | Ast.Cryptoline.Ebinop (op, e1, e2) ->
-      let cop =
-		match op with
-		| Ast.Cryptoline.Eadd -> Extraction.DSL.Eadd
-		| Ast.Cryptoline.Esub -> Extraction.DSL.Esub
-		| Ast.Cryptoline.Emul -> Extraction.DSL.Emul in
-      let (m', g', coq_e1') = visit_eexp m g e1 in
-      let (m'', g'', coq_e2') = visit_eexp m' g' e2 in
-      (m'', g'', Extraction.DSL.Ebinop (cop, coq_e1', coq_e2'))
+     let cop =
+	   match op with
+	   | Ast.Cryptoline.Eadd -> Extraction.DSL.Eadd
+	   | Ast.Cryptoline.Esub -> Extraction.DSL.Esub
+	   | Ast.Cryptoline.Emul -> Extraction.DSL.Emul
+       | _ -> assert false in
+     let (m', g', coq_e1') = visit_eexp m g e1 in
+     let (m'', g'', coq_e2') = visit_eexp m' g' e2 in
+     (m'', g'', Extraction.DSL.Ebinop (cop, coq_e1', coq_e2'))
 
 let rec visit_rexp m g e =
   match e with

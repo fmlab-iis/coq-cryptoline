@@ -14,6 +14,8 @@ val z_of_pos : positive -> Z.t
 val pos_of_z : Z.t -> positive
 val coq_z_of_z : Z.t -> coq_Z
 val z_of_coq_z : coq_Z -> Z.t
+val coq_n_of_z : Z.t -> coq_N
+val z_of_coq_n : coq_N -> Z.t
 
 val keep_temp_files : bool ref
 val use_fork : bool ref

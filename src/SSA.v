@@ -86,6 +86,7 @@ Section MakeSSA.
     | Econst c => SSA.econst c
     | Eunop op e => SSA.eunary op (ssa_eexp m e)
     | Ebinop op e1 e2 => SSA.ebinary op (ssa_eexp m e1) (ssa_eexp m e2)
+    | Epow e n => SSA.epow (ssa_eexp m e) n
     end.
 
   Definition ssa_eexps (m : vmap) (es : seq DSL.eexp) : seq SSA.eexp :=
@@ -656,11 +657,9 @@ Section MakeSSA.
     elim: e => /=.
     - exact: ssa_vars_singleton.
     - reflexivity.
-    - move=> op e IH.
-      assumption.
-    - move=> op e1 IH1 e2 IH2.
-      rewrite -IH1 -IH2 ssa_vars_union.
-      reflexivity.
+    - move=> op e IH. assumption.
+    - move=> op e1 IH1 e2 IH2. rewrite -IH1 -IH2 ssa_vars_union. reflexivity.
+    - move=> e H n. assumption.
   Qed.
 
   Lemma ssa_vars_eexps_comm m (es : seq DSL.eexp) :
@@ -1809,6 +1808,7 @@ Section MakeSSA.
     - reflexivity.
     - move=> op e IH. rewrite IH. reflexivity.
     - move=> op e1 IH1 e2 IH2. rewrite IH1 IH2. reflexivity.
+    - move=> e IH n. rewrite IH. reflexivity.
   Qed.
 
   Lemma ssa_eval_eexps m s ss te ste (es : seq DSL.eexp) :
@@ -3385,6 +3385,7 @@ Section MakeSSA.
     - move=> op e1 IH1 e2 IH2 Hun Hei.
       move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2].
       rewrite (IH1 Hun1 Hei) (IH2 Hun2 Hei); reflexivity.
+    - move=> e IH n Hun Hei. rewrite (IH Hun Hei). reflexivity.
   Qed.
 
   Lemma ssa_unchanged_instr_eval_eexps es te s1 s2 i :
@@ -3454,6 +3455,7 @@ Section MakeSSA.
     - move=> op e1 IH1 e2 IH2 Hun Hep.
       move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
       rewrite (IH1 Hun1 Hep) (IH2 Hun2 Hep); reflexivity.
+    - move=> e IH n Hun Hei. rewrite (IH Hun Hei). reflexivity.
   Qed.
 
   Lemma ssa_unchanged_program_eval_eexps es te s1 s2 p :
@@ -4535,6 +4537,7 @@ Section MakeSSA.
       rewrite SSA.are_defined_union. apply/andP; split.
       + exact: (H _ _ H1_1).
       + exact: (H0 _ _ H1_2).
+    - exact: (H _ _ H0).
     - by rewrite <- (ssa_vars_are_defined_singleton) in H.
     - done.
     - apply H with m. by rewrite /= in H0.
@@ -4543,6 +4546,7 @@ Section MakeSSA.
       rewrite DSL.are_defined_union. apply/andP; split.
       + exact: (H _ _ H1_1).
       + exact: (H0 _ _ H1_2).
+    - exact: (H _ _ H0).
   Qed.
 
   Lemma ssa_vars_are_defined_eexps m es te:
@@ -4705,12 +4709,14 @@ Section MakeSSA.
     - rewrite /= in H1.
       move/andP: H1 => [H1_1 H1_2].
       apply/andP; split; by [apply H | apply H0].
+    - exact: (H _ _ H0).
     - done.
     - done.
     - apply (H m). by rewrite /= in H0.
     - rewrite /= in H1.
       move/andP: H1 => [H1_1 H1_2].
       apply/andP; split; by [ apply (H m) | apply (H0 m)].
+    - exact: (H _ _ H0).
   Qed.
 
   Lemma ssa_well_typed_eexps m te es:
@@ -5021,6 +5027,7 @@ Section MakeSSA.
       case: (SSA.VSLemmas.mem_union1 Hmem) => {Hmem} Hmem.
       + exact: IH1.
       + exact: IH2.
+    - move=> e IH n m v i Hmem. exact: (IH _ _ _ Hmem).
   Qed.
 
   Lemma ssa_eexps_var_index m (es : seq DSL.eexp) v i :

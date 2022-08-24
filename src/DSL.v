@@ -192,7 +192,8 @@ Section DSLRaw.
   | Evar : var -> eexp
   | Econst : Z -> eexp
   | Eunop : eunop -> eexp -> eexp
-  | Ebinop : ebinop -> eexp -> eexp -> eexp.
+  | Ebinop : ebinop -> eexp -> eexp -> eexp
+  | Epow : eexp -> N -> eexp.
 
   Definition evar v := Evar v.
   Definition econst n := Econst n.
@@ -203,6 +204,7 @@ Section DSLRaw.
   Definition esub e1 e2 := Ebinop Esub e1 e2.
   Definition emul e1 e2 := Ebinop Emul e1 e2.
   Definition esq e := Ebinop Emul e e.
+  Definition epow e n := Epow e n.
 
   Definition eadds (es : seq eexp) : eexp :=
     match es with
@@ -230,17 +232,20 @@ Section DSLRaw.
     | Econst n1, Econst n2 => n1 == n2
     | Eunop op1 e1, Eunop op2 e2 => (op1 == op2) && eexp_eqn e1 e2
     | Ebinop op1 e1 e2, Ebinop op2 e3 e4 =>
-      (op1 == op2) && eexp_eqn e1 e3 && eexp_eqn e2 e4
+        (op1 == op2) && eexp_eqn e1 e3 && eexp_eqn e2 e4
+    | Epow e1 n1, Epow e2 n2 =>
+        (eexp_eqn e1 e2) && (n1 == n2)
     | _, _ => false
     end.
 
   Lemma eexp_eqn_eq (e1 e2 : eexp) : eexp_eqn e1 e2 -> e1 = e2.
   Proof.
-    elim: e1 e2 => [v1 | n1 | op1 e1 IH1 | op1 e1 IH1 e2 IH2] [] //=.
+    elim: e1 e2 => [v1 | n1 | op1 e1 IH1 | op1 e1 IH1 e2 IH2 | e1 IH1 n1] [] //=.
     - by move=> ? /eqP ->.
     - by move=> ? /eqP ->.
     - by move=> ? ? /andP [/eqP -> H]; rewrite (IH1 _ H).
     - by move=> ? ? ? /andP [/andP [/eqP -> H1] H2]; rewrite (IH1 _ H1) (IH2 _ H2).
+    - by move=> ? ? /andP [H1 /eqP ->]; rewrite (IH1 _ H1).
   Qed.
 
   Lemma eexp_eqn_refl (e : eexp) : eexp_eqn e e.
@@ -248,6 +253,7 @@ Section DSLRaw.
     elim: e => //=.
     - by move=> ? ? ->; rewrite eqxx.
     - by move=> ? ? -> ? ->; rewrite eqxx.
+    - by move=> ? -> ?; rewrite eqxx.
   Qed.
 
   Lemma eexp_eqn_sym {e1 e2 : eexp} : eexp_eqn e1 e2 -> eexp_eqn e2 e1.
@@ -581,6 +587,7 @@ Module MakeDSL
   Definition esub (e1 e2 : eexp) : eexp := @Ebinop V.T Esub e1 e2.
   Definition emul (e1 e2 : eexp) : eexp := @Ebinop V.T Emul e1 e2.
   Definition esq (e : eexp) : eexp := @Ebinop V.T Emul e e.
+  Definition epow (e : eexp) (n : N) := @Epow V.T e n.
 
   Definition eadds (es : seq eexp) : eexp := eadds es.
   Definition emuls (es : seq eexp) : eexp := emuls es.
@@ -595,6 +602,7 @@ Module MakeDSL
     | Econst n => VS.empty
     | Eunop op e => vars_eexp e
     | Ebinop op e1 e2 => VS.union (vars_eexp e1) (vars_eexp e2)
+    | Epow e _ => vars_eexp e
     end.
 
   Fixpoint vars_eexps (es : seq eexp) : VS.t :=
@@ -1307,6 +1315,7 @@ Module MakeDSL
     | Econst n => n
     | Eunop op e => eval_eunop op (eval_eexp e te s)
     | Ebinop op e1 e2 => eval_ebinop op (eval_eexp e1 te s) (eval_eexp e2 te s)
+    | Epow e n => Z.pow (eval_eexp e te s) (Z.of_N n)
     end.
 
   Definition eval_eexps (es : seq eexp) (te : TE.env) (s : S.t) : seq Z :=
@@ -1845,6 +1854,7 @@ Module MakeDSL
     | Econst n => true
     | Eunop op e => well_typed_eexp te e
     | Ebinop op e1 e2 => (well_typed_eexp te e1) && (well_typed_eexp te e2)
+    | Epow e _ => well_typed_eexp te e
     end.
 
   Fixpoint well_typed_eexps (te : TE.env) (es : seq eexp) : bool :=
@@ -3298,6 +3308,7 @@ Module MakeDSL
     - move=> op e IH Hdef. rewrite (IH Hdef). reflexivity.
     - move=> op e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
       rewrite (IH1 Hdef1) (IH2 Hdef2). reflexivity.
+    - move=> e IH n Hdef. rewrite (IH Hdef). reflexivity.
   Qed.
 
   Lemma submap_eval_eexps {E1 E2 es s} :
@@ -4213,6 +4224,7 @@ Module MakeDSL
       - move=> op e1 IH1 e2 IH2 Hdef Heqi. rewrite are_defined_union in Hdef.
         move/andP: Hdef => [Hdef1 Hdef2].
         rewrite (IH1 Hdef1 Heqi) (IH2 Hdef2 Heqi). reflexivity.
+      - move=> e IH n Hdef Heqi. rewrite (IH Hdef Heqi). reflexivity.
     Qed.
 
     Lemma bvs_eqi_eval_eexps E es s1 s2 :
@@ -4475,6 +4487,7 @@ Module MakeDSL
       - move=> op e IH Hdef. rewrite (IH Hdef). reflexivity.
       - move=> op e1 IH1 e2 IH2. rewrite are_defined_union => /andP [Hdef1 Hdef2].
         rewrite (IH1 Hdef1) (IH2 Hdef2). reflexivity.
+      - move=> e IH n Hdef. rewrite (IH Hdef). reflexivity.
     Qed.
 
     Lemma force_conform_eval_eexps E1 E2 es s :

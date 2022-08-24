@@ -1775,16 +1775,10 @@ eexp:
   | eexp MULOP eexp                               { fun cm vm ym gm -> emul ($1 cm vm ym gm) ($3 cm vm ym gm) }
   | eexp POWOP const                              { fun cm vm ym gm ->
                                                       let e = $1 cm vm ym gm in
-                                                      let i = Z.to_int ($3 cm) in
-                                                      match e with
-                                                      | Econst n -> Econst (Z.pow n i)
-                                                      | _ ->
-                                                        let rec helper j =
-                                                          if j = 0 then Econst Z.one
-                                                          else if j = 1 then e
-                                                          else if j = 2 then esq e
-                                                          else emul (helper (j - 1)) e in
-                                                        helper i
+                                                      let i = $3 cm in
+                                                      if Z.equal i Z.zero then Econst Z.one
+                                                      else if Z.equal i Z.one then e
+                                                      else epow e (Econst i)
                                                   }
   | ULIMBS const LSQUARE eexps RSQUARE            { fun cm vm ym gm -> limbs (Z.to_int ($2 cm)) ($4 cm vm ym gm) }
 ;

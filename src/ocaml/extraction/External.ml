@@ -75,6 +75,15 @@ let z_of_coq_z n =
   | Zpos p -> z_of_pos p
   | Zneg p -> Z.neg (z_of_pos p)
 
+let coq_n_of_z z =
+  if Z.equal z Z.zero then N0
+  else Npos (pos_of_z z)
+
+let z_of_coq_n n =
+  match n with
+  | N0 -> Z.zero
+  | Npos p -> z_of_pos p
+
 
 
 (** Verify a sequence of Coq CNFs *)

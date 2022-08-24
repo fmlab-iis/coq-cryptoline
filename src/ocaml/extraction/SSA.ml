@@ -67,6 +67,7 @@ let rec ssa_eexp m = function
 | DSL.Econst c -> SSA.econst c
 | DSL.Eunop (op, e0) -> SSA.eunary op (ssa_eexp m e0)
 | DSL.Ebinop (op, e1, e2) -> SSA.ebinary op (ssa_eexp m e1) (ssa_eexp m e2)
+| DSL.Epow (e0, n) -> SSA.epow (ssa_eexp m e0) n
 
 (** val ssa_eexps : vmap -> DSL.DSL.eexp list -> SSA.eexp list **)
 

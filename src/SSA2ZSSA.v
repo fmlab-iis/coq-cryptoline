@@ -1292,6 +1292,7 @@ Section SplitSpec.
     - move=> op e IH Hdef. rewrite (IH Hdef). reflexivity.
     - move=> op e1 IH1 e2 IH2. rewrite are_defined_union=> /andP [Hdef1 Hdef2].
       rewrite (IH1 Hdef1) (IH2 Hdef2). reflexivity.
+    - move=> e IH n Hdef. rewrite (IH Hdef). reflexivity.
   Qed.
 
   Lemma bvz_eqi_eval_eexps E es bs zs :
@@ -1739,6 +1740,7 @@ Section SplitSpec.
     - move=> op e IH Hnew. rewrite (IH Hnew). reflexivity.
     - move=> op e1 IH1 e2 IH2 /avars_newer_than_union [] Hnew1 Hnew2.
       rewrite (IH1 Hnew1) (IH2 Hnew2). reflexivity.
+    - move=> e IH n Hnew. rewrite (IH Hnew). reflexivity.
   Qed.
 
   Lemma algred_upd_avars_instr_eval_zexps E avn i g1 g2 zs1 zs2 es :
@@ -1850,6 +1852,7 @@ Section SplitSpec.
     - move=> op e IH Hni. rewrite (IH Hni). reflexivity.
     - move=> op e1 IH1 e2 IH2 /svar_notin_union [Hni1 Hni2].
       rewrite (IH1 Hni1) (IH2 Hni2). reflexivity.
+    - move=> e IH m Hni. rewrite (IH Hni). reflexivity.
   Qed.
 
   Lemma svar_notin_eval_zexps {zs n g avn es} :
@@ -2936,6 +2939,7 @@ Section SplitSpec.
     - move=> op e1 IH1 e2 IH2 E g p bs Hnotin.
       rewrite (IH1 _ _ _ _ (svar_notin_union1 Hnotin))
               (IH2 _ _ _ _ (svar_notin_union2 Hnotin)). reflexivity.
+    - move=> e IH n E g p bs Hni. rewrite (IH _ _ _ _ Hni). reflexivity.
   Qed.
 
   Lemma algred_upd_avars_eval_eexps {E avn g p bs es} :

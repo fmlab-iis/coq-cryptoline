@@ -95,6 +95,7 @@ module Coq__1 : sig
  | Econst of coq_Z
  | Eunop of eunop * eexp
  | Ebinop of ebinop * eexp * eexp
+ | Epow of eexp * coq_N
 end
 include module type of struct include Coq__1 end
 
@@ -1199,6 +1200,8 @@ module MakeDSL :
   val emul : eexp -> eexp -> eexp
 
   val esq : eexp -> eexp
+
+  val epow : eexp -> coq_N -> Coq__1.eexp
 
   val eadds : eexp list -> eexp
 
@@ -2858,6 +2861,8 @@ module DSL :
   val emul : eexp -> eexp -> eexp
 
   val esq : eexp -> eexp
+
+  val epow : eexp -> coq_N -> Coq__1.eexp
 
   val eadds : eexp list -> eexp
 
