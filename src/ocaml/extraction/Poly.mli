@@ -1,6 +1,7 @@
 open BinInt
 open BinNums
 open BinPos
+open Bool
 open Datatypes
 open List0
 open Options0
@@ -10,13 +11,24 @@ open Var
 open ZAriths
 open Eqtype
 open Seq
+open Ssrbool
 open Ssrnat
 
 type azbexp =
 | Seq of SSA.SSA.eexp * SSA.SSA.eexp
 | Seqmod of SSA.SSA.eexp * SSA.SSA.eexp * SSA.SSA.eexp list
 
+val azbexp_eqn : azbexp -> azbexp -> bool
+
+val azbexp_eqP : azbexp -> azbexp -> reflect
+
+val azbexp_eqMixin : azbexp Equality.mixin_of
+
+val azbexp_eqType : Equality.coq_type
+
 type arep = { apremises : azbexp list; aconseq : azbexp }
+
+val is_arep_trivial : arep -> bool
 
 val zexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp -> DSL.eexp
 
@@ -61,6 +73,8 @@ val pair_with_vars : azbexp -> SSAVS.t * azbexp
 val simplify_arep_vars_cache : arep -> arep
 
 val split_zbexp : SSA.SSA.ebexp -> azbexp list
+
+val areps_of_rep_full : ZSSA.ZSSA.rep -> arep list
 
 val areps_of_rep : ZSSA.ZSSA.rep -> arep list
 

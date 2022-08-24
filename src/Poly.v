@@ -94,6 +94,16 @@ Section AtomicRootEntailment.
       (forall e : azbexp, e \in (apremises s) -> eval_azbexp e st) ->
       eval_azbexp (aconseq s) st.
 
+  (* Check if an atomic root entailment problem is trivial. *)
+  Definition is_arep_trivial (s : arep) : bool :=
+    aconseq s \in apremises s.
+
+  Lemma is_arep_trivial_valid s : is_arep_trivial s -> valid_arep s.
+  Proof.
+    case: s => premises conseq. rewrite /is_arep_trivial. move=> Hin s Hpre.
+    apply: Hpre. assumption.
+  Qed.
+
 End AtomicRootEntailment.
 
 
@@ -650,10 +660,15 @@ Section REP2AREP.
     | Eand e1 e2 => split_zbexp e1 ++ split_zbexp e2
     end.
 
-  Definition areps_of_rep (s : ZSSA.rep) : seq arep :=
+  Definition areps_of_rep_full (s : ZSSA.rep) : seq arep :=
     let premises := split_zbexp (ZSSA.premise s) in
     let conseqs := split_zbexp (ZSSA.conseq s) in
     map (fun conseq => {| apremises := premises; aconseq := conseq |}) conseqs.
+
+  (* Remove trivial atomic root entailment problems at the end of this conversion. *)
+  Definition areps_of_rep (s : ZSSA.rep) : seq arep :=
+    let areps := areps_of_rep_full s in
+    List.filter (fun s => ~~ (is_arep_trivial s)) areps.
 
   Definition areps_of_rep_simplified (o : options) (s : ZSSA.rep) : seq arep :=
     if vars_cache_in_rewrite_assignments o then map simplify_arep_vars_cache (areps_of_rep s)
@@ -685,25 +700,44 @@ Section REP2AREP.
       + apply: IH2 => pe Hmem. apply: Hpe. by rewrite mem_cat Hmem orbT.
   Qed.
 
-  Theorem areps_of_rep_sound zs :
-    (forall ps, ps \in areps_of_rep zs -> valid_arep ps) ->
+  Lemma areps_of_rep_equiv_full zs :
+    (forall ps, ps \in areps_of_rep zs -> valid_arep ps) <->
+      (forall ps, ps \in areps_of_rep_full zs -> valid_arep ps).
+  Proof.
+    case: zs => premises conseq. rewrite /areps_of_rep. split=> H ps Hmem.
+    - case Htr: (is_arep_trivial ps).
+      + exact: (is_arep_trivial_valid Htr).
+      + apply: H. rewrite mem_filter Htr /=. assumption.
+    - apply: H. rewrite mem_filter in Hmem. move/andP: Hmem => [_ H]. assumption.
+  Qed.
+
+  Lemma areps_of_rep_full_sound zs :
+    (forall ps, ps \in areps_of_rep_full zs -> valid_arep ps) ->
     ZSSA.valid_rep zs.
   Proof.
     case: zs => zf zq. elim: zq zf => //=.
-    - move=> e1 e2 zf /= Hps s /= Hzf. rewrite /areps_of_rep /= in Hps.
+    - move=> e1 e2 zf /= Hps s /= Hzf. rewrite /areps_of_rep_full /= in Hps.
       apply: (Hps {| apremises := split_zbexp zf; aconseq := Seq e1 e2 |});
         first by rewrite in_cons eqxx.
       move=> {Hps} pe /= Hmem. exact: (split_zbexp_mem Hzf Hmem).
-    - move=> e1 e2 m zf Hps s /= Hzf. rewrite /areps_of_rep /= in Hps.
+    - move=> e1 e2 m zf Hps s /= Hzf. rewrite /areps_of_rep_full /= in Hps.
       apply: (Hps {| apremises := split_zbexp zf; aconseq := Seqmod e1 e2 m |});
         first by rewrite in_cons eqxx.
       move=> {Hps} pe /= Hmem. exact: (split_zbexp_mem Hzf Hmem).
-    - move=> e1 IH1 e2 IH2 zf Hps s /= Hzf. rewrite /areps_of_rep /= in Hps.
+    - move=> e1 IH1 e2 IH2 zf Hps s /= Hzf. rewrite /areps_of_rep_full /= in Hps.
       split.
       + apply: (IH1 zf _ s Hzf) => /=. move=> ps Hin. apply: Hps.
         rewrite map_cat mem_cat. apply/orP; left. assumption.
       + apply: (IH2 zf _ s Hzf) => /=. move=> ps Hin. apply: Hps.
         rewrite map_cat mem_cat. apply/orP; right. assumption.
+  Qed.
+
+  Theorem areps_of_rep_sound zs :
+    (forall ps, ps \in areps_of_rep zs -> valid_arep ps) ->
+    ZSSA.valid_rep zs.
+  Proof.
+    move=> H. apply: areps_of_rep_full_sound. apply/areps_of_rep_equiv_full.
+    assumption.
   Qed.
 
   Theorem areps_of_rep_simplified_sound o zs :

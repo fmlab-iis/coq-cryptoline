@@ -510,6 +510,16 @@ let ebexp_eqP var e1 e2 =
   let _evar_0_0 = fun _ -> ReflectF in
   if ebexp_eqn var e1 e2 then _evar_0_ __ else _evar_0_0 __
 
+(** val ebexp_eqMixin : Equality.coq_type -> ebexp Equality.mixin_of **)
+
+let ebexp_eqMixin var =
+  { Equality.op = (ebexp_eqn var); Equality.mixin_of__1 = (ebexp_eqP var) }
+
+(** val ebexp_eqType : Equality.coq_type -> Equality.coq_type **)
+
+let ebexp_eqType var =
+  Obj.magic ebexp_eqMixin var
+
 module Coq__4 = struct
  type rbexp =
  | Rtrue

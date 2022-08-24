@@ -1,6 +1,7 @@
 open BinInt
 open BinNums
 open BinPos
+open Bool
 open Datatypes
 open List0
 open Options0
@@ -10,13 +11,57 @@ open Var
 open ZAriths
 open Eqtype
 open Seq
+open Ssrbool
 open Ssrnat
+
+let __ = let rec f _ = Obj.repr f in Obj.repr f
 
 type azbexp =
 | Seq of SSA.SSA.eexp * SSA.SSA.eexp
 | Seqmod of SSA.SSA.eexp * SSA.SSA.eexp * SSA.SSA.eexp list
 
+(** val azbexp_eqn : azbexp -> azbexp -> bool **)
+
+let azbexp_eqn e1 e2 =
+  match e1 with
+  | Seq (e3, e4) ->
+    (match e2 with
+     | Seq (e5, e6) ->
+       eq_op (DSL.ebexp_eqType SSAVarOrder.coq_T)
+         (Obj.magic (DSL.Eeq (e3, e4))) (Obj.magic (DSL.Eeq (e5, e6)))
+     | Seqmod (_, _, _) -> false)
+  | Seqmod (e3, e4, ms1) ->
+    (match e2 with
+     | Seq (_, _) -> false
+     | Seqmod (e5, e6, ms2) ->
+       eq_op (DSL.ebexp_eqType SSAVarOrder.coq_T)
+         (Obj.magic (DSL.Eeqmod (e3, e4, ms1)))
+         (Obj.magic (DSL.Eeqmod (e5, e6, ms2))))
+
+(** val azbexp_eqP : azbexp -> azbexp -> reflect **)
+
+let azbexp_eqP e1 e2 =
+  let _evar_0_ = fun _ -> ReflectT in
+  let _evar_0_0 = fun _ -> ReflectF in
+  if azbexp_eqn e1 e2 then _evar_0_ __ else _evar_0_0 __
+
+(** val azbexp_eqMixin : azbexp Equality.mixin_of **)
+
+let azbexp_eqMixin =
+  { Equality.op = azbexp_eqn; Equality.mixin_of__1 = azbexp_eqP }
+
+(** val azbexp_eqType : Equality.coq_type **)
+
+let azbexp_eqType =
+  Obj.magic azbexp_eqMixin
+
 type arep = { apremises : azbexp list; aconseq : azbexp }
+
+(** val is_arep_trivial : arep -> bool **)
+
+let is_arep_trivial s =
+  in_mem (Obj.magic s.aconseq)
+    (mem (seq_predType azbexp_eqType) (Obj.magic s.apremises))
 
 (** val zexp_subst :
     SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp -> DSL.eexp **)
@@ -25,9 +70,9 @@ let rec zexp_subst p r e =
   if eq_op SSA.SSA.eexp_eqType (Obj.magic e) (Obj.magic p)
   then r
   else (match e with
-        | DSL.Eunop (op, e0) -> DSL.Eunop (op, (zexp_subst p r e0))
-        | DSL.Ebinop (op, e1, e2) ->
-          DSL.Ebinop (op, (zexp_subst p r e1), (zexp_subst p r e2))
+        | DSL.Eunop (op0, e0) -> DSL.Eunop (op0, (zexp_subst p r e0))
+        | DSL.Ebinop (op0, e1, e2) ->
+          DSL.Ebinop (op0, (zexp_subst p r e1), (zexp_subst p r e2))
         | DSL.Epow (e0, n) -> DSL.Epow ((zexp_subst p r e0), n)
         | _ -> e)
 
@@ -56,9 +101,9 @@ let rec single_variables = function
 | DSL.Evar v -> SSAVS.singleton v
 | DSL.Econst _ -> SSAVS.empty
 | DSL.Eunop (_, e0) -> single_variables e0
-| DSL.Ebinop (op, e1, e2) ->
-  if (||) (eq_op DSL.ebinop_eqType (Obj.magic op) (Obj.magic DSL.Eadd))
-       (eq_op DSL.ebinop_eqType (Obj.magic op) (Obj.magic DSL.Esub))
+| DSL.Ebinop (op0, e1, e2) ->
+  if (||) (eq_op DSL.ebinop_eqType (Obj.magic op0) (Obj.magic DSL.Eadd))
+       (eq_op DSL.ebinop_eqType (Obj.magic op0) (Obj.magic DSL.Esub))
   then SSAVS.union (single_variables e1) (single_variables e2)
   else SSAVS.empty
 | DSL.Epow (e0, _) -> single_variables e0
@@ -82,10 +127,10 @@ let rec separate v e pat =
     if SSAVS.mem v (SSA.SSA.vars_eexp e0)
     then separate v e0 (SSA.SSA.eneg pat)
     else None
-  | DSL.Ebinop (op, e1, e2) ->
+  | DSL.Ebinop (op0, e1, e2) ->
     let in1 = SSAVS.mem v (SSA.SSA.vars_eexp e1) in
     let in2 = SSAVS.mem v (SSA.SSA.vars_eexp e2) in
-    (match op with
+    (match op0 with
      | DSL.Eadd ->
        if in1
        then if in2 then None else separate v e1 (SSA.SSA.esub pat e2)
@@ -305,12 +350,18 @@ let rec split_zbexp = function
 | DSL.Eeqmod (e1, e2, ms) -> (Seqmod (e1, e2, ms)) :: []
 | DSL.Eand (e1, e2) -> cat (split_zbexp e1) (split_zbexp e2)
 
-(** val areps_of_rep : ZSSA.ZSSA.rep -> arep list **)
+(** val areps_of_rep_full : ZSSA.ZSSA.rep -> arep list **)
 
-let areps_of_rep s =
+let areps_of_rep_full s =
   let premises = split_zbexp s.ZSSA.ZSSA.premise in
   let conseqs = split_zbexp s.ZSSA.ZSSA.conseq in
   map (fun conseq0 -> { apremises = premises; aconseq = conseq0 }) conseqs
+
+(** val areps_of_rep : ZSSA.ZSSA.rep -> arep list **)
+
+let areps_of_rep s =
+  let areps = areps_of_rep_full s in
+  filter (fun s0 -> negb (is_arep_trivial s0)) areps
 
 (** val areps_of_rep_simplified : options -> ZSSA.ZSSA.rep -> arep list **)
 
@@ -374,8 +425,8 @@ let zpexpr_of_eunop _ x =
 (** val zpexpr_of_ebinop :
     DSL.ebinop -> coq_Z coq_PExpr -> coq_Z coq_PExpr -> coq_Z coq_PExpr **)
 
-let zpexpr_of_ebinop op x x0 =
-  match op with
+let zpexpr_of_ebinop op0 x x0 =
+  match op0 with
   | DSL.Eadd -> PEadd (x, x0)
   | DSL.Esub -> PEsub (x, x0)
   | DSL.Emul -> PEmul (x, x0)
@@ -387,12 +438,12 @@ let zpexpr_of_ebinop op x x0 =
 let rec zpexpr_of_zexp g t0 = function
 | DSL.Evar v -> zpexpr_of_var g t0 v
 | DSL.Econst n -> ((g, t0), (PEc n))
-| DSL.Eunop (op, e0) ->
-  let (p, e') = zpexpr_of_zexp g t0 e0 in (p, (zpexpr_of_eunop op e'))
-| DSL.Ebinop (op, e1, e2) ->
+| DSL.Eunop (op0, e0) ->
+  let (p, e') = zpexpr_of_zexp g t0 e0 in (p, (zpexpr_of_eunop op0 e'))
+| DSL.Ebinop (op0, e1, e2) ->
   let (p, e3) = zpexpr_of_zexp g t0 e1 in
   let (g1, t1) = p in
-  let (p0, e4) = zpexpr_of_zexp g1 t1 e2 in (p0, (zpexpr_of_ebinop op e3 e4))
+  let (p0, e4) = zpexpr_of_zexp g1 t1 e2 in (p0, (zpexpr_of_ebinop op0 e3 e4))
 | DSL.Epow (e0, n) ->
   let (p, e') = zpexpr_of_zexp g t0 e0 in (p, (PEpow (e', n)))
 

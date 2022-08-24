@@ -173,6 +173,10 @@ val ebexp_eqn : Equality.coq_type -> ebexp -> ebexp -> bool
 
 val ebexp_eqP : Equality.coq_type -> ebexp -> ebexp -> reflect
 
+val ebexp_eqMixin : Equality.coq_type -> ebexp Equality.mixin_of
+
+val ebexp_eqType : Equality.coq_type -> Equality.coq_type
+
 module Coq__4 : sig
  type rbexp =
  | Rtrue
