@@ -17,6 +17,9 @@ val z_of_coq_z : coq_Z -> Z.t
 val coq_n_of_z : Z.t -> coq_N
 val z_of_coq_n : coq_N -> Z.t
 
+val string_of_coq_eexp : SSA.SSA.eexp -> string
+val string_of_coq_ebexp : SSA.SSA.ebexp -> string
+
 val keep_temp_files : bool ref
 val use_fork : bool ref
 

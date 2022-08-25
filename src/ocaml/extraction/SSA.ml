@@ -1,9 +1,11 @@
 open BinNat
 open BinNums
+open BinaryString
 open Bool
 open Datatypes
 open NBitsDef
 open State
+open String0
 open Typ
 open Var
 open Eqtype
@@ -12,6 +14,13 @@ open Seq
 type __ = Obj.t
 
 module SSA = DSL.MakeDSL(SSAVarOrder)(SSAVS)(SSAVM)(TypEnv.SSATE)(SSAStore)
+
+(** val string_of_ssavar : ssavar -> char list **)
+
+let string_of_ssavar v =
+  append ('v'::[])
+    (append (of_N (fst (Obj.magic v)))
+      (append ('_'::[]) (of_N (snd (Obj.magic v)))))
 
 type vmap = coq_N VM.t
 

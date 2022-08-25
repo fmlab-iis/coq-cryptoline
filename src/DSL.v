@@ -1,7 +1,7 @@
 
 (** Typed CryptoLine. *)
 
-From Coq Require Import List ZArith.
+From Coq Require Import List ZArith String BinaryString.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
@@ -179,6 +179,49 @@ Section Operators.
 
   Definition rcmpop_eqMixin := EqMixin rcmpop_eqP.
   Canonical rcmpop_eqType := Eval hnf in EqType rcmpop rcmpop_eqMixin.
+
+  Definition string_of_eunop op :=
+    match op with
+    | Eneg => "-"%string
+    end.
+
+  Definition string_of_ebinop op :=
+    match op with
+    | Eadd => "+"%string
+    | Esub => "-"%string
+    | Emul => "*"%string
+    end.
+
+  Definition string_of_runop op :=
+    match op with
+    | Rnegb => "-"%string
+    | Rnotb => "!"%string
+    end.
+
+  Definition string_of_rbinop op :=
+    match op with
+    | Radd => "+"%string
+    | Rsub => "-"%string
+    | Rmul => "*"%string
+    | Rumod => "umod"%string
+    | Rsrem => "srem"%string
+    | Rsmod => "smod"%string
+    | Randb => "&"%string
+    | Rorb => "|"%string
+    | Rxorb => "xor"%string
+    end.
+
+  Definition string_of_rcmpop op :=
+    match op with
+    | Rult => "<u"%string
+    | Rule => "<=u"%string
+    | Rugt => ">u"%string
+    | Ruge => ">=u"%string
+    | Rslt => "<s"%string
+    | Rsle => "<=s"%string
+    | Rsgt => ">s"%string
+    | Rsge => ">=s"%string
+    end.
 
 End Operators.
 
@@ -551,6 +594,110 @@ Section DSLRaw.
   Definition rbexp_eqMixin := EqMixin rbexp_eqP.
   Canonical rbexp_eqType := Eval hnf in EqType rbexp rbexp_eqMixin.
 
+
+  (* String outputs *)
+
+  Variable string_of_var : var -> string.
+
+  Definition is_eexp_atomic (e : eexp) : bool :=
+    match e with
+    | Evar _ | Econst _ => true
+    | _ => false
+    end.
+
+  Fixpoint string_of_eexp (e : eexp) : string :=
+    match e with
+    | Evar v => string_of_var v
+    | Econst n => BinaryString.of_Z n
+    | Eunop op e =>
+        (string_of_eunop op ++ " " ++ string_of_eexp' e)%string
+    | Ebinop op e1 e2 =>
+        (string_of_eexp' e1 ++ " " ++ string_of_ebinop op ++ " " ++ string_of_eexp' e2)%string
+    | Epow e n => (string_of_eexp' e ++ " ^ " ++ BinaryString.of_N n)%string
+    end
+  with
+  string_of_eexp' (e : eexp) : string :=
+    match e with
+    | Evar v => string_of_var v
+    | Econst n => BinaryString.of_Z n
+    | Eunop op e =>
+        ("(" ++ string_of_eunop op ++ " " ++ string_of_eexp' e ++ ")")%string
+    | Ebinop op e1 e2 =>
+        ("(" ++ string_of_eexp' e1 ++ " " ++ string_of_ebinop op ++ " "
+             ++ string_of_eexp' e2 ++ ")")%string
+    | Epow e n => ("(" ++ string_of_eexp' e ++ " ^ " ++ BinaryString.of_N n ++ ")")%string
+    end
+    .
+
+    Fixpoint string_of_eexps glue (es : list eexp) : string :=
+      match es with
+      | [::] => ""%string
+      | hd::tl => (string_of_eexp hd ++ glue ++ string_of_eexps glue tl)%string
+      end.
+
+    Fixpoint string_of_ebexp (e : ebexp) : string :=
+      match e with
+      | Etrue => "true"
+      | Eeq e1 e2 => (string_of_eexp e1 ++ " = " ++ string_of_eexp e2)%string
+      | Eeqmod e1 e2 ms =>
+          (string_of_eexp e1 ++ " = " ++ string_of_eexp e2
+                          ++ "(mod [" ++ string_of_eexps ", " ms ++ "])")%string
+      | Eand e1 e2 => (string_of_ebexp e1 ++ " /\\ " ++ string_of_ebexp e2)%string
+      end.
+
+    Definition is_rexp_atomic (e : rexp) : bool :=
+      match e with
+      | Rvar _ | Rconst _ _ => true
+      | _ => false
+      end.
+
+    Fixpoint string_of_rexp (e : rexp) : string :=
+      match e with
+      | Rvar v => string_of_var v
+      | Rconst w bs => to_hex bs
+      | Runop w op e => (string_of_runop op ++ " " ++ string_of_rexp' e)%string
+      | Rbinop w op e1 e2 =>
+          (string_of_rexp' e1 ++ " " ++ string_of_rbinop op
+                           ++ " " ++ string_of_rexp' e2)%string
+      | Ruext w e i => ("uext " ++ string_of_rexp' e ++ " " ++ of_nat i)%string
+      | Rsext w e i => ("sext " ++ string_of_rexp' e ++ " " ++ of_nat i)%string
+      end
+    with
+    string_of_rexp' (e : rexp) : string :=
+      match e with
+      | Rvar v => string_of_var v
+      | Rconst w bs => to_hex bs
+      | Runop w op e => ("(" ++ string_of_runop op ++ " " ++ string_of_rexp' e ++ ")")%string
+      | Rbinop w op e1 e2 =>
+          ("(" ++ string_of_rexp' e1 ++ " " ++ string_of_rbinop op
+               ++ " " ++ string_of_rexp' e2 ++ ")")%string
+      | Ruext w e i => ("(uext " ++ string_of_rexp' e ++ " " ++ of_nat i ++ ")")%string
+      | Rsext w e i => ("(sext " ++ string_of_rexp' e ++ " " ++ of_nat i ++ ")")%string
+      end.
+
+    Definition is_rbexp_or (e : rbexp) : bool :=
+      match e with
+      | Ror _ _ => true
+      | _ => false
+      end.
+
+    Fixpoint string_of_rbexp (e : rbexp) : string :=
+      match e with
+      | Rtrue => "true"
+      | Req w e1 e2 => (string_of_rexp e1 ++ " = " ++ string_of_rexp e2)%string
+      | Rcmp w op e1 e2 =>
+          (string_of_rexp e1 ++ " " ++ string_of_rcmpop op ++ " " ++ string_of_rexp e2)%string
+      | Rneg e => ("~ " ++ string_of_rbexp e)%string
+      | Rand e1 e2 =>
+          (if is_rbexp_or e1 then "(" ++ string_of_rbexp e1 ++ ")"
+           else string_of_rbexp e1)%string
+                                   ++ " /\\ "
+                                   ++ (if is_rbexp_or e2 then "(" ++ string_of_rbexp e2 ++ ")"
+                                       else string_of_rbexp e2)%string
+      | Ror e1 e2 => (string_of_rbexp e1 ++ " \\/ " ++ string_of_rbexp e2)%string
+      end.
+
+
 End DSLRaw.
 
 
@@ -892,6 +1039,23 @@ Module MakeDSL
   | Iassume : bexp -> instr.
 
   Definition program := seq instr.
+
+
+  (** String outputs *)
+
+  Definition string_of_eunop := @string_of_eunop.
+  Definition string_of_ebinop := @string_of_ebinop.
+  Definition string_of_runop := @string_of_runop.
+  Definition string_of_rbinop := @string_of_rbinop.
+  Definition string_of_rcmpop := @string_of_rcmpop.
+  Definition string_of_eexp := @string_of_eexp V.T.
+  Definition string_of_eexps := @string_of_eexps V.T.
+  Definition string_of_ebexp := @string_of_ebexp V.T.
+  Definition string_of_rexp := @string_of_rexp V.T.
+  Definition string_of_rbexp := @string_of_rbexp V.T.
+
+
+  (** Variables in programs *)
 
   Definition vars_atom (a : atom) : VS.t :=
     match a with
@@ -4561,3 +4725,6 @@ Module MakeDSL
 End MakeDSL.
 
 Module DSL := MakeDSL VarOrder VS VM TE Store.
+
+Definition string_of_var (v : var) :=
+  ("v" ++ BinaryString.of_N v)%string.

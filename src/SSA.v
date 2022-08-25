@@ -1,7 +1,7 @@
 
 (** SSA transformation. *)
 
-From Coq Require Import List ZArith FSets OrderedType.
+From Coq Require Import List ZArith FSets OrderedType String BinaryString.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
@@ -20,6 +20,9 @@ Module M2 := Map2 VS SSAVS.
 Module M2SSA := Map2Map Store.M SSAStore.M.
 
 Module MdeSSA := Map2Map SSAStore.M Store.M.
+
+Definition string_of_ssavar (v : ssavar) : string :=
+  ("v" ++ BinaryString.of_N (fst v) ++ "_" ++ BinaryString.of_N (snd v))%string.
 
 Section MakeSSA.
 

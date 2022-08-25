@@ -12,9 +12,15 @@ open Options.Std
 
 exception ParseError of string
 
+
+(** Options *)
+
 let keep_temp_files = ref false
 let temp_file_prefix = "coqcryptoline_temp"
 let use_fork = ref false
+
+
+(** Auxiliary string functions *)
 
 let starts_with s t =
   let len_s = String.length s in
@@ -22,12 +28,13 @@ let starts_with s t =
   if len_t <= len_s then String.sub s 0 len_t = t
   else false
 
+let explode s = List.init (String.length s) (String.get s)
+
+
 (** Basic numbers conversion *)
 
 let string_of_bits bs =
   String.concat "" (List.map (fun b -> if b then "1" else "0") (List.rev bs))
-
-let explode s = List.init (String.length s) (String.get s)
 
 (*
 let nat_of_z z = nat_of_int (Z.to_int z)
@@ -84,6 +91,46 @@ let z_of_coq_n n =
   | N0 -> Z.zero
   | Npos p -> z_of_pos p
 
+
+(** String outputs *)
+
+let is_coq_eexp_atomic (e : SSA.SSA.eexp) =
+  match e with
+  | Evar _ | Econst _ -> true
+  | _ -> false
+
+let string_of_coq_var v = let (n, m) = Obj.magic v in
+                          "v_" ^ (Z.to_string (z_of_pos n)) ^ "_" ^ (Z.to_string (z_of_pos m))
+
+let string_of_coq_const n = Z.to_string (z_of_coq_z n)
+
+let string_of_coq_eunop (op : DSL.eunop) =
+  match op with
+  | DSL.Eneg -> "-"
+
+let string_of_coq_ebinop (op : DSL.ebinop) =
+  match op with
+  | DSL.Eadd -> "+"
+  | DSL.Esub -> "-"
+  | DSL.Emul -> "*"
+
+let rec string_of_coq_eexp (e : SSA.SSA.eexp) =
+  match e with
+  | DSL.Evar v -> string_of_coq_var v
+  | DSL.Econst n ->string_of_coq_const n
+  | DSL.Eunop (op, e) -> Printf.sprintf "%s %s" (string_of_coq_eunop op) (string_of_coq_eexp' e)
+  | DSL.Ebinop (op, e1, e2) -> Printf.sprintf "%s %s %s" (string_of_coq_eexp' e1) (string_of_coq_ebinop op) (string_of_coq_eexp' e2)
+  | DSL.Epow (e, n) -> Printf.sprintf "%s ^ %s" (string_of_coq_eexp' e) (Z.to_string (z_of_coq_n n))
+and string_of_coq_eexp' e =
+  if is_coq_eexp_atomic e then Printf.sprintf ("%s") (string_of_coq_eexp e)
+  else Printf.sprintf ("(%s)") (string_of_coq_eexp e)
+
+let rec string_of_coq_ebexp (e : SSA.SSA.ebexp) =
+  match e with
+  | Etrue -> "true"
+  | Eeq (e1, e2) -> Printf.sprintf "%s = %s" (string_of_coq_eexp e1) (string_of_coq_eexp e2)
+  | Eeqmod (e1, e2, ms) -> Printf.sprintf "%s = %s (mod [%s])" (string_of_coq_eexp e1) (string_of_coq_eexp e2) (String.concat ", " (List.map string_of_coq_eexp ms))
+  | Eand (e1, e2) -> Printf.sprintf "%s /\\ %s" (string_of_coq_ebexp e1) (string_of_coq_ebexp e2)
 
 
 (** Verify a sequence of Coq CNFs *)
@@ -145,7 +192,6 @@ let coq_output_dimacs_reorder ch cs =
 let coq_output_dimacs ch cs =
   (*if !unsat_certifier = Grat then coq_output_dimacs_reorder ch cs
   else*) coq_output_dimacs ch cs
-
 
 
 (* ===== Single-thread solving ===== *)
@@ -588,7 +634,7 @@ let ext_all_unsat_impl cnfs =
   else ext_all_unsat_impl cnfs
 
 
-(* ===== Find coefficients using Singular ===== *)
+(** Find coefficients using Singular *)
 
 let vname = "x"
 

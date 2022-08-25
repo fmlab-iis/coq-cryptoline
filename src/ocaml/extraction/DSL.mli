@@ -1,5 +1,6 @@
 open BinInt
 open BinNums
+open BinaryString
 open Bool
 open Datatypes
 open FMaps
@@ -7,6 +8,7 @@ open FSets
 open NBitsDef
 open NBitsOp
 open State
+open String0
 open Typ
 open Var
 open ZAriths
@@ -88,6 +90,16 @@ val rcmpop_eqP : rcmpop -> rcmpop -> reflect
 val rcmpop_eqMixin : rcmpop Equality.mixin_of
 
 val rcmpop_eqType : Equality.coq_type
+
+val string_of_eunop : eunop -> char list
+
+val string_of_ebinop : ebinop -> char list
+
+val string_of_runop : runop -> char list
+
+val string_of_rbinop : rbinop -> char list
+
+val string_of_rcmpop : rcmpop -> char list
 
 module Coq__1 : sig
  type eexp =
@@ -199,6 +211,24 @@ val rors : Equality.coq_type -> rbexp list -> rbexp
 val rbexp_eqn : Equality.coq_type -> rbexp -> rbexp -> bool
 
 val rbexp_eqP : Equality.coq_type -> rbexp -> rbexp -> reflect
+
+val string_of_eexp :
+  Equality.coq_type -> (Equality.sort -> char list) -> eexp -> char list
+
+val string_of_eexps :
+  Equality.coq_type -> (Equality.sort -> char list) -> char list -> eexp list
+  -> char list
+
+val string_of_ebexp :
+  Equality.coq_type -> (Equality.sort -> char list) -> ebexp -> char list
+
+val string_of_rexp :
+  Equality.coq_type -> (Equality.sort -> char list) -> rexp -> char list
+
+val is_rbexp_or : Equality.coq_type -> rbexp -> bool
+
+val string_of_rbexp :
+  Equality.coq_type -> (Equality.sort -> char list) -> rbexp -> char list
 
 module MakeDSL :
  functor (V:SsrOrder.SsrOrder) ->
@@ -1447,6 +1477,31 @@ module MakeDSL :
     'a1) -> (bexp -> 'a1) -> instr -> 'a1
 
   type program = instr list
+
+  val string_of_eunop : eunop -> char list
+
+  val string_of_ebinop : ebinop -> char list
+
+  val string_of_runop : runop -> char list
+
+  val string_of_rbinop : rbinop -> char list
+
+  val string_of_rcmpop : rcmpop -> char list
+
+  val string_of_eexp :
+    (Equality.sort -> char list) -> Coq__1.eexp -> char list
+
+  val string_of_eexps :
+    (Equality.sort -> char list) -> char list -> Coq__1.eexp list -> char list
+
+  val string_of_ebexp :
+    (Equality.sort -> char list) -> Coq__3.ebexp -> char list
+
+  val string_of_rexp :
+    (Equality.sort -> char list) -> Coq__2.rexp -> char list
+
+  val string_of_rbexp :
+    (Equality.sort -> char list) -> Coq__4.rbexp -> char list
 
   val vars_atom : atom -> VS.t
 
@@ -3115,6 +3170,31 @@ module DSL :
 
   type program = instr list
 
+  val string_of_eunop : eunop -> char list
+
+  val string_of_ebinop : ebinop -> char list
+
+  val string_of_runop : runop -> char list
+
+  val string_of_rbinop : rbinop -> char list
+
+  val string_of_rcmpop : rcmpop -> char list
+
+  val string_of_eexp :
+    (Equality.sort -> char list) -> Coq__1.eexp -> char list
+
+  val string_of_eexps :
+    (Equality.sort -> char list) -> char list -> Coq__1.eexp list -> char list
+
+  val string_of_ebexp :
+    (Equality.sort -> char list) -> Coq__3.ebexp -> char list
+
+  val string_of_rexp :
+    (Equality.sort -> char list) -> Coq__2.rexp -> char list
+
+  val string_of_rbexp :
+    (Equality.sort -> char list) -> Coq__4.rbexp -> char list
+
   val vars_atom : atom -> VS.t
 
   val vars_instr : instr -> VS.t
@@ -3920,3 +4000,5 @@ module DSL :
 
   val force_conform : TypEnv.TE.env -> TypEnv.TE.env -> Store.t -> Store.t
  end
+
+val string_of_var : var -> char list

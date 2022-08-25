@@ -7,6 +7,7 @@ open List0
 open Options0
 open Ring_polynom
 open Seqs
+open String0
 open Var
 open ZAriths
 open Eqtype
@@ -19,6 +20,8 @@ type azbexp =
 | Seqmod of SSA.SSA.eexp * SSA.SSA.eexp * SSA.SSA.eexp list
 
 val azbexp_eqn : azbexp -> azbexp -> bool
+
+val string_of_azbexp : azbexp -> char list
 
 val azbexp_eqP : azbexp -> azbexp -> reflect
 

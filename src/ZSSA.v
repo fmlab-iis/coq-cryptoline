@@ -58,6 +58,16 @@ Module ZSSA.
   Definition entails (f g : zbexp) : Prop :=
     forall s, eval_zbexp f s -> eval_zbexp g s.
 
+
+  (* String outputs *)
+
+  Definition string_of_zexp := @SSA.string_of_eexp string_of_ssavar.
+
+  Definition string_of_zexps := @SSA.string_of_eexps string_of_ssavar.
+
+  Definition string_of_zbexp := @SSA.string_of_ebexp string_of_ssavar.
+
+
   (* Specification *)
 
   (** A root entailment problem checks if the premise entails the consequence. *)

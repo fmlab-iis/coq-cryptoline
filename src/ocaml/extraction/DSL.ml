@@ -1,5 +1,6 @@
 open BinInt
 open BinNums
+open BinaryString
 open Bool
 open Datatypes
 open FMaps
@@ -7,6 +8,7 @@ open FSets
 open NBitsDef
 open NBitsOp
 open State
+open String0
 open Typ
 open Var
 open ZAriths
@@ -226,6 +228,49 @@ let rcmpop_eqMixin =
 let rcmpop_eqType =
   Obj.magic rcmpop_eqMixin
 
+(** val string_of_eunop : eunop -> char list **)
+
+let string_of_eunop _ =
+  '-'::[]
+
+(** val string_of_ebinop : ebinop -> char list **)
+
+let string_of_ebinop = function
+| Eadd -> '+'::[]
+| Esub -> '-'::[]
+| Emul -> '*'::[]
+
+(** val string_of_runop : runop -> char list **)
+
+let string_of_runop = function
+| Rnegb -> '-'::[]
+| Rnotb -> '!'::[]
+
+(** val string_of_rbinop : rbinop -> char list **)
+
+let string_of_rbinop = function
+| Radd -> '+'::[]
+| Rsub -> '-'::[]
+| Rmul -> '*'::[]
+| Rumod -> 'u'::('m'::('o'::('d'::[])))
+| Rsrem -> 's'::('r'::('e'::('m'::[])))
+| Rsmod -> 's'::('m'::('o'::('d'::[])))
+| Randb -> '&'::[]
+| Rorb -> '|'::[]
+| Rxorb -> 'x'::('o'::('r'::[]))
+
+(** val string_of_rcmpop : rcmpop -> char list **)
+
+let string_of_rcmpop = function
+| Rult -> '<'::('u'::[])
+| Rule -> '<'::('='::('u'::[]))
+| Rugt -> '>'::('u'::[])
+| Ruge -> '>'::('='::('u'::[]))
+| Rslt -> '<'::('s'::[])
+| Rsle -> '<'::('='::('s'::[]))
+| Rsgt -> '>'::('s'::[])
+| Rsge -> '>'::('='::('s'::[]))
+
 module Coq__1 = struct
  type eexp =
  | Evar of Equality.sort
@@ -253,21 +298,21 @@ let emul _ e1 e2 =
 
 (** val eadds : Equality.coq_type -> eexp list -> eexp **)
 
-let eadds var = function
-| [] -> econst var Z.zero
+let eadds var0 = function
+| [] -> econst var0 Z.zero
 | e :: es0 ->
   (match es0 with
    | [] -> e
-   | _ :: _ -> foldl (fun res e0 -> eadd var res e0) e es0)
+   | _ :: _ -> foldl (fun res e0 -> eadd var0 res e0) e es0)
 
 (** val emuls : Equality.coq_type -> eexp list -> eexp **)
 
-let emuls var = function
-| [] -> econst var Z.one
+let emuls var0 = function
+| [] -> econst var0 Z.one
 | e :: es0 ->
   (match es0 with
    | [] -> e
-   | _ :: _ -> foldl (fun res e0 -> emul var res e0) e es0)
+   | _ :: _ -> foldl (fun res e0 -> emul var0 res e0) e es0)
 
 (** val z2expn : coq_Z -> coq_Z **)
 
@@ -276,20 +321,20 @@ let z2expn n =
 
 (** val e2expn : Equality.coq_type -> coq_Z -> eexp **)
 
-let e2expn var n =
-  econst var (z2expn n)
+let e2expn var0 n =
+  econst var0 (z2expn n)
 
 (** val emul2p : Equality.coq_type -> eexp -> coq_Z -> eexp **)
 
-let emul2p var x n =
-  emul var x (e2expn var n)
+let emul2p var0 x n =
+  emul var0 x (e2expn var0 n)
 
 (** val eexp_eqn : Equality.coq_type -> eexp -> eexp -> bool **)
 
-let rec eexp_eqn var e1 e2 =
+let rec eexp_eqn var0 e1 e2 =
   match e1 with
   | Evar v1 -> (match e2 with
-                | Evar v2 -> eq_op var v1 v2
+                | Evar v2 -> eq_op var0 v1 v2
                 | _ -> false)
   | Econst n1 ->
     (match e2 with
@@ -299,49 +344,49 @@ let rec eexp_eqn var e1 e2 =
     (match e2 with
      | Eunop (op2, e4) ->
        (&&) (eq_op eunop_eqType (Obj.magic op1) (Obj.magic op2))
-         (eexp_eqn var e3 e4)
+         (eexp_eqn var0 e3 e4)
      | _ -> false)
   | Ebinop (op1, e3, e4) ->
     (match e2 with
      | Ebinop (op2, e5, e6) ->
        (&&)
          ((&&) (eq_op ebinop_eqType (Obj.magic op1) (Obj.magic op2))
-           (eexp_eqn var e3 e5)) (eexp_eqn var e4 e6)
+           (eexp_eqn var0 e3 e5)) (eexp_eqn var0 e4 e6)
      | _ -> false)
   | Epow (e3, n1) ->
     (match e2 with
      | Epow (e4, n2) ->
-       (&&) (eexp_eqn var e3 e4)
+       (&&) (eexp_eqn var0 e3 e4)
          (eq_op bin_nat_eqType (Obj.magic n1) (Obj.magic n2))
      | _ -> false)
 
 (** val eexp_eqP : Equality.coq_type -> eexp -> eexp -> reflect **)
 
-let eexp_eqP var e1 e2 =
+let eexp_eqP var0 e1 e2 =
   let _evar_0_ = fun _ -> ReflectT in
   let _evar_0_0 = fun _ -> ReflectF in
-  if eexp_eqn var e1 e2 then _evar_0_ __ else _evar_0_0 __
+  if eexp_eqn var0 e1 e2 then _evar_0_ __ else _evar_0_0 __
 
 (** val eexp_eqMixin : Equality.coq_type -> eexp Equality.mixin_of **)
 
-let eexp_eqMixin var =
-  { Equality.op = (eexp_eqn var); Equality.mixin_of__1 = (eexp_eqP var) }
+let eexp_eqMixin var0 =
+  { Equality.op = (eexp_eqn var0); Equality.mixin_of__1 = (eexp_eqP var0) }
 
 (** val eexp_eqType : Equality.coq_type -> Equality.coq_type **)
 
-let eexp_eqType var =
-  Obj.magic eexp_eqMixin var
+let eexp_eqType var0 =
+  Obj.magic eexp_eqMixin var0
 
 (** val limbsi : Equality.coq_type -> int -> coq_Z -> eexp list -> eexp **)
 
-let rec limbsi var i r = function
-| [] -> econst var Z.zero
+let rec limbsi var0 i r = function
+| [] -> econst var0 Z.zero
 | e :: es0 ->
   (match es0 with
    | [] -> e
    | _ :: _ ->
-     eadd var (emul var e (e2expn var (Z.mul (Z.of_nat i) r)))
-       (limbsi var (addn i (Pervasives.succ 0)) r es0))
+     eadd var0 (emul var0 e (e2expn var0 (Z.mul (Z.of_nat i) r)))
+       (limbsi var0 (addn i (Pervasives.succ 0)) r es0))
 
 module Coq__2 = struct
  type rexp =
@@ -371,28 +416,28 @@ let rmul _ w e1 e2 =
 
 (** val radds : Equality.coq_type -> int -> rexp list -> rexp **)
 
-let radds var w = function
-| [] -> rbits var (from_nat w 0)
+let radds var0 w = function
+| [] -> rbits var0 (from_nat w 0)
 | e :: es0 ->
   (match es0 with
    | [] -> e
-   | _ :: _ -> foldl (fun res e0 -> radd var w res e0) e es0)
+   | _ :: _ -> foldl (fun res e0 -> radd var0 w res e0) e es0)
 
 (** val rmuls : Equality.coq_type -> int -> rexp list -> rexp **)
 
-let rmuls var w = function
-| [] -> rbits var (from_nat w (Pervasives.succ 0))
+let rmuls var0 w = function
+| [] -> rbits var0 (from_nat w (Pervasives.succ 0))
 | e :: es0 ->
   (match es0 with
    | [] -> e
-   | _ :: _ -> foldl (fun res e0 -> rmul var w res e0) e es0)
+   | _ :: _ -> foldl (fun res e0 -> rmul var0 w res e0) e es0)
 
 (** val rexp_eqn : Equality.coq_type -> rexp -> rexp -> bool **)
 
-let rec rexp_eqn var e1 e2 =
+let rec rexp_eqn var0 e1 e2 =
   match e1 with
   | Rvar v1 -> (match e2 with
-                | Rvar v2 -> eq_op var v1 v2
+                | Rvar v2 -> eq_op var0 v1 v2
                 | _ -> false)
   | Rconst (w1, n1) ->
     (match e2 with
@@ -406,7 +451,7 @@ let rec rexp_eqn var e1 e2 =
        (&&)
          ((&&) (eq_op nat_eqType (Obj.magic w1) (Obj.magic w2))
            (eq_op runop_eqType (Obj.magic op1) (Obj.magic op2)))
-         (rexp_eqn var e3 e4)
+         (rexp_eqn var0 e3 e4)
      | _ -> false)
   | Rbinop (w1, op1, e3, e4) ->
     (match e2 with
@@ -415,14 +460,14 @@ let rec rexp_eqn var e1 e2 =
          ((&&)
            ((&&) (eq_op nat_eqType (Obj.magic w1) (Obj.magic w2))
              (eq_op rbinop_eqType (Obj.magic op1) (Obj.magic op2)))
-           (rexp_eqn var e3 e5)) (rexp_eqn var e4 e6)
+           (rexp_eqn var0 e3 e5)) (rexp_eqn var0 e4 e6)
      | _ -> false)
   | Ruext (w1, e3, n1) ->
     (match e2 with
      | Ruext (w2, e4, n2) ->
        (&&)
          ((&&) (eq_op nat_eqType (Obj.magic w1) (Obj.magic w2))
-           (rexp_eqn var e3 e4))
+           (rexp_eqn var0 e3 e4))
          (eq_op nat_eqType (Obj.magic n1) (Obj.magic n2))
      | _ -> false)
   | Rsext (w1, e3, n1) ->
@@ -430,26 +475,26 @@ let rec rexp_eqn var e1 e2 =
      | Rsext (w2, e4, n2) ->
        (&&)
          ((&&) (eq_op nat_eqType (Obj.magic w1) (Obj.magic w2))
-           (rexp_eqn var e3 e4))
+           (rexp_eqn var0 e3 e4))
          (eq_op nat_eqType (Obj.magic n1) (Obj.magic n2))
      | _ -> false)
 
 (** val rexp_eqP : Equality.coq_type -> rexp -> rexp -> reflect **)
 
-let rexp_eqP var e1 e2 =
+let rexp_eqP var0 e1 e2 =
   let _evar_0_ = fun _ -> ReflectT in
   let _evar_0_0 = fun _ -> ReflectF in
-  if rexp_eqn var e1 e2 then _evar_0_ __ else _evar_0_0 __
+  if rexp_eqn var0 e1 e2 then _evar_0_ __ else _evar_0_0 __
 
 (** val rexp_eqMixin : Equality.coq_type -> rexp Equality.mixin_of **)
 
-let rexp_eqMixin var =
-  { Equality.op = (rexp_eqn var); Equality.mixin_of__1 = (rexp_eqP var) }
+let rexp_eqMixin var0 =
+  { Equality.op = (rexp_eqn var0); Equality.mixin_of__1 = (rexp_eqP var0) }
 
 (** val rexp_eqType : Equality.coq_type -> Equality.coq_type **)
 
-let rexp_eqType var =
-  Obj.magic rexp_eqMixin var
+let rexp_eqType var0 =
+  Obj.magic rexp_eqMixin var0
 
 module Coq__3 = struct
  type ebexp =
@@ -467,18 +512,18 @@ let eand _ b1 b2 =
 
 (** val eands : Equality.coq_type -> ebexp list -> ebexp **)
 
-let eands var es =
-  foldr (fun res e -> eand var res e) Etrue es
+let eands var0 es =
+  foldr (fun res e -> eand var0 res e) Etrue es
 
 (** val split_eand : Equality.coq_type -> ebexp -> ebexp list **)
 
-let rec split_eand var e = match e with
-| Eand (e1, e2) -> cat (split_eand var e1) (split_eand var e2)
+let rec split_eand var0 e = match e with
+| Eand (e1, e2) -> cat (split_eand var0 e1) (split_eand var0 e2)
 | _ -> e :: []
 
 (** val ebexp_eqn : Equality.coq_type -> ebexp -> ebexp -> bool **)
 
-let rec ebexp_eqn var e1 e2 =
+let rec ebexp_eqn var0 e1 e2 =
   match e1 with
   | Etrue -> (match e2 with
               | Etrue -> true
@@ -486,39 +531,39 @@ let rec ebexp_eqn var e1 e2 =
   | Eeq (e3, e4) ->
     (match e2 with
      | Eeq (e5, e6) ->
-       (&&) (eq_op (eexp_eqType var) (Obj.magic e3) (Obj.magic e5))
-         (eq_op (eexp_eqType var) (Obj.magic e4) (Obj.magic e6))
+       (&&) (eq_op (eexp_eqType var0) (Obj.magic e3) (Obj.magic e5))
+         (eq_op (eexp_eqType var0) (Obj.magic e4) (Obj.magic e6))
      | _ -> false)
   | Eeqmod (e3, e4, ms1) ->
     (match e2 with
      | Eeqmod (e5, e6, ms2) ->
        (&&)
-         ((&&) (eq_op (eexp_eqType var) (Obj.magic e3) (Obj.magic e5))
-           (eq_op (eexp_eqType var) (Obj.magic e4) (Obj.magic e6)))
-         (eq_op (seq_eqType (eexp_eqType var)) (Obj.magic ms1)
+         ((&&) (eq_op (eexp_eqType var0) (Obj.magic e3) (Obj.magic e5))
+           (eq_op (eexp_eqType var0) (Obj.magic e4) (Obj.magic e6)))
+         (eq_op (seq_eqType (eexp_eqType var0)) (Obj.magic ms1)
            (Obj.magic ms2))
      | _ -> false)
   | Eand (e3, e4) ->
     (match e2 with
-     | Eand (e5, e6) -> (&&) (ebexp_eqn var e3 e5) (ebexp_eqn var e4 e6)
+     | Eand (e5, e6) -> (&&) (ebexp_eqn var0 e3 e5) (ebexp_eqn var0 e4 e6)
      | _ -> false)
 
 (** val ebexp_eqP : Equality.coq_type -> ebexp -> ebexp -> reflect **)
 
-let ebexp_eqP var e1 e2 =
+let ebexp_eqP var0 e1 e2 =
   let _evar_0_ = fun _ -> ReflectT in
   let _evar_0_0 = fun _ -> ReflectF in
-  if ebexp_eqn var e1 e2 then _evar_0_ __ else _evar_0_0 __
+  if ebexp_eqn var0 e1 e2 then _evar_0_ __ else _evar_0_0 __
 
 (** val ebexp_eqMixin : Equality.coq_type -> ebexp Equality.mixin_of **)
 
-let ebexp_eqMixin var =
-  { Equality.op = (ebexp_eqn var); Equality.mixin_of__1 = (ebexp_eqP var) }
+let ebexp_eqMixin var0 =
+  { Equality.op = (ebexp_eqn var0); Equality.mixin_of__1 = (ebexp_eqP var0) }
 
 (** val ebexp_eqType : Equality.coq_type -> Equality.coq_type **)
 
-let ebexp_eqType var =
-  Obj.magic ebexp_eqMixin var
+let ebexp_eqType var0 =
+  Obj.magic ebexp_eqMixin var0
 
 module Coq__4 = struct
  type rbexp =
@@ -625,17 +670,17 @@ let ror _ e1 e2 =
 
 (** val rands : Equality.coq_type -> rbexp list -> rbexp **)
 
-let rands var es =
-  foldl (fun res e -> rand var res e) Rtrue es
+let rands var0 es =
+  foldl (fun res e -> rand var0 res e) Rtrue es
 
 (** val rors : Equality.coq_type -> rbexp list -> rbexp **)
 
-let rors var es =
-  foldl (fun res e -> ror var res e) (Rneg Rtrue) es
+let rors var0 es =
+  foldl (fun res e -> ror var0 res e) (Rneg Rtrue) es
 
 (** val rbexp_eqn : Equality.coq_type -> rbexp -> rbexp -> bool **)
 
-let rec rbexp_eqn var e1 e2 =
+let rec rbexp_eqn var0 e1 e2 =
   match e1 with
   | Rtrue -> (match e2 with
               | Rtrue -> true
@@ -645,8 +690,8 @@ let rec rbexp_eqn var e1 e2 =
      | Req (n2, e5, e6) ->
        (&&)
          ((&&) (eq_op nat_eqType (Obj.magic n1) (Obj.magic n2))
-           (eq_op (rexp_eqType var) (Obj.magic e3) (Obj.magic e5)))
-         (eq_op (rexp_eqType var) (Obj.magic e4) (Obj.magic e6))
+           (eq_op (rexp_eqType var0) (Obj.magic e3) (Obj.magic e5)))
+         (eq_op (rexp_eqType var0) (Obj.magic e4) (Obj.magic e6))
      | _ -> false)
   | Rcmp (n1, op1, e3, e4) ->
     (match e2 with
@@ -655,27 +700,171 @@ let rec rbexp_eqn var e1 e2 =
          ((&&)
            ((&&) (eq_op nat_eqType (Obj.magic n1) (Obj.magic n2))
              (eq_op rcmpop_eqType (Obj.magic op1) (Obj.magic op2)))
-           (eq_op (rexp_eqType var) (Obj.magic e3) (Obj.magic e5)))
-         (eq_op (rexp_eqType var) (Obj.magic e4) (Obj.magic e6))
+           (eq_op (rexp_eqType var0) (Obj.magic e3) (Obj.magic e5)))
+         (eq_op (rexp_eqType var0) (Obj.magic e4) (Obj.magic e6))
      | _ -> false)
   | Rneg e3 -> (match e2 with
-                | Rneg e4 -> rbexp_eqn var e3 e4
+                | Rneg e4 -> rbexp_eqn var0 e3 e4
                 | _ -> false)
   | Rand (e3, e4) ->
     (match e2 with
-     | Rand (e5, e6) -> (&&) (rbexp_eqn var e3 e5) (rbexp_eqn var e4 e6)
+     | Rand (e5, e6) -> (&&) (rbexp_eqn var0 e3 e5) (rbexp_eqn var0 e4 e6)
      | _ -> false)
   | Ror (e3, e4) ->
     (match e2 with
-     | Ror (e5, e6) -> (&&) (rbexp_eqn var e3 e5) (rbexp_eqn var e4 e6)
+     | Ror (e5, e6) -> (&&) (rbexp_eqn var0 e3 e5) (rbexp_eqn var0 e4 e6)
      | _ -> false)
 
 (** val rbexp_eqP : Equality.coq_type -> rbexp -> rbexp -> reflect **)
 
-let rbexp_eqP var e1 e2 =
+let rbexp_eqP var0 e1 e2 =
   let _evar_0_ = fun _ -> ReflectT in
   let _evar_0_0 = fun _ -> ReflectF in
-  if rbexp_eqn var e1 e2 then _evar_0_ __ else _evar_0_0 __
+  if rbexp_eqn var0 e1 e2 then _evar_0_ __ else _evar_0_0 __
+
+(** val string_of_eexp :
+    Equality.coq_type -> (Equality.sort -> char list) -> eexp -> char list **)
+
+let string_of_eexp _ string_of_var0 =
+  let rec string_of_eexp0 = function
+  | Evar v -> string_of_var0 v
+  | Econst n -> of_Z n
+  | Eunop (op0, e0) ->
+    append (string_of_eunop op0) (append (' '::[]) (string_of_eexp' e0))
+  | Ebinop (op0, e1, e2) ->
+    append (string_of_eexp' e1)
+      (append (' '::[])
+        (append (string_of_ebinop op0)
+          (append (' '::[]) (string_of_eexp' e2))))
+  | Epow (e0, n) ->
+    append (string_of_eexp' e0) (append (' '::('^'::(' '::[]))) (of_N n))
+  and string_of_eexp' = function
+  | Evar v -> string_of_var0 v
+  | Econst n -> of_Z n
+  | Eunop (op0, e0) ->
+    append ('('::[])
+      (append (string_of_eunop op0)
+        (append (' '::[]) (append (string_of_eexp' e0) (')'::[]))))
+  | Ebinop (op0, e1, e2) ->
+    append ('('::[])
+      (append (string_of_eexp' e1)
+        (append (' '::[])
+          (append (string_of_ebinop op0)
+            (append (' '::[]) (append (string_of_eexp' e2) (')'::[]))))))
+  | Epow (e0, n) ->
+    append ('('::[])
+      (append (string_of_eexp' e0)
+        (append (' '::('^'::(' '::[]))) (append (of_N n) (')'::[]))))
+  in string_of_eexp0
+
+(** val string_of_eexps :
+    Equality.coq_type -> (Equality.sort -> char list) -> char list -> eexp
+    list -> char list **)
+
+let rec string_of_eexps var0 string_of_var0 glue = function
+| [] -> []
+| hd :: tl ->
+  append (string_of_eexp var0 string_of_var0 hd)
+    (append glue (string_of_eexps var0 string_of_var0 glue tl))
+
+(** val string_of_ebexp :
+    Equality.coq_type -> (Equality.sort -> char list) -> ebexp -> char list **)
+
+let rec string_of_ebexp var0 string_of_var0 = function
+| Etrue -> 't'::('r'::('u'::('e'::[])))
+| Eeq (e1, e2) ->
+  append (string_of_eexp var0 string_of_var0 e1)
+    (append (' '::('='::(' '::[]))) (string_of_eexp var0 string_of_var0 e2))
+| Eeqmod (e1, e2, ms) ->
+  append (string_of_eexp var0 string_of_var0 e1)
+    (append (' '::('='::(' '::[])))
+      (append (string_of_eexp var0 string_of_var0 e2)
+        (append ('('::('m'::('o'::('d'::(' '::('['::[]))))))
+          (append (string_of_eexps var0 string_of_var0 (','::(' '::[])) ms)
+            (']'::(')'::[]))))))
+| Eand (e1, e2) ->
+  append (string_of_ebexp var0 string_of_var0 e1)
+    (append (' '::('/'::('\\'::('\\'::(' '::[])))))
+      (string_of_ebexp var0 string_of_var0 e2))
+
+(** val string_of_rexp :
+    Equality.coq_type -> (Equality.sort -> char list) -> rexp -> char list **)
+
+let string_of_rexp _ string_of_var0 =
+  let rec string_of_rexp0 = function
+  | Rvar v -> string_of_var0 v
+  | Rconst (_, bs) -> to_hex bs
+  | Runop (_, op0, e0) ->
+    append (string_of_runop op0) (append (' '::[]) (string_of_rexp' e0))
+  | Rbinop (_, op0, e1, e2) ->
+    append (string_of_rexp' e1)
+      (append (' '::[])
+        (append (string_of_rbinop op0)
+          (append (' '::[]) (string_of_rexp' e2))))
+  | Ruext (_, e0, i) ->
+    append ('u'::('e'::('x'::('t'::(' '::[])))))
+      (append (string_of_rexp' e0) (append (' '::[]) (of_nat i)))
+  | Rsext (_, e0, i) ->
+    append ('s'::('e'::('x'::('t'::(' '::[])))))
+      (append (string_of_rexp' e0) (append (' '::[]) (of_nat i)))
+  and string_of_rexp' = function
+  | Rvar v -> string_of_var0 v
+  | Rconst (_, bs) -> to_hex bs
+  | Runop (_, op0, e0) ->
+    append ('('::[])
+      (append (string_of_runop op0)
+        (append (' '::[]) (append (string_of_rexp' e0) (')'::[]))))
+  | Rbinop (_, op0, e1, e2) ->
+    append ('('::[])
+      (append (string_of_rexp' e1)
+        (append (' '::[])
+          (append (string_of_rbinop op0)
+            (append (' '::[]) (append (string_of_rexp' e2) (')'::[]))))))
+  | Ruext (_, e0, i) ->
+    append ('('::('u'::('e'::('x'::('t'::(' '::[]))))))
+      (append (string_of_rexp' e0)
+        (append (' '::[]) (append (of_nat i) (')'::[]))))
+  | Rsext (_, e0, i) ->
+    append ('('::('s'::('e'::('x'::('t'::(' '::[]))))))
+      (append (string_of_rexp' e0)
+        (append (' '::[]) (append (of_nat i) (')'::[]))))
+  in string_of_rexp0
+
+(** val is_rbexp_or : Equality.coq_type -> rbexp -> bool **)
+
+let is_rbexp_or _ = function
+| Ror (_, _) -> true
+| _ -> false
+
+(** val string_of_rbexp :
+    Equality.coq_type -> (Equality.sort -> char list) -> rbexp -> char list **)
+
+let rec string_of_rbexp var0 string_of_var0 = function
+| Rtrue -> 't'::('r'::('u'::('e'::[])))
+| Req (_, e1, e2) ->
+  append (string_of_rexp var0 string_of_var0 e1)
+    (append (' '::('='::(' '::[]))) (string_of_rexp var0 string_of_var0 e2))
+| Rcmp (_, op0, e1, e2) ->
+  append (string_of_rexp var0 string_of_var0 e1)
+    (append (' '::[])
+      (append (string_of_rcmpop op0)
+        (append (' '::[]) (string_of_rexp var0 string_of_var0 e2))))
+| Rneg e0 -> append ('~'::(' '::[])) (string_of_rbexp var0 string_of_var0 e0)
+| Rand (e1, e2) ->
+  append
+    (if is_rbexp_or var0 e1
+     then append ('('::[])
+            (append (string_of_rbexp var0 string_of_var0 e1) (')'::[]))
+     else string_of_rbexp var0 string_of_var0 e1)
+    (append (' '::('/'::('\\'::('\\'::(' '::[])))))
+      (if is_rbexp_or var0 e2
+       then append ('('::[])
+              (append (string_of_rbexp var0 string_of_var0 e2) (')'::[]))
+       else string_of_rbexp var0 string_of_var0 e2))
+| Ror (e1, e2) ->
+  append (string_of_rbexp var0 string_of_var0 e1)
+    (append (' '::('\\'::('\\'::('/'::(' '::[])))))
+      (string_of_rbexp var0 string_of_var0 e2))
 
 module MakeDSL =
  functor (V:SsrOrder.SsrOrder) ->
@@ -1725,6 +1914,62 @@ module MakeDSL =
 
   type program = instr list
 
+  (** val string_of_eunop : eunop -> char list **)
+
+  let string_of_eunop =
+    string_of_eunop
+
+  (** val string_of_ebinop : ebinop -> char list **)
+
+  let string_of_ebinop =
+    string_of_ebinop
+
+  (** val string_of_runop : runop -> char list **)
+
+  let string_of_runop =
+    string_of_runop
+
+  (** val string_of_rbinop : rbinop -> char list **)
+
+  let string_of_rbinop =
+    string_of_rbinop
+
+  (** val string_of_rcmpop : rcmpop -> char list **)
+
+  let string_of_rcmpop =
+    string_of_rcmpop
+
+  (** val string_of_eexp :
+      (Equality.sort -> char list) -> Coq__1.eexp -> char list **)
+
+  let string_of_eexp =
+    string_of_eexp V.coq_T
+
+  (** val string_of_eexps :
+      (Equality.sort -> char list) -> char list -> Coq__1.eexp list ->
+      char list **)
+
+  let string_of_eexps =
+    string_of_eexps V.coq_T
+
+  (** val string_of_ebexp :
+      (Equality.sort -> char list) -> Coq__3.ebexp -> char list **)
+
+  let string_of_ebexp =
+    string_of_ebexp V.coq_T
+
+  (** val string_of_rexp :
+      (Equality.sort -> char list) -> Coq__2.rexp -> char list **)
+
+  let string_of_rexp =
+    string_of_rexp V.coq_T
+
+  (** val string_of_rbexp :
+      (Equality.sort -> char list) -> Coq__4.rbexp -> char list **)
+
+  let string_of_rbexp =
+    string_of_rbexp V.coq_T
+
   (** val vars_atom : atom -> VS.t **)
 
   let vars_atom = function
@@ -2549,3 +2794,8 @@ module MakeDSL =
  end
 
 module DSL = MakeDSL(VarOrder)(VS)(VM)(TypEnv.TE)(Store)
+
+(** val string_of_var : var -> char list **)
+
+let string_of_var v =
+  append ('v'::[]) (of_N v)

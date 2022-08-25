@@ -7,6 +7,7 @@ open List0
 open Options0
 open Ring_polynom
 open Seqs
+open String0
 open Var
 open ZAriths
 open Eqtype
@@ -37,6 +38,20 @@ let azbexp_eqn e1 e2 =
        eq_op (DSL.ebexp_eqType SSAVarOrder.coq_T)
          (Obj.magic (DSL.Eeqmod (e3, e4, ms1)))
          (Obj.magic (DSL.Eeqmod (e5, e6, ms2))))
+
+(** val string_of_azbexp : azbexp -> char list **)
+
+let string_of_azbexp = function
+| Seq (e1, e2) ->
+  append (ZSSA.ZSSA.string_of_zexp e1)
+    (append (' '::('='::(' '::[]))) (ZSSA.ZSSA.string_of_zexp e2))
+| Seqmod (e1, e2, ms) ->
+  append (ZSSA.ZSSA.string_of_zexp e1)
+    (append (' '::('='::(' '::[])))
+      (append (ZSSA.ZSSA.string_of_zexp e2)
+        (append ('('::('m'::('o'::('d'::(' '::('['::[]))))))
+          (append (ZSSA.ZSSA.string_of_zexps (','::(' '::[])) ms)
+            (']'::(')'::[]))))))
 
 (** val azbexp_eqP : azbexp -> azbexp -> reflect **)
 

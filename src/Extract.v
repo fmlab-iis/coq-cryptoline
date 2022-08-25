@@ -22,8 +22,15 @@ Extract Constant Verify.ext_solve_imp_list => "External.ext_solve_imp_list_impl"
 
 Cd "src/ocaml/extraction".
 Separate Extraction
+         (* Number conversion *)
          int_of_pos pos_of_int int_of_n n_of_int int_of_nat nat_of_int
          NBitsDef.from_Zpos NBitsDef.from_Zneg NBitsDef.from_Z
+         (* String outputs *)
+         DSL.string_of_var SSA.string_of_ssavar
+         DSL.string_of_ebexp SSA.string_of_ebexp
+         DSL.string_of_rbexp SSA.string_of_rbexp
+         Poly.string_of_azbexp
+         (* Verification *)
          CNF.dimacs_cnf_with_header CNF.max_var_of_cnf CNF.num_clauses
          Poly.zpexpr_is_zero
          DSL.well_formed_spec Verify.verify_dsl.

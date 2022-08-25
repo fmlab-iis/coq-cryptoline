@@ -1,9 +1,11 @@
 open BinNat
 open BinNums
+open BinaryString
 open Bool
 open Datatypes
 open NBitsDef
 open State
+open String0
 open Typ
 open Var
 open Eqtype
@@ -960,6 +962,27 @@ module SSA :
 
   type program = instr list
 
+  val string_of_eunop : DSL.eunop -> char list
+
+  val string_of_ebinop : DSL.ebinop -> char list
+
+  val string_of_runop : DSL.runop -> char list
+
+  val string_of_rbinop : DSL.rbinop -> char list
+
+  val string_of_rcmpop : DSL.rcmpop -> char list
+
+  val string_of_eexp : (Equality.sort -> char list) -> DSL.eexp -> char list
+
+  val string_of_eexps :
+    (Equality.sort -> char list) -> char list -> DSL.eexp list -> char list
+
+  val string_of_ebexp : (Equality.sort -> char list) -> DSL.ebexp -> char list
+
+  val string_of_rexp : (Equality.sort -> char list) -> DSL.rexp -> char list
+
+  val string_of_rbexp : (Equality.sort -> char list) -> DSL.rbexp -> char list
+
   val vars_atom : atom -> SSAVS.t
 
   val vars_instr : instr -> SSAVS.t
@@ -1793,6 +1816,8 @@ module SSA :
   val force_conform :
     TypEnv.SSATE.env -> TypEnv.SSATE.env -> SSAStore.t -> SSAStore.t
  end
+
+val string_of_ssavar : ssavar -> char list
 
 type vmap = coq_N VM.t
 

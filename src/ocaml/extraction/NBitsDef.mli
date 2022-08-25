@@ -1,6 +1,7 @@
 open BinInt
 open BinNums
 open Datatypes
+open String0
 open Seq
 open Ssrnat
 
@@ -67,3 +68,9 @@ val from_Zpos : int -> coq_Z -> bits
 val from_Zneg : int -> coq_Z -> bits
 
 val from_Z : int -> coq_Z -> bits
+
+val nibble_to_char : bits -> char
+
+val append_nibble_on_string : bits -> char list -> char list
+
+val to_hex : bits -> char list

@@ -1,6 +1,7 @@
 open BinInt
 open BinNums
 open Datatypes
+open String0
 open Seq
 open Ssrnat
 
@@ -180,3 +181,39 @@ let from_Z n x = match x with
 | Z0 -> zeros n
 | Zpos _ -> from_Zpos n x
 | Zneg _ -> from_Zneg n (Z.pred (Z.opp x))
+
+(** val nibble_to_char : bits -> char **)
+
+let nibble_to_char n =
+  match get (to_nat n)
+          ('0'::('1'::('2'::('3'::('4'::('5'::('6'::('7'::('8'::('9'::('A'::('B'::('C'::('D'::('E'::('F'::[])))))))))))))))) with
+  | Some c -> c
+  | None -> ' '
+
+(** val append_nibble_on_string : bits -> char list -> char list **)
+
+let append_nibble_on_string n s =
+  append s ((nibble_to_char n)::[])
+
+(** val to_hex : bits -> char list **)
+
+let rec to_hex bs = match bs with
+| [] -> []
+| b2 :: l ->
+  (match l with
+   | [] ->
+     append_nibble_on_string
+       (cat bs
+         (zeros (Pervasives.succ (Pervasives.succ (Pervasives.succ 0))))) []
+   | b3 :: l0 ->
+     (match l0 with
+      | [] ->
+        append_nibble_on_string
+          (cat bs (zeros (Pervasives.succ (Pervasives.succ 0)))) []
+      | b4 :: l1 ->
+        (match l1 with
+         | [] ->
+           append_nibble_on_string (cat bs (zeros (Pervasives.succ 0))) []
+         | b5 :: tl ->
+           append_nibble_on_string (b2 :: (b3 :: (b4 :: (b5 :: []))))
+             (to_hex tl))))

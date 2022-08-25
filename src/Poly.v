@@ -1,7 +1,7 @@
 
 (** Ideal membership problem together with the validator of CAS answers. *)
 
-From Coq Require Import List Arith ZArith.
+From Coq Require Import List Arith ZArith String.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From ssrlib Require Import Var Types SsrOrder Nats ZAriths Seqs Store Tactics Compatibility.
 From BitBlasting Require Import State.
@@ -26,6 +26,15 @@ Section AtomicRootEntailment.
     | Seq e1 e2, Seq e3 e4 => (Eeq e1 e2) == (Eeq e3 e4)
     | Seqmod e1 e2 ms1, Seqmod e3 e4 ms2 => (Eeqmod e1 e2 ms1) == (Eeqmod e3 e4 ms2)
     | _, _ => false
+    end.
+
+  Definition string_of_azbexp (e : azbexp) : string :=
+    match e with
+    | Seq e1 e2 =>
+        (ZSSA.string_of_zexp e1 ++ " = " ++ ZSSA.string_of_zexp e2)%string
+    | Seqmod e1 e2 ms =>
+        (ZSSA.string_of_zexp e1 ++ " = " ++ ZSSA.string_of_zexp e2
+                             ++ "(mod [" ++ ZSSA.string_of_zexps ", " ms ++ "])")%string
     end.
 
   Lemma azbexp_eqn_eq (e1 e2 : azbexp) : azbexp_eqn e1 e2 -> e1 = e2.
