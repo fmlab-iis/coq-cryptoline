@@ -77,7 +77,8 @@ let anon file =
       let (_vs, _s, coq_spec) = parse_and_check file in
 	  (* options : bool, true to add carry constraints *)
 	  let o = { add_carry_constraints = !carry_constraint;
-                rewrite_assignments = !apply_rewriting;
+                rewrite_assignments_arep = !apply_rewriting_arep;
+                rewrite_assignments_imp = !apply_rewriting_imp;
                 vars_cache_in_rewrite_assignments = !vars_cache_in_rewriting;
                 compute_coefficients_one_by_one = !jobs <= 1 }  in
 	  let res = Extraction.Verify.verify_dsl o coq_spec in

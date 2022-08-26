@@ -29,26 +29,29 @@ let verify_rspec_algsnd s =
 
 let ext_solve_imp = External.ext_solve_imp_impl
 
-(** val verify_arep : arep -> bool **)
+(** val verify_arep : options -> arep -> bool **)
 
-let verify_arep ps =
+let verify_arep o ps =
   let (p, q) = imp_of_arep ps in
   let (p0, ms) = p in
   let (_, ps0) = p0 in
-  let (cps, cms) = ext_solve_imp ps0 q ms in
-  validate_imp_answer ps0 ms q cps cms
+  let (ps', q') =
+    if o.rewrite_assignments_imp then simplify_generator ps0 q else (ps0, q)
+  in
+  let (cps, cms) = ext_solve_imp ps' q' ms in
+  validate_imp_answer ps' ms q' cps cms
 
-(** val verify_areps : arep list -> bool **)
+(** val verify_areps : options -> arep list -> bool **)
 
-let verify_areps pss =
-  all verify_arep pss
+let verify_areps o pss =
+  all (verify_arep o) pss
 
 (** val verify_rep : options -> ZSSA.ZSSA.rep -> bool **)
 
 let verify_rep o zs =
-  if o.rewrite_assignments
-  then verify_areps (areps_of_rep_simplified o zs)
-  else verify_areps (areps_of_rep zs)
+  if o.rewrite_assignments_arep
+  then verify_areps o (areps_of_rep_simplified o zs)
+  else verify_areps o (areps_of_rep zs)
 
 (** val ext_solve_imp_list :
     ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr list) list ->
@@ -57,13 +60,19 @@ let verify_rep o zs =
 let ext_solve_imp_list = External.ext_solve_imp_list_impl
 
 (** val polys_of_areps :
-    arep list -> ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr
-    list) list **)
+    options -> arep list -> ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z
+    coq_PExpr list) list **)
 
-let polys_of_areps pss =
+let polys_of_areps o pss =
   let f = fun ps ->
     let (p, q) = imp_of_arep ps in
-    let (p0, ms) = p in let (_, ps0) = p0 in ((ps0, q), ms)
+    let (p0, ms) = p in
+    let (_, ps0) = p0 in
+    ((if o.rewrite_assignments_imp
+      then if o.vars_cache_in_rewrite_assignments
+           then simplify_generator_vars_cache ps0 q
+           else simplify_generator ps0 q
+      else (ps0, q)), ms)
   in
   map f pss
 
@@ -87,10 +96,10 @@ let rec validate_imp_answer_list polys coefs =
        then validate_imp_answer_list tlp tlc
        else false)
 
-(** val verify_areps_list : arep list -> bool **)
+(** val verify_areps_list : options -> arep list -> bool **)
 
-let verify_areps_list pss =
-  let poly_list = polys_of_areps pss in
+let verify_areps_list o pss =
+  let poly_list = polys_of_areps o pss in
   let coef_list = ext_solve_imp_list poly_list in
   if eq_op nat_eqType (Obj.magic size poly_list) (Obj.magic size coef_list)
   then validate_imp_answer_list poly_list coef_list
@@ -99,9 +108,9 @@ let verify_areps_list pss =
 (** val verify_rep_list : options -> ZSSA.ZSSA.rep -> bool **)
 
 let verify_rep_list o zs =
-  if o.rewrite_assignments
-  then verify_areps_list (areps_of_rep_simplified o zs)
-  else verify_areps_list (areps_of_rep zs)
+  if o.rewrite_assignments_arep
+  then verify_areps_list o (areps_of_rep_simplified o zs)
+  else verify_areps_list o (areps_of_rep zs)
 
 (** val verify_espec : options -> SSA.SSA.spec -> bool **)
 

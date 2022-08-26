@@ -48,7 +48,8 @@ val algebra_system : algebra_system ref
 val algebra_args : string ref
 val string_of_algebra_system : algebra_system -> string
 
-val apply_rewriting : bool ref
+val apply_rewriting_arep : bool ref
+val apply_rewriting_imp : bool ref
 val polys_rewrite_replace_eexp : bool ref
 val apply_slicing : bool ref
 

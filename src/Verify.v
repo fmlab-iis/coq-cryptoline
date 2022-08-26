@@ -75,30 +75,36 @@ Section Verification.
       ideal membership problem, solving the ideal membership problem by an
       external computer algebra system, and validating the answer from the
       computer algebra system. *)
-  Definition verify_arep (ps : arep) : bool :=
+  Definition verify_arep (o : options) (ps : arep) : bool :=
     let '(_, _, ps, ms, q) := imp_of_arep ps in
-    let (cps, cms) := ext_solve_imp ps q ms in
-    validate_imp_answer ps ms q cps cms.
+    let '(ps', q') := if rewrite_assignments_imp o then simplify_generator ps q
+                      else (ps, q) in
+    let (cps, cms) := ext_solve_imp ps' q' ms in
+    validate_imp_answer ps' ms q' cps cms.
 
-  Definition verify_areps (pss : seq arep) : bool := all verify_arep pss.
+  Definition verify_areps (o : options) (pss : seq arep) : bool := all (verify_arep o) pss.
 
   (** Verify a root entailment problem by reducing the problem to atomic
       root entailment problems and then verifying the atomic problems
       through verify_areps. *)
   Definition verify_rep (o : options) (zs : ZSSA.rep) : bool :=
-    if rewrite_assignments o
-    then verify_areps (areps_of_rep_simplified o zs)
-    else verify_areps (areps_of_rep zs).
+    if rewrite_assignments_arep o
+    then verify_areps o (areps_of_rep_simplified o zs)
+    else verify_areps o (areps_of_rep zs).
 
-  Lemma verify_arep_sound ps : verify_arep ps -> valid_arep ps.
+  Lemma verify_arep_sound o ps : verify_arep o ps -> valid_arep ps.
   Proof.
-    rewrite /verify_arep. dcase (imp_of_arep ps) => [[[[[g t] zps] zm] zq] Hzp].
-    dcase (ext_solve_imp zps zq zm) => [[cs c] Hco]. move=> Hch.
-    exact: (validated_imp_valid_arep Hzp Hch).
+    rewrite /verify_arep. dcase (imp_of_arep ps) => [[[[[g t] zps] zms] zq] Hzp].
+    case: (rewrite_assignments_imp o).
+    - dcase (simplify_generator zps zq) => [[zps' zq'] Hsimp].
+      dcase (ext_solve_imp zps' zq' zms) => [[cs c] Hco]. move=> Hch.
+      exact: (validated_simplified_imp_valid_arep Hzp Hsimp Hch).
+    - dcase (ext_solve_imp zps zq zms) => [[cs c] Hco]. move=> Hch.
+      exact: (validated_imp_valid_arep Hzp Hch).
   Qed.
 
-  Lemma verify_areps_in ps pss :
-    verify_areps pss -> ps \in pss -> valid_arep ps.
+  Lemma verify_areps_in o ps pss :
+    verify_areps o pss -> ps \in pss -> valid_arep ps.
   Proof.
     elim: pss => [| hd tl IH] //=. move/andP=> [Hhd Htl] Hin.
     rewrite in_cons in Hin. case/orP: Hin => Hin.
@@ -109,7 +115,7 @@ Section Verification.
   Lemma verify_rep_sound o (zs : ZSSA.rep) :
     verify_rep o zs -> ZSSA.valid_rep zs.
   Proof.
-    rewrite /verify_rep. case: (rewrite_assignments o) => Hv.
+    rewrite /verify_rep. case: (rewrite_assignments_arep o) => Hv.
     - apply: (@areps_of_rep_simplified_sound o) => ps Hin.
       exact: (verify_areps_in Hv Hin).
     - apply: areps_of_rep_sound => ps Hin.
@@ -130,11 +136,16 @@ Section Verification.
       ext_solve_imp_list ((ps, q, ms)::tl) =
       (ext_solve_imp ps q ms)::(ext_solve_imp_list tl).
 
-  Definition polys_of_areps (pss : seq arep) :
+  Definition polys_of_areps (o : options) (pss : seq arep) :
     seq (seq (PExpr Z) * PExpr Z * seq (PExpr Z)) :=
     let f ps :=
-        let '(_, _, ps, ms, q) := imp_of_arep ps in
-        (ps, q, ms) in
+      let '(_, _, ps, ms, q) := imp_of_arep ps in
+      let '(ps', q') :=
+        if rewrite_assignments_imp o then
+          if vars_cache_in_rewrite_assignments o then simplify_generator_vars_cache ps q
+          else simplify_generator ps q
+        else (ps, q) in
+        (ps', q', ms) in
     map f pss.
 
   Fixpoint validate_imp_answer_list polys coefs : bool :=
@@ -146,38 +157,55 @@ Section Verification.
     | _, _ => false
     end.
 
-  Definition verify_areps_list (pss : seq arep) : bool :=
-    let poly_list := polys_of_areps pss in
+  Definition verify_areps_list (o : options) (pss : seq arep) : bool :=
+    let poly_list := polys_of_areps o pss in
     let coef_list := ext_solve_imp_list poly_list in
     if size poly_list == size coef_list
     then validate_imp_answer_list poly_list coef_list
     else false.
 
   Definition verify_rep_list (o : options) (zs : ZSSA.rep) : bool :=
-    if rewrite_assignments o
-    then verify_areps_list (areps_of_rep_simplified o zs)
-    else verify_areps_list (areps_of_rep zs).
+    if rewrite_assignments_arep o
+    then verify_areps_list o (areps_of_rep_simplified o zs)
+    else verify_areps_list o (areps_of_rep zs).
 
-  Lemma verify_areps_list_in psp psps :
-    verify_areps_list psps -> psp \in psps -> valid_arep psp.
+  Lemma verify_areps_list_in o psp psps :
+    verify_areps_list o psps -> psp \in psps -> valid_arep psp.
   Proof.
     elim: psps => [| hd tl IH] //=. rewrite /verify_areps_list.
-    case Hs: (size (polys_of_areps (hd :: tl)) ==
-              size (ext_solve_imp_list (polys_of_areps (hd :: tl)))) => //=.
-    dcase (imp_of_arep hd) => [[[[[g t] ps] m] q] Hhd] /=.
-    rewrite Hhd in Hs. rewrite ext_solve_imp_list_cons /= in Hs.
-    rewrite eqSS in Hs. rewrite ext_solve_imp_list_cons.
-    dcase (ext_solve_imp ps q m) => [[cs c] Hcs].
-    case Hchk_hd: (validate_imp_answer ps m q cs c) => //=.
-    move=> Hchk_tl Hin. rewrite in_cons in Hin. case/orP: Hin => Hin.
-    - rewrite (eqP Hin). exact: (validated_imp_valid_arep Hhd Hchk_hd).
-    - apply: (IH _ Hin). rewrite /verify_areps_list. rewrite Hs. exact: Hchk_tl.
+    case Hs: (size (polys_of_areps o (hd :: tl)) ==
+                size (ext_solve_imp_list (polys_of_areps o (hd :: tl)))) => //=.
+    case: (rewrite_assignments_imp o) Hs.
+    - dcase (imp_of_arep hd) => [[[[[g t] ps] m] q] Hhd] /=.
+      case: (vars_cache_in_rewrite_assignments o).
+      + dcase (simplify_generator_vars_cache ps q) => [[ps' q'] Hsimp] Hs.
+        rewrite ext_solve_imp_list_cons /= in Hs. rewrite eqSS in Hs.
+        rewrite ext_solve_imp_list_cons. dcase (ext_solve_imp ps' q' m) => [[cs c] Hcs].
+        case Hchk_hd: (validate_imp_answer ps' m q' cs c) => //=.
+        move=> Hchk_tl Hin. rewrite in_cons in Hin. case/orP: Hin => Hin.
+        * rewrite (eqP Hin).
+          exact: (validated_simplified_imp_vars_cache_valid_arep Hhd Hsimp Hchk_hd).
+        * apply: (IH _ Hin). rewrite /verify_areps_list. rewrite Hs. exact: Hchk_tl.
+      + dcase (simplify_generator ps q) => [[ps' q'] Hsimp] Hs.
+        rewrite ext_solve_imp_list_cons /= in Hs. rewrite eqSS in Hs.
+        rewrite ext_solve_imp_list_cons. dcase (ext_solve_imp ps' q' m) => [[cs c] Hcs].
+        case Hchk_hd: (validate_imp_answer ps' m q' cs c) => //=.
+        move=> Hchk_tl Hin. rewrite in_cons in Hin. case/orP: Hin => Hin.
+        * rewrite (eqP Hin). exact: (validated_simplified_imp_valid_arep Hhd Hsimp Hchk_hd).
+        * apply: (IH _ Hin). rewrite /verify_areps_list. rewrite Hs. exact: Hchk_tl.
+    - dcase (imp_of_arep hd) => [[[[[g t] ps] m] q] Hhd] /=.
+      rewrite !ext_solve_imp_list_cons /= => Hs.
+      rewrite eqSS in Hs. dcase (ext_solve_imp ps q m) => [[cs c] Hcs].
+      case Hchk_hd: (validate_imp_answer ps m q cs c) => //=.
+      move=> Hchk_tl Hin. rewrite in_cons in Hin. case/orP: Hin => Hin.
+      + rewrite (eqP Hin). exact: (validated_imp_valid_arep Hhd Hchk_hd).
+      + apply: (IH _ Hin). rewrite /verify_areps_list. rewrite Hs. exact: Hchk_tl.
   Qed.
 
   Lemma verify_rep_list_sound o (zs : ZSSA.rep) :
     verify_rep_list o zs -> ZSSA.valid_rep zs.
   Proof.
-    rewrite /verify_rep_list. case: (rewrite_assignments o) => Hv.
+    rewrite /verify_rep_list. case: (rewrite_assignments_arep o) => Hv.
     - apply: (@areps_of_rep_simplified_sound o) => ps Hin.
       exact: (verify_areps_list_in Hv Hin).
     - apply: areps_of_rep_sound => ps Hin.

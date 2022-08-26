@@ -29,7 +29,7 @@ Separate Extraction
          DSL.string_of_var SSA.string_of_ssavar
          DSL.string_of_ebexp SSA.string_of_ebexp
          DSL.string_of_rbexp SSA.string_of_rbexp
-         Poly.string_of_azbexp
+         Poly.string_of_azbexp Poly.string_of_zpexpr
          (* Verification *)
          CNF.dimacs_cnf_with_header CNF.max_var_of_cnf CNF.num_clauses
          Poly.zpexpr_is_zero

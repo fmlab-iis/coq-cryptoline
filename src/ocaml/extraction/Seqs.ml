@@ -18,6 +18,11 @@ let rec mapr_rec f res = function
 let mapr f es =
   mapr_rec f [] es
 
+(** val tmap : ('a1 -> 'a2) -> 'a1 list -> 'a2 list **)
+
+let tmap f es =
+  mapr f (rev es)
+
 (** val tfilter :
     Equality.coq_type -> Equality.sort pred -> Equality.sort list ->
     Equality.sort list **)

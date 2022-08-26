@@ -1,9 +1,9 @@
 
 (** Ideal membership problem together with the validator of CAS answers. *)
 
-From Coq Require Import List Arith ZArith String.
+From Coq Require Import List Arith ZArith String Lia BinaryString.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
-From ssrlib Require Import Var Types SsrOrder Nats ZAriths Seqs Store Tactics Compatibility.
+From ssrlib Require Import Var Types SsrOrder Nats ZAriths Seqs Store Tactics Compatibility FSets.
 From BitBlasting Require Import State.
 From Cryptoline Require Import Options DSL SSA ZSSA.
 
@@ -223,7 +223,7 @@ Section AtomicRootEntailmentSimpl.
     | Ebinop op e1 e2 =>
         if (op == Eadd) || (op == Esub) then SSAVS.union (single_variables e1) (single_variables e2)
         else SSAVS.empty
-    | Epow e _ => single_variables e
+    | Epow e _ => SSAVS.empty
     end.
 
   Fixpoint num_occurrence (v : var) (e : zexp) :=
@@ -265,7 +265,7 @@ Section AtomicRootEntailmentSimpl.
           match separate v e (econst Z.zero) with
           | None => None
           | Some pat =>
-              (*let pat := simplifylala_eexp pat in*)
+              (*let pat := simplify_eexp pat in*)
               Some (v, pat)
           end
       end.
@@ -625,20 +625,20 @@ Section AtomicRootEntailmentSimpl.
                                      (vars_eexps ms)
     end.
 
-  Definition pair_with_vars (e : azbexp) : SSAVS.t * azbexp :=
+  Definition pair_azbexp_with_vars (e : azbexp) : SSAVS.t * azbexp :=
     (vars_azbexp e, e).
 
-  Lemma split_map_pair_with_vars (es : seq azbexp) :
-    (split (map pair_with_vars es)).2 = es.
+  Lemma split_map_pair_azbexp_with_vars (es : seq azbexp) :
+    (split (map pair_azbexp_with_vars es)).2 = es.
   Proof.
     elim: es => [| e es IH] //=. move: IH.
-    dcase (split [seq pair_with_vars i | i <- es]) => [[vs es'] Hs].
+    dcase (split [seq pair_azbexp_with_vars i | i <- es]) => [[vs es'] Hs].
     rewrite Hs /=. move=> ->. reflexivity.
   Qed.
 
   Definition simplify_arep_vars_cache (s : arep) : arep :=
-    let vs_ps := map pair_with_vars (apremises s) in
-    let vs_q := pair_with_vars (aconseq s) in
+    let vs_ps := map pair_azbexp_with_vars (apremises s) in
+    let vs_q := pair_azbexp_with_vars (aconseq s) in
     let (vs_ps', vs_q') := simplify_arep_vars_cache_rec [::] vs_ps vs_q in
     {| apremises := (split vs_ps').2; aconseq := vs_q'.2 |}.
 
@@ -646,11 +646,11 @@ Section AtomicRootEntailmentSimpl.
     valid_arep (simplify_arep_vars_cache s) -> valid_arep s.
   Proof.
     rewrite /valid_arep. case: s => ps q /=. rewrite /simplify_arep_vars_cache /=.
-    dcase (simplify_arep_vars_cache_rec [::] [seq pair_with_vars i | i <- ps]
-                                         (pair_with_vars q)) => [[vs_ps' vs_q'] Hsp].
+    dcase (simplify_arep_vars_cache_rec [::] [seq pair_azbexp_with_vars i | i <- ps]
+                                         (pair_azbexp_with_vars q)) => [[vs_ps' vs_q'] Hsp].
     rewrite Hsp /=. move=> H s Hs.
     apply: (simplify_arep_vars_cache_rec_sound Hsp H). rewrite cat0s.
-    rewrite split_map_pair_with_vars. assumption.
+    rewrite split_map_pair_azbexp_with_vars. assumption.
   Qed.
 
 End AtomicRootEntailmentSimpl.
@@ -875,21 +875,95 @@ Section ZRing.
                  Z.eq RelationClasses.eq_equivalence Zeqe Zath
                  Z 0 1 Z.add Z.mul Z.sub Z.opp Z.eqb id Zrm get_signZ Zst.
 
+  Definition ZPExpr_eq := Field_theory.PExpr_eq Z.eqb.
+
+  (* Two polynomials are syntactically equal after normalization *)
+  Definition zpexpr_eqb (p1 p2 : PExpr Z) : bool :=
+    ZPeq (Znorm_subst p1) (Znorm_subst p2).
+
+  Lemma zpexpr_eq_zpeeval s e1 e2 :
+    ZPExpr_eq e1 e2 -> ZPEeval s e1 = ZPEeval s e2.
+  Proof.
+    elim: e1 e2 => //=.
+    - move=> c [] //=. move=> d Heq. apply/Z.eqb_eq. assumption.
+    - move=> j [] //=. move=> k Heq. move/Pos.eqb_eq: Heq => ->. reflexivity.
+    - move=> e1 IH1 e2 IH2 [] //=. move=> e3 e4. case Heq13: (ZPExpr_eq e1 e3) => //=.
+      move=> Heq24. rewrite (IH1 _ Heq13) (IH2 _ Heq24). reflexivity.
+    - move=> e1 IH1 e2 IH2 [] //=. move=> e3 e4. case Heq13: (ZPExpr_eq e1 e3) => //=.
+      move=> Heq24. rewrite (IH1 _ Heq13) (IH2 _ Heq24). reflexivity.
+    - move=> e1 IH1 e2 IH2 [] //=. move=> e3 e4. case Heq13: (ZPExpr_eq e1 e3) => //=.
+      move=> Heq24. rewrite (IH1 _ Heq13) (IH2 _ Heq24). reflexivity.
+    - move=> e1 IH1 [] //=. move=> e2 Heq. rewrite (IH1 _ Heq). reflexivity.
+    - move=> e1 IH1 n [] //=. move=> e2 m. case Heq: (n =? m)%num => //=.
+      move=> Heq12. rewrite (IH1 _ Heq12). move/N.eqb_eq: Heq => ->. reflexivity.
+  Qed.
+
   Fixpoint zpexpr_all0 l (ps : seq (PExpr Z)) : Prop :=
     match ps with
     | [::] => True
     | hd::tl => ZPEeval l hd = 0 /\ zpexpr_all0 l tl
     end.
 
+  Lemma zpexpr_all0_cons l e es :
+    zpexpr_all0 l (e::es) <-> ZPEeval l e = 0 /\ zpexpr_all0 l es.
+  Proof. done. Qed.
+
+  Lemma zpexpr_all0_rcons l es e :
+    zpexpr_all0 l (rcons es e) <-> zpexpr_all0 l es /\ ZPEeval l e = 0.
+  Proof.
+    elim: es e => [| hd tl IH] //=.
+    - move=> e. tauto.
+    - move=> e. move: (IH e) => [H1 H2]. tauto.
+  Qed.
+
+  Lemma zpexpr_all0_cat l es1 es2 :
+    zpexpr_all0 l (es1 ++ es2) <-> zpexpr_all0 l es1 /\ zpexpr_all0 l es2.
+  Proof.
+    elim: es1 es2 => [| e1 es1 IH] //=.
+    - tauto.
+    - move=> es2. move: (IH es2) => [H1 H2]. tauto.
+  Qed.
+
+  Lemma zpexpr_all0_rev l es : zpexpr_all0 l (rev es) <-> zpexpr_all0 l es.
+  Proof.
+    elim: es => [| e es IH] //=. rewrite rev_cons. rewrite zpexpr_all0_rcons. tauto.
+  Qed.
+
+  Lemma zpexpr_all0_in l ps p :
+    zpexpr_all0 l ps -> List.In p ps -> ZPEeval l p = 0%Z.
+  Proof.
+    elim: ps => [| e es IH] //=. move=> [H1 H2] [] H.
+    - rewrite -H. assumption.
+    - exact: (IH H2 H).
+  Qed.
+
   (* (\forall p \in ps, p = 0) -> q1 = q2 *)
   Definition zpimply_eq ps q1 q2 :=
     forall l : list Z,
       zpexpr_all0 l ps -> ZPEeval l q1 = ZPEeval l q2.
 
+  Lemma ZPEeval0 l : ZPEeval l PEO = 0.
+  Proof. reflexivity. Qed.
+
+  Lemma ZPEeval1 l : ZPEeval l PEI = 1.
+  Proof. reflexivity. Qed.
+
+  Lemma ZPEeval_const l c : ZPEeval l (PEc c) = c.
+  Proof. reflexivity. Qed.
+
+  Lemma ZPEeval_add l e1 e2 : ZPEeval l (PEadd e1 e2) = ZPEeval l e1 + ZPEeval l e2.
+  Proof. reflexivity. Qed.
+
   Lemma ZPEeval_sub l e1 e2 : ZPEeval l (PEsub e1 e2) = ZPEeval l e1 - ZPEeval l e2.
   Proof. reflexivity. Qed.
 
   Lemma ZPEeval_mul l e1 e2 : ZPEeval l (PEmul e1 e2) = ZPEeval l e1 * ZPEeval l e2.
+  Proof. reflexivity. Qed.
+
+  Lemma ZPEeval_opp l e : ZPEeval l (PEopp e) = - ZPEeval l e.
+  Proof. reflexivity. Qed.
+
+  Lemma ZPEeval_pow l e n : ZPEeval l (PEpow e n) = Z.pow (ZPEeval l e) (Z.of_N n).
   Proof. reflexivity. Qed.
 
   Definition peadds {A : Type} es : PExpr A := foldl (@PEadd A) PEO es.
@@ -2708,14 +2782,810 @@ Section REP2IMP.
 End REP2IMP.
 
 
+Module PS <: SsrFSet := FSets.MakeTreeSet PositiveOrder.
+
+Section PExprAux.
+
+  Variable C : Type.
+
+  Variable ceq : C -> C -> bool.
+
+  Fixpoint vars_pexpr (e : PExpr C) : PS.t :=
+    match e with
+    | PEO
+    | PEI
+    | PEc _ => PS.empty
+    | PEX j => PS.singleton j
+    | PEopp e => vars_pexpr e
+    | PEadd e1 e2
+    | PEsub e1 e2
+    | PEmul e1 e2 => PS.union (vars_pexpr e1) (vars_pexpr e2)
+    | PEpow e _ => vars_pexpr e
+    end.
+
+  Fixpoint subst_pexpr (p r e : PExpr C) : PExpr C :=
+    if Field_theory.PExpr_eq ceq e p then r
+    else match e with
+         | PEadd e1 e2 => PEadd (subst_pexpr p r e1) (subst_pexpr p r e2)
+         | PEsub e1 e2 => PEsub (subst_pexpr p r e1) (subst_pexpr p r e2)
+         | PEmul e1 e2 => PEmul (subst_pexpr p r e1) (subst_pexpr p r e2)
+         | PEopp e => PEopp (subst_pexpr p r e)
+         | PEpow e n => PEpow (subst_pexpr p r e) n
+         | _ => e
+         end.
+
+  Definition subst_pexprs (p r : PExpr C) (es : seq (PExpr C)) : seq (PExpr C) :=
+    map (subst_pexpr p r) es.
+
+  Fixpoint pexpr_single_variables (e : PExpr C) :=
+    match e with
+    | PEO
+    | PEI
+    | PEc _ => PS.empty
+    | PEX j => PS.singleton j
+    | PEopp e => pexpr_single_variables e
+    | PEadd e1 e2 => PS.union (pexpr_single_variables e1) (pexpr_single_variables e2)
+    | PEsub e1 e2 => PS.union (pexpr_single_variables e1) (pexpr_single_variables e2)
+    | PEmul _ _ => PS.empty
+    | PEpow _ _ => PS.empty
+    end.
+
+  Fixpoint pexpr_num_occurrence (v : positive) (e : PExpr C) :=
+    match e with
+    | PEI
+    | PEO
+    | PEc _ => 0
+    | PEX j => if j == v then 1 else 0
+    | PEopp e => pexpr_num_occurrence v e
+    | PEadd e1 e2
+    | PEsub e1 e2
+    | PEmul e1 e2 => pexpr_num_occurrence v e1 + pexpr_num_occurrence v e2
+    | PEpow e _ => pexpr_num_occurrence v e
+    end.
+
+  Fixpoint pexpr_separate (v : positive) (e : PExpr C) (pat : PExpr C) {struct e} :=
+    match e with
+    | PEO
+    | PEI
+    | PEc _ => None
+    | PEX j => if j == v then Some pat
+               else None
+    | PEopp e => if PS.mem v (vars_pexpr e) then pexpr_separate v e (PEopp pat)
+                 else None
+    | PEadd e1 e2 =>
+       let in1 := PS.mem v (vars_pexpr e1) in
+       let in2 := PS.mem v (vars_pexpr e2) in
+       match in1, in2 with
+       | true, false => pexpr_separate v e1 (PEsub pat e2)
+       | false, true => pexpr_separate v e2 (PEsub pat e1)
+       | _, _ => None
+       end
+    | PEsub e1 e2 =>
+       let in1 := PS.mem v (vars_pexpr e1) in
+       let in2 := PS.mem v (vars_pexpr e2) in
+       match in1, in2 with
+       | true, false => pexpr_separate v e1 (PEadd pat e2)
+       | false, true => pexpr_separate v e2 (PEsub e1 pat)
+       | _, _ => None
+       end
+    | PEmul _ _ => None
+    | PEpow _ _ => None
+    end.
+
+  Definition pexpr_get_rewrite_pattern (e : PExpr C) :=
+    let candidates := PS.filter (fun v => pexpr_num_occurrence v e == 1) (pexpr_single_variables e) in
+    if PS.cardinal candidates == 0 then
+      None
+    else
+      match PS.min_elt candidates with
+      | None => None
+      | Some v =>
+          match pexpr_separate v e PEO with
+          | None => None
+          | Some pat =>
+              Some (v, pat)
+          end
+      end.
+
+  (* Do not add too many cases in this function.
+     Otherwise it will take much more time in proving zpexpr_is_assignment_equal. *)
+  Definition pexpr_is_assignment (e : PExpr C) : option (positive * PExpr C) :=
+    match e with
+    (* v - e = 0, e - v = 0; v = e*)
+    | PEsub (PEX j) e
+    | PEsub e (PEX j) => Some (j, e)
+    (* v + e = 0, e + v = 0; v = -e *)
+    | PEadd (PEX j) e
+    | PEadd e (PEX j) => Some (j, PEopp e)
+    (* v + e1 = e2, e2 = v + e1 *)
+    | PEsub (PEadd (PEX j) e1) e2
+    | PEsub e2 (PEadd (PEX j) e1) => Some (j, PEsub e2 e1)
+    (* others *)
+    | _ => pexpr_get_rewrite_pattern e
+    end.
+
+  (* String outputs *)
+
+  Variable string_of_zero : string.
+  Variable string_of_identity : string.
+  Variable string_of_const : C -> string.
+
+  Fixpoint string_of_pexpr (e : PExpr C) : string :=
+    match e with
+    | PEO => string_of_zero
+    | PEI => string_of_identity
+    | PEc c => string_of_const c
+    | PEX j => BinaryString.of_pos j
+    | PEopp e => ("- " ++ string_of_pexpr' e)%string
+    | PEadd e1 e2 => (string_of_pexpr' e1 ++ " + " ++ string_of_pexpr' e2)%string
+    | PEsub e1 e2 => (string_of_pexpr' e1 ++ " - " ++ string_of_pexpr' e2)%string
+    | PEmul e1 e2 => (string_of_pexpr' e1 ++ " * " ++ string_of_pexpr' e2)%string
+    | PEpow e n => (string_of_pexpr' e ++ " ^ " ++ BinaryString.of_N n)%string
+    end
+  with
+  string_of_pexpr' (e : PExpr C) : string :=
+    match e with
+    | PEO => string_of_zero
+    | PEI => string_of_identity
+    | PEc c => string_of_const c
+    | PEX j => BinaryString.of_pos j
+    | PEopp e => ("(- " ++ string_of_pexpr' e ++ ")")%string
+    | PEadd e1 e2 => ("(" ++ string_of_pexpr' e1 ++ " + " ++ string_of_pexpr' e2 ++ ")")%string
+    | PEsub e1 e2 => ("(" ++ string_of_pexpr' e1 ++ " - " ++ string_of_pexpr' e2 ++ ")")%string
+    | PEmul e1 e2 => ("(" ++ string_of_pexpr' e1 ++ " * " ++ string_of_pexpr' e2 ++ ")")%string
+    | PEpow e n => ("(" ++ string_of_pexpr' e ++ " ^ " ++ BinaryString.of_N n ++ ")")%string
+    end.
+
+End PExprAux.
+
+Definition string_of_zpexpr := string_of_pexpr "0" "1" BinaryString.of_Z.
+
+
+Section IdealMembershipRewriting.
+
+  Ltac simplify_zpeeval :=
+    repeat match goal with
+           | H : context f [ZPEeval _ PEO] |- _ => rewrite ZPEeval0 in H
+           | H : context f [ZPEeval _ PEI] |- _ => rewrite ZPEeval1 in H
+           | H : context f [ZPEeval _ (PEc _)] |- _ => rewrite ZPEeval_const in H
+           | H : context f [ZPEeval _ (PEopp _)] |- _ => rewrite ZPEeval_opp in H
+           | H : context f [ZPEeval _ (PEadd _ _)] |- _ => rewrite ZPEeval_add in H
+           | H : context f [ZPEeval _ (PEsub _ _)] |- _ => rewrite ZPEeval_sub in H
+           | H : context f [ZPEeval _ (PEmul _ _)] |- _ => rewrite ZPEeval_mul in H
+           | H : context f [ZPEeval _ (PEpow _ _)] |- _ => rewrite ZPEeval_pow in H
+           | |- context f [ZPEeval _ PEO] => rewrite ZPEeval0
+           | |- context f [ZPEeval _ PEI] => rewrite ZPEeval1
+           | |- context f [ZPEeval _ (PEc _)] => rewrite ZPEeval_const
+           | |- context f [ZPEeval _ (PEopp _)] => rewrite ZPEeval_opp
+           | |- context f [ZPEeval _ (PEadd _ _)] => rewrite ZPEeval_add
+           | |- context f [ZPEeval _ (PEsub _ _)] => rewrite ZPEeval_sub
+           | |- context f [ZPEeval _ (PEmul _ _)] => rewrite ZPEeval_mul
+           | |- context f [ZPEeval _ (PEpow _ _)] => rewrite ZPEeval_pow
+           end.
+
+  (* Simplification of `Pexpr Z` *)
+
+  Fixpoint simplify_zpexpr (e : PExpr Z) : PExpr Z :=
+    match e with
+    | PEO => e
+    | PEI => e
+    | PEc c => if c == 0%Z then PEO
+               else if c == 1%Z then PEI
+                    else e
+    | PEX _ => e
+    | PEopp e => let e' := simplify_zpexpr e in
+                 match e' with
+                 | PEopp e'' => e''
+                 | _ => PEopp e'
+                 end
+    | PEadd e1 e2 => let e1' := simplify_zpexpr e1 in
+                     let e2' := simplify_zpexpr e2 in
+                     match e1', e2' with
+                     | PEO, _ => e2'
+                     | _, PEO => e1'
+                     | _, _ => PEadd e1' e2'
+                     end
+    | PEsub e1 e2 => let e1' := simplify_zpexpr e1 in
+                     let e2' := simplify_zpexpr e2 in
+                     match e1', e2' with
+                     | PEO, PEopp e2'' => e2''
+                     | PEO, _ => PEopp e2'
+                     | _, PEO => e1'
+                     | _, PEopp e2'' => PEadd e1' e2''
+                     | _, _ => PEsub e1' e2'
+                     end
+    | PEmul e1 e2 => let e1' := simplify_zpexpr e1 in
+                     let e2' := simplify_zpexpr e2 in
+                     match e1', e2' with
+                     | PEO, _ => PEO
+                     | PEI, _ => e2'
+                     | _, PEO => PEO
+                     | _, PEI => e1'
+                     | _, _ => PEmul e1' e2'
+                     end
+    | PEpow e n => let e' := simplify_zpexpr e in
+                   if n == 0%num then PEI
+                   else if n == 1%num then e'
+                        else match e' with
+                             | PEO => PEO
+                             | PEI => PEI
+                             | _ => PEpow e' n
+                             end
+    end.
+
+  Ltac tac :=
+    repeat match goal with
+           | H : match ?x with _ => _ end = _ |- _ =>
+               destruct x; try solve [inversion H]
+           end.
+
+  Ltac mytac :=
+    repeat match goal with
+           | |- context f [if ?e then _ else _] =>
+               let H := fresh in
+               dcase e; case; [move/eqP => ?; subst|] => //
+           end.
+
+  Lemma simplify_zpexpr_zpeeval s e : ZPEeval s (simplify_zpexpr e) = ZPEeval s e.
+  Proof.
+    elim: e => //=.
+    - move=> c. mytac; reflexivity.
+    - move=> e1 IH1 e2 IH2. case He1: (simplify_zpexpr e1);
+        (rewrite He1 in IH1; rewrite -IH1 -IH2; case: (simplify_zpexpr e2); intros;
+            simplify_zpeeval; ring).
+    - move=> e1 IH1 e2 IH2. case He1: (simplify_zpexpr e1);
+        (rewrite He1 in IH1; rewrite -IH1 -IH2; case: (simplify_zpexpr e2); intros;
+            simplify_zpeeval; ring).
+    - move=> e1 IH1 e2 IH2. case He1: (simplify_zpexpr e1);
+        (rewrite He1 in IH1; rewrite -IH1 -IH2; case: (simplify_zpexpr e2); intros;
+            simplify_zpeeval; ring).
+    - move=> e IH. case He: (simplify_zpexpr e);
+        (rewrite He in IH; rewrite -IH; simplify_zpeeval; ring).
+    - move=> e IH n. case Hn0: (n == 0%num).
+      + rewrite (eqP Hn0). simplify_zpeeval. rewrite Z.pow_0_r. reflexivity.
+      + case Hn1: (n == 1%num).
+        * rewrite (eqP Hn1). rewrite IH. rewrite Z.pow_1_r. reflexivity.
+        * have Hngt0: (0 < Z.of_N n)%Z.
+          { replace 0%Z with (Z.of_N 0)%Z by reflexivity.
+            apply/N2Z.inj_lt. apply/N.lt_nge. move=> Hne. move/negP: Hn0; apply.
+            apply/eqP. move/N.le_0_r: Hne. by apply. }
+          case He: (simplify_zpexpr e); rewrite He in IH; rewrite -IH; simplify_zpeeval;
+            try ring.
+          -- symmetry. exact: (Z.pow_0_l _ Hngt0).
+          -- rewrite (Z.pow_1_l _ (Z.lt_le_incl _ _ Hngt0)). reflexivity.
+  Qed.
+
+  Lemma simplify_zpexpr_all0 s es :
+    zpexpr_all0 s (map simplify_zpexpr es) <-> zpexpr_all0 s es.
+  Proof.
+    elim: es => [| e es [IH1 IH2]] //=.
+    rewrite simplify_zpexpr_zpeeval. split.
+    - move=> [He Hes]. move: (IH1 Hes) => {} Hes. tauto.
+    - move=> [He Hes]. move: (IH2 Hes) => {} Hes. tauto.
+  Qed.
+
+
+  (* Substitution of `PExpr Z` *)
+
+  Definition subst_zpexpr (p r e : PExpr Z) : PExpr Z := subst_pexpr Z.eqb p r e.
+
+  Definition subst_zpexprs (p r : PExpr Z) (es : seq (PExpr Z)) : seq (PExpr Z) :=
+    subst_pexprs Z.eqb p r es.
+
+
+  (* Rewriting *)
+
+  Definition zpexpr_is_assignment (e : PExpr Z) : option (positive * PExpr Z) :=
+    match pexpr_is_assignment e with
+    | None => None
+    | Some (p, r) => Some (p, simplify_zpexpr r)
+    end.
+
+  Function simplify_generator_rec
+           (visited : seq (PExpr Z)) (ps : seq (PExpr Z)) (q : PExpr Z)
+           {wf (@size_lt (PExpr Z)) ps} :=
+    match ps with
+    | [::] => (rev visited, q)
+    | e::es =>
+        match zpexpr_is_assignment e with
+        | None => simplify_generator_rec (e::visited) es q
+        | Some (p, r) => simplify_generator_rec
+                           (subst_zpexprs (PEX Z p) r visited)
+                           (subst_zpexprs (PEX Z p) r es)
+                           (subst_zpexpr (PEX Z p) r q)
+        end
+    end.
+  Proof.
+    - move=> _ ps _ e es ? [p' r'] p r [] ? ? Ha.
+      rewrite /size_lt /subst_zpexpr /subst_pexpr size_map /=. exact: Nat.lt_succ_diag_r.
+    - move=> _ ps _ e es ? Ha. rewrite /size_lt /=. exact: Nat.lt_succ_diag_r.
+    - exact: (well_founded_ltof (seq (PExpr Z)) size).
+  Defined.
+
+  Local Opaque ZPEeval.
+
+  Lemma zpexpr_subst_valid (e p r : PExpr Z) s :
+    ZPEeval s p = ZPEeval s r ->
+    ZPEeval s e = ZPEeval s (subst_zpexpr p r e).
+  Proof.
+    elim: e => /=.
+    - reflexivity.
+    - reflexivity.
+    - case: p => //=. move=> c1 c2 Hev. case H: (c2 =? c1)%Z => //=.
+      move/Z.eqb_eq: H => ->. assumption.
+    - case: p => //=. move=> c1 c2 Hev. case H: (c2 =? c1)%positive => //=.
+      move/Pos.eqb_eq: H => ->. assumption.
+    - case: p => //=; simplify_zpeeval.
+      + move=> e1 IH1 e2 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 IH1 e2 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> c e1 IH1 e2 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> j e1 IH1 e2 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 e2 e3 IH1 e4 IH2 Hev; simplify_zpeeval.
+        case Heq31: (Field_theory.PExpr_eq Z.eqb e3 e1) => //=.
+        * rewrite (zpexpr_eq_zpeeval s Heq31) in IH1 *.
+          case Heq42: (Field_theory.PExpr_eq Z.eqb e4 e2) => //=.
+          -- rewrite (zpexpr_eq_zpeeval s Heq42). exact: Hev.
+          -- simplify_zpeeval. rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+        * simplify_zpeeval. rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 e2 e3 IH1 e4 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 e2 e3 IH1 e4 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 e2 IH1 e3 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 n1 e2 IH1 e3 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+    - case: p => //=.
+      + move=> e1 IH1 e2 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 IH1 e2 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> c e1 IH1 e2 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> j e1 IH1 e2 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 e2 e3 IH1 e4 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 e2 e3 IH1 e4 IH2 Hev; simplify_zpeeval.
+        case Heq31: (Field_theory.PExpr_eq Z.eqb e3 e1) => //=.
+        * rewrite (zpexpr_eq_zpeeval s Heq31) in IH1 *.
+          case Heq42: (Field_theory.PExpr_eq Z.eqb e4 e2) => //=.
+          -- rewrite (zpexpr_eq_zpeeval s Heq42). exact: Hev.
+          -- simplify_zpeeval. rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+        * simplify_zpeeval. rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 e2 e3 IH1 e4 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 e2 IH1 e3 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 n1 e2 IH1 e3 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+    - case: p => //=.
+      + move=> e1 IH1 e2 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 IH1 e2 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> c e1 IH1 e2 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> j e1 IH1 e2 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 e2 e3 IH1 e4 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 e2 e3 IH1 e4 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 e2 e3 IH1 e4 IH2 Hev; simplify_zpeeval.
+        case Heq31: (Field_theory.PExpr_eq Z.eqb e3 e1) => //=.
+        * rewrite (zpexpr_eq_zpeeval s Heq31) in IH1 *.
+          case Heq42: (Field_theory.PExpr_eq Z.eqb e4 e2) => //=.
+          -- rewrite (zpexpr_eq_zpeeval s Heq42). exact: Hev.
+          -- simplify_zpeeval. rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+        * simplify_zpeeval. rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 e2 IH1 e3 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+      + move=> e1 n1 e2 IH1 e3 IH2 Hev; simplify_zpeeval.
+        rewrite -(IH1 Hev) -(IH2 Hev). reflexivity.
+    - case: p => //=.
+      + move=> e IH Hev; simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+      + move=> e IH Hev; simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+      + move=> c e IH Hev; simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+      + move=> j e IH Hev; simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+      + move=> e1 e2 e3 IH Hev; simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+      + move=> e1 e2 e3 IH Hev; simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+      + move=> e1 e2 e3 IH Hev; simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+      + move=> e1 e2 IH Hev; simplify_zpeeval.
+        case Heq21: (Field_theory.PExpr_eq Z.eqb e2 e1) => //=.
+        * rewrite (zpexpr_eq_zpeeval s Heq21) in IH *. exact: Hev.
+        * simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+      + move=> p n e IH Hev; simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+    - case: p => //=.
+      + move=> e IH n Hev; simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+      + move=> e IH n Hev; simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+      + move=> c e IH n Hev; simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+      + move=> j e IH n Hev; simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+      + move=> e1 e2 e3 IH n Hev; simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+      + move=> e1 e2 e3 IH n Hev; simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+      + move=> e1 e2 e3 IH n Hev; simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+      + move=> e1 e2 IH n Hev; simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+      + move=> e1 n e2 IH m Hev; simplify_zpeeval.
+        case Heqmn: (m =? n)%num => //=.
+        * move/N.eqb_eq: Heqmn => ?; subst.
+          case Heq21: (Field_theory.PExpr_eq Z.eqb e2 e1).
+          -- rewrite (zpexpr_eq_zpeeval s Heq21) in IH *. exact: Hev.
+          -- simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+        * simplify_zpeeval. rewrite -(IH Hev). reflexivity.
+  Qed.
+
+  Lemma zpexpr_subst_all0 (p r : PExpr Z) (es : seq (PExpr Z)) s :
+    ZPEeval s p = ZPEeval s r ->
+    zpexpr_all0 s es <-> zpexpr_all0 s (subst_zpexprs p r es).
+  Proof.
+    elim: es => [| e es IH] //=. move=> Hpr. move: (IH Hpr) => {IH} [H1 H2].
+    rewrite -(zpexpr_subst_valid e Hpr). tauto.
+  Qed.
+
+  Lemma zpexpr_separate_some_eval
+        (v : positive) (e : PExpr Z) (pat : PExpr Z) (r : PExpr Z) s :
+    pexpr_separate v e pat = Some r ->
+    ZPEeval s e = ZPEeval s pat ->
+    ZPEeval s (PEX Z v) = ZPEeval s r.
+  Proof.
+    elim: e pat r => //=.
+    - move=> v' pat r. case Hv: (v' == v); last by done.
+      case=> ->.  rewrite (eqP Hv). move=> ->. reflexivity.
+    - move=> e1 IH1 e2 IH2 pat r.
+      (case Hmem1: (PS.mem v (vars_pexpr e1)); case Hmem2: (PS.mem v (vars_pexpr e2)));
+      [done | | | done].
+      + move=> Hsep /= Hev. apply: (IH1 _ _ Hsep) => /=. simplify_zpeeval. rewrite -Hev. ring.
+      + move=> Hsep /= Hev. apply: (IH2 _ _ Hsep) => /=. simplify_zpeeval. rewrite -Hev. ring.
+    - move=> e1 IH1 e2 IH2 pat r.
+      (case Hmem1: (PS.mem v (vars_pexpr e1)); case Hmem2: (PS.mem v (vars_pexpr e2)));
+      [done | | | done].
+      + move=> Hsep /= Hev. apply: (IH1 _ _ Hsep) => /=. simplify_zpeeval. rewrite -Hev. ring.
+      + move=> Hsep /= Hev. apply: (IH2 _ _ Hsep) => /=. simplify_zpeeval. rewrite -Hev. ring.
+    - move=> e IH pat r. case Hmem: (PS.mem v (vars_pexpr e)); last by done.
+      move=> Hsep /= Hev. apply: (IH _ _ Hsep) => /=. simplify_zpeeval. rewrite -Hev. ring.
+  Qed.
+
+  Lemma zpexpr_get_rewrite_pattern_eval e v r s :
+    pexpr_get_rewrite_pattern e = Some (v, r) ->
+    ZPEeval s e = 0%Z ->
+    ZPEeval s (PEX Z v) = ZPEeval s r.
+  Proof.
+    rewrite /pexpr_get_rewrite_pattern.
+    case: (PS.cardinal
+             (PS.filter
+                (fun v0 : PS.elt => pexpr_num_occurrence v0 e == 1) (pexpr_single_variables e)) == 0);
+      first by done.
+    case: (PS.min_elt
+             (PS.filter
+                (fun v0 : PS.elt => pexpr_num_occurrence v0 e == 1) (pexpr_single_variables e)));
+      last by done.
+    move=> v'. case Hsep: (pexpr_separate v' e PEO); last by done.
+    case=> ? ?; subst. move=> Hev. exact: (zpexpr_separate_some_eval Hsep Hev).
+  Qed.
+
+  Ltac mytac ::=
+    repeat match goal with
+           | H : Some (_, _) = Some (_, _) |- _ =>
+             case: H => ? ?; subst => /=
+           | H : match ?e with | PEX _ => _ | _ => _ end = _ |- _ =>
+             repeat match goal with
+                    | H1 : context f [e] |- _ => move: H1
+                    end;
+             case: e => //=; intros
+           | H : match ?e with | Eadd => _ | _ => _ end = _ |- _ =>
+             repeat match goal with
+                    | H1 : context f [e] |- _ => move: H1
+                    end;
+             case: e => //=; intros
+           | H : ?l = ?r |- ?r = ?l => symmetry; assumption
+           | H : ?l = ?r |- ?l = ?r => assumption
+           | |- ?e = ?e => reflexivity
+           | |- context f [(?n + ?m - ?m)%Z] => rewrite Z.add_simpl_r
+           | H : ?l = 0%Z |- context f [?l] => rewrite H /=
+           | H1 : pexpr_get_rewrite_pattern ?e = Some _,
+               H2 : ZPEeval ?s ?e = 0%Z |- _ =>
+               let H := fresh in
+               (move: (zpexpr_get_rewrite_pattern_eval H1 H2) => /= H);
+               clear H1
+           | H : context f [ZPEeval _ PEO] |- _ => rewrite ZPEeval0 in H
+           | H : context f [ZPEeval _ PEI] |- _ => rewrite ZPEeval1 in H
+           | H : context f [ZPEeval _ (PEc _)] |- _ => rewrite ZPEeval_const in H
+           | H : context f [ZPEeval _ (PEopp _)] |- _ => rewrite ZPEeval_opp in H
+           | H : context f [ZPEeval _ (PEadd _ _)] |- _ => rewrite ZPEeval_add in H
+           | H : context f [ZPEeval _ (PEsub _ _)] |- _ => rewrite ZPEeval_sub in H
+           | H : context f [ZPEeval _ (PEmul _ _)] |- _ => rewrite ZPEeval_mul in H
+           | H : context f [ZPEeval _ (PEpow _ _)] |- _ => rewrite ZPEeval_pow in H
+           | |- context f [ZPEeval _ PEO] => rewrite ZPEeval0
+           | |- context f [ZPEeval _ PEI] => rewrite ZPEeval1
+           | |- context f [ZPEeval _ (PEc _)] => rewrite ZPEeval_const
+           | |- context f [ZPEeval _ (PEopp _)] => rewrite ZPEeval_opp
+           | |- context f [ZPEeval _ (PEadd _ _)] => rewrite ZPEeval_add
+           | |- context f [ZPEeval _ (PEsub _ _)] => rewrite ZPEeval_sub
+           | |- context f [ZPEeval _ (PEmul _ _)] => rewrite ZPEeval_mul
+           | |- context f [ZPEeval _ (PEpow _ _)] => rewrite ZPEeval_pow
+           end.
+
+  Lemma zpexpr_is_assignment_equal e p r s :
+    zpexpr_is_assignment e = Some (p, r) ->
+    ZPEeval s e = 0%Z -> ZPEeval s (PEX Z p) = ZPEeval s r.
+  Proof.
+    rewrite /zpexpr_is_assignment. dcase (pexpr_is_assignment e); case=> //=.
+    move=> [p' r'] => He [] ? ?; subst. rewrite simplify_zpexpr_zpeeval. move: He.
+    case: e => //=.
+    - move=> v. intros. by mytac.
+    - move=> left right.
+      (case: left; case: right => //=); intros; mytac; by lia.
+    - move=> left right.
+      (case: left; case: right => //=); intros; mytac; by lia.
+    - move=> e; intros. mytac; by lia.
+  Qed.
+
+  Corollary zpexpr_subst_assignment_valid e p r e' s :
+    zpexpr_is_assignment e = Some (p, r) -> ZPEeval s e = 0%Z ->
+    ZPEeval s e' = ZPEeval s (subst_zpexpr (PEX Z p) r e').
+  Proof.
+    move=> His Hev. exact: (zpexpr_subst_valid _ (zpexpr_is_assignment_equal His Hev)).
+  Qed.
+
+  Lemma simplify_generator_rec_cons_is_assignment visited e es q p r :
+    zpexpr_is_assignment e = Some (p, r) ->
+    simplify_generator_rec visited (e::es) q =
+      simplify_generator_rec (subst_zpexprs (PEX Z p) r visited)
+                             (subst_zpexprs (PEX Z p) r es)
+                             (subst_zpexpr (PEX Z p) r q).
+  Proof.
+    move=> Ha.
+    dcase (simplify_generator_rec
+             (subst_zpexprs (PEX Z p) r visited) (subst_zpexprs (PEX Z p) r es)
+             (subst_zpexpr (PEX Z p) r q)) => [[visited' q'] Hs].
+    move: (Logic.eq_sym Hs) => {} Hs.
+    move: (R_simplify_generator_rec_correct Hs) => {Hs} H.
+    symmetry. apply: R_simplify_generator_rec_complete.
+    apply: (R_simplify_generator_rec_2 _ _ _ _ _ _ _ _ Ha _ H). reflexivity.
+  Qed.
+
+  Lemma simplify_generator_rec_cons_not_assignment visited e es q :
+    zpexpr_is_assignment e = None ->
+    simplify_generator_rec visited (e::es) q =
+    simplify_generator_rec (e::visited) es q.
+  Proof.
+    move=> Ha. dcase (simplify_generator_rec (e :: visited) es q) => [[visited' q'] Hs].
+    move: (Logic.eq_sym Hs) => {} Hs.
+    move: (R_simplify_generator_rec_correct Hs) => {Hs} H.
+    symmetry. apply: R_simplify_generator_rec_complete.
+    apply: (R_simplify_generator_rec_1 _ _ _ _ _ _ Ha _ H). reflexivity.
+  Qed.
+
+  Lemma simplify_generator_rec_empty visited q :
+    simplify_generator_rec visited [::] q = (rev visited, q).
+  Proof. reflexivity. Qed.
+
+  Lemma simplify_generator_rec_sound pre ps q ps' q' ms cms :
+    simplify_generator_rec pre ps q = (ps', q') ->
+    zpimply_eq ps' q' (peadds (pemuls cms ms)) ->
+    zpimply_eq (rev pre ++ ps) q (peadds (pemuls cms ms)).
+  Proof.
+    have ->: ps' = (ps', q').1 by reflexivity.
+    have ->: q' = (ps', q').2 by reflexivity.
+    move: (ps', q'). clear ps' q'. eapply simplify_generator_rec_ind.
+    - move=> {pre ps q} pre ps q Hps [ps' q'] [] ? ?; subst => /=.
+      rewrite cats0. move=> Hs s Hev. apply: (Hs s). assumption.
+    - move=> {pre ps q} pre ps q e es Hps Ha IH [ps' q']  /= Hrec Hs s He.
+      apply: (IH _ Hrec Hs). rewrite rev_cons cat_rcons. assumption.
+    - move=> {pre ps q} pre ps q e es Hps pat rep Ha IH [ps' q'] /= Hrec Hs s He.
+      have He0: (ZPEeval s e = 0%Z).
+      { apply: (zpexpr_all0_in He). apply: in_or_app. right. exact: in_eq. }
+      rewrite (zpexpr_subst_assignment_valid q Ha He0). apply: (IH _ Hrec Hs).
+      move/zpexpr_all0_cat: He => [Hpre Hees]. move/zpexpr_all0_rev: Hpre => Hpre.
+      move/zpexpr_all0_cons: Hees => [He Hes]. apply/zpexpr_all0_cat.
+      move: (zpexpr_is_assignment_equal Ha He0) => Hpr. split.
+      + apply/zpexpr_all0_rev. move/(zpexpr_subst_all0 _ Hpr): Hpre. by apply.
+      + move/(zpexpr_subst_all0 _ Hpr): Hes. by apply.
+  Qed.
+
+  Definition simplify_generator ps q : seq (PExpr Z) * PExpr Z :=
+    let '(ps', q') := simplify_generator_rec
+                        [::] (tmap simplify_zpexpr ps) (simplify_zpexpr q) in
+    (ps', q').
+
+  Lemma simplify_generator_sound ps q ps' q' ms cms :
+    simplify_generator ps q = (ps', q') ->
+    zpimply_eq ps' q' (peadds (pemuls cms ms)) ->
+    zpimply_eq ps q (peadds (pemuls cms ms)).
+  Proof.
+    rewrite /simplify_generator. rewrite tmap_map.
+    dcase (simplify_generator_rec [::] (map simplify_zpexpr ps) (simplify_zpexpr q)) =>
+            [[ps1 q1] Himp]. case=> ? ?; subst. move=> Heq.
+    move: (simplify_generator_rec_sound Himp Heq). rewrite cat0s.
+    move=> H s Hps. move/simplify_zpexpr_all0: Hps => Hps.
+    move: (H s Hps). rewrite simplify_zpexpr_zpeeval. by apply.
+  Qed.
+
+
+  (* Substitution with caches of appearing variables *)
+
+  Definition subst_zpexpr_vars_cache
+             (p : positive) (r : PExpr Z) vspr (ve : PS.t * PExpr Z) :=
+    let vs := ve.1 in
+    let e := ve.2 in
+    if PS.mem p vs then (PS.remove p (PS.union vs vspr),
+                            subst_zpexpr (PEX Z p) r e)
+    else ve.
+
+  Definition subst_zpexprs_vars_cache
+             (p : positive) (r : PExpr Z) vspr (ves : seq (PS.t * PExpr Z)) :=
+    tmap (subst_zpexpr_vars_cache p r vspr) ves.
+
+  Lemma zpexpr_subst_vars_cache_valid e p r vspr s :
+    ZPEeval s (PEX Z p) = ZPEeval s r ->
+    ZPEeval s e.2 = ZPEeval s (subst_zpexpr_vars_cache p r vspr e).2.
+  Proof.
+    move=> Hev. rewrite /subst_zpexpr_vars_cache. case: (PS.mem p e.1) => /=.
+    - exact: (zpexpr_subst_valid _ Hev).
+    - tauto.
+  Qed.
+
+  Lemma zpexpr_subst_vars_cache_all0 p r vspr ves s :
+    ZPEeval s (PEX Z p) = ZPEeval s r ->
+    zpexpr_all0 s (split ves).2 <->
+      zpexpr_all0 s (split (subst_zpexprs_vars_cache p r vspr ves)).2.
+  Proof.
+    elim: ves => [| [vse e] ves IH] //=. move=> Hpr. move: (IH Hpr) => {IH} [H1 H2].
+    rewrite /subst_zpexprs_vars_cache
+            tmap_map /= -tmap_map -/(subst_zpexprs_vars_cache p r vspr ves).
+    dcase (split ves) => [[vses es] Hves].
+    dcase (subst_zpexpr_vars_cache p r vspr (vse, e)) => [[vse' e'] Hsube].
+    dcase (split (subst_zpexprs_vars_cache p r vspr ves)) => [[vses' es'] Hsubes] /=.
+    rewrite Hves /= in H1 H2. rewrite Hsubes /= in H1 H2. split.
+    - move=> [He Hes]. move: (zpexpr_subst_vars_cache_valid (vse, e) vspr Hpr).
+      rewrite Hsube /= => <-. tauto.
+    - move=> [He' Hes']. move: (zpexpr_subst_vars_cache_valid (vse, e) vspr Hpr).
+      rewrite Hsube /= => ->. tauto.
+  Qed.
+
+  Lemma subst_zpexprs_vars_cache_cat es1 es2 p r vspr :
+    subst_zpexprs_vars_cache p r vspr (es1 ++ es2) =
+    subst_zpexprs_vars_cache p r vspr es1 ++ subst_zpexprs_vars_cache p r vspr es2.
+  Proof. rewrite /subst_zpexprs_vars_cache. rewrite !tmap_map. exact: map_cat. Qed.
+
+  Corollary zpexpr_subst_vars_cache_assignment_valid (ve : PS.t * PExpr Z) p r vspr ve' s :
+    zpexpr_is_assignment ve.2 = Some (p, r) -> ZPEeval s ve.2 = 0%Z ->
+    ZPEeval s ve'.2 = ZPEeval s (subst_zpexpr_vars_cache p r vspr ve').2.
+  Proof.
+    move=> His Hev. move: (zpexpr_is_assignment_equal His Hev) => Hpr.
+    exact: (zpexpr_subst_vars_cache_valid _ _ Hpr).
+  Qed.
+
+  Function simplify_generator_vars_cache_rec
+           (visited : seq (PS.t * PExpr Z)) (ps : seq (PS.t * PExpr Z))
+           (q : (PS.t * PExpr Z))
+           {wf (@size_lt (PS.t * PExpr Z)) ps} :=
+    match ps with
+    | [::] => (rev visited, q)
+    | ve::ves =>
+      match zpexpr_is_assignment ve.2 with
+      | None => simplify_generator_vars_cache_rec (ve::visited) ves q
+      | Some (p, r) => simplify_generator_vars_cache_rec
+                         (subst_zpexprs_vars_cache p r ve.1 visited)
+                         (subst_zpexprs_vars_cache p r ve.1 ves)
+                         (subst_zpexpr_vars_cache p r ve.1 q)
+      end
+    end.
+  Proof.
+    - move=> _ ps _ e es ? [p' r'] p r [] ? ? Ha.
+      rewrite /size_lt /subst_zpexprs_vars_cache /subst_zpexpr_vars_cache tmap_map size_map /=.
+      exact: Nat.lt_succ_diag_r.
+    - move=> _ ps _ e es ? Ha. rewrite /size_lt /=. exact: Nat.lt_succ_diag_r.
+    - exact: (well_founded_ltof (seq (PS.t * PExpr Z)) size).
+  Defined.
+
+  Lemma simplify_generator_vars_cache_rec_cons_is_assignment visited ve ves q p r :
+    zpexpr_is_assignment ve.2 = Some (p, r) ->
+    simplify_generator_vars_cache_rec visited (ve::ves) q =
+      simplify_generator_vars_cache_rec
+        (subst_zpexprs_vars_cache p r ve.1 visited)
+        (subst_zpexprs_vars_cache p r ve.1 ves)
+        (subst_zpexpr_vars_cache p r ve.1 q).
+  Proof.
+    move=> Ha.
+    dcase (simplify_generator_vars_cache_rec
+             (subst_zpexprs_vars_cache p r ve.1 visited)
+             (subst_zpexprs_vars_cache p r ve.1 ves)
+             (subst_zpexpr_vars_cache p r ve.1 q)) =>
+    [[visited' q'] Hs]. move: (Logic.eq_sym Hs) => {} Hs.
+    move: (R_simplify_generator_vars_cache_rec_correct Hs) => {Hs} H.
+    symmetry. apply: R_simplify_generator_vars_cache_rec_complete.
+    exact: (R_simplify_generator_vars_cache_rec_2 _ _ _ _ _ (Logic.eq_refl _) _ _ Ha _ H).
+  Qed.
+
+  Lemma simplify_generator_vars_cache_rec_cons_not_assignment visited ve ves q :
+    zpexpr_is_assignment ve.2 = None ->
+    simplify_generator_vars_cache_rec visited (ve::ves) q =
+    simplify_generator_vars_cache_rec (ve::visited) ves q.
+  Proof.
+    move=> Ha. dcase (simplify_generator_vars_cache_rec (ve :: visited) ves q) =>
+               [[visited' q'] Hs]. move: (Logic.eq_sym Hs) => {} Hs.
+    move: (R_simplify_generator_vars_cache_rec_correct Hs) => {Hs} H.
+    symmetry. apply: R_simplify_generator_vars_cache_rec_complete.
+    exact: (R_simplify_generator_vars_cache_rec_1 _ _ _ _ _ (Logic.eq_refl _) Ha _ H).
+  Qed.
+
+  Lemma simplify_generator_vars_cache_rec_empty visited q :
+    simplify_generator_vars_cache_rec visited [::] q = (rev visited, q).
+  Proof. reflexivity. Qed.
+
+  Lemma simplify_generator_vars_cache_rec_sound vpre vps vq vps' vq' cms ms :
+    simplify_generator_vars_cache_rec vpre vps vq = (vps', vq') ->
+    zpimply_eq (split vps').2 vq'.2 (peadds (pemuls cms ms)) ->
+    zpimply_eq (rev (split vpre).2 ++ (split vps).2) vq.2 (peadds (pemuls cms ms)).
+  Proof.
+    have ->: vps' = (vps', vq').1 by reflexivity.
+    have ->: vq' = (vps', vq').2 by reflexivity.
+    move: (vps', vq'). clear vps' vq'. eapply simplify_generator_vars_cache_rec_ind.
+    - move=> {vpre vps vq} vpre vps vq Hvps [vps' vq'] [] ? ?; subst => /=.
+      rewrite cats0. move=> Hs s Hev. apply: (Hs s). rewrite split_rev /=.
+      assumption.
+    - move=> {vpre vps vq} vpre vps vq ve ves Hps Ha IH [vps' vq']  // Hrec Hs s He.
+      apply: (IH _ Hrec Hs). rewrite split_cons rev_cons.
+      rewrite !zpexpr_all0_cat in He *. move: He => [He1 He2].
+      rewrite split_cons /= in He2. move: He2 => [He2 He3]. rewrite zpexpr_all0_rcons.
+      tauto.
+    - move=> {vpre vps vq} vpre vps vq ve ves Hps p r Ha IH [vps' vq'] // Hrec Hs s He.
+      rewrite zpexpr_all0_cat split_cons zpexpr_all0_cons in He.
+      move: He => [He1 [He2 He3]]. simpl in Hs.
+      rewrite (zpexpr_subst_vars_cache_assignment_valid ve.1 vq Ha He2).
+      apply: (IH _ Hrec Hs). rewrite zpexpr_all0_cat.
+      rewrite zpexpr_all0_rev. move: (zpexpr_is_assignment_equal Ha He2) => Hpr.
+      rewrite zpexpr_all0_rev in He1. split.
+      + move/(zpexpr_subst_vars_cache_all0 ve.1 _ Hpr): He1. by apply.
+      + move/(zpexpr_subst_vars_cache_all0 ve.1 _ Hpr): He3. by apply.
+  Qed.
+
+  Definition pair_zpexpr_with_vars (e : PExpr Z) : PS.t * PExpr Z :=
+    (vars_pexpr e, e).
+
+  Lemma split_tmap_pair_zpexpr_with_vars (es : seq (PExpr Z)) :
+    (split (tmap pair_zpexpr_with_vars es)).2 = es.
+  Proof.
+    rewrite tmap_map. elim: es => [| e es IH] //=. move: IH.
+    dcase (split [seq pair_zpexpr_with_vars i | i <- es]) => [[vs es'] Hs].
+    rewrite Hs /=. move=> ->. reflexivity.
+  Qed.
+
+  Definition simplify_generator_vars_cache ps q : seq (PExpr Z) * PExpr Z :=
+    let vs_ps := tmap pair_zpexpr_with_vars (tmap simplify_zpexpr ps) in
+    let vs_q := pair_zpexpr_with_vars (simplify_zpexpr q) in
+    let '(vs_ps', vs_q') := simplify_generator_vars_cache_rec [::] vs_ps vs_q in
+    ((split vs_ps').2, vs_q'.2).
+
+  Lemma simplify_generator_vars_cache_sound ps q ps' q' ms cms :
+    simplify_generator_vars_cache ps q = (ps', q') ->
+    zpimply_eq ps' q' (peadds (pemuls cms ms)) ->
+    zpimply_eq ps q (peadds (pemuls cms ms)).
+  Proof.
+    rewrite /simplify_generator_vars_cache.
+    dcase (simplify_generator_vars_cache_rec
+             [::] (tmap pair_zpexpr_with_vars (tmap simplify_zpexpr ps))
+             (pair_zpexpr_with_vars (simplify_zpexpr q))) => [[vps' vq'] Hsimp].
+    case=> ? ?; subst. move=> Heq.
+    move: (simplify_generator_vars_cache_rec_sound Hsimp Heq).
+    rewrite split_tmap_pair_zpexpr_with_vars cat0s => Heq2.
+    move=> s Hps. rewrite -(Heq2 s).
+    - rewrite /pair_zpexpr_with_vars /=. rewrite simplify_zpexpr_zpeeval.
+      reflexivity.
+    - rewrite tmap_map. apply/simplify_zpexpr_all0. assumption.
+  Qed.
+
+End IdealMembershipRewriting.
+
 
 Section Validator.
 
   Local Open Scope Z_scope.
-
-  (* Two polynomials are syntactically equal after normalization *)
-  Definition zpexpr_eqb (p1 p2 : PExpr Z) : bool :=
-    ZPeq (Znorm_subst p1) (Znorm_subst p2).
 
   (** Validate the answer (cps, cms) of an ideal membership problem given as a
       tuple (ps, ms, q), i.e., check if q = cps * ps + cms * ms. *)
@@ -2774,6 +3644,39 @@ Section Validator.
     valid_arep s.
   Proof.
     move=> Hpoly Hch. exact: (zimply_eq_valid_arep Hpoly (validated_imp_imply_eq Hch)).
+  Qed.
+
+
+  Lemma simplify_generator_validate_zpimply ps q ms cps cms ps' q' :
+    simplify_generator ps q = (ps', q') ->
+    validate_imp_answer ps' ms q' cps cms ->
+    zpimply_eq ps q (peadds (pemuls cms ms)).
+  Proof.
+    move=> Hsim Hvd. move: (validated_imp_imply_eq Hvd) => Himp.
+    exact: (simplify_generator_sound Hsim Himp).
+  Qed.
+
+  (* If the answer of a simplified ideal membership problem reduced from an
+     atomic root entailment problem are verified by the validator, the atomic
+     root entailment problem is valid *)
+  Theorem validated_simplified_imp_valid_arep s g t ps ms q ps' q' cps cms :
+    imp_of_arep s = (g, t, ps, ms, q) ->
+    simplify_generator ps q = (ps', q') ->
+    validate_imp_answer ps' ms q' cps cms ->
+    valid_arep s.
+  Proof.
+    move=> Hpoly Hsim Hch. apply: (zimply_eq_valid_arep Hpoly).
+    move: (validated_imp_imply_eq Hch). exact: (simplify_generator_sound Hsim).
+  Qed.
+
+  Theorem validated_simplified_imp_vars_cache_valid_arep s g t ps ms q ps' q' cps cms :
+    imp_of_arep s = (g, t, ps, ms, q) ->
+    simplify_generator_vars_cache ps q = (ps', q') ->
+    validate_imp_answer ps' ms q' cps cms ->
+    valid_arep s.
+  Proof.
+    move=> Hpoly Hsim Hch. apply: (zimply_eq_valid_arep Hpoly).
+    move: (validated_imp_imply_eq Hch). exact: (simplify_generator_vars_cache_sound Hsim).
   Qed.
 
 End Validator.

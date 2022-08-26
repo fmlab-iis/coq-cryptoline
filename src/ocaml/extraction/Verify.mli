@@ -18,9 +18,9 @@ val ext_solve_imp :
   coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z coq_PExpr list -> coq_Z
   coq_PExpr list * coq_Z coq_PExpr list
 
-val verify_arep : arep -> bool
+val verify_arep : options -> arep -> bool
 
-val verify_areps : arep list -> bool
+val verify_areps : options -> arep list -> bool
 
 val verify_rep : options -> ZSSA.ZSSA.rep -> bool
 
@@ -29,14 +29,14 @@ val ext_solve_imp_list :
   (coq_Z coq_PExpr list * coq_Z coq_PExpr list) list
 
 val polys_of_areps :
-  arep list -> ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr
-  list) list
+  options -> arep list -> ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z
+  coq_PExpr list) list
 
 val validate_imp_answer_list :
   ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr list) list ->
   (coq_Z coq_PExpr list * coq_Z coq_PExpr list) list -> bool
 
-val verify_areps_list : arep list -> bool
+val verify_areps_list : options -> arep list -> bool
 
 val verify_rep_list : options -> ZSSA.ZSSA.rep -> bool
 
