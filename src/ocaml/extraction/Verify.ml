@@ -6,6 +6,7 @@ open QFBV2CNF
 open QFBVHash
 open Ring_polynom
 open SSA2ZSSA
+open Seqs
 open Eqtype
 open Seq
 open Ssrnat
@@ -20,7 +21,7 @@ let verify_rspec_algsnd s =
   let fE = SSA.SSA.program_succ_typenv (SSA.SSA.sprog s) (SSA.SSA.sinputs s)
   in
   let es = bb_range_algsnd_la_simplified_filtered s in
-  let (_, cnfs) = bb_hbexps_cache fE (map (Obj.magic hash_bexp) es) in
+  let (_, cnfs) = bb_hbexps_cache fE (tmap (Obj.magic hash_bexp) es) in
   ext_all_unsat cnfs
 
 (** val ext_solve_imp :
@@ -74,7 +75,7 @@ let polys_of_areps o pss =
            else simplify_generator ps0 q
       else (ps0, q)), ms)
   in
-  map f pss
+  tmap f pss
 
 (** val validate_imp_answer_list :
     ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr list) list ->

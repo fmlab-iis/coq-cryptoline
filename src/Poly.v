@@ -136,7 +136,7 @@ Section AtomicRootEntailmentSimpl.
          end.
 
   Definition zexps_subst (p : ZSSA.zexp) (r : ZSSA.zexp) (es : seq ZSSA.zexp) :=
-    map (zexp_subst p r) es.
+    tmap (zexp_subst p r) es.
 
   Definition azbexp_subst (p : ZSSA.zexp) (r : ZSSA.zexp) (e : azbexp) :=
     match e with
@@ -146,7 +146,23 @@ Section AtomicRootEntailmentSimpl.
     end.
 
   Definition subst_azbexps (p r : zexp) (es : seq azbexp) : seq azbexp :=
-    map (azbexp_subst p r) es.
+    tmap (azbexp_subst p r) es.
+
+  Lemma zexps_subst_cons p r e es :
+    zexps_subst p r (e::es) = zexp_subst p r e :: zexps_subst p r es.
+  Proof. rewrite /zexps_subst !tmap_map. reflexivity. Qed.
+
+  Lemma zexps_subst_cat p r es1 es2 :
+    zexps_subst p r (es1 ++ es2) = zexps_subst p r es1 ++ zexps_subst p r es2.
+  Proof. rewrite /zexps_subst !tmap_map. exact: map_cat. Qed.
+
+  Lemma subst_azbexps_cons p r e es :
+    subst_azbexps p r (e::es) = azbexp_subst p r e :: subst_azbexps p r es.
+  Proof. rewrite /subst_azbexps !tmap_map. reflexivity. Qed.
+
+  Lemma subst_azbexps_cat p r es1 es2 :
+    subst_azbexps p r (es1 ++ es2) = subst_azbexps p r es1 ++ subst_azbexps p r es2.
+  Proof. rewrite /subst_azbexps !tmap_map. exact: map_cat. Qed.
 
   Lemma zexp_subst_valid (e p r : ZSSA.zexp) s :
     eval_zexp p s = eval_zexp r s ->
@@ -174,7 +190,7 @@ Section AtomicRootEntailmentSimpl.
     eval_zexp p s = eval_zexp r s ->
     eval_zexps es s = eval_zexps (zexps_subst p r es) s.
   Proof.
-    elim: es => [| e es IH] //=. move=> Hpr.
+    elim: es => [| e es IH] //=. move=> Hpr. rewrite zexps_subst_cons /=.
     rewrite (zexp_subst_valid _ Hpr) (IH Hpr). reflexivity.
   Qed.
 
@@ -188,16 +204,12 @@ Section AtomicRootEntailmentSimpl.
       tauto.
   Qed.
 
-  Lemma subst_azbexps_cat es1 es2 p r :
-    subst_azbexps p r (es1 ++ es2) = subst_azbexps p r es1 ++ subst_azbexps p r es2.
-  Proof. rewrite /subst_azbexps. exact: map_cat. Qed.
-
   Lemma subst_azbexps_valid es p r s :
     eval_zexp p s = eval_zexp r s ->
     (forall e, e \in es -> eval_azbexp e s) <->
     (forall e, e \in (subst_azbexps p r es) -> eval_azbexp e s).
   Proof.
-    move=> Hpr. elim: es => [| e es IH] //=. split.
+    move=> Hpr. elim: es => [| e es IH] //=. rewrite subst_azbexps_cons. split.
     - move=> Hev f Hin_f. rewrite in_cons in Hin_f. case/orP: Hin_f => Hin_f.
       + rewrite (eqP Hin_f). apply/(azbexp_subst_valid e Hpr). apply: Hev.
         rewrite in_cons eqxx orTb. exact: is_true_true.
@@ -382,13 +394,13 @@ Section AtomicRootEntailmentSimpl.
       match is_assignment e with
       | None => simplify_arep_rec (e::visited) es conseq
       | Some (p, r) => simplify_arep_rec (subst_azbexps (evar p) r visited)
-                                          (subst_azbexps (evar p) r es)
-                                          (azbexp_subst (evar p) r conseq)
+                                         (subst_azbexps (evar p) r es)
+                                         (azbexp_subst (evar p) r conseq)
       end
     end.
   Proof.
     - move=> _ premises _ e es ? [p' r'] p r [] ? ? Ha.
-      rewrite /size_lt /subst_azbexps size_map /=. exact: Nat.lt_succ_diag_r.
+      rewrite /size_lt /subst_azbexps tmap_map size_map /=. exact: Nat.lt_succ_diag_r.
     - move=> _ premises _ e es ? Ha. rewrite /size_lt /=. exact: Nat.lt_succ_diag_r.
     - exact: (well_founded_ltof (seq azbexp) size).
   Defined.
@@ -397,13 +409,13 @@ Section AtomicRootEntailmentSimpl.
     is_assignment e = Some (p, r) ->
     simplify_arep_rec visited (e::es) q =
     simplify_arep_rec (subst_azbexps (evar p) r visited)
-                       (subst_azbexps (evar p) r es)
-                       (azbexp_subst (evar p) r q).
+                      (subst_azbexps (evar p) r es)
+                      (azbexp_subst (evar p) r q).
   Proof.
     move=> Ha.
     dcase (simplify_arep_rec (subst_azbexps (evar p) r visited)
-                              (subst_azbexps (evar p) r es)
-                              (azbexp_subst (evar p) r q)) => [[visited' q'] Hs].
+                             (subst_azbexps (evar p) r es)
+                             (azbexp_subst (evar p) r q)) => [[visited' q'] Hs].
     move: (Logic.eq_sym Hs) => {Hs} Hs.
     move: (R_simplify_arep_rec_correct Hs) => {Hs} H.
     symmetry. apply: R_simplify_arep_rec_complete.
@@ -483,7 +495,17 @@ Section AtomicRootEntailmentSimpl.
 
   Definition subst_azbexps_vars_cache
              (p : ssavar) (r : ZSSA.zexp) vspr (ves : seq (SSAVS.t * azbexp)) :=
-    map (azbexp_subst_vars_cache p r vspr) ves.
+    tmap (azbexp_subst_vars_cache p r vspr) ves.
+
+  Lemma subst_azbexps_vars_cache_cons p r vspr e es :
+    subst_azbexps_vars_cache p r vspr (e::es) =
+    azbexp_subst_vars_cache p r vspr e :: subst_azbexps_vars_cache p r vspr es.
+  Proof. rewrite /subst_azbexps_vars_cache !tmap_map. reflexivity. Qed.
+
+  Lemma subst_azbexps_vars_cache_cat p r vspr es1 es2 :
+    subst_azbexps_vars_cache p r vspr (es1 ++ es2) =
+    subst_azbexps_vars_cache p r vspr es1 ++ subst_azbexps_vars_cache p r vspr es2.
+  Proof. rewrite /subst_azbexps_vars_cache !tmap_map. exact: map_cat. Qed.
 
   Lemma subst_assignment_vars_cache_valid e p r e' vspr s :
     is_assignment e = Some (p, r) -> eval_azbexp e s ->
@@ -494,18 +516,14 @@ Section AtomicRootEntailmentSimpl.
     - tauto.
   Qed.
 
-  Lemma subst_azbexps_vars_cache_cat es1 es2 p r vspr :
-    subst_azbexps_vars_cache p r vspr (es1 ++ es2) =
-    subst_azbexps_vars_cache p r vspr es1 ++ subst_azbexps_vars_cache p r vspr es2.
-  Proof. rewrite /subst_azbexps_vars_cache. exact: map_cat. Qed.
-
   Lemma subst_azbexps_vars_cache_valid es p r vspr s :
     eval_zexp (evar p) s = eval_zexp r s ->
     (forall e, e \in (split es).2 -> eval_azbexp e s) <->
     (forall e, e \in (split (subst_azbexps_vars_cache p r vspr es)).2 ->
                      eval_azbexp e s).
   Proof.
-    move=> H. elim: es => [| [el er] es IH] //=. case Hses: (split es) => [esl esr] /=.
+    move=> H. elim: es => [| [el er] es IH] //=.
+    rewrite subst_azbexps_vars_cache_cons. case Hses: (split es) => [esl esr] /=.
     case Hsube: (azbexp_subst_vars_cache p r vspr (el, er)) => [sel ser].
     case Hsubes: (split (subst_azbexps_vars_cache p r vspr es)) => [sesl sesr] /=.
     case: IH => [IH1 IH2]. split=> Hs e Hin.
@@ -540,13 +558,14 @@ Section AtomicRootEntailmentSimpl.
       | None => simplify_arep_vars_cache_rec (ve::visited) ves conseq
       | Some (p, r) =>
         simplify_arep_vars_cache_rec (subst_azbexps_vars_cache p r ve.1 visited)
-                                      (subst_azbexps_vars_cache p r ve.1 ves)
-                                      (azbexp_subst_vars_cache p r ve.1 conseq)
+                                     (subst_azbexps_vars_cache p r ve.1 ves)
+                                     (azbexp_subst_vars_cache p r ve.1 conseq)
       end
     end.
   Proof.
     - move=> _ premises _ ve ves ? [p' r'] p r [] ? ? Ha.
-      rewrite /size_lt /subst_azbexps size_map /=. exact: Nat.lt_succ_diag_r.
+      rewrite /size_lt /subst_azbexps_vars_cache tmap_map size_map /=.
+      exact: Nat.lt_succ_diag_r.
     - move=> _ premises _ e es ? Ha. rewrite /size_lt /=. exact: Nat.lt_succ_diag_r.
     - exact: (well_founded_ltof (seq (SSAVS.t * azbexp)) size).
   Defined.
@@ -555,8 +574,8 @@ Section AtomicRootEntailmentSimpl.
     is_assignment ve.2 = Some (p, r) ->
     simplify_arep_vars_cache_rec visited (ve::ves) q =
     simplify_arep_vars_cache_rec (subst_azbexps_vars_cache p r ve.1 visited)
-                                  (subst_azbexps_vars_cache p r ve.1 ves)
-                                  (azbexp_subst_vars_cache p r ve.1 q).
+                                 (subst_azbexps_vars_cache p r ve.1 ves)
+                                 (azbexp_subst_vars_cache p r ve.1 q).
   Proof.
     move=> Ha.
     dcase (simplify_arep_vars_cache_rec (subst_azbexps_vars_cache p r ve.1 visited)
@@ -637,7 +656,7 @@ Section AtomicRootEntailmentSimpl.
   Qed.
 
   Definition simplify_arep_vars_cache (s : arep) : arep :=
-    let vs_ps := map pair_azbexp_with_vars (apremises s) in
+    let vs_ps := tmap pair_azbexp_with_vars (apremises s) in
     let vs_q := pair_azbexp_with_vars (aconseq s) in
     let (vs_ps', vs_q') := simplify_arep_vars_cache_rec [::] vs_ps vs_q in
     {| apremises := (split vs_ps').2; aconseq := vs_q'.2 |}.
@@ -646,6 +665,7 @@ Section AtomicRootEntailmentSimpl.
     valid_arep (simplify_arep_vars_cache s) -> valid_arep s.
   Proof.
     rewrite /valid_arep. case: s => ps q /=. rewrite /simplify_arep_vars_cache /=.
+    rewrite tmap_map.
     dcase (simplify_arep_vars_cache_rec [::] [seq pair_azbexp_with_vars i | i <- ps]
                                          (pair_azbexp_with_vars q)) => [[vs_ps' vs_q'] Hsp].
     rewrite Hsp /=. move=> H s Hs.
@@ -672,7 +692,7 @@ Section REP2AREP.
   Definition areps_of_rep_full (s : ZSSA.rep) : seq arep :=
     let premises := split_zbexp (ZSSA.premise s) in
     let conseqs := split_zbexp (ZSSA.conseq s) in
-    map (fun conseq => {| apremises := premises; aconseq := conseq |}) conseqs.
+    tmap (fun conseq => {| apremises := premises; aconseq := conseq |}) conseqs.
 
   (* Remove trivial atomic root entailment problems at the end of this conversion. *)
   Definition areps_of_rep (s : ZSSA.rep) : seq arep :=
@@ -680,8 +700,8 @@ Section REP2AREP.
     List.filter (fun s => ~~ (is_arep_trivial s)) areps.
 
   Definition areps_of_rep_simplified (o : options) (s : ZSSA.rep) : seq arep :=
-    if vars_cache_in_rewrite_assignments o then map simplify_arep_vars_cache (areps_of_rep s)
-    else map simplify_arep (areps_of_rep s).
+    if vars_cache_in_rewrite_assignments o then tmap simplify_arep_vars_cache (areps_of_rep s)
+    else tmap simplify_arep (areps_of_rep s).
 
   Lemma split_zbexp_mem ze s :
     ZSSA.eval_zbexp ze s ->
@@ -734,11 +754,13 @@ Section REP2AREP.
         first by rewrite in_cons eqxx.
       move=> {Hps} pe /= Hmem. exact: (split_zbexp_mem Hzf Hmem).
     - move=> e1 IH1 e2 IH2 zf Hps s /= Hzf. rewrite /areps_of_rep_full /= in Hps.
-      split.
-      + apply: (IH1 zf _ s Hzf) => /=. move=> ps Hin. apply: Hps.
-        rewrite map_cat mem_cat. apply/orP; left. assumption.
-      + apply: (IH2 zf _ s Hzf) => /=. move=> ps Hin. apply: Hps.
-        rewrite map_cat mem_cat. apply/orP; right. assumption.
+      rewrite tmap_map in Hps. split.
+      + apply: (IH1 zf _ s Hzf) => /=. rewrite /areps_of_rep_full tmap_map.
+        move=> ps Hin. apply: Hps. rewrite map_cat mem_cat. apply/orP; left.
+        assumption.
+      + apply: (IH2 zf _ s Hzf) => /=. rewrite /areps_of_rep_full tmap_map.
+        move=> ps Hin. apply: Hps. rewrite map_cat mem_cat. apply/orP; right.
+        assumption.
   Qed.
 
   Theorem areps_of_rep_sound zs :
@@ -756,9 +778,11 @@ Section REP2AREP.
     move=> H. apply: areps_of_rep_sound. move=> ps Hin.
     case Ho: (vars_cache_in_rewrite_assignments o).
     - apply: simplify_arep_vars_cache_sound. apply: H.
-      rewrite /areps_of_rep_simplified Ho. apply: map_f. assumption.
+      rewrite /areps_of_rep_simplified Ho. rewrite tmap_map.
+      apply: map_f. assumption.
     - apply: simplify_arep_sound. apply: H.
-      rewrite /areps_of_rep_simplified Ho. apply: map_f. assumption.
+      rewrite /areps_of_rep_simplified Ho. rewrite tmap_map.
+      apply: map_f. assumption.
   Qed.
 
 End REP2AREP.
@@ -2815,7 +2839,15 @@ Section PExprAux.
          end.
 
   Definition subst_pexprs (p r : PExpr C) (es : seq (PExpr C)) : seq (PExpr C) :=
-    map (subst_pexpr p r) es.
+    tmap (subst_pexpr p r) es.
+
+  Lemma subst_pexprs_cons p r e es :
+    subst_pexprs p r (e::es) = subst_pexpr p r e :: subst_pexprs p r es.
+  Proof. rewrite /subst_pexprs !tmap_map /=. reflexivity. Qed.
+
+  Lemma subst_pexprs_cat p r es1 es2 :
+    subst_pexprs p r (es1 ++ es2) = subst_pexprs p r es1 ++ subst_pexprs p r es2.
+  Proof. rewrite /subst_pexprs !tmap_map /=. exact: map_cat. Qed.
 
   Fixpoint pexpr_single_variables (e : PExpr C) :=
     match e with
@@ -3072,6 +3104,15 @@ Section IdealMembershipRewriting.
   Definition subst_zpexprs (p r : PExpr Z) (es : seq (PExpr Z)) : seq (PExpr Z) :=
     subst_pexprs Z.eqb p r es.
 
+  Definition subst_zpexprs_cons
+    : forall p r e es, subst_zpexprs p r (e::es) = subst_zpexpr p r e::subst_zpexprs p r es
+    := subst_pexprs_cons Z.eqb.
+
+  Definition subst_zpexprs_cat
+    : forall p r es1 es2, subst_zpexprs p r (es1 ++ es2) =
+                            subst_zpexprs p r es1 ++ subst_zpexprs p r es2
+    := subst_pexprs_cat Z.eqb.
+
 
   (* Rewriting *)
 
@@ -3097,7 +3138,8 @@ Section IdealMembershipRewriting.
     end.
   Proof.
     - move=> _ ps _ e es ? [p' r'] p r [] ? ? Ha.
-      rewrite /size_lt /subst_zpexpr /subst_pexpr size_map /=. exact: Nat.lt_succ_diag_r.
+      rewrite /size_lt /subst_zpexprs /subst_pexprs tmap_map size_map /=.
+      exact: Nat.lt_succ_diag_r.
     - move=> _ ps _ e es ? Ha. rewrite /size_lt /=. exact: Nat.lt_succ_diag_r.
     - exact: (well_founded_ltof (seq (PExpr Z)) size).
   Defined.
@@ -3222,7 +3264,8 @@ Section IdealMembershipRewriting.
     ZPEeval s p = ZPEeval s r ->
     zpexpr_all0 s es <-> zpexpr_all0 s (subst_zpexprs p r es).
   Proof.
-    elim: es => [| e es IH] //=. move=> Hpr. move: (IH Hpr) => {IH} [H1 H2].
+    elim: es => [| e es IH] //=. move=> Hpr. rewrite subst_zpexprs_cons.
+    move: (IH Hpr) => {IH} [H1 H2]. rewrite zpexpr_all0_cons.
     rewrite -(zpexpr_subst_valid e Hpr). tauto.
   Qed.
 
@@ -3548,10 +3591,10 @@ Section IdealMembershipRewriting.
   Definition pair_zpexpr_with_vars (e : PExpr Z) : PS.t * PExpr Z :=
     (vars_pexpr e, e).
 
-  Lemma split_tmap_pair_zpexpr_with_vars (es : seq (PExpr Z)) :
-    (split (tmap pair_zpexpr_with_vars es)).2 = es.
+  Lemma split_map_pair_zpexpr_with_vars (es : seq (PExpr Z)) :
+    (split (map pair_zpexpr_with_vars es)).2 = es.
   Proof.
-    rewrite tmap_map. elim: es => [| e es IH] //=. move: IH.
+    elim: es => [| e es IH] //=. move: IH.
     dcase (split [seq pair_zpexpr_with_vars i | i <- es]) => [[vs es'] Hs].
     rewrite Hs /=. move=> ->. reflexivity.
   Qed.
@@ -3573,7 +3616,7 @@ Section IdealMembershipRewriting.
              (pair_zpexpr_with_vars (simplify_zpexpr q))) => [[vps' vq'] Hsimp].
     case=> ? ?; subst. move=> Heq.
     move: (simplify_generator_vars_cache_rec_sound Hsimp Heq).
-    rewrite split_tmap_pair_zpexpr_with_vars cat0s => Heq2.
+    rewrite tmap_map. rewrite split_map_pair_zpexpr_with_vars cat0s => Heq2.
     move=> s Hps. rewrite -(Heq2 s).
     - rewrite /pair_zpexpr_with_vars /=. rewrite simplify_zpexpr_zpeeval.
       reflexivity.

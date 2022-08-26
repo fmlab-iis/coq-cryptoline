@@ -100,7 +100,7 @@ let rec zexp_subst p r e =
     SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp list -> DSL.eexp list **)
 
 let zexps_subst p r es =
-  map (zexp_subst p r) es
+  tmap (zexp_subst p r) es
 
 (** val azbexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> azbexp -> azbexp **)
 
@@ -113,7 +113,7 @@ let azbexp_subst p r = function
     SSA.SSA.eexp -> SSA.SSA.eexp -> azbexp list -> azbexp list **)
 
 let subst_azbexps p r es =
-  map (azbexp_subst p r) es
+  tmap (azbexp_subst p r) es
 
 (** val single_variables : SSA.SSA.eexp -> SSAVS.t **)
 
@@ -321,7 +321,7 @@ let azbexp_subst_vars_cache p r vspr ve =
     (SSAVS.t * azbexp) list **)
 
 let subst_azbexps_vars_cache p r vspr ves =
-  map (azbexp_subst_vars_cache p r vspr) ves
+  tmap (azbexp_subst_vars_cache p r vspr) ves
 
 (** val simplify_arep_vars_cache_rec :
     (SSAVS.t * azbexp) list -> (SSAVS.t * azbexp) list -> (SSAVS.t * azbexp)
@@ -356,7 +356,7 @@ let pair_azbexp_with_vars e =
 (** val simplify_arep_vars_cache : arep -> arep **)
 
 let simplify_arep_vars_cache s =
-  let vs_ps = map pair_azbexp_with_vars s.apremises in
+  let vs_ps = tmap pair_azbexp_with_vars s.apremises in
   let vs_q = pair_azbexp_with_vars s.aconseq in
   let (vs_ps', vs_q') = simplify_arep_vars_cache_rec [] vs_ps vs_q in
   { apremises = (snd (split vs_ps')); aconseq = (snd vs_q') }
@@ -374,7 +374,7 @@ let rec split_zbexp = function
 let areps_of_rep_full s =
   let premises = split_zbexp s.ZSSA.ZSSA.premise in
   let conseqs = split_zbexp s.ZSSA.ZSSA.conseq in
-  map (fun conseq0 -> { apremises = premises; aconseq = conseq0 }) conseqs
+  tmap (fun conseq0 -> { apremises = premises; aconseq = conseq0 }) conseqs
 
 (** val areps_of_rep : ZSSA.ZSSA.rep -> arep list **)
 
@@ -386,8 +386,8 @@ let areps_of_rep s =
 
 let areps_of_rep_simplified o s =
   if o.vars_cache_in_rewrite_assignments
-  then map simplify_arep_vars_cache (areps_of_rep s)
-  else map simplify_arep (areps_of_rep s)
+  then tmap simplify_arep_vars_cache (areps_of_rep s)
+  else tmap simplify_arep (areps_of_rep s)
 
 (** val coq_Znorm_subst : coq_Z coq_PExpr -> coq_Z coq_Pol **)
 
@@ -589,7 +589,7 @@ let rec subst_pexpr ceq p r e =
     list -> 'a1 coq_PExpr list **)
 
 let subst_pexprs ceq p r es =
-  map (subst_pexpr ceq p r) es
+  tmap (subst_pexpr ceq p r) es
 
 (** val pexpr_single_variables : 'a1 coq_PExpr -> PS.t **)
 

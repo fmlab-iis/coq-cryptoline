@@ -6,6 +6,7 @@ open QFBV2CNF
 open QFBVHash
 open Ring_polynom
 open SSA2ZSSA
+open Seqs
 open Eqtype
 open Seq
 open Ssrnat

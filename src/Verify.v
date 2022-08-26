@@ -33,7 +33,7 @@ Section Verification.
   Definition verify_rspec_algsnd (s : SSA.spec) : bool :=
     let fE := SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s) in
     let es := bb_range_algsnd_la_simplified_filtered s in
-    let '(_, _, _, cnfs) := bb_hbexps_cache fE (map QFBVHash.hash_bexp es) in
+    let '(_, _, _, cnfs) := bb_hbexps_cache fE (tmap QFBVHash.hash_bexp es) in
     ext_all_unsat cnfs.
 
   Lemma verify_rspec_algsnd_sound (s : SSA.spec) :
@@ -43,8 +43,8 @@ Section Verification.
   Proof.
     move=> Hwf Hv. apply: (bb_range_algsnd_la_simplified_filtered_sound Hwf).
     move=> m c g cnfs cnf Hbb Hin. rewrite /verify_rspec_algsnd in Hv.
-    rewrite Hbb in Hv. move: (all_unsat_sound Hv) => Hsat.
-    move: (Hsat cnf Hin) => {Hsat} Hsat.
+    rewrite tmap_map Hbb in Hv. move: (all_unsat_sound Hv) => Hsat.
+    move: (Hsat cnf Hin) => {} Hsat.
     move=> Hsat'; apply: Hsat. exact: Hsat'.
   Qed.
 
@@ -53,7 +53,7 @@ Section Verification.
     SSA.valid_rspec (SSA.rspec_of_spec s) -> ssa_spec_algsnd s ->
     verify_rspec_algsnd s.
   Proof.
-    move=> Hwf Hrange Hsafe. rewrite /verify_rspec_algsnd.
+    move=> Hwf Hrange Hsafe. rewrite /verify_rspec_algsnd. rewrite tmap_map.
     dcase (bb_hbexps_cache (SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s))
                            (map QFBVHash.hash_bexp
                                 (bb_range_algsnd_la_simplified_filtered s))) =>
@@ -146,7 +146,7 @@ Section Verification.
           else simplify_generator ps q
         else (ps, q) in
         (ps', q', ms) in
-    map f pss.
+    tmap f pss.
 
   Fixpoint validate_imp_answer_list polys coefs : bool :=
     match polys, coefs with
@@ -175,7 +175,8 @@ Section Verification.
     elim: psps => [| hd tl IH] //=. rewrite /verify_areps_list.
     case Hs: (size (polys_of_areps o (hd :: tl)) ==
                 size (ext_solve_imp_list (polys_of_areps o (hd :: tl)))) => //=.
-    case: (rewrite_assignments_imp o) Hs.
+    move: Hs. rewrite /polys_of_areps !tmap_map /= -!tmap_map -/(polys_of_areps o tl).
+    case: (rewrite_assignments_imp o).
     - dcase (imp_of_arep hd) => [[[[[g t] ps] m] q] Hhd] /=.
       case: (vars_cache_in_rewrite_assignments o).
       + dcase (simplify_generator_vars_cache ps q) => [[ps' q'] Hsimp] Hs.
