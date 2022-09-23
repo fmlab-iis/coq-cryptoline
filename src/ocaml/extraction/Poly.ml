@@ -800,24 +800,24 @@ let string_of_pexpr string_of_zero string_of_identity string_of_const =
   | PEX j -> of_pos j
   | PEadd (e1, e2) ->
     append ('('::[])
-      (append (string_of_pexpr' e1)
+      (append (string_of_pexpr0 e1)
         (append (' '::('+'::(' '::[])))
-          (append (string_of_pexpr' e2) (')'::[]))))
+          (append (string_of_pexpr0 e2) (')'::[]))))
   | PEsub (e1, e2) ->
     append ('('::[])
-      (append (string_of_pexpr' e1)
+      (append (string_of_pexpr0 e1)
         (append (' '::('-'::(' '::[])))
-          (append (string_of_pexpr' e2) (')'::[]))))
+          (append (string_of_pexpr0 e2) (')'::[]))))
   | PEmul (e1, e2) ->
     append ('('::[])
-      (append (string_of_pexpr' e1)
+      (append (string_of_pexpr0 e1)
         (append (' '::('*'::(' '::[])))
-          (append (string_of_pexpr' e2) (')'::[]))))
+          (append (string_of_pexpr0 e2) (')'::[]))))
   | PEopp e0 ->
-    append ('('::('-'::(' '::[]))) (append (string_of_pexpr' e0) (')'::[]))
+    append ('('::('-'::(' '::[]))) (append (string_of_pexpr0 e0) (')'::[]))
   | PEpow (e0, n) ->
     append ('('::[])
-      (append (string_of_pexpr' e0)
+      (append (string_of_pexpr0 e0)
         (append (' '::('^'::(' '::[]))) (append (of_N n) (')'::[]))))
   in string_of_pexpr0
 

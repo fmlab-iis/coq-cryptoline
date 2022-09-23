@@ -54,6 +54,12 @@ let verify_rep o zs =
   then verify_areps o (areps_of_rep_simplified o zs)
   else verify_areps o (areps_of_rep zs)
 
+(** val verify_reps_seq : options -> ZSSA.ZSSA.rep list -> bool **)
+
+let rec verify_reps_seq o = function
+| [] -> true
+| hd :: tl -> (&&) (verify_rep o hd) (verify_reps_seq o tl)
+
 (** val ext_solve_imp_list :
     ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr list) list ->
     (coq_Z coq_PExpr list * coq_Z coq_PExpr list) list **)
@@ -106,21 +112,31 @@ let verify_areps_list o pss =
   then validate_imp_answer_list poly_list coef_list
   else false
 
-(** val verify_rep_list : options -> ZSSA.ZSSA.rep -> bool **)
+(** val verify_reps_paral : options -> ZSSA.ZSSA.rep list -> bool **)
 
-let verify_rep_list o zs =
+let verify_reps_paral o zss =
   if o.rewrite_assignments_arep
-  then verify_areps_list o (areps_of_rep_simplified o zs)
-  else verify_areps_list o (areps_of_rep zs)
+  then verify_areps_list o (tflatten (tmap (areps_of_rep_simplified o) zss))
+  else verify_areps_list o (tflatten (tmap areps_of_rep zss))
 
 (** val verify_espec : options -> SSA.SSA.spec -> bool **)
 
 let verify_espec o s =
-  if o.compute_coefficients_one_by_one
-  then verify_rep o
-         (algred_espec o (new_svar_spec s) (SSA.SSA.espec_of_spec s))
-  else verify_rep_list o
-         (algred_espec o (new_svar_spec s) (SSA.SSA.espec_of_spec s))
+  let avn = new_svar_spec s in
+  let apply_algred = fun s0 -> algred_espec o avn s0 in
+  if o.apply_slicing_espec
+  then let reps =
+         tmap apply_algred
+           (tmap SSA.SSA.slice_espec
+             (SSA.SSA.split_espec (SSA.SSA.espec_of_spec s)))
+       in
+       if o.compute_coefficients_one_by_one
+       then verify_reps_seq o reps
+       else verify_reps_paral o reps
+  else let rep0 = apply_algred (SSA.SSA.espec_of_spec s) in
+       if o.compute_coefficients_one_by_one
+       then verify_rep o rep0
+       else verify_reps_paral o (rep0 :: [])
 
 (** val verify_ssa : options -> SSA.SSA.spec -> bool **)
 

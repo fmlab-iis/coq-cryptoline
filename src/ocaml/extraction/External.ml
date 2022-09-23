@@ -30,6 +30,8 @@ let starts_with s t =
 
 let explode s = List.init (String.length s) (String.get s)
 
+let string_of_char_list l = String.of_seq (List.to_seq l)
+
 
 (** Basic numbers conversion *)
 

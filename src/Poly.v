@@ -2961,11 +2961,11 @@ Section PExprAux.
     | PEI => string_of_identity
     | PEc c => string_of_const c
     | PEX j => BinaryString.of_pos j
-    | PEopp e => ("(- " ++ string_of_pexpr' e ++ ")")%string
-    | PEadd e1 e2 => ("(" ++ string_of_pexpr' e1 ++ " + " ++ string_of_pexpr' e2 ++ ")")%string
-    | PEsub e1 e2 => ("(" ++ string_of_pexpr' e1 ++ " - " ++ string_of_pexpr' e2 ++ ")")%string
-    | PEmul e1 e2 => ("(" ++ string_of_pexpr' e1 ++ " * " ++ string_of_pexpr' e2 ++ ")")%string
-    | PEpow e n => ("(" ++ string_of_pexpr' e ++ " ^ " ++ BinaryString.of_N n ++ ")")%string
+    | PEopp e => ("(- " ++ string_of_pexpr e ++ ")")%string
+    | PEadd e1 e2 => ("(" ++ string_of_pexpr e1 ++ " + " ++ string_of_pexpr e2 ++ ")")%string
+    | PEsub e1 e2 => ("(" ++ string_of_pexpr e1 ++ " - " ++ string_of_pexpr e2 ++ ")")%string
+    | PEmul e1 e2 => ("(" ++ string_of_pexpr e1 ++ " * " ++ string_of_pexpr e2 ++ ")")%string
+    | PEpow e n => ("(" ++ string_of_pexpr e ++ " ^ " ++ BinaryString.of_N n ++ ")")%string
     end.
 
 End PExprAux.

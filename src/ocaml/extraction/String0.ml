@@ -15,3 +15,12 @@ let rec get n = function
      (fun _ -> Some c)
      (fun n' -> get n' s')
      n)
+
+(** val concat : char list -> char list list -> char list **)
+
+let rec concat sep = function
+| [] -> []
+| x :: xs ->
+  (match xs with
+   | [] -> x
+   | _ :: _ -> append x (append sep (concat sep xs)))

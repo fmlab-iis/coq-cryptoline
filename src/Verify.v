@@ -92,6 +92,22 @@ Section Verification.
     then verify_areps o (areps_of_rep_simplified o zs)
     else verify_areps o (areps_of_rep zs).
 
+  (** Sequentail version *)
+  Fixpoint verify_reps_seq (o : options) (zss : seq ZSSA.rep) : bool :=
+    match zss with
+    | [::] => true
+    | hd::tl => (verify_rep o hd) && (verify_reps_seq o tl)
+    end.
+
+  Lemma verify_reps_seq_in o zs zss :
+    In zs zss -> verify_reps_seq o zss -> verify_rep o zs.
+  Proof.
+    elim: zss => [| z zss IH] //= Hin Hv. move/andP: Hv => [Hvz Hvzss].
+    case: Hin.
+    - move=> ?; subst. exact: Hvz.
+    - move=> Hin. exact: (IH Hin Hvzss).
+  Qed.
+
   Lemma verify_arep_sound o ps : verify_arep o ps -> valid_arep ps.
   Proof.
     rewrite /verify_arep. dcase (imp_of_arep ps) => [[[[[g t] zps] zms] zq] Hzp].
@@ -164,11 +180,6 @@ Section Verification.
     then validate_imp_answer_list poly_list coef_list
     else false.
 
-  Definition verify_rep_list (o : options) (zs : ZSSA.rep) : bool :=
-    if rewrite_assignments_arep o
-    then verify_areps_list o (areps_of_rep_simplified o zs)
-    else verify_areps_list o (areps_of_rep zs).
-
   Lemma verify_areps_list_in o psp psps :
     verify_areps_list o psps -> psp \in psps -> valid_arep psp.
   Proof.
@@ -203,20 +214,43 @@ Section Verification.
       + apply: (IH _ Hin). rewrite /verify_areps_list. rewrite Hs. exact: Hchk_tl.
   Qed.
 
-  Lemma verify_rep_list_sound o (zs : ZSSA.rep) :
-    verify_rep_list o zs -> ZSSA.valid_rep zs.
+
+  (** Concurrent version *)
+  Definition verify_reps_paral (o : options) (zss : seq ZSSA.rep) : bool :=
+    if rewrite_assignments_arep o
+    then verify_areps_list o (tflatten (tmap (areps_of_rep_simplified o) zss))
+    else verify_areps_list o (tflatten (tmap areps_of_rep zss)).
+
+
+  Lemma verify_reps_paral_sound o (zss : seq ZSSA.rep) :
+    verify_reps_paral o zss -> ZSSA.valid_reps zss.
   Proof.
-    rewrite /verify_rep_list. case: (rewrite_assignments_arep o) => Hv.
-    - apply: (@areps_of_rep_simplified_sound o) => ps Hin.
-      exact: (verify_areps_list_in Hv Hin).
-    - apply: areps_of_rep_sound => ps Hin.
-      exact: (verify_areps_list_in Hv Hin).
+    rewrite /verify_reps_paral. case: (rewrite_assignments_arep o) => /= Hv.
+    - move=> s Hs. apply: (@areps_of_rep_simplified_sound o) => ps Hin.
+      apply: (verify_areps_list_in Hv). rewrite !tflatten_flatten !tmap_map /=.
+      rewrite mem_rev. apply/flattenP. exists (areps_of_rep_simplified o s).
+      + exact: (map_f _ Hs).
+      + assumption.
+    - move=> s Hs. apply: areps_of_rep_sound => ps Hin.
+      apply: (verify_areps_list_in Hv). rewrite !tflatten_flatten !tmap_map /=.
+      rewrite mem_rev. apply/flattenP. exists (areps_of_rep s).
+      + exact: (map_f _ Hs).
+      + assumption.
   Qed.
 
+
   Definition verify_espec (o : options) (s : SSA.spec) :=
-    if compute_coefficients_one_by_one o
-    then (verify_rep o (algred_espec o (new_svar_spec s) (SSA.espec_of_spec s)))
-    else (verify_rep_list o (algred_espec o (new_svar_spec s) (SSA.espec_of_spec s))).
+    let avn := new_svar_spec s in
+    let apply_algred s := algred_espec o avn s in
+    if apply_slicing_espec o
+    then let reps := tmap apply_algred (tmap SSA.slice_espec (SSA.split_espec (SSA.espec_of_spec s))) in
+         if compute_coefficients_one_by_one o
+         then verify_reps_seq o reps
+         else verify_reps_paral o reps
+    else let rep := apply_algred (SSA.espec_of_spec s) in
+         if compute_coefficients_one_by_one o
+         then verify_rep o rep
+         else verify_reps_paral o [:: rep].
 
 
   (* Verify specifications *)
@@ -228,21 +262,32 @@ Section Verification.
     verify_ssa o (ssa_spec s).
 
   Theorem verify_ssa_sound (o : options) (s : SSA.spec) :
-    well_formed_ssa_spec s ->
-    verify_ssa o s ->
+    well_formed_ssa_spec s -> verify_ssa o s ->
     SSA.valid_spec s.
   Proof.
     rewrite /verify_ssa /verify_espec=> Hwf /andP [Hvrs Hvz].
     move: (verify_rspec_algsnd_sound Hwf Hvrs) => [Hvr Hvs].
-    apply: (algred_spec_sound (o:=o) Hwf Hvs Hvr).
-    case Hc: (compute_coefficients_one_by_one o) Hvz => Hvz.
-    - exact: (verify_rep_sound Hvz).
-    - exact: (verify_rep_list_sound Hvz).
+    case: (apply_slicing_espec o) Hvz.
+    - case: (compute_coefficients_one_by_one o) => Hrep.
+      + apply: (algred_spec_slice_sound
+                  (o:=o) Hwf Hvs (fresh_var_spec_espec (new_svar_spec_fresh s)) Hvr).
+        move=> ss Hin. apply: (verify_rep_sound (o:=o)).
+        apply: (verify_reps_seq_in _ Hrep). apply/in_In. assumption.
+      + apply: (algred_spec_slice_sound
+                  (o:=o) Hwf Hvs (fresh_var_spec_espec (new_svar_spec_fresh s)) Hvr).
+        move=> ss Hin. apply: (verify_reps_paral_sound Hrep).
+        rewrite !tmap_map in Hin *. assumption.
+    - case: (compute_coefficients_one_by_one o) => Hrep.
+      + apply: (algred_spec_sound
+                  (o:=o) Hwf Hvs Hvr (fresh_var_spec_espec (new_svar_spec_fresh s))).
+        exact: (verify_rep_sound Hrep).
+      + apply: (algred_spec_sound
+                  (o:=o) Hwf Hvs Hvr (fresh_var_spec_espec (new_svar_spec_fresh s))).
+        apply: (verify_reps_paral_sound Hrep). exact: mem_head.
   Qed.
 
   Theorem verify_dsl_sound (o : options) (s : DSL.spec) :
-    DSL.well_formed_spec s ->
-    verify_dsl o s ->
+    DSL.well_formed_spec s -> verify_dsl o s ->
     DSL.valid_spec s.
   Proof.
     rewrite /verify_dsl => Hwf Hv. apply: ssa_spec_sound.

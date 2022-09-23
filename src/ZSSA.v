@@ -11,6 +11,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
+Module ZSEQM := TStateEqmod SSAVarOrder ZValueType ZSSAStore SSAVS.
+
 Module ZSSA.
 
   Local Notation var := SSAVarOrder.t.
@@ -58,23 +60,13 @@ Module ZSSA.
   Definition entails (f g : zbexp) : Prop :=
     forall s, eval_zbexp f s -> eval_zbexp g s.
 
-
-  (* String outputs *)
-
-  Definition string_of_zexp := @SSA.string_of_eexp string_of_ssavar.
-
-  Definition string_of_zexps := @SSA.string_of_eexps string_of_ssavar.
-
-  Definition string_of_zbexp := @SSA.string_of_ebexp string_of_ssavar.
-
-
-  (* Specification *)
-
-  (** A root entailment problem checks if the premise entails the consequence. *)
-  Record rep : Type := { premise : zbexp; conseq : zbexp }.
-
-  Definition valid_rep (s : rep) : Prop :=
-    entails (premise s) (conseq s).
+  Lemma entails_eand f g1 g2 :
+    entails f (Eand g1 g2) <-> entails f g1 /\ entails f g2.
+  Proof.
+    split.
+    - move=> H; split; move=> s Hf; move: (H s Hf) => /=; tauto.
+    - move=> [H1 H2] s Hf; split; move: (H1 s Hf) (H2 s Hf); tauto.
+  Qed.
 
   Lemma size_eval_zexps es s : size (eval_zexps es s) = size es.
   Proof. elim: es => [| e es IH] //=. by rewrite IH. Qed.
@@ -94,6 +86,118 @@ Module ZSSA.
       + move=> [[He1 Hes1] Hes2]. split; first assumption.
         apply/IH. done.
   Qed.
+
+  Lemma eval_zbexp_eands_split_eand e s :
+    ZSSA.eval_zbexp (eands (split_eand e)) s <-> ZSSA.eval_zbexp e s.
+  Proof.
+    elim: e => //=.
+    - move=> e1 e2; split.
+      + move=> [H _]; assumption.
+      + move=> H; tauto.
+    - move=> e1 e2 ms; split.
+      + move=> [H _]; assumption.
+      + move=> H; tauto.
+    - move=> e1 IH1 e2 IH2; split.
+      + move/eval_zbexp_eands_cat=> [H1 H2]. move: ((proj1 IH1) H1) ((proj1 IH2) H2). tauto.
+      + move=> [H1 H2]. move: ((proj2 IH1) H1) ((proj2 IH2) H2) => {}H1 {}H2.
+        apply/eval_zbexp_eands_cat. tauto.
+  Qed.
+
+
+  (* String outputs *)
+
+  Definition string_of_zexp := SSA.string_of_eexp.
+
+  Definition string_of_zexps := SSA.string_of_eexps.
+
+  Definition string_of_zbexp := SSA.string_of_ebexp.
+
+
+  (* Specification *)
+
+  (** A root entailment problem checks if the premise entails the consequence. *)
+  Record rep : Type := { premise : zbexp; conseq : zbexp }.
+
+  Definition rep_eqn (ps1 ps2 : rep) : bool :=
+    (premise ps1 == premise ps2) && (conseq ps1 == conseq ps2).
+
+  Lemma rep_eqn_eq ps1 ps2 : rep_eqn ps1 ps2 -> ps1 = ps2.
+  Proof.
+    case: ps1 => [pres1 post1]. case: ps2 => [pres2 post2]. rewrite /rep_eqn /=.
+    move/andP=> [/eqP -> /eqP ->]. reflexivity.
+  Qed.
+
+  Lemma rep_eqn_refl ps : rep_eqn ps ps.
+  Proof. by rewrite /rep_eqn 2!eqxx. Qed.
+
+  Lemma rep_eqP (ps1 ps2 : rep) : reflect (ps1 = ps2) (rep_eqn ps1 ps2).
+  Proof.
+    case H: (rep_eqn ps1 ps2).
+    - apply: ReflectT. exact: (rep_eqn_eq H).
+    - apply: ReflectF => Heq. move/negP: H; apply. rewrite Heq. exact: rep_eqn_refl.
+  Qed.
+
+  Definition rep_eqMixin := EqMixin rep_eqP.
+  Canonical rep_eqType := Eval hnf in EqType rep rep_eqMixin.
+
+
+  Definition valid_rep (s : rep) : Prop :=
+    entails (premise s) (conseq s).
+
+  Definition valid_reps (ss : seq rep) : Prop :=
+    forall s, s \in ss -> valid_rep s.
+
+
+  Lemma valid_reps_empty : valid_reps [::].
+  Proof. move=> s Hin. discriminate. Qed.
+
+  Lemma valid_reps_hd s ss :
+    valid_reps (s::ss) -> valid_rep s.
+  Proof. apply. exact: mem_head. Qed.
+
+  Lemma valid_reps_tl s ss :
+    valid_reps (s::ss) -> valid_reps ss.
+  Proof.
+    move=> H st Hin. apply: H. rewrite in_cons Hin orbT. reflexivity.
+  Qed.
+
+  Lemma valid_reps_cons s ss :
+    valid_reps (s::ss) <-> valid_rep s /\ valid_reps ss.
+  Proof.
+    split.
+    - move=> H; split.
+      + exact: (valid_reps_hd H).
+      + exact: (valid_reps_tl H).
+    - move=> [H1 H2] st Hin. rewrite in_cons in Hin. case/orP: Hin=> Hin.
+      + move/eqP: Hin => ?; subst. assumption.
+      + exact: (H2 _ Hin).
+  Qed.
+
+  Lemma valid_reps_cat ss1 ss2 :
+    valid_reps (ss1 ++ ss2) <-> valid_reps ss1 /\ valid_reps ss2.
+  Proof.
+    elim: ss1 ss2 => [| s1 ss1 IH] ss2 /=.
+    - split.
+      + move=> H; split; [exact: valid_reps_empty | exact: H].
+      + move=> [_ H]; exact: H.
+    - split.
+      + move/valid_reps_cons=> [H1 H2]. move: (IH ss2) => {IH} [IH1 IH2].
+        move: (IH1 H2) => {IH1} [IH11 IH12]. split.
+        * apply/valid_reps_cons. tauto.
+        * assumption.
+      + move=> [/valid_reps_cons [Hs1 Hss1] Hss2]. apply/valid_reps_cons.
+        move: (IH ss2) => {IH} [IH1 IH2]. split; first assumption.
+        apply: IH2. tauto.
+  Qed.
+
+  Lemma valid_reps_cat1 ss1 ss2 :
+    valid_reps (ss1 ++ ss2) -> valid_reps ss1.
+  Proof. move/valid_reps_cat=> [H1 H2]; assumption. Qed.
+
+  Lemma valid_reps_cat2 ss1 ss2 :
+    valid_reps (ss1 ++ ss2) -> valid_reps ss2.
+  Proof. move/valid_reps_cat=> [H1 H2]; assumption. Qed.
+
 
 
   Lemma steq_eval_zexp e {s1 s2} :
@@ -261,4 +365,65 @@ Module ZSSA.
     exact: (zs_eqi_Upd Hx Heqi HUpd).
   Qed.
 
+
+  (* Slicing*)
+
+  Lemma slice_zbexp_eval vs e s :
+    eval_zbexp e s -> eval_zbexp (SSA.slice_ebexp vs e) s.
+  Proof.
+    elim: e => //=.
+    - move=> e1 e2 H. by case_if.
+    - move=> e1 e2 ms H. by case_if.
+    - move=> e1 IH1 e2 IH2 [H1 H2].
+      case Hs1: (SSA.slice_ebexp vs e1) => //=; rewrite Hs1 /= in IH1.
+      + (case Hs2: (SSA.slice_ebexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+        move: (IH1 H1) (IH2 H2) => /=; tauto.
+      + (case Hs2: (SSA.slice_ebexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+        move: (IH1 H1) (IH2 H2) => /=; tauto.
+      + (case Hs2: (SSA.slice_ebexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+        move: (IH1 H1) (IH2 H2) => /=; tauto.
+      + (case Hs2: (SSA.slice_ebexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+        move: (IH1 H1) (IH2 H2) => /=; tauto.
+  Qed.
+
+  Lemma state_eqmod_eval_zexp e s1 s2 :
+    ZSEQM.state_eqmod (SSA.vars_eexp e) s1 s2 ->
+    eval_zexp e s1 = eval_zexp e s2.
+  Proof.
+    elim: e => //=.
+    - move=> v. apply. apply: SSA.VSLemmas.mem_singleton2. exact: eqxx.
+    - move=> op e IH Heqm. rewrite (IH Heqm). reflexivity.
+    - move=> op e1 IH1 e2 IH2 /ZSEQM.state_eqmod_union1 [Heqm1 Heqm2].
+      rewrite (IH1 Heqm1) (IH2 Heqm2). reflexivity.
+    - move=> e IH n Heqm. rewrite (IH Heqm). reflexivity.
+  Qed.
+
+  Lemma state_eqmod_eval_zexps es s1 s2 :
+    ZSEQM.state_eqmod (SSA.vars_eexps es) s1 s2 ->
+    eval_zexps es s1 = eval_zexps es s2.
+  Proof.
+    elim: es => [| e es IH] //=. move/ZSEQM.state_eqmod_union1 => [Heqm1 Heqm2].
+    rewrite (state_eqmod_eval_zexp Heqm1) (IH Heqm2). reflexivity.
+  Qed.
+
+  Lemma state_eqmod_eval_zbexp e s1 s2 :
+    ZSEQM.state_eqmod (SSA.vars_ebexp e) s1 s2 ->
+    eval_zbexp e s1 -> eval_zbexp e s2.
+  Proof.
+    elim: e => //=.
+    - move=> e1 e2 /ZSEQM.state_eqmod_union1 [Heqm1 Heqm2] H.
+      rewrite -(state_eqmod_eval_zexp Heqm1) -(state_eqmod_eval_zexp Heqm2). exact: H.
+    - move=> e1 e2 ms /ZSEQM.state_eqmod_union1
+                [Heqm1 /ZSEQM.state_eqmod_union1 [Heqm2 Heqm3]] H.
+      rewrite -(state_eqmod_eval_zexp Heqm1) -(state_eqmod_eval_zexp Heqm2)
+              -(state_eqmod_eval_zexps Heqm3). exact: H.
+    - move=> e1 IH1 e2 IH2 /ZSEQM.state_eqmod_union1 [Heqm1 Heqm2] [H1 H2].
+      move: (IH1 Heqm1 H1) (IH2 Heqm2 H2). tauto.
+  Qed.
+
+
 End ZSSA.
+
+
+Definition rep_eqMixin := ZSSA.rep_eqMixin.
+Canonical rep_eqType := ZSSA.rep_eqType.

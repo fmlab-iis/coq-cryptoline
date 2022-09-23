@@ -4,12 +4,12 @@ module ZSSA =
   (** val string_of_zexp : DSL.eexp -> char list **)
 
   let string_of_zexp =
-    SSA.SSA.string_of_eexp SSA.string_of_ssavar
+    SSA.SSA.string_of_eexp
 
   (** val string_of_zexps : char list -> DSL.eexp list -> char list **)
 
   let string_of_zexps =
-    SSA.SSA.string_of_eexps SSA.string_of_ssavar
+    SSA.SSA.string_of_eexps
 
   type rep = { premise : SSA.SSA.ebexp; conseq : SSA.SSA.ebexp }
 

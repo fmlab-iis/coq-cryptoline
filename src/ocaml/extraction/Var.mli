@@ -685,7 +685,15 @@ module VS :
 
       val memP : TS.elt -> TS.t -> reflect
 
+      val equalP : TS.t -> TS.t -> reflect
+
+      val subsetP : TS.t -> TS.t -> reflect
+
+      val emptyP : TS.t -> reflect
+
       val disjoint : TS.t -> TS.t -> bool
+
+      val proper_subset : TS.t -> TS.t -> bool
      end
 
     module SE :
@@ -1751,7 +1759,15 @@ module VS :
 
     val memP : TS.elt -> TS.t -> reflect
 
+    val equalP : TS.t -> TS.t -> reflect
+
+    val subsetP : TS.t -> TS.t -> reflect
+
+    val emptyP : TS.t -> reflect
+
     val disjoint : TS.t -> TS.t -> bool
+
+    val proper_subset : TS.t -> TS.t -> bool
    end
 
   module SE :
@@ -5119,7 +5135,15 @@ module SSAVS :
 
       val memP : TS.elt -> TS.t -> reflect
 
+      val equalP : TS.t -> TS.t -> reflect
+
+      val subsetP : TS.t -> TS.t -> reflect
+
+      val emptyP : TS.t -> reflect
+
       val disjoint : TS.t -> TS.t -> bool
+
+      val proper_subset : TS.t -> TS.t -> bool
      end
 
     module SE :
@@ -6185,7 +6209,15 @@ module SSAVS :
 
     val memP : TS.elt -> TS.t -> reflect
 
+    val equalP : TS.t -> TS.t -> reflect
+
+    val subsetP : TS.t -> TS.t -> reflect
+
+    val emptyP : TS.t -> reflect
+
     val disjoint : TS.t -> TS.t -> bool
+
+    val proper_subset : TS.t -> TS.t -> bool
    end
 
   module SE :

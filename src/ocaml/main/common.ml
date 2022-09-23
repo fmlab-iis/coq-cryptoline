@@ -23,6 +23,10 @@ let args =
     ("-disable_rewriting_arep", Clear apply_rewriting_arep, "\n\t     Enable rewriting of equalities in root entailment problems\n");
     ("-enable_rewriting_imp", Set apply_rewriting_imp, "\n\t     Disable rewriting of equalities in ideal membership problems\n");
     ("-disable_rewriting_imp", Clear apply_rewriting_imp, "\n\t     Disable rewriting of equalities in ideal membership problems\n");
+    ("-enable_slicing_espec", Set apply_slicing_espec, "\n\t     Enable slicing in the verification of algebraic specifications\n");
+    ("-enable_slicing_rspec", Set apply_slicing_rspec, "\n\t     Enable slicing in the verification of range specifications\n");
+    ("-disable_slicing_espec", Clear apply_slicing_espec, "\n\t     Disable slicing in the verification of algebraic specifications\n");
+    ("-disable_slicing_rspec", Clear apply_slicing_rspec, "\n\t     Disable slicing in the verification of range specifications\n");
     ("-drat-trim", String (fun str -> Options.Std.drat_trim_path := str),
      "Set the path to drat-trim (default: " ^
        !Options.Std.drat_trim_path ^ ")\n");

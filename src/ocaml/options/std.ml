@@ -59,9 +59,10 @@ let string_of_algebra_system s =
   | Macaulay2 -> "macaulay2"
 
 let apply_rewriting_arep = ref true
-let apply_rewriting_imp = ref false
+let apply_rewriting_imp = ref true
 let polys_rewrite_replace_eexp = ref false
-let apply_slicing = ref false
+let apply_slicing_espec = ref true
+let apply_slicing_rspec = ref false
 
 let variable_ordering = ref RevAppearingOrder
 let string_of_variable_ordering o =

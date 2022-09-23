@@ -26,12 +26,13 @@ Separate Extraction
          int_of_pos pos_of_int int_of_n n_of_int int_of_nat nat_of_int
          NBitsDef.from_Zpos NBitsDef.from_Zneg NBitsDef.from_Z
          (* String outputs *)
-         DSL.string_of_var SSA.string_of_ssavar
-         DSL.string_of_ebexp SSA.string_of_ebexp
-         DSL.string_of_rbexp SSA.string_of_rbexp
+         DSL.string_of_spec SSA.string_of_spec
+         DSL.string_of_espec SSA.string_of_espec
+         DSL.string_of_rspec SSA.string_of_rspec
          Poly.string_of_azbexp Poly.string_of_zpexpr
          (* Verification *)
          CNF.dimacs_cnf_with_header CNF.max_var_of_cnf CNF.num_clauses
-         Poly.zpexpr_is_zero
+         Poly.zpexpr_is_zero SSA.slice_espec SSA.slice_rspec
+         SSA.split_espec SSA.split_rspec
          DSL.well_formed_spec Verify.verify_dsl.
 Cd "../../..".

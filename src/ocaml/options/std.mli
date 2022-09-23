@@ -51,7 +51,8 @@ val string_of_algebra_system : algebra_system -> string
 val apply_rewriting_arep : bool ref
 val apply_rewriting_imp : bool ref
 val polys_rewrite_replace_eexp : bool ref
-val apply_slicing : bool ref
+val apply_slicing_espec : bool ref
+val apply_slicing_rspec : bool ref
 
 val variable_ordering : variable_order ref
 val string_of_variable_ordering : variable_order -> string

@@ -1,4 +1,3 @@
-open BinNatDef
 open BinNums
 
 module Raw =
@@ -29,8 +28,3 @@ let of_Z = function
 | Z0 -> '0'::('b'::('0'::[]))
 | Zpos p -> of_pos p
 | Zneg p -> '-'::(of_pos p)
-
-(** val of_nat : int -> char list **)
-
-let of_nat n =
-  of_N (N.of_nat n)

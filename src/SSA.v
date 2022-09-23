@@ -1,28 +1,30 @@
 
 (** SSA transformation. *)
 
-From Coq Require Import List ZArith FSets OrderedType String BinaryString.
+From Coq Require Import List ZArith FSets OrderedType String Decimal DecimalString.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
-From ssrlib Require Import Var SsrOrder FMaps ZAriths Tactics Lists FSets.
+From ssrlib Require Import Var SsrOrder FMaps ZAriths Tactics Lists FSets Seqs.
 From Cryptoline Require Import DSL.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
+Module SSAVarOrderPrinter <: Printer with Definition t := ssavar.
+  Definition t := SSAVarOrder.t.
+  Definition to_string (v : SSAVarOrder.t) : string :=
+    ("v" ++ string_of_N (fst v) ++ "_" ++ string_of_N (snd v))%string.
+End SSAVarOrderPrinter.
 
-Module SSA := MakeDSL SSAVarOrder SSAVS SSAVM SSATE SSAStore.
+Module SSA := MakeDSL SSAVarOrder SSAVarOrderPrinter SSAVS SSAVM SSATE SSAStore.
 
 Module M2 := Map2 VS SSAVS.
 
 Module M2SSA := Map2Map Store.M SSAStore.M.
 
 Module MdeSSA := Map2Map SSAStore.M Store.M.
-
-Definition string_of_ssavar (v : ssavar) : string :=
-  ("v" ++ BinaryString.of_N (fst v) ++ "_" ++ BinaryString.of_N (snd v))%string.
 
 Section MakeSSA.
 

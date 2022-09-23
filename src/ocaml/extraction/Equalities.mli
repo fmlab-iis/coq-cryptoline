@@ -1,4 +1,9 @@
 
+module type Typ =
+ sig
+  type t
+ end
+
 module type DecidableTypeOrig =
  sig
   type t

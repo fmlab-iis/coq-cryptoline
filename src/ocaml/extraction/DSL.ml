@@ -1,13 +1,19 @@
+open Ascii
 open BinInt
+open BinNat
 open BinNums
-open BinaryString
+open BinPos
 open Bool
 open Datatypes
+open Decimal
+open DecimalString
 open FMaps
 open FSets
 open NBitsDef
 open NBitsOp
-open State
+open PeanoNat
+open Seqs
+open Store
 open String0
 open Typ
 open Var
@@ -18,6 +24,53 @@ open Ssrnat
 
 type __ = Obj.t
 let __ = let rec f _ = Obj.repr f in Obj.repr f
+
+(** val newline : char list **)
+
+let newline =
+  (ascii_of_N (Npos (Coq_xO (Coq_xI (Coq_xO Coq_xH)))))::[]
+
+type signed_int =
+| Pos of uint
+| Neg of uint
+
+(** val nat_to_signed_int : int -> signed_int **)
+
+let nat_to_signed_int n =
+  Pos (Nat.to_uint n)
+
+(** val coq_N_to_signed_int : coq_N -> signed_int **)
+
+let coq_N_to_signed_int n =
+  Pos (N.to_uint n)
+
+(** val coq_Z_to_signed_int : coq_Z -> signed_int **)
+
+let coq_Z_to_signed_int = function
+| Z0 -> Pos (Nat.to_uint 0)
+| Zpos m -> Pos (Pos.to_uint m)
+| Zneg m -> Neg (Pos.to_uint m)
+
+(** val string_of_signed_int : signed_int -> char list **)
+
+let string_of_signed_int = function
+| Pos d0 -> NilEmpty.string_of_uint d0
+| Neg d0 -> '-'::(NilEmpty.string_of_uint d0)
+
+(** val string_of_nat : int -> char list **)
+
+let string_of_nat n =
+  string_of_signed_int (nat_to_signed_int n)
+
+(** val string_of_N : coq_N -> char list **)
+
+let string_of_N n =
+  string_of_signed_int (coq_N_to_signed_int n)
+
+(** val string_of_Z : coq_Z -> char list **)
+
+let string_of_Z n =
+  string_of_signed_int (coq_Z_to_signed_int n)
 
 type eunop =
 | Eneg
@@ -298,21 +351,21 @@ let emul _ e1 e2 =
 
 (** val eadds : Equality.coq_type -> eexp list -> eexp **)
 
-let eadds var0 = function
-| [] -> econst var0 Z.zero
+let eadds var = function
+| [] -> econst var Z.zero
 | e :: es0 ->
   (match es0 with
    | [] -> e
-   | _ :: _ -> foldl (fun res e0 -> eadd var0 res e0) e es0)
+   | _ :: _ -> foldl (fun res e0 -> eadd var res e0) e es0)
 
 (** val emuls : Equality.coq_type -> eexp list -> eexp **)
 
-let emuls var0 = function
-| [] -> econst var0 Z.one
+let emuls var = function
+| [] -> econst var Z.one
 | e :: es0 ->
   (match es0 with
    | [] -> e
-   | _ :: _ -> foldl (fun res e0 -> emul var0 res e0) e es0)
+   | _ :: _ -> foldl (fun res e0 -> emul var res e0) e es0)
 
 (** val z2expn : coq_Z -> coq_Z **)
 
@@ -321,20 +374,20 @@ let z2expn n =
 
 (** val e2expn : Equality.coq_type -> coq_Z -> eexp **)
 
-let e2expn var0 n =
-  econst var0 (z2expn n)
+let e2expn var n =
+  econst var (z2expn n)
 
 (** val emul2p : Equality.coq_type -> eexp -> coq_Z -> eexp **)
 
-let emul2p var0 x n =
-  emul var0 x (e2expn var0 n)
+let emul2p var x n =
+  emul var x (e2expn var n)
 
 (** val eexp_eqn : Equality.coq_type -> eexp -> eexp -> bool **)
 
-let rec eexp_eqn var0 e1 e2 =
+let rec eexp_eqn var e1 e2 =
   match e1 with
   | Evar v1 -> (match e2 with
-                | Evar v2 -> eq_op var0 v1 v2
+                | Evar v2 -> eq_op var v1 v2
                 | _ -> false)
   | Econst n1 ->
     (match e2 with
@@ -344,49 +397,49 @@ let rec eexp_eqn var0 e1 e2 =
     (match e2 with
      | Eunop (op2, e4) ->
        (&&) (eq_op eunop_eqType (Obj.magic op1) (Obj.magic op2))
-         (eexp_eqn var0 e3 e4)
+         (eexp_eqn var e3 e4)
      | _ -> false)
   | Ebinop (op1, e3, e4) ->
     (match e2 with
      | Ebinop (op2, e5, e6) ->
        (&&)
          ((&&) (eq_op ebinop_eqType (Obj.magic op1) (Obj.magic op2))
-           (eexp_eqn var0 e3 e5)) (eexp_eqn var0 e4 e6)
+           (eexp_eqn var e3 e5)) (eexp_eqn var e4 e6)
      | _ -> false)
   | Epow (e3, n1) ->
     (match e2 with
      | Epow (e4, n2) ->
-       (&&) (eexp_eqn var0 e3 e4)
+       (&&) (eexp_eqn var e3 e4)
          (eq_op bin_nat_eqType (Obj.magic n1) (Obj.magic n2))
      | _ -> false)
 
 (** val eexp_eqP : Equality.coq_type -> eexp -> eexp -> reflect **)
 
-let eexp_eqP var0 e1 e2 =
+let eexp_eqP var e1 e2 =
   let _evar_0_ = fun _ -> ReflectT in
   let _evar_0_0 = fun _ -> ReflectF in
-  if eexp_eqn var0 e1 e2 then _evar_0_ __ else _evar_0_0 __
+  if eexp_eqn var e1 e2 then _evar_0_ __ else _evar_0_0 __
 
 (** val eexp_eqMixin : Equality.coq_type -> eexp Equality.mixin_of **)
 
-let eexp_eqMixin var0 =
-  { Equality.op = (eexp_eqn var0); Equality.mixin_of__1 = (eexp_eqP var0) }
+let eexp_eqMixin var =
+  { Equality.op = (eexp_eqn var); Equality.mixin_of__1 = (eexp_eqP var) }
 
 (** val eexp_eqType : Equality.coq_type -> Equality.coq_type **)
 
-let eexp_eqType var0 =
-  Obj.magic eexp_eqMixin var0
+let eexp_eqType var =
+  Obj.magic eexp_eqMixin var
 
 (** val limbsi : Equality.coq_type -> int -> coq_Z -> eexp list -> eexp **)
 
-let rec limbsi var0 i r = function
-| [] -> econst var0 Z.zero
+let rec limbsi var i r = function
+| [] -> econst var Z.zero
 | e :: es0 ->
   (match es0 with
    | [] -> e
    | _ :: _ ->
-     eadd var0 (emul var0 e (e2expn var0 (Z.mul (Z.of_nat i) r)))
-       (limbsi var0 (addn i (Pervasives.succ 0)) r es0))
+     eadd var (emul var e (e2expn var (Z.mul (Z.of_nat i) r)))
+       (limbsi var (addn i (Pervasives.succ 0)) r es0))
 
 module Coq__2 = struct
  type rexp =
@@ -416,28 +469,28 @@ let rmul _ w e1 e2 =
 
 (** val radds : Equality.coq_type -> int -> rexp list -> rexp **)
 
-let radds var0 w = function
-| [] -> rbits var0 (from_nat w 0)
+let radds var w = function
+| [] -> rbits var (from_nat w 0)
 | e :: es0 ->
   (match es0 with
    | [] -> e
-   | _ :: _ -> foldl (fun res e0 -> radd var0 w res e0) e es0)
+   | _ :: _ -> foldl (fun res e0 -> radd var w res e0) e es0)
 
 (** val rmuls : Equality.coq_type -> int -> rexp list -> rexp **)
 
-let rmuls var0 w = function
-| [] -> rbits var0 (from_nat w (Pervasives.succ 0))
+let rmuls var w = function
+| [] -> rbits var (from_nat w (Pervasives.succ 0))
 | e :: es0 ->
   (match es0 with
    | [] -> e
-   | _ :: _ -> foldl (fun res e0 -> rmul var0 w res e0) e es0)
+   | _ :: _ -> foldl (fun res e0 -> rmul var w res e0) e es0)
 
 (** val rexp_eqn : Equality.coq_type -> rexp -> rexp -> bool **)
 
-let rec rexp_eqn var0 e1 e2 =
+let rec rexp_eqn var e1 e2 =
   match e1 with
   | Rvar v1 -> (match e2 with
-                | Rvar v2 -> eq_op var0 v1 v2
+                | Rvar v2 -> eq_op var v1 v2
                 | _ -> false)
   | Rconst (w1, n1) ->
     (match e2 with
@@ -451,7 +504,7 @@ let rec rexp_eqn var0 e1 e2 =
        (&&)
          ((&&) (eq_op nat_eqType (Obj.magic w1) (Obj.magic w2))
            (eq_op runop_eqType (Obj.magic op1) (Obj.magic op2)))
-         (rexp_eqn var0 e3 e4)
+         (rexp_eqn var e3 e4)
      | _ -> false)
   | Rbinop (w1, op1, e3, e4) ->
     (match e2 with
@@ -460,14 +513,14 @@ let rec rexp_eqn var0 e1 e2 =
          ((&&)
            ((&&) (eq_op nat_eqType (Obj.magic w1) (Obj.magic w2))
              (eq_op rbinop_eqType (Obj.magic op1) (Obj.magic op2)))
-           (rexp_eqn var0 e3 e5)) (rexp_eqn var0 e4 e6)
+           (rexp_eqn var e3 e5)) (rexp_eqn var e4 e6)
      | _ -> false)
   | Ruext (w1, e3, n1) ->
     (match e2 with
      | Ruext (w2, e4, n2) ->
        (&&)
          ((&&) (eq_op nat_eqType (Obj.magic w1) (Obj.magic w2))
-           (rexp_eqn var0 e3 e4))
+           (rexp_eqn var e3 e4))
          (eq_op nat_eqType (Obj.magic n1) (Obj.magic n2))
      | _ -> false)
   | Rsext (w1, e3, n1) ->
@@ -475,26 +528,26 @@ let rec rexp_eqn var0 e1 e2 =
      | Rsext (w2, e4, n2) ->
        (&&)
          ((&&) (eq_op nat_eqType (Obj.magic w1) (Obj.magic w2))
-           (rexp_eqn var0 e3 e4))
+           (rexp_eqn var e3 e4))
          (eq_op nat_eqType (Obj.magic n1) (Obj.magic n2))
      | _ -> false)
 
 (** val rexp_eqP : Equality.coq_type -> rexp -> rexp -> reflect **)
 
-let rexp_eqP var0 e1 e2 =
+let rexp_eqP var e1 e2 =
   let _evar_0_ = fun _ -> ReflectT in
   let _evar_0_0 = fun _ -> ReflectF in
-  if rexp_eqn var0 e1 e2 then _evar_0_ __ else _evar_0_0 __
+  if rexp_eqn var e1 e2 then _evar_0_ __ else _evar_0_0 __
 
 (** val rexp_eqMixin : Equality.coq_type -> rexp Equality.mixin_of **)
 
-let rexp_eqMixin var0 =
-  { Equality.op = (rexp_eqn var0); Equality.mixin_of__1 = (rexp_eqP var0) }
+let rexp_eqMixin var =
+  { Equality.op = (rexp_eqn var); Equality.mixin_of__1 = (rexp_eqP var) }
 
 (** val rexp_eqType : Equality.coq_type -> Equality.coq_type **)
 
-let rexp_eqType var0 =
-  Obj.magic rexp_eqMixin var0
+let rexp_eqType var =
+  Obj.magic rexp_eqMixin var
 
 module Coq__3 = struct
  type ebexp =
@@ -512,18 +565,18 @@ let eand _ b1 b2 =
 
 (** val eands : Equality.coq_type -> ebexp list -> ebexp **)
 
-let eands var0 es =
-  foldr (fun res e -> eand var0 res e) Etrue es
+let eands var es =
+  foldr (fun res e -> eand var res e) Etrue es
 
 (** val split_eand : Equality.coq_type -> ebexp -> ebexp list **)
 
-let rec split_eand var0 e = match e with
-| Eand (e1, e2) -> cat (split_eand var0 e1) (split_eand var0 e2)
+let rec split_eand var e = match e with
+| Eand (e1, e2) -> cat (split_eand var e1) (split_eand var e2)
 | _ -> e :: []
 
 (** val ebexp_eqn : Equality.coq_type -> ebexp -> ebexp -> bool **)
 
-let rec ebexp_eqn var0 e1 e2 =
+let rec ebexp_eqn var e1 e2 =
   match e1 with
   | Etrue -> (match e2 with
               | Etrue -> true
@@ -531,39 +584,39 @@ let rec ebexp_eqn var0 e1 e2 =
   | Eeq (e3, e4) ->
     (match e2 with
      | Eeq (e5, e6) ->
-       (&&) (eq_op (eexp_eqType var0) (Obj.magic e3) (Obj.magic e5))
-         (eq_op (eexp_eqType var0) (Obj.magic e4) (Obj.magic e6))
+       (&&) (eq_op (eexp_eqType var) (Obj.magic e3) (Obj.magic e5))
+         (eq_op (eexp_eqType var) (Obj.magic e4) (Obj.magic e6))
      | _ -> false)
   | Eeqmod (e3, e4, ms1) ->
     (match e2 with
      | Eeqmod (e5, e6, ms2) ->
        (&&)
-         ((&&) (eq_op (eexp_eqType var0) (Obj.magic e3) (Obj.magic e5))
-           (eq_op (eexp_eqType var0) (Obj.magic e4) (Obj.magic e6)))
-         (eq_op (seq_eqType (eexp_eqType var0)) (Obj.magic ms1)
+         ((&&) (eq_op (eexp_eqType var) (Obj.magic e3) (Obj.magic e5))
+           (eq_op (eexp_eqType var) (Obj.magic e4) (Obj.magic e6)))
+         (eq_op (seq_eqType (eexp_eqType var)) (Obj.magic ms1)
            (Obj.magic ms2))
      | _ -> false)
   | Eand (e3, e4) ->
     (match e2 with
-     | Eand (e5, e6) -> (&&) (ebexp_eqn var0 e3 e5) (ebexp_eqn var0 e4 e6)
+     | Eand (e5, e6) -> (&&) (ebexp_eqn var e3 e5) (ebexp_eqn var e4 e6)
      | _ -> false)
 
 (** val ebexp_eqP : Equality.coq_type -> ebexp -> ebexp -> reflect **)
 
-let ebexp_eqP var0 e1 e2 =
+let ebexp_eqP var e1 e2 =
   let _evar_0_ = fun _ -> ReflectT in
   let _evar_0_0 = fun _ -> ReflectF in
-  if ebexp_eqn var0 e1 e2 then _evar_0_ __ else _evar_0_0 __
+  if ebexp_eqn var e1 e2 then _evar_0_ __ else _evar_0_0 __
 
 (** val ebexp_eqMixin : Equality.coq_type -> ebexp Equality.mixin_of **)
 
-let ebexp_eqMixin var0 =
-  { Equality.op = (ebexp_eqn var0); Equality.mixin_of__1 = (ebexp_eqP var0) }
+let ebexp_eqMixin var =
+  { Equality.op = (ebexp_eqn var); Equality.mixin_of__1 = (ebexp_eqP var) }
 
 (** val ebexp_eqType : Equality.coq_type -> Equality.coq_type **)
 
-let ebexp_eqType var0 =
-  Obj.magic ebexp_eqMixin var0
+let ebexp_eqType var =
+  Obj.magic ebexp_eqMixin var
 
 module Coq__4 = struct
  type rbexp =
@@ -670,17 +723,23 @@ let ror _ e1 e2 =
 
 (** val rands : Equality.coq_type -> rbexp list -> rbexp **)
 
-let rands var0 es =
-  foldl (fun res e -> rand var0 res e) Rtrue es
+let rands var es =
+  foldl (fun res e -> rand var res e) Rtrue es
 
 (** val rors : Equality.coq_type -> rbexp list -> rbexp **)
 
-let rors var0 es =
-  foldl (fun res e -> ror var0 res e) (Rneg Rtrue) es
+let rors var es =
+  foldl (fun res e -> ror var res e) (Rneg Rtrue) es
+
+(** val split_rand : Equality.coq_type -> rbexp -> rbexp list **)
+
+let rec split_rand var e = match e with
+| Rand (e1, e2) -> cat (split_rand var e1) (split_rand var e2)
+| _ -> e :: []
 
 (** val rbexp_eqn : Equality.coq_type -> rbexp -> rbexp -> bool **)
 
-let rec rbexp_eqn var0 e1 e2 =
+let rec rbexp_eqn var e1 e2 =
   match e1 with
   | Rtrue -> (match e2 with
               | Rtrue -> true
@@ -690,8 +749,8 @@ let rec rbexp_eqn var0 e1 e2 =
      | Req (n2, e5, e6) ->
        (&&)
          ((&&) (eq_op nat_eqType (Obj.magic n1) (Obj.magic n2))
-           (eq_op (rexp_eqType var0) (Obj.magic e3) (Obj.magic e5)))
-         (eq_op (rexp_eqType var0) (Obj.magic e4) (Obj.magic e6))
+           (eq_op (rexp_eqType var) (Obj.magic e3) (Obj.magic e5)))
+         (eq_op (rexp_eqType var) (Obj.magic e4) (Obj.magic e6))
      | _ -> false)
   | Rcmp (n1, op1, e3, e4) ->
     (match e2 with
@@ -700,35 +759,35 @@ let rec rbexp_eqn var0 e1 e2 =
          ((&&)
            ((&&) (eq_op nat_eqType (Obj.magic n1) (Obj.magic n2))
              (eq_op rcmpop_eqType (Obj.magic op1) (Obj.magic op2)))
-           (eq_op (rexp_eqType var0) (Obj.magic e3) (Obj.magic e5)))
-         (eq_op (rexp_eqType var0) (Obj.magic e4) (Obj.magic e6))
+           (eq_op (rexp_eqType var) (Obj.magic e3) (Obj.magic e5)))
+         (eq_op (rexp_eqType var) (Obj.magic e4) (Obj.magic e6))
      | _ -> false)
   | Rneg e3 -> (match e2 with
-                | Rneg e4 -> rbexp_eqn var0 e3 e4
+                | Rneg e4 -> rbexp_eqn var e3 e4
                 | _ -> false)
   | Rand (e3, e4) ->
     (match e2 with
-     | Rand (e5, e6) -> (&&) (rbexp_eqn var0 e3 e5) (rbexp_eqn var0 e4 e6)
+     | Rand (e5, e6) -> (&&) (rbexp_eqn var e3 e5) (rbexp_eqn var e4 e6)
      | _ -> false)
   | Ror (e3, e4) ->
     (match e2 with
-     | Ror (e5, e6) -> (&&) (rbexp_eqn var0 e3 e5) (rbexp_eqn var0 e4 e6)
+     | Ror (e5, e6) -> (&&) (rbexp_eqn var e3 e5) (rbexp_eqn var e4 e6)
      | _ -> false)
 
 (** val rbexp_eqP : Equality.coq_type -> rbexp -> rbexp -> reflect **)
 
-let rbexp_eqP var0 e1 e2 =
+let rbexp_eqP var e1 e2 =
   let _evar_0_ = fun _ -> ReflectT in
   let _evar_0_0 = fun _ -> ReflectF in
-  if rbexp_eqn var0 e1 e2 then _evar_0_ __ else _evar_0_0 __
+  if rbexp_eqn var e1 e2 then _evar_0_ __ else _evar_0_0 __
 
 (** val string_of_eexp :
     Equality.coq_type -> (Equality.sort -> char list) -> eexp -> char list **)
 
-let string_of_eexp _ string_of_var0 =
+let string_of_eexp _ string_of_var =
   let rec string_of_eexp0 = function
-  | Evar v -> string_of_var0 v
-  | Econst n -> of_Z n
+  | Evar v -> string_of_var v
+  | Econst n -> string_of_Z n
   | Eunop (op0, e0) ->
     append (string_of_eunop op0) (append (' '::[]) (string_of_eexp' e0))
   | Ebinop (op0, e1, e2) ->
@@ -737,10 +796,11 @@ let string_of_eexp _ string_of_var0 =
         (append (string_of_ebinop op0)
           (append (' '::[]) (string_of_eexp' e2))))
   | Epow (e0, n) ->
-    append (string_of_eexp' e0) (append (' '::('^'::(' '::[]))) (of_N n))
+    append (string_of_eexp' e0)
+      (append (' '::('^'::(' '::[]))) (string_of_N n))
   and string_of_eexp' = function
-  | Evar v -> string_of_var0 v
-  | Econst n -> of_Z n
+  | Evar v -> string_of_var v
+  | Econst n -> string_of_Z n
   | Eunop (op0, e0) ->
     append ('('::[])
       (append (string_of_eunop op0)
@@ -754,46 +814,46 @@ let string_of_eexp _ string_of_var0 =
   | Epow (e0, n) ->
     append ('('::[])
       (append (string_of_eexp' e0)
-        (append (' '::('^'::(' '::[]))) (append (of_N n) (')'::[]))))
+        (append (' '::('^'::(' '::[]))) (append (string_of_N n) (')'::[]))))
   in string_of_eexp0
 
 (** val string_of_eexps :
     Equality.coq_type -> (Equality.sort -> char list) -> char list -> eexp
     list -> char list **)
 
-let rec string_of_eexps var0 string_of_var0 glue = function
+let rec string_of_eexps var string_of_var glue = function
 | [] -> []
 | hd :: tl ->
-  append (string_of_eexp var0 string_of_var0 hd)
-    (append glue (string_of_eexps var0 string_of_var0 glue tl))
+  append (string_of_eexp var string_of_var hd)
+    (append glue (string_of_eexps var string_of_var glue tl))
 
 (** val string_of_ebexp :
     Equality.coq_type -> (Equality.sort -> char list) -> ebexp -> char list **)
 
-let rec string_of_ebexp var0 string_of_var0 = function
+let rec string_of_ebexp var string_of_var = function
 | Etrue -> 't'::('r'::('u'::('e'::[])))
 | Eeq (e1, e2) ->
-  append (string_of_eexp var0 string_of_var0 e1)
-    (append (' '::('='::(' '::[]))) (string_of_eexp var0 string_of_var0 e2))
+  append (string_of_eexp var string_of_var e1)
+    (append (' '::('='::(' '::[]))) (string_of_eexp var string_of_var e2))
 | Eeqmod (e1, e2, ms) ->
-  append (string_of_eexp var0 string_of_var0 e1)
+  append (string_of_eexp var string_of_var e1)
     (append (' '::('='::(' '::[])))
-      (append (string_of_eexp var0 string_of_var0 e2)
+      (append (string_of_eexp var string_of_var e2)
         (append ('('::('m'::('o'::('d'::(' '::('['::[]))))))
-          (append (string_of_eexps var0 string_of_var0 (','::(' '::[])) ms)
+          (append (string_of_eexps var string_of_var (','::(' '::[])) ms)
             (']'::(')'::[]))))))
 | Eand (e1, e2) ->
-  append (string_of_ebexp var0 string_of_var0 e1)
-    (append (' '::('/'::('\\'::('\\'::(' '::[])))))
-      (string_of_ebexp var0 string_of_var0 e2))
+  append (string_of_ebexp var string_of_var e1)
+    (append (' '::('/'::('\\'::(' '::[]))))
+      (string_of_ebexp var string_of_var e2))
 
 (** val string_of_rexp :
     Equality.coq_type -> (Equality.sort -> char list) -> rexp -> char list **)
 
-let string_of_rexp _ string_of_var0 =
+let string_of_rexp _ string_of_var =
   let rec string_of_rexp0 = function
-  | Rvar v -> string_of_var0 v
-  | Rconst (_, bs) -> to_hex bs
+  | Rvar v -> string_of_var v
+  | Rconst (w, bs) -> append (to_hex bs) (append ('@'::[]) (string_of_nat w))
   | Runop (_, op0, e0) ->
     append (string_of_runop op0) (append (' '::[]) (string_of_rexp' e0))
   | Rbinop (_, op0, e1, e2) ->
@@ -803,12 +863,12 @@ let string_of_rexp _ string_of_var0 =
           (append (' '::[]) (string_of_rexp' e2))))
   | Ruext (_, e0, i) ->
     append ('u'::('e'::('x'::('t'::(' '::[])))))
-      (append (string_of_rexp' e0) (append (' '::[]) (of_nat i)))
+      (append (string_of_rexp' e0) (append (' '::[]) (string_of_nat i)))
   | Rsext (_, e0, i) ->
     append ('s'::('e'::('x'::('t'::(' '::[])))))
-      (append (string_of_rexp' e0) (append (' '::[]) (of_nat i)))
+      (append (string_of_rexp' e0) (append (' '::[]) (string_of_nat i)))
   and string_of_rexp' = function
-  | Rvar v -> string_of_var0 v
+  | Rvar v -> string_of_var v
   | Rconst (_, bs) -> to_hex bs
   | Runop (_, op0, e0) ->
     append ('('::[])
@@ -823,11 +883,11 @@ let string_of_rexp _ string_of_var0 =
   | Ruext (_, e0, i) ->
     append ('('::('u'::('e'::('x'::('t'::(' '::[]))))))
       (append (string_of_rexp' e0)
-        (append (' '::[]) (append (of_nat i) (')'::[]))))
+        (append (' '::[]) (append (string_of_nat i) (')'::[]))))
   | Rsext (_, e0, i) ->
     append ('('::('s'::('e'::('x'::('t'::(' '::[]))))))
       (append (string_of_rexp' e0)
-        (append (' '::[]) (append (of_nat i) (')'::[]))))
+        (append (' '::[]) (append (string_of_nat i) (')'::[]))))
   in string_of_rexp0
 
 (** val is_rbexp_or : Equality.coq_type -> rbexp -> bool **)
@@ -839,39 +899,55 @@ let is_rbexp_or _ = function
 (** val string_of_rbexp :
     Equality.coq_type -> (Equality.sort -> char list) -> rbexp -> char list **)
 
-let rec string_of_rbexp var0 string_of_var0 = function
+let rec string_of_rbexp var string_of_var = function
 | Rtrue -> 't'::('r'::('u'::('e'::[])))
 | Req (_, e1, e2) ->
-  append (string_of_rexp var0 string_of_var0 e1)
-    (append (' '::('='::(' '::[]))) (string_of_rexp var0 string_of_var0 e2))
+  append (string_of_rexp var string_of_var e1)
+    (append (' '::('='::(' '::[]))) (string_of_rexp var string_of_var e2))
 | Rcmp (_, op0, e1, e2) ->
-  append (string_of_rexp var0 string_of_var0 e1)
+  append (string_of_rexp var string_of_var e1)
     (append (' '::[])
       (append (string_of_rcmpop op0)
-        (append (' '::[]) (string_of_rexp var0 string_of_var0 e2))))
-| Rneg e0 -> append ('~'::(' '::[])) (string_of_rbexp var0 string_of_var0 e0)
+        (append (' '::[]) (string_of_rexp var string_of_var e2))))
+| Rneg e0 -> append ('~'::(' '::[])) (string_of_rbexp var string_of_var e0)
 | Rand (e1, e2) ->
   append
-    (if is_rbexp_or var0 e1
+    (if is_rbexp_or var e1
      then append ('('::[])
-            (append (string_of_rbexp var0 string_of_var0 e1) (')'::[]))
-     else string_of_rbexp var0 string_of_var0 e1)
-    (append (' '::('/'::('\\'::('\\'::(' '::[])))))
-      (if is_rbexp_or var0 e2
+            (append (string_of_rbexp var string_of_var e1) (')'::[]))
+     else string_of_rbexp var string_of_var e1)
+    (append (' '::('/'::('\\'::(' '::[]))))
+      (if is_rbexp_or var e2
        then append ('('::[])
-              (append (string_of_rbexp var0 string_of_var0 e2) (')'::[]))
-       else string_of_rbexp var0 string_of_var0 e2))
+              (append (string_of_rbexp var string_of_var e2) (')'::[]))
+       else string_of_rbexp var string_of_var e2))
 | Ror (e1, e2) ->
-  append (string_of_rbexp var0 string_of_var0 e1)
-    (append (' '::('\\'::('\\'::('/'::(' '::[])))))
-      (string_of_rbexp var0 string_of_var0 e2))
+  append (string_of_rbexp var string_of_var e1)
+    (append (' '::('\\'::('/'::(' '::[]))))
+      (string_of_rbexp var string_of_var e2))
+
+module type Printer =
+ sig
+  type t
+
+  val to_string : t -> char list
+ end
 
 module MakeDSL =
  functor (V:SsrOrder.SsrOrder) ->
+ functor (VP:Printer with type t = V.t) ->
  functor (VS:SsrFSet with module SE = V) ->
  functor (VM:SsrFMap with module SE = V) ->
- functor (TE:TypEnv.TypEnv with module SE = V) ->
+ functor (TE:TypEnv.TypEnv with module SE = V with type 'x t = 'x VM.t) ->
  functor (S:sig
+  type t
+
+  val acc : V.t -> t -> bits
+
+  val upd : V.t -> bits -> t -> t
+
+  val upd2 : V.t -> bits -> V.t -> bits -> t -> t
+
   module Lemmas :
    sig
     module F :
@@ -1241,14 +1317,6 @@ module MakeDSL =
 
     val min_key : 'a1 TE.t -> TE.key option
    end
-
-  type t
-
-  val acc : V.t -> t -> bits
-
-  val upd : V.t -> bits -> t -> t
-
-  val upd2 : V.t -> bits -> V.t -> bits -> t -> t
  end) ->
  struct
   module VSLemmas = SsrFSetLemmas(VS)
@@ -1361,6 +1429,11 @@ module MakeDSL =
 
   let eexp_eqType =
     Obj.magic eexp_eqMixin
+
+  (** val eexp_eqn : Coq__1.eexp -> Coq__1.eexp -> bool **)
+
+  let eexp_eqn =
+    eexp_eqn V.coq_T
 
   (** val limbsi : int -> coq_Z -> eexp list -> eexp **)
 
@@ -1515,6 +1588,11 @@ module MakeDSL =
   let rexp_eqType =
     Obj.magic rexp_eqMixin
 
+  (** val rexp_eqn : Coq__2.rexp -> Coq__2.rexp -> bool **)
+
+  let rexp_eqn =
+    rexp_eqn V.coq_T
+
   type ebexp = Coq__3.ebexp
 
   (** val etrue : ebexp **)
@@ -1570,6 +1648,11 @@ module MakeDSL =
 
   let ebexp_eqType =
     Obj.magic ebexp_eqMixin
+
+  (** val ebexp_eqn : Coq__3.ebexp -> Coq__3.ebexp -> bool **)
+
+  let ebexp_eqn =
+    ebexp_eqn V.coq_T
 
   type rbexp = Coq__4.rbexp
 
@@ -1687,6 +1770,11 @@ module MakeDSL =
 
   let rbexp_eqType =
     Obj.magic rbexp_eqMixin
+
+  (** val rbexp_eqn : Coq__4.rbexp -> Coq__4.rbexp -> bool **)
+
+  let rbexp_eqn =
+    rbexp_eqn V.coq_T
 
   type bexp = ebexp * rbexp
 
@@ -1914,61 +2002,302 @@ module MakeDSL =
 
   type program = instr list
 
-  (** val string_of_eunop : eunop -> char list **)
+  (** val atom_eqn : atom -> atom -> bool **)
 
-  let string_of_eunop =
-    string_of_eunop
+  let atom_eqn a1 a2 =
+    match a1 with
+    | Avar v1 ->
+      (match a2 with
+       | Avar v2 -> eq_op V.coq_T v1 v2
+       | Aconst (_, _) -> false)
+    | Aconst (ty1, n1) ->
+      (match a2 with
+       | Avar _ -> false
+       | Aconst (ty2, n2) ->
+         (&&) (eq_op typ_eqType (Obj.magic ty1) (Obj.magic ty2))
+           (eq_op bitseq_eqType (Obj.magic n1) (Obj.magic n2)))
 
-  (** val string_of_ebinop : ebinop -> char list **)
+  (** val atom_eqP : atom -> atom -> reflect **)
 
-  let string_of_ebinop =
-    string_of_ebinop
+  let atom_eqP a1 a2 =
+    let _evar_0_ = fun _ -> ReflectT in
+    let _evar_0_0 = fun _ -> ReflectF in
+    if atom_eqn a1 a2 then _evar_0_ __ else _evar_0_0 __
 
-  (** val string_of_runop : runop -> char list **)
+  (** val atom_eqMixin : atom Equality.mixin_of **)
 
-  let string_of_runop =
-    string_of_runop
+  let atom_eqMixin =
+    { Equality.op = atom_eqn; Equality.mixin_of__1 = atom_eqP }
 
-  (** val string_of_rbinop : rbinop -> char list **)
+  (** val atom_eqType : Equality.coq_type **)
 
-  let string_of_rbinop =
-    string_of_rbinop
+  let atom_eqType =
+    Obj.magic atom_eqMixin
 
-  (** val string_of_rcmpop : rcmpop -> char list **)
+  (** val instr_eqn : instr -> instr -> bool **)
 
-  let string_of_rcmpop =
-    string_of_rcmpop
+  let instr_eqn i1 i2 =
+    match i1 with
+    | Imov (a1, a2) ->
+      (match i2 with
+       | Imov (b1, b2) ->
+         (&&) (eq_op V.coq_T a1 b1)
+           (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2))
+       | _ -> false)
+    | Ishl (a1, a2, a3) ->
+      (match i2 with
+       | Ishl (b1, b2, b3) ->
+         (&&)
+           ((&&) (eq_op V.coq_T a1 b1)
+             (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
+           (eq_op nat_eqType (Obj.magic a3) (Obj.magic b3))
+       | _ -> false)
+    | Icshl (a1, a2, a3, a4, a5) ->
+      (match i2 with
+       | Icshl (b1, b2, b3, b4, b5) ->
+         (&&)
+           ((&&)
+             ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
+               (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+             (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4)))
+           (eq_op nat_eqType (Obj.magic a5) (Obj.magic b5))
+       | _ -> false)
+    | Inondet (a1, a2) ->
+      (match i2 with
+       | Inondet (b1, b2) ->
+         (&&) (eq_op V.coq_T a1 b1)
+           (eq_op typ_eqType (Obj.magic a2) (Obj.magic b2))
+       | _ -> false)
+    | Icmov (a1, a2, a3, a4) ->
+      (match i2 with
+       | Icmov (b1, b2, b3, b4) ->
+         (&&)
+           ((&&)
+             ((&&) (eq_op V.coq_T a1 b1)
+               (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
+             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+       | _ -> false)
+    | Inop -> (match i2 with
+               | Inop -> true
+               | _ -> false)
+    | Inot (a1, a2, a3) ->
+      (match i2 with
+       | Inot (b1, b2, b3) ->
+         (&&)
+           ((&&) (eq_op V.coq_T a1 b1)
+             (eq_op typ_eqType (Obj.magic a2) (Obj.magic b2)))
+           (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3))
+       | _ -> false)
+    | Iadd (a1, a2, a3) ->
+      (match i2 with
+       | Iadd (b1, b2, b3) ->
+         (&&)
+           ((&&) (eq_op V.coq_T a1 b1)
+             (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
+           (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3))
+       | _ -> false)
+    | Iadds (a1, a2, a3, a4) ->
+      (match i2 with
+       | Iadds (b1, b2, b3, b4) ->
+         (&&)
+           ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
+             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+       | _ -> false)
+    | Iadc (a1, a2, a3, a4) ->
+      (match i2 with
+       | Iadc (b1, b2, b3, b4) ->
+         (&&)
+           ((&&)
+             ((&&) (eq_op V.coq_T a1 b1)
+               (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
+             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+       | _ -> false)
+    | Iadcs (a1, a2, a3, a4, a5) ->
+      (match i2 with
+       | Iadcs (b1, b2, b3, b4, b5) ->
+         (&&)
+           ((&&)
+             ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
+               (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+             (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4)))
+           (eq_op atom_eqType (Obj.magic a5) (Obj.magic b5))
+       | _ -> false)
+    | Isub (a1, a2, a3) ->
+      (match i2 with
+       | Isub (b1, b2, b3) ->
+         (&&)
+           ((&&) (eq_op V.coq_T a1 b1)
+             (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
+           (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3))
+       | _ -> false)
+    | Isubc (a1, a2, a3, a4) ->
+      (match i2 with
+       | Isubc (b1, b2, b3, b4) ->
+         (&&)
+           ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
+             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+       | _ -> false)
+    | Isubb (a1, a2, a3, a4) ->
+      (match i2 with
+       | Isubb (b1, b2, b3, b4) ->
+         (&&)
+           ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
+             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+       | _ -> false)
+    | Isbc (a1, a2, a3, a4) ->
+      (match i2 with
+       | Isbc (b1, b2, b3, b4) ->
+         (&&)
+           ((&&)
+             ((&&) (eq_op V.coq_T a1 b1)
+               (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
+             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+       | _ -> false)
+    | Isbcs (a1, a2, a3, a4, a5) ->
+      (match i2 with
+       | Isbcs (b1, b2, b3, b4, b5) ->
+         (&&)
+           ((&&)
+             ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
+               (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+             (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4)))
+           (eq_op atom_eqType (Obj.magic a5) (Obj.magic b5))
+       | _ -> false)
+    | Isbb (a1, a2, a3, a4) ->
+      (match i2 with
+       | Isbb (b1, b2, b3, b4) ->
+         (&&)
+           ((&&)
+             ((&&) (eq_op V.coq_T a1 b1)
+               (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
+             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+       | _ -> false)
+    | Isbbs (a1, a2, a3, a4, a5) ->
+      (match i2 with
+       | Isbbs (b1, b2, b3, b4, b5) ->
+         (&&)
+           ((&&)
+             ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
+               (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+             (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4)))
+           (eq_op atom_eqType (Obj.magic a5) (Obj.magic b5))
+       | _ -> false)
+    | Imul (a1, a2, a3) ->
+      (match i2 with
+       | Imul (b1, b2, b3) ->
+         (&&)
+           ((&&) (eq_op V.coq_T a1 b1)
+             (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
+           (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3))
+       | _ -> false)
+    | Imull (a1, a2, a3, a4) ->
+      (match i2 with
+       | Imull (b1, b2, b3, b4) ->
+         (&&)
+           ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
+             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+       | _ -> false)
+    | Imulj (a1, a2, a3) ->
+      (match i2 with
+       | Imulj (b1, b2, b3) ->
+         (&&)
+           ((&&) (eq_op V.coq_T a1 b1)
+             (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
+           (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3))
+       | _ -> false)
+    | Isplit (a1, a2, a3, a4) ->
+      (match i2 with
+       | Isplit (b1, b2, b3, b4) ->
+         (&&)
+           ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
+             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+           (eq_op nat_eqType (Obj.magic a4) (Obj.magic b4))
+       | _ -> false)
+    | Iand (a1, a2, a3, a4) ->
+      (match i2 with
+       | Iand (b1, b2, b3, b4) ->
+         (&&)
+           ((&&)
+             ((&&) (eq_op V.coq_T a1 b1)
+               (eq_op typ_eqType (Obj.magic a2) (Obj.magic b2)))
+             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+       | _ -> false)
+    | Ior (a1, a2, a3, a4) ->
+      (match i2 with
+       | Ior (b1, b2, b3, b4) ->
+         (&&)
+           ((&&)
+             ((&&) (eq_op V.coq_T a1 b1)
+               (eq_op typ_eqType (Obj.magic a2) (Obj.magic b2)))
+             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+       | _ -> false)
+    | Ixor (a1, a2, a3, a4) ->
+      (match i2 with
+       | Ixor (b1, b2, b3, b4) ->
+         (&&)
+           ((&&)
+             ((&&) (eq_op V.coq_T a1 b1)
+               (eq_op typ_eqType (Obj.magic a2) (Obj.magic b2)))
+             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+       | _ -> false)
+    | Icast (a1, a2, a3) ->
+      (match i2 with
+       | Icast (b1, b2, b3) ->
+         (&&)
+           ((&&) (eq_op V.coq_T a1 b1)
+             (eq_op typ_eqType (Obj.magic a2) (Obj.magic b2)))
+           (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3))
+       | _ -> false)
+    | Ivpc (a1, a2, a3) ->
+      (match i2 with
+       | Ivpc (b1, b2, b3) ->
+         (&&)
+           ((&&) (eq_op V.coq_T a1 b1)
+             (eq_op typ_eqType (Obj.magic a2) (Obj.magic b2)))
+           (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3))
+       | _ -> false)
+    | Ijoin (a1, a2, a3) ->
+      (match i2 with
+       | Ijoin (b1, b2, b3) ->
+         (&&)
+           ((&&) (eq_op V.coq_T a1 b1)
+             (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
+           (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3))
+       | _ -> false)
+    | Iassume a1 ->
+      (match i2 with
+       | Iassume b1 ->
+         eq_op (prod_eqType ebexp_eqType rbexp_eqType) (Obj.magic a1)
+           (Obj.magic b1)
+       | _ -> false)
 
-  (** val string_of_eexp :
-      (Equality.sort -> char list) -> Coq__1.eexp -> char list **)
+  (** val instr_eqP : instr -> instr -> reflect **)
 
-  let string_of_eexp =
-    string_of_eexp V.coq_T
+  let instr_eqP i1 i2 =
+    let _evar_0_ = fun _ -> ReflectT in
+    let _evar_0_0 = fun _ -> ReflectF in
+    if instr_eqn i1 i2 then _evar_0_ __ else _evar_0_0 __
 
-  (** val string_of_eexps :
-      (Equality.sort -> char list) -> char list -> Coq__1.eexp list ->
-      char list **)
+  (** val instr_eqMixin : instr Equality.mixin_of **)
 
-  let string_of_eexps =
-    string_of_eexps V.coq_T
+  let instr_eqMixin =
+    { Equality.op = instr_eqn; Equality.mixin_of__1 = instr_eqP }
 
-  (** val string_of_ebexp :
-      (Equality.sort -> char list) -> Coq__3.ebexp -> char list **)
+  (** val instr_eqType : Equality.coq_type **)
 
-  let string_of_ebexp =
-    string_of_ebexp V.coq_T
-
-  (** val string_of_rexp :
-      (Equality.sort -> char list) -> Coq__2.rexp -> char list **)
-
-  let string_of_rexp =
-    string_of_rexp V.coq_T
-
-  (** val string_of_rbexp :
-      (Equality.sort -> char list) -> Coq__4.rbexp -> char list **)
-
-  let string_of_rbexp =
-    string_of_rbexp V.coq_T
+  let instr_eqType =
+    Obj.magic instr_eqMixin
 
   (** val vars_atom : atom -> VS.t **)
 
@@ -2219,6 +2548,332 @@ module MakeDSL =
   let rspec_of_spec s =
     { rsinputs = (sinputs s); rspre = (rng_bexp (spre s)); rsprog =
       (rng_program (sprog s)); rspost = (rng_bexp (spost s)) }
+
+  (** val string_of_eunop : eunop -> char list **)
+
+  let string_of_eunop =
+    string_of_eunop
+
+  (** val string_of_ebinop : ebinop -> char list **)
+
+  let string_of_ebinop =
+    string_of_ebinop
+
+  (** val string_of_runop : runop -> char list **)
+
+  let string_of_runop =
+    string_of_runop
+
+  (** val string_of_rbinop : rbinop -> char list **)
+
+  let string_of_rbinop =
+    string_of_rbinop
+
+  (** val string_of_rcmpop : rcmpop -> char list **)
+
+  let string_of_rcmpop =
+    string_of_rcmpop
+
+  (** val string_of_eexp : Coq__1.eexp -> char list **)
+
+  let string_of_eexp =
+    string_of_eexp V.coq_T VP.to_string
+
+  (** val string_of_eexps : char list -> Coq__1.eexp list -> char list **)
+
+  let string_of_eexps =
+    string_of_eexps V.coq_T VP.to_string
+
+  (** val string_of_ebexp : Coq__3.ebexp -> char list **)
+
+  let string_of_ebexp =
+    string_of_ebexp V.coq_T VP.to_string
+
+  (** val string_of_rexp : Coq__2.rexp -> char list **)
+
+  let string_of_rexp =
+    string_of_rexp V.coq_T VP.to_string
+
+  (** val string_of_rbexp : Coq__4.rbexp -> char list **)
+
+  let string_of_rbexp =
+    string_of_rbexp V.coq_T VP.to_string
+
+  (** val string_of_bexp : bexp -> char list **)
+
+  let string_of_bexp e =
+    append (string_of_ebexp (eqn_bexp e))
+      (append (' '::('&'::('&'::(' '::[])))) (string_of_rbexp (rng_bexp e)))
+
+  (** val string_of_typ : typ -> char list **)
+
+  let string_of_typ = function
+  | Tuint n -> append ('u'::('i'::('n'::('t'::[])))) (string_of_nat n)
+  | Tsint n -> append ('s'::('i'::('n'::('t'::[])))) (string_of_nat n)
+
+  (** val string_of_var_with_typ : (V.t * typ) -> char list **)
+
+  let string_of_var_with_typ vt =
+    append (VP.to_string (fst vt)) (append ('@'::[]) (string_of_typ (snd vt)))
+
+  (** val string_of_vars : VS.t -> char list **)
+
+  let string_of_vars vs =
+    concat (','::(' '::[])) (tmap VP.to_string (VS.elements vs))
+
+  (** val string_of_atom : atom -> char list **)
+
+  let string_of_atom = function
+  | Avar v -> VP.to_string v
+  | Aconst (ty, n) -> append (to_hex n) (append ('@'::[]) (string_of_typ ty))
+
+  (** val string_of_instr : instr -> char list **)
+
+  let string_of_instr = function
+  | Imov (v, a) ->
+    append ('m'::('o'::('v'::(' '::[]))))
+      (append (VP.to_string v) (append (' '::[]) (string_of_atom a)))
+  | Ishl (v, a, _) ->
+    append ('s'::('h'::('l'::(' '::[]))))
+      (append (VP.to_string v) (append (' '::[]) (string_of_atom a)))
+  | Icshl (v1, v2, a1, a2, _) ->
+    append ('c'::('s'::('h'::('l'::(' '::[])))))
+      (append (VP.to_string v1)
+        (append (' '::[])
+          (append (VP.to_string v2)
+            (append (' '::[])
+              (append (string_of_atom a1)
+                (append (' '::[]) (string_of_atom a2)))))))
+  | Inondet (v, t0) ->
+    append ('n'::('o'::('n'::('d'::('e'::('t'::(' '::[])))))))
+      (append (VP.to_string v) (append ('@'::[]) (string_of_typ t0)))
+  | Icmov (v, c, a1, a2) ->
+    append ('c'::('m'::('o'::('v'::(' '::[])))))
+      (append (VP.to_string v)
+        (append (' '::[])
+          (append (string_of_atom c)
+            (append (' '::[])
+              (append (string_of_atom a1)
+                (append (' '::[]) (string_of_atom a2)))))))
+  | Inop -> 'n'::('o'::('p'::[]))
+  | Inot (v, t0, a) ->
+    append ('n'::('o'::('t'::(' '::[]))))
+      (append (string_of_var_with_typ (v, t0))
+        (append (' '::[]) (string_of_atom a)))
+  | Iadd (v, a1, a2) ->
+    append ('a'::('d'::('d'::(' '::[]))))
+      (append (VP.to_string v)
+        (append (' '::[])
+          (append (string_of_atom a1) (append (' '::[]) (string_of_atom a2)))))
+  | Iadds (c, v, a1, a2) ->
+    append ('a'::('d'::('d'::('s'::(' '::[])))))
+      (append (VP.to_string c)
+        (append (' '::[])
+          (append (VP.to_string v)
+            (append (' '::[])
+              (append (string_of_atom a1)
+                (append (' '::[]) (string_of_atom a2)))))))
+  | Iadc (v, a1, a2, y) ->
+    append ('a'::('d'::('c'::(' '::[]))))
+      (append (VP.to_string v)
+        (append (' '::[])
+          (append (string_of_atom a1)
+            (append (' '::[])
+              (append (string_of_atom a2)
+                (append (' '::[]) (string_of_atom y)))))))
+  | Iadcs (c, v, a1, a2, y) ->
+    append ('a'::('d'::('c'::('s'::(' '::[])))))
+      (append (VP.to_string c)
+        (append (' '::[])
+          (append (VP.to_string v)
+            (append (' '::[])
+              (append (string_of_atom a1)
+                (append (' '::[])
+                  (append (string_of_atom a2)
+                    (append (' '::[]) (string_of_atom y)))))))))
+  | Isub (v, a1, a2) ->
+    append ('s'::('u'::('b'::(' '::[]))))
+      (append (VP.to_string v)
+        (append (' '::[])
+          (append (string_of_atom a1) (append (' '::[]) (string_of_atom a2)))))
+  | Isubc (c, v, a1, a2) ->
+    append ('s'::('u'::('b'::('c'::(' '::[])))))
+      (append (VP.to_string c)
+        (append (' '::[])
+          (append (VP.to_string v)
+            (append (' '::[])
+              (append (string_of_atom a1)
+                (append (' '::[]) (string_of_atom a2)))))))
+  | Isubb (c, v, a1, a2) ->
+    append ('s'::('u'::('b'::('b'::(' '::[])))))
+      (append (VP.to_string c)
+        (append (' '::[])
+          (append (VP.to_string v)
+            (append (' '::[])
+              (append (string_of_atom a1)
+                (append (' '::[]) (string_of_atom a2)))))))
+  | Isbc (v, a1, a2, y) ->
+    append ('s'::('b'::('c'::(' '::[]))))
+      (append (VP.to_string v)
+        (append (' '::[])
+          (append (string_of_atom a1)
+            (append (' '::[])
+              (append (string_of_atom a2)
+                (append (' '::[]) (string_of_atom y)))))))
+  | Isbcs (c, v, a1, a2, y) ->
+    append ('s'::('b'::('c'::('s'::(' '::[])))))
+      (append (VP.to_string c)
+        (append (' '::[])
+          (append (VP.to_string v)
+            (append (' '::[])
+              (append (string_of_atom a1)
+                (append (' '::[])
+                  (append (string_of_atom a2)
+                    (append (' '::[]) (string_of_atom y)))))))))
+  | Isbb (v, a1, a2, y) ->
+    append ('s'::('b'::('b'::(' '::[]))))
+      (append (VP.to_string v)
+        (append (' '::[])
+          (append (string_of_atom a1)
+            (append (' '::[])
+              (append (string_of_atom a2)
+                (append (' '::[]) (string_of_atom y)))))))
+  | Isbbs (c, v, a1, a2, y) ->
+    append ('s'::('b'::('b'::('s'::(' '::[])))))
+      (append (VP.to_string c)
+        (append (' '::[])
+          (append (VP.to_string v)
+            (append (' '::[])
+              (append (string_of_atom a1)
+                (append (' '::[])
+                  (append (string_of_atom a2)
+                    (append (' '::[]) (string_of_atom y)))))))))
+  | Imul (v, a1, a2) ->
+    append ('m'::('u'::('l'::(' '::[]))))
+      (append (VP.to_string v)
+        (append (' '::[])
+          (append (string_of_atom a1) (append (' '::[]) (string_of_atom a2)))))
+  | Imull (vh, vl, a1, a2) ->
+    append ('m'::('u'::('l'::('l'::(' '::[])))))
+      (append (VP.to_string vh)
+        (append (' '::[])
+          (append (VP.to_string vl)
+            (append (' '::[])
+              (append (string_of_atom a1)
+                (append (' '::[]) (string_of_atom a2)))))))
+  | Imulj (v, a1, a2) ->
+    append ('m'::('u'::('l'::('j'::(' '::[])))))
+      (append (VP.to_string v)
+        (append (' '::[])
+          (append (string_of_atom a1) (append (' '::[]) (string_of_atom a2)))))
+  | Isplit (vh, vl, a, n) ->
+    append ('s'::('p'::('l'::('i'::('t'::(' '::[]))))))
+      (append (VP.to_string vh)
+        (append (' '::[])
+          (append (VP.to_string vl)
+            (append (' '::[])
+              (append (string_of_atom a) (append (' '::[]) (string_of_nat n)))))))
+  | Iand (v, t0, a1, a2) ->
+    append ('a'::('n'::('d'::(' '::[]))))
+      (append (string_of_var_with_typ (v, t0))
+        (append (' '::[])
+          (append (string_of_atom a1) (append (' '::[]) (string_of_atom a2)))))
+  | Ior (v, t0, a1, a2) ->
+    append ('o'::('r'::(' '::[])))
+      (append (string_of_var_with_typ (v, t0))
+        (append (' '::[])
+          (append (string_of_atom a1) (append (' '::[]) (string_of_atom a2)))))
+  | Ixor (v, t0, a1, a2) ->
+    append ('x'::('o'::('r'::(' '::[]))))
+      (append (string_of_var_with_typ (v, t0))
+        (append (' '::[])
+          (append (string_of_atom a1) (append (' '::[]) (string_of_atom a2)))))
+  | Icast (v, t0, a) ->
+    append ('c'::('a'::('s'::('t'::(' '::[])))))
+      (append (VP.to_string v)
+        (append ('@'::[])
+          (append (string_of_typ t0) (append (' '::[]) (string_of_atom a)))))
+  | Ivpc (v, t0, a) ->
+    append ('v'::('p'::('c'::(' '::[]))))
+      (append (string_of_var_with_typ (v, t0))
+        (append (' '::[]) (string_of_atom a)))
+  | Ijoin (v, ah, al) ->
+    append ('j'::('o'::('i'::('n'::(' '::[])))))
+      (append (VP.to_string v)
+        (append (' '::[])
+          (append (string_of_atom ah) (append (' '::[]) (string_of_atom al)))))
+  | Iassume e ->
+    append ('a'::('s'::('s'::('u'::('m'::('e'::(' '::[])))))))
+      (string_of_bexp e)
+
+  (** val string_of_instr' : instr -> char list **)
+
+  let string_of_instr' i =
+    append (string_of_instr i) (';'::[])
+
+  (** val string_of_program : program -> char list **)
+
+  let string_of_program p =
+    concat newline (tmap string_of_instr' p)
+
+  (** val string_of_typenv : TE.env -> char list **)
+
+  let string_of_typenv e =
+    concat (','::(' '::[])) (tmap string_of_var_with_typ (TE.elements e))
+
+  (** val string_of_spec : spec -> char list **)
+
+  let string_of_spec s =
+    append
+      ('p'::('r'::('o'::('c'::(' '::('m'::('a'::('i'::('n'::('('::[]))))))))))
+      (append (string_of_typenv (sinputs s))
+        (append (')'::(' '::('='::[])))
+          (append newline
+            (append ('{'::(' '::[]))
+              (append (string_of_bexp (spre s))
+                (append ('}'::[])
+                  (append newline
+                    (append (string_of_program (sprog s))
+                      (append newline
+                        (append ('{'::(' '::[]))
+                          (append (string_of_bexp (spost s))
+                            (append ('}'::[]) newline))))))))))))
+
+  (** val string_of_espec : espec -> char list **)
+
+  let string_of_espec s =
+    append
+      ('p'::('r'::('o'::('c'::(' '::('m'::('a'::('i'::('n'::('('::[]))))))))))
+      (append (string_of_typenv (esinputs s))
+        (append (')'::(' '::('='::[])))
+          (append newline
+            (append ('{'::(' '::[]))
+              (append (string_of_bexp (espre s))
+                (append ('}'::[])
+                  (append newline
+                    (append (string_of_program (esprog s))
+                      (append newline
+                        (append ('{'::(' '::[]))
+                          (append (string_of_ebexp (espost s))
+                            (append ('}'::[]) newline))))))))))))
+
+  (** val string_of_rspec : rspec -> char list **)
+
+  let string_of_rspec s =
+    append
+      ('p'::('r'::('o'::('c'::(' '::('m'::('a'::('i'::('n'::('('::[]))))))))))
+      (append (string_of_typenv (rsinputs s))
+        (append
+          (')'::(' '::('='::(' '::('+'::('+'::(' '::('n'::('e'::('w'::('l'::('i'::('n'::('e'::[]))))))))))))))
+          (append ('{'::(' '::[]))
+            (append (string_of_rbexp (rspre s))
+              (append ('}'::[])
+                (append newline
+                  (append (string_of_program (rsprog s))
+                    (append newline
+                      (append ('{'::(' '::[]))
+                        (append (string_of_rbexp (rspost s))
+                          ('}'::(' '::('+'::('+'::(' '::('n'::('e'::('w'::('l'::('i'::('n'::('e'::[]))))))))))))))))))))))
 
   (** val bv2z : typ -> bits -> coq_Z **)
 
@@ -2791,11 +3446,416 @@ module MakeDSL =
   let force_conform e1 e2 s =
     force_conform_vars e2 (VS.elements (VS.diff (vars_env e2) (vars_env e1)))
       s
+
+  (** val split_espec : espec -> espec list **)
+
+  let split_espec s =
+    tmap (fun q -> { esinputs = (esinputs s); espre = (espre s); esprog =
+      (esprog s); espost = q }) (split_eand (espost s))
+
+  (** val split_rspec : rspec -> rspec list **)
+
+  let split_rspec s =
+    tmap (fun q -> { rsinputs = (rsinputs s); rspre = (rspre s); rsprog =
+      (rsprog s); rspost = q }) (split_rand V.coq_T (rspost s))
+
+  module TSEQM = TStateEqmod(V)(State.BitsValueType)(S)(VS)
+
+  module MA = MapAgree(V)(TE)(VS)
+
+  (** val depvars_ebexp : VS.t -> ebexp -> VS.t **)
+
+  let depvars_ebexp vs e =
+    foldl (fun vs0 e0 ->
+      let vse = vars_ebexp e0 in
+      if VSLemmas.disjoint vs0 vse then vs0 else VS.union vs0 vse) vs
+      (split_eand e)
+
+  (** val depvars_rexp : VS.t -> rexp -> VS.t **)
+
+  let depvars_rexp vs e =
+    let vse = vars_rexp e in
+    if VSLemmas.disjoint vs vse then vs else VS.union vs vse
+
+  (** val depvars_rbexp : VS.t -> Coq__4.rbexp -> VS.t **)
+
+  let depvars_rbexp vs e =
+    foldl (fun vs0 e0 ->
+      let vse = vars_rbexp e0 in
+      if VSLemmas.disjoint vs0 vse then vs0 else VS.union vs0 vse) vs
+      (split_rand V.coq_T e)
+
+  (** val depvars_einstr : VS.t -> instr -> VS.t **)
+
+  let depvars_einstr vs i = match i with
+  | Imov (_, a) ->
+    (match a with
+     | Avar _ ->
+       if VSLemmas.disjoint vs (vars_instr i)
+       then vs
+       else VS.union vs (vars_instr i)
+     | Aconst (_, _) ->
+       if VSLemmas.disjoint vs (lvs_instr i)
+       then vs
+       else VS.union vs (vars_instr i))
+  | Ivpc (_, _, a) ->
+    (match a with
+     | Avar _ ->
+       if VSLemmas.disjoint vs (vars_instr i)
+       then vs
+       else VS.union vs (vars_instr i)
+     | Aconst (_, _) ->
+       if VSLemmas.disjoint vs (lvs_instr i)
+       then vs
+       else VS.union vs (vars_instr i))
+  | Iassume b -> let (e, _) = b in depvars_ebexp vs e
+  | _ ->
+    if VSLemmas.disjoint vs (lvs_instr i)
+    then vs
+    else VS.union vs (vars_instr i)
+
+  (** val depvars_rinstr : VS.t -> instr -> VS.t **)
+
+  let depvars_rinstr vs i = match i with
+  | Imov (_, a) ->
+    (match a with
+     | Avar _ ->
+       if VSLemmas.disjoint vs (vars_instr i)
+       then vs
+       else VS.union vs (vars_instr i)
+     | Aconst (_, _) ->
+       if VSLemmas.disjoint vs (lvs_instr i)
+       then vs
+       else VS.union vs (vars_instr i))
+  | Ivpc (_, _, a) ->
+    (match a with
+     | Avar _ ->
+       if VSLemmas.disjoint vs (vars_instr i)
+       then vs
+       else VS.union vs (vars_instr i)
+     | Aconst (_, _) ->
+       if VSLemmas.disjoint vs (lvs_instr i)
+       then vs
+       else VS.union vs (vars_instr i))
+  | Iassume b -> let (_, r) = b in depvars_rbexp vs r
+  | _ ->
+    if VSLemmas.disjoint vs (lvs_instr i)
+    then vs
+    else VS.union vs (vars_instr i)
+
+  (** val depvars_eprogram : VS.t -> instr list -> VS.t **)
+
+  let depvars_eprogram vs p =
+    foldl depvars_einstr vs (rev p)
+
+  (** val depvars_rprogram : VS.t -> instr list -> VS.t **)
+
+  let depvars_rprogram vs p =
+    foldl depvars_rinstr vs (rev p)
+
+  (** val depvars_epre_eprogram : VS.t -> ebexp -> instr list -> VS.t **)
+
+  let depvars_epre_eprogram vs e p =
+    depvars_ebexp (depvars_eprogram vs p) e
+
+  (** val depvars_rpre_rprogram :
+      VS.t -> Coq__4.rbexp -> instr list -> VS.t **)
+
+  let depvars_rpre_rprogram vs e p =
+    depvars_rbexp (depvars_rprogram vs p) e
+
+  (** val evsize : ebexp -> program -> VS.t -> int **)
+
+  let evsize e p vs =
+    let vsall = VS.union vs (VS.union (vars_ebexp e) (vars_program p)) in
+    subn (VS.cardinal vsall) (VS.cardinal vs)
+
+  (** val rvsize : rbexp -> program -> VS.t -> int **)
+
+  let rvsize r p vs =
+    let vsall = VS.union vs (VS.union (vars_rbexp r) (vars_program p)) in
+    subn (VS.cardinal vsall) (VS.cardinal vs)
+
+  (** val depvars_epre_eprogram_sat_F :
+      ebexp -> program -> (VS.t -> VS.t) -> VS.t -> VS.t **)
+
+  let depvars_epre_eprogram_sat_F e p depvars_epre_eprogram_sat0 vs =
+    if leq (Pervasives.succ (VS.cardinal vs))
+         (VS.cardinal (depvars_epre_eprogram vs e p))
+    then depvars_epre_eprogram_sat0 (depvars_epre_eprogram vs e p)
+    else depvars_epre_eprogram vs e p
+
+  (** val depvars_epre_eprogram_sat_terminate :
+      ebexp -> program -> VS.t -> VS.t **)
+
+  let rec depvars_epre_eprogram_sat_terminate e p vs =
+    if leq (Pervasives.succ (VS.cardinal vs))
+         (VS.cardinal (depvars_epre_eprogram vs e p))
+    then depvars_epre_eprogram_sat_terminate e p
+           (depvars_epre_eprogram vs e p)
+    else depvars_epre_eprogram vs e p
+
+  (** val depvars_epre_eprogram_sat : ebexp -> program -> VS.t -> VS.t **)
+
+  let depvars_epre_eprogram_sat =
+    depvars_epre_eprogram_sat_terminate
+
+  type coq_R_depvars_epre_eprogram_sat =
+  | R_depvars_epre_eprogram_sat_0 of VS.t * VS.t
+     * coq_R_depvars_epre_eprogram_sat
+  | R_depvars_epre_eprogram_sat_1 of VS.t
+
+  (** val coq_R_depvars_epre_eprogram_sat_rect :
+      ebexp -> program -> (VS.t -> __ -> VS.t ->
+      coq_R_depvars_epre_eprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
+      -> VS.t -> VS.t -> coq_R_depvars_epre_eprogram_sat -> 'a1 **)
+
+  let rec coq_R_depvars_epre_eprogram_sat_rect e p f f0 _ _ = function
+  | R_depvars_epre_eprogram_sat_0 (vs, x, x0) ->
+    let vs' = depvars_epre_eprogram vs e p in
+    f vs __ x x0 (coq_R_depvars_epre_eprogram_sat_rect e p f f0 vs' x x0)
+  | R_depvars_epre_eprogram_sat_1 vs -> f0 vs __
+
+  (** val coq_R_depvars_epre_eprogram_sat_rec :
+      ebexp -> program -> (VS.t -> __ -> VS.t ->
+      coq_R_depvars_epre_eprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
+      -> VS.t -> VS.t -> coq_R_depvars_epre_eprogram_sat -> 'a1 **)
+
+  let rec coq_R_depvars_epre_eprogram_sat_rec e p f f0 _ _ = function
+  | R_depvars_epre_eprogram_sat_0 (vs, x, x0) ->
+    let vs' = depvars_epre_eprogram vs e p in
+    f vs __ x x0 (coq_R_depvars_epre_eprogram_sat_rec e p f f0 vs' x x0)
+  | R_depvars_epre_eprogram_sat_1 vs -> f0 vs __
+
+  (** val depvars_epre_eprogram_sat_rect :
+      ebexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
+      -> VS.t -> 'a1 **)
+
+  let rec depvars_epre_eprogram_sat_rect e p f f0 vs =
+    let f1 = f0 vs in
+    let f2 = f vs in
+    if leq (Pervasives.succ (VS.cardinal vs))
+         (VS.cardinal (depvars_epre_eprogram vs e p))
+    then let f3 = f2 __ in
+         let hrec =
+           depvars_epre_eprogram_sat_rect e p f f0
+             (depvars_epre_eprogram vs e p)
+         in
+         f3 hrec
+    else f1 __
+
+  (** val depvars_epre_eprogram_sat_rec :
+      ebexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
+      -> VS.t -> 'a1 **)
+
+  let depvars_epre_eprogram_sat_rec =
+    depvars_epre_eprogram_sat_rect
+
+  (** val coq_R_depvars_epre_eprogram_sat_correct :
+      ebexp -> program -> VS.t -> VS.t -> coq_R_depvars_epre_eprogram_sat **)
+
+  let coq_R_depvars_epre_eprogram_sat_correct e p vs _res =
+    depvars_epre_eprogram_sat_rect e p (fun y _ y1 _ _ ->
+      R_depvars_epre_eprogram_sat_0 (y,
+      (depvars_epre_eprogram_sat e p (depvars_epre_eprogram y e p)),
+      (y1 (depvars_epre_eprogram_sat e p (depvars_epre_eprogram y e p)) __)))
+      (fun y _ _ _ -> R_depvars_epre_eprogram_sat_1 y) vs _res __
+
+  (** val depvars_rpre_rprogram_sat_F :
+      rbexp -> program -> (VS.t -> VS.t) -> VS.t -> VS.t **)
+
+  let depvars_rpre_rprogram_sat_F r p depvars_rpre_rprogram_sat0 vs =
+    if leq (Pervasives.succ (VS.cardinal vs))
+         (VS.cardinal (depvars_rpre_rprogram vs r p))
+    then depvars_rpre_rprogram_sat0 (depvars_rpre_rprogram vs r p)
+    else depvars_rpre_rprogram vs r p
+
+  (** val depvars_rpre_rprogram_sat_terminate :
+      rbexp -> program -> VS.t -> VS.t **)
+
+  let rec depvars_rpre_rprogram_sat_terminate r p vs =
+    if leq (Pervasives.succ (VS.cardinal vs))
+         (VS.cardinal (depvars_rpre_rprogram vs r p))
+    then depvars_rpre_rprogram_sat_terminate r p
+           (depvars_rpre_rprogram vs r p)
+    else depvars_rpre_rprogram vs r p
+
+  (** val depvars_rpre_rprogram_sat : rbexp -> program -> VS.t -> VS.t **)
+
+  let depvars_rpre_rprogram_sat =
+    depvars_rpre_rprogram_sat_terminate
+
+  type coq_R_depvars_rpre_rprogram_sat =
+  | R_depvars_rpre_rprogram_sat_0 of VS.t * VS.t
+     * coq_R_depvars_rpre_rprogram_sat
+  | R_depvars_rpre_rprogram_sat_1 of VS.t
+
+  (** val coq_R_depvars_rpre_rprogram_sat_rect :
+      rbexp -> program -> (VS.t -> __ -> VS.t ->
+      coq_R_depvars_rpre_rprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
+      -> VS.t -> VS.t -> coq_R_depvars_rpre_rprogram_sat -> 'a1 **)
+
+  let rec coq_R_depvars_rpre_rprogram_sat_rect r p f f0 _ _ = function
+  | R_depvars_rpre_rprogram_sat_0 (vs, x, x0) ->
+    let vs' = depvars_rpre_rprogram vs r p in
+    f vs __ x x0 (coq_R_depvars_rpre_rprogram_sat_rect r p f f0 vs' x x0)
+  | R_depvars_rpre_rprogram_sat_1 vs -> f0 vs __
+
+  (** val coq_R_depvars_rpre_rprogram_sat_rec :
+      rbexp -> program -> (VS.t -> __ -> VS.t ->
+      coq_R_depvars_rpre_rprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
+      -> VS.t -> VS.t -> coq_R_depvars_rpre_rprogram_sat -> 'a1 **)
+
+  let rec coq_R_depvars_rpre_rprogram_sat_rec r p f f0 _ _ = function
+  | R_depvars_rpre_rprogram_sat_0 (vs, x, x0) ->
+    let vs' = depvars_rpre_rprogram vs r p in
+    f vs __ x x0 (coq_R_depvars_rpre_rprogram_sat_rec r p f f0 vs' x x0)
+  | R_depvars_rpre_rprogram_sat_1 vs -> f0 vs __
+
+  (** val depvars_rpre_rprogram_sat_rect :
+      rbexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
+      -> VS.t -> 'a1 **)
+
+  let rec depvars_rpre_rprogram_sat_rect r p f f0 vs =
+    let f1 = f0 vs in
+    let f2 = f vs in
+    if leq (Pervasives.succ (VS.cardinal vs))
+         (VS.cardinal (depvars_rpre_rprogram vs r p))
+    then let f3 = f2 __ in
+         let hrec =
+           depvars_rpre_rprogram_sat_rect r p f f0
+             (depvars_rpre_rprogram vs r p)
+         in
+         f3 hrec
+    else f1 __
+
+  (** val depvars_rpre_rprogram_sat_rec :
+      rbexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
+      -> VS.t -> 'a1 **)
+
+  let depvars_rpre_rprogram_sat_rec =
+    depvars_rpre_rprogram_sat_rect
+
+  (** val coq_R_depvars_rpre_rprogram_sat_correct :
+      rbexp -> program -> VS.t -> VS.t -> coq_R_depvars_rpre_rprogram_sat **)
+
+  let coq_R_depvars_rpre_rprogram_sat_correct r p vs _res =
+    depvars_rpre_rprogram_sat_rect r p (fun y _ y1 _ _ ->
+      R_depvars_rpre_rprogram_sat_0 (y,
+      (depvars_rpre_rprogram_sat r p (depvars_rpre_rprogram y r p)),
+      (y1 (depvars_rpre_rprogram_sat r p (depvars_rpre_rprogram y r p)) __)))
+      (fun y _ _ _ -> R_depvars_rpre_rprogram_sat_1 y) vs _res __
+
+  (** val slice_ebexp : VS.t -> Coq__3.ebexp -> Coq__3.ebexp **)
+
+  let rec slice_ebexp vs e = match e with
+  | Etrue -> e
+  | Eeq (e1, e2) ->
+    if (&&) (VSLemmas.disjoint vs (vars_eexp e1))
+         (VSLemmas.disjoint vs (vars_eexp e2))
+    then etrue
+    else e
+  | Eeqmod (e1, e2, ms) ->
+    if (&&)
+         ((&&) (VSLemmas.disjoint vs (vars_eexp e1))
+           (VSLemmas.disjoint vs (vars_eexp e2)))
+         (VSLemmas.disjoint vs (vars_eexps ms))
+    then etrue
+    else e
+  | Eand (e1, e2) ->
+    (match slice_ebexp vs e1 with
+     | Etrue -> slice_ebexp vs e2
+     | x -> (match slice_ebexp vs e2 with
+             | Etrue -> x
+             | x0 -> Eand (x, x0)))
+
+  (** val slice_rbexp : VS.t -> Coq__4.rbexp -> Coq__4.rbexp **)
+
+  let rec slice_rbexp vs e = match e with
+  | Rtrue -> e
+  | Req (_, e1, e2) ->
+    if (&&) (VSLemmas.disjoint vs (vars_rexp e1))
+         (VSLemmas.disjoint vs (vars_rexp e2))
+    then rtrue
+    else e
+  | Rcmp (_, _, e1, e2) ->
+    if (&&) (VSLemmas.disjoint vs (vars_rexp e1))
+         (VSLemmas.disjoint vs (vars_rexp e2))
+    then rtrue
+    else e
+  | Rneg e' -> if VSLemmas.disjoint vs (vars_rbexp e') then rtrue else e
+  | Rand (e1, e2) ->
+    (match slice_rbexp vs e1 with
+     | Rtrue -> slice_rbexp vs e2
+     | x -> (match slice_rbexp vs e2 with
+             | Rtrue -> x
+             | x0 -> Rand (x, x0)))
+  | Ror (e1, e2) ->
+    if (&&) (VSLemmas.disjoint vs (vars_rbexp e1))
+         (VSLemmas.disjoint vs (vars_rbexp e2))
+    then rtrue
+    else e
+
+  (** val slice_einstr : VS.t -> instr -> instr option **)
+
+  let slice_einstr vs i = match i with
+  | Iassume b -> let (e, _) = b in Some (Iassume ((slice_ebexp vs e), rtrue))
+  | _ -> if VSLemmas.disjoint vs (lvs_instr i) then None else Some i
+
+  (** val slice_rinstr : VS.t -> instr -> instr option **)
+
+  let slice_rinstr vs i = match i with
+  | Iassume b -> let (_, r) = b in Some (Iassume (etrue, (slice_rbexp vs r)))
+  | _ -> if VSLemmas.disjoint vs (lvs_instr i) then None else Some i
+
+  (** val slice_eprogram : VS.t -> instr list -> instr list **)
+
+  let rec slice_eprogram vs = function
+  | [] -> []
+  | hd :: tl ->
+    (match slice_einstr vs hd with
+     | Some i -> i :: (slice_eprogram vs tl)
+     | None -> slice_eprogram vs tl)
+
+  (** val slice_rprogram : VS.t -> instr list -> instr list **)
+
+  let rec slice_rprogram vs = function
+  | [] -> []
+  | hd :: tl ->
+    (match slice_rinstr vs hd with
+     | Some i -> i :: (slice_rprogram vs tl)
+     | None -> slice_rprogram vs tl)
+
+  (** val slice_espec : espec -> espec **)
+
+  let slice_espec s =
+    let vs =
+      depvars_epre_eprogram_sat (eqn_bexp (espre s)) (esprog s)
+        (vars_ebexp (espost s))
+    in
+    { esinputs = (esinputs s); espre =
+    ((slice_ebexp vs (eqn_bexp (espre s))), (rng_bexp (espre s))); esprog =
+    (slice_eprogram vs (esprog s)); espost = (espost s) }
+
+  (** val slice_rspec : rspec -> rspec **)
+
+  let slice_rspec s =
+    let vs =
+      depvars_rpre_rprogram_sat (rspre s) (rsprog s) (vars_rbexp (rspost s))
+    in
+    { rsinputs = (rsinputs s); rspre = (slice_rbexp vs (rspre s)); rsprog =
+    (slice_rprogram vs (rsprog s)); rspost = (rspost s) }
  end
 
-module DSL = MakeDSL(VarOrder)(VS)(VM)(TypEnv.TE)(Store)
+module VarOrderPrinter =
+ struct
+  type t = VarOrder.t
 
-(** val string_of_var : var -> char list **)
+  (** val to_string : VarOrder.t -> char list **)
 
-let string_of_var v =
-  append ('v'::[]) (of_N v)
+  let to_string v =
+    append ('v'::[]) (string_of_N (Obj.magic v))
+ end
+
+module DSL =
+ MakeDSL(VarOrder)(VarOrderPrinter)(VS)(VM)(TypEnv.TE)(State.Store)

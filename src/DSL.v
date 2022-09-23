@@ -1,17 +1,66 @@
 
 (** Typed CryptoLine. *)
 
-From Coq Require Import List ZArith String BinaryString.
+From Coq Require Import List Ascii ZArith OrderedType String Decimal DecimalString.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
-From ssrlib Require Import Var SsrOrder ZAriths FSets FMaps Tactics Seqs.
+From ssrlib Require Import Var SsrOrder ZAriths Store FSets FMaps Tactics Seqs Nats.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
 Delimit Scope dsl with dsl.
+
+
+Section DecimalStringConversions.
+
+  (*
+    Decimal.int is renamed to Decimal.signed_int to avoid name clashes since 8.16.0.
+    Do not use Decimal.int or any function involving Decimal.int to avoid name clashes.
+    See https://github.com/coq/coq/issues/7017.
+   *)
+
+  Local Open Scope string_scope.
+
+  Definition newline := String (Ascii.ascii_of_N 10) EmptyString.
+
+  Variant signed_int := Pos (d : uint) | Neg (d : uint).
+
+  Definition nat_to_signed_int (n : nat) : signed_int := Pos (Nat.to_uint n).
+
+  Definition positive_to_signed_int (n : positive) : signed_int := Pos (Pos.to_uint n).
+
+  Definition N_to_signed_int (n : N) : signed_int := Pos (N.to_uint n).
+
+  Definition Z_to_signed_int (n : Z) : signed_int :=
+    match n with
+    | Z0 => Pos (Nat.to_uint O)
+    | Zpos m => Pos (Pos.to_uint m)
+    | Zneg m => Neg (Pos.to_uint m)
+    end.
+
+  Definition string_of_signed_int (d : signed_int) :=
+    match d with
+    | Pos d => NilEmpty.string_of_uint d
+    | Neg d => String.String "-" (NilEmpty.string_of_uint d)
+    end.
+
+  Definition string_of_nat (n : nat) : string :=
+    string_of_signed_int (nat_to_signed_int n).
+
+  Definition string_of_positive (n : positive) : string :=
+    string_of_signed_int (positive_to_signed_int n).
+
+  Definition string_of_N (n : N) : string :=
+    string_of_signed_int (N_to_signed_int n).
+
+  Definition string_of_Z (n : Z) : string :=
+    string_of_signed_int (Z_to_signed_int n).
+
+End DecimalStringConversions.
+
 
 Section Operators.
 
@@ -544,6 +593,12 @@ Section DSLRaw.
   Definition rands es := foldl (fun res e => rand res e) Rtrue es.
   Definition rors es := foldl (fun res e => ror res e) (Rneg Rtrue) es.
 
+  Fixpoint split_rand (e : rbexp) : seq rbexp :=
+    match e with
+    | Rand e1 e2 => (split_rand e1) ++ (split_rand e2)
+    | _ => [:: e]
+    end.
+
   Fixpoint rbexp_eqn (e1 e2 : rbexp) : bool :=
     match e1, e2 with
     | Rtrue, Rtrue => true
@@ -608,24 +663,24 @@ Section DSLRaw.
   Fixpoint string_of_eexp (e : eexp) : string :=
     match e with
     | Evar v => string_of_var v
-    | Econst n => BinaryString.of_Z n
+    | Econst n => string_of_Z n
     | Eunop op e =>
         (string_of_eunop op ++ " " ++ string_of_eexp' e)%string
     | Ebinop op e1 e2 =>
         (string_of_eexp' e1 ++ " " ++ string_of_ebinop op ++ " " ++ string_of_eexp' e2)%string
-    | Epow e n => (string_of_eexp' e ++ " ^ " ++ BinaryString.of_N n)%string
+    | Epow e n => (string_of_eexp' e ++ " ^ " ++ string_of_N n)%string
     end
   with
   string_of_eexp' (e : eexp) : string :=
     match e with
     | Evar v => string_of_var v
-    | Econst n => BinaryString.of_Z n
+    | Econst n => string_of_Z n
     | Eunop op e =>
         ("(" ++ string_of_eunop op ++ " " ++ string_of_eexp' e ++ ")")%string
     | Ebinop op e1 e2 =>
         ("(" ++ string_of_eexp' e1 ++ " " ++ string_of_ebinop op ++ " "
              ++ string_of_eexp' e2 ++ ")")%string
-    | Epow e n => ("(" ++ string_of_eexp' e ++ " ^ " ++ BinaryString.of_N n ++ ")")%string
+    | Epow e n => ("(" ++ string_of_eexp' e ++ " ^ " ++ string_of_N n ++ ")")%string
     end
     .
 
@@ -642,7 +697,7 @@ Section DSLRaw.
       | Eeqmod e1 e2 ms =>
           (string_of_eexp e1 ++ " = " ++ string_of_eexp e2
                           ++ "(mod [" ++ string_of_eexps ", " ms ++ "])")%string
-      | Eand e1 e2 => (string_of_ebexp e1 ++ " /\\ " ++ string_of_ebexp e2)%string
+      | Eand e1 e2 => (string_of_ebexp e1 ++ " /\ " ++ string_of_ebexp e2)%string
       end.
 
     Definition is_rexp_atomic (e : rexp) : bool :=
@@ -654,13 +709,13 @@ Section DSLRaw.
     Fixpoint string_of_rexp (e : rexp) : string :=
       match e with
       | Rvar v => string_of_var v
-      | Rconst w bs => to_hex bs
+      | Rconst w bs => to_hex bs ++ "@" ++ string_of_nat w
       | Runop w op e => (string_of_runop op ++ " " ++ string_of_rexp' e)%string
       | Rbinop w op e1 e2 =>
           (string_of_rexp' e1 ++ " " ++ string_of_rbinop op
                            ++ " " ++ string_of_rexp' e2)%string
-      | Ruext w e i => ("uext " ++ string_of_rexp' e ++ " " ++ of_nat i)%string
-      | Rsext w e i => ("sext " ++ string_of_rexp' e ++ " " ++ of_nat i)%string
+      | Ruext w e i => ("uext " ++ string_of_rexp' e ++ " " ++ string_of_nat i)%string
+      | Rsext w e i => ("sext " ++ string_of_rexp' e ++ " " ++ string_of_nat i)%string
       end
     with
     string_of_rexp' (e : rexp) : string :=
@@ -671,8 +726,8 @@ Section DSLRaw.
       | Rbinop w op e1 e2 =>
           ("(" ++ string_of_rexp' e1 ++ " " ++ string_of_rbinop op
                ++ " " ++ string_of_rexp' e2 ++ ")")%string
-      | Ruext w e i => ("(uext " ++ string_of_rexp' e ++ " " ++ of_nat i ++ ")")%string
-      | Rsext w e i => ("(sext " ++ string_of_rexp' e ++ " " ++ of_nat i ++ ")")%string
+      | Ruext w e i => ("(uext " ++ string_of_rexp' e ++ " " ++ string_of_nat i ++ ")")%string
+      | Rsext w e i => ("(sext " ++ string_of_rexp' e ++ " " ++ string_of_nat i ++ ")")%string
       end.
 
     Definition is_rbexp_or (e : rbexp) : bool :=
@@ -691,22 +746,27 @@ Section DSLRaw.
       | Rand e1 e2 =>
           (if is_rbexp_or e1 then "(" ++ string_of_rbexp e1 ++ ")"
            else string_of_rbexp e1)%string
-                                   ++ " /\\ "
+                                   ++ " /\ "
                                    ++ (if is_rbexp_or e2 then "(" ++ string_of_rbexp e2 ++ ")"
                                        else string_of_rbexp e2)%string
-      | Ror e1 e2 => (string_of_rbexp e1 ++ " \\/ " ++ string_of_rbexp e2)%string
+      | Ror e1 e2 => (string_of_rbexp e1 ++ " \/ " ++ string_of_rbexp e2)%string
       end.
-
 
 End DSLRaw.
 
 
 
+Module Type Printer.
+  Variable t : Type.
+  Variable to_string : t -> string.
+End Printer.
+
 Module MakeDSL
        (V : SsrOrder)
+       (VP : Printer with Definition t := V.t)
        (VS : SsrFSet with Module SE := V)
        (VM : SsrFMap with Module SE := V)
-       (TE : TypEnv with Module SE := V)
+       (TE : TypEnv with Module SE := V with Definition t := VM.t)
        (S : BitsStore V TE).
   Local Open Scope dsl.
   Local Open Scope bits.
@@ -718,7 +778,6 @@ Module MakeDSL
   (* Variables *)
 
   Local Notation var := V.t.
-
 
 
   (* Algebraic Expressions *)
@@ -763,6 +822,7 @@ Module MakeDSL
 
   Definition eexp_eqMixin := EqMixin eexp_eqP.
   Canonical eexp_eqType := Eval hnf in EqType eexp eexp_eqMixin.
+  Definition eexp_eqn := @eexp_eqn V.T.
 
 
   (* Limbs *)
@@ -824,6 +884,7 @@ Module MakeDSL
 
   Definition rexp_eqMixin := EqMixin rexp_eqP.
   Canonical rexp_eqType := Eval hnf in EqType rexp rexp_eqMixin.
+  Definition rexp_eqn := @rexp_eqn V.T.
 
 
 
@@ -854,6 +915,7 @@ Module MakeDSL
 
   Definition ebexp_eqMixin := EqMixin ebexp_eqP.
   Canonical ebexp_eqType := Eval hnf in EqType ebexp ebexp_eqMixin.
+  Definition ebexp_eqn := @ebexp_eqn V.T.
 
   Lemma vars_eands_cons e es :
     VS.Equal (vars_ebexp (eands (e::es)))
@@ -918,7 +980,7 @@ Module MakeDSL
 
   Definition rbexp_eqMixin := EqMixin rbexp_eqP.
   Canonical rbexp_eqType := Eval hnf in EqType rbexp rbexp_eqMixin.
-
+  Definition rbexp_eqn := @rbexp_eqn V.T.
 
 
   (* Predicates *)
@@ -1041,18 +1103,86 @@ Module MakeDSL
   Definition program := seq instr.
 
 
-  (** String outputs *)
+  Definition atom_eqn (a1 a2 : atom) : bool :=
+    match a1, a2 with
+    | Avar v1, Avar v2 => v1 == v2
+    | Aconst ty1 n1, Aconst ty2 n2 => (ty1 == ty2) && (n1 == n2)
+    | _, _ => false
+    end.
 
-  Definition string_of_eunop := @string_of_eunop.
-  Definition string_of_ebinop := @string_of_ebinop.
-  Definition string_of_runop := @string_of_runop.
-  Definition string_of_rbinop := @string_of_rbinop.
-  Definition string_of_rcmpop := @string_of_rcmpop.
-  Definition string_of_eexp := @string_of_eexp V.T.
-  Definition string_of_eexps := @string_of_eexps V.T.
-  Definition string_of_ebexp := @string_of_ebexp V.T.
-  Definition string_of_rexp := @string_of_rexp V.T.
-  Definition string_of_rbexp := @string_of_rbexp V.T.
+  Lemma atom_eqn_eq a1 a2 : atom_eqn a1 a2 <-> a1 = a2.
+  Proof.
+    split; case: a1; case: a2 => //=.
+    - move=> ? ? /eqP ->. reflexivity.
+    - move=> ? ? ? ? /andP [/eqP -> /eqP] ->. reflexivity.
+    - move=> ? ? [] ->. exact: eqxx.
+    - move=> ? ? ? ? [] -> ->. by rewrite !eqxx.
+  Qed.
+
+  Lemma atom_eqP (a1 a2 : atom) : reflect (a1 = a2) (atom_eqn a1 a2).
+  Proof.
+    case H: (atom_eqn a1 a2).
+    - apply: ReflectT. apply/atom_eqn_eq. assumption.
+    - apply: ReflectF. move=> Heq. move/negP: H. apply. apply/atom_eqn_eq.
+      assumption.
+  Qed.
+
+  Definition atom_eqMixin := EqMixin atom_eqP.
+  Canonical atom_eqType := Eval hnf in EqType atom atom_eqMixin.
+
+  Definition instr_eqn (i1 i2 : instr) : bool :=
+    match i1, i2 with
+    | Imov a1 a2, Imov b1 b2 => (a1 == b1) && (a2 == b2)
+    | Ishl a1 a2 a3, Ishl b1 b2 b3 => (a1 == b1) && (a2 == b2) && (a3 == b3)
+    | Icshl a1 a2 a3 a4 a5, Icshl b1 b2 b3 b4 b5 =>
+        (a1 == b1) && (a2 == b2) && (a3 == b3) && (a4 == b4) && (a5 == b5)
+    | Inondet a1 a2, Inondet b1 b2 => (a1 == b1) && (a2 == b2)
+    | Icmov a1 a2 a3 a4, Icmov b1 b2 b3 b4 => (a1 == b1) && (a2 == b2) && (a3 == b3) && (a4 == b4)
+    | Inop, Inop => true
+    | Inot a1 a2 a3, Inot b1 b2 b3 => (a1 == b1) && (a2 == b2) && (a3 == b3)
+    | Iadd a1 a2 a3, Iadd b1 b2 b3 => (a1 == b1) && (a2 == b2) && (a3 == b3)
+    | Iadds a1 a2 a3 a4, Iadds b1 b2 b3 b4 => (a1 == b1) && (a2 == b2) && (a3 == b3) && (a4 == b4)
+    | Iadc a1 a2 a3 a4, Iadc b1 b2 b3 b4 => (a1 == b1) && (a2 == b2) && (a3 == b3) && (a4 == b4)
+    | Iadcs a1 a2 a3 a4 a5, Iadcs b1 b2 b3 b4 b5 =>
+        (a1 == b1) && (a2 == b2) && (a3 == b3) && (a4 == b4) && (a5 == b5)
+    | Isub a1 a2 a3, Isub b1 b2 b3 => (a1 == b1) && (a2 == b2) && (a3 == b3)
+    | Isubc a1 a2 a3 a4, Isubc b1 b2 b3 b4 => (a1 == b1) && (a2 == b2) && (a3 == b3) && (a4 == b4)
+    | Isubb a1 a2 a3 a4, Isubb b1 b2 b3 b4 => (a1 == b1) && (a2 == b2) && (a3 == b3) && (a4 == b4)
+    | Isbc a1 a2 a3 a4, Isbc b1 b2 b3 b4 => (a1 == b1) && (a2 == b2) && (a3 == b3) && (a4 == b4)
+    | Isbcs a1 a2 a3 a4 a5, Isbcs b1 b2 b3 b4 b5 =>
+        (a1 == b1) && (a2 == b2) && (a3 == b3) && (a4 == b4) && (a5 == b5)
+    | Isbb a1 a2 a3 a4, Isbb b1 b2 b3 b4 => (a1 == b1) && (a2 == b2) && (a3 == b3) && (a4 == b4)
+    | Isbbs a1 a2 a3 a4 a5, Isbbs b1 b2 b3 b4 b5 =>
+        (a1 == b1) && (a2 == b2) && (a3 == b3) && (a4 == b4) && (a5 == b5)
+    | Imul a1 a2 a3, Imul b1 b2 b3 => (a1 == b1) && (a2 == b2) && (a3 == b3)
+    | Imull a1 a2 a3 a4, Imull b1 b2 b3 b4 => (a1 == b1) && (a2 == b2) && (a3 == b3) && (a4 == b4)
+    | Imulj a1 a2 a3, Imulj b1 b2 b3 => (a1 == b1) && (a2 == b2) && (a3 == b3)
+    | Isplit a1 a2 a3 a4, Isplit b1 b2 b3 b4 => (a1 == b1) && (a2 == b2) && (a3 == b3) && (a4 == b4)
+    | Iand a1 a2 a3 a4, Iand b1 b2 b3 b4 => (a1 == b1) && (a2 == b2) && (a3 == b3) && (a4 == b4)
+    | Ior a1 a2 a3 a4, Ior b1 b2 b3 b4 => (a1 == b1) && (a2 == b2) && (a3 == b3) && (a4 == b4)
+    | Ixor a1 a2 a3 a4, Ixor b1 b2 b3 b4 => (a1 == b1) && (a2 == b2) && (a3 == b3) && (a4 == b4)
+    | Icast a1 a2 a3, Icast b1 b2 b3 => (a1 == b1) && (a2 == b2) && (a3 == b3)
+    | Ivpc a1 a2 a3, Ivpc b1 b2 b3 => (a1 == b1) && (a2 == b2) && (a3 == b3)
+    | Ijoin a1 a2 a3, Ijoin b1 b2 b3 => (a1 == b1) && (a2 == b2) && (a3 == b3)
+    | Iassume a1, Iassume b1 => (a1 == b1)
+    | _, _ => false
+    end.
+
+  Lemma instr_eqn_eq i1 i2 : instr_eqn i1 i2 <-> i1 = i2.
+  Proof.
+    split; (case: i1; case: i2 => //=); intros; by t_auto.
+  Qed.
+
+  Lemma instr_eqP (i1 i2 : instr) : reflect (i1 = i2) (instr_eqn i1 i2).
+  Proof.
+    case H: (instr_eqn i1 i2).
+    - apply: ReflectT. apply/instr_eqn_eq. assumption.
+    - apply: ReflectF. move=> Heq. move/negP: H. apply. apply/instr_eqn_eq.
+      assumption.
+  Qed.
+
+  Definition instr_eqMixin := EqMixin instr_eqP.
+  Canonical instr_eqType := Eval hnf in EqType instr instr_eqMixin.
 
 
   (** Variables in programs *)
@@ -1345,6 +1475,134 @@ Module MakeDSL
        rsprog := rng_program (sprog s);
        rspost := rng_bexp (spost s) |}.
 
+
+  (** String outputs *)
+
+  Section StringOutputs.
+
+    Local Open Scope string_scope.
+
+    Definition string_of_eunop := @string_of_eunop.
+    Definition string_of_ebinop := @string_of_ebinop.
+    Definition string_of_runop := @string_of_runop.
+    Definition string_of_rbinop := @string_of_rbinop.
+    Definition string_of_rcmpop := @string_of_rcmpop.
+    Definition string_of_eexp := @string_of_eexp V.T VP.to_string.
+    Definition string_of_eexps := @string_of_eexps V.T VP.to_string.
+    Definition string_of_ebexp := @string_of_ebexp V.T VP.to_string.
+    Definition string_of_rexp := @string_of_rexp V.T VP.to_string.
+    Definition string_of_rbexp := @string_of_rbexp V.T VP.to_string.
+    Definition string_of_bexp e :=
+      string_of_ebexp (eqn_bexp e) ++ " && " ++ string_of_rbexp (rng_bexp e).
+
+    Definition string_of_typ (t : typ) : string :=
+      match t with
+      | Tuint n => "uint" ++ string_of_nat n
+      | Tsint n => "sint" ++ string_of_nat n
+      end.
+
+    Definition string_of_var_with_typ (vt : var * typ) : string :=
+      VP.to_string (fst vt) ++ "@" ++ string_of_typ (snd vt).
+
+    Definition string_of_vars (vs : VS.t) :=
+      (concat ", " (tmap VP.to_string (VS.elements vs)))%string.
+
+    Definition string_of_atom (a : atom) : string :=
+      match a with
+      | Avar v => VP.to_string v
+      | Aconst ty n => to_hex n ++ "@" ++ string_of_typ ty
+    end.
+
+    Definition string_of_instr (i : instr) : string :=
+      match i with
+      | Imov v a => "mov " ++ VP.to_string v ++ " " ++ string_of_atom a
+      | Ishl v a _ => "shl " ++ VP.to_string v ++ " " ++ string_of_atom a
+      | Icshl v1 v2 a1 a2 _ => "cshl " ++ VP.to_string v1 ++ " " ++ VP.to_string v2 ++ " "
+                                       ++ string_of_atom a1 ++ " " ++ string_of_atom a2
+      | Inondet v t => "nondet " ++ VP.to_string v ++ "@" ++ string_of_typ t
+      | Icmov v c a1 a2 => "cmov " ++ VP.to_string v ++ " " ++ string_of_atom c ++ " "
+                                   ++ string_of_atom a1 ++ " " ++ string_of_atom a2
+      | Inop => "nop"
+      | Inot v t a => "not " ++ string_of_var_with_typ (v, t) ++ " "
+                             ++ string_of_atom a
+      | Iadd v a1 a2 => "add " ++ VP.to_string v ++ " "
+                               ++ string_of_atom a1 ++ " " ++ string_of_atom a2
+      | Iadds c v a1 a2 => "adds " ++ VP.to_string c ++ " " ++ VP.to_string v ++ " "
+                                   ++ string_of_atom a1 ++ " " ++ string_of_atom a2
+      | Iadc v a1 a2 y => "adc " ++ VP.to_string v ++ " "
+                                 ++ string_of_atom a1 ++ " " ++ string_of_atom a2 ++ " "
+                                 ++ string_of_atom y
+      | Iadcs c v a1 a2 y => "adcs " ++ VP.to_string c ++ " " ++ VP.to_string v ++ " "
+                                     ++ string_of_atom a1 ++ " " ++ string_of_atom a2 ++ " "
+                                     ++ string_of_atom y
+      | Isub v a1 a2 => "sub " ++ VP.to_string v ++ " "
+                               ++ string_of_atom a1 ++ " " ++ string_of_atom a2
+      | Isubc c v a1 a2 => "subc " ++ VP.to_string c ++ " " ++ VP.to_string v ++ " "
+                                   ++ string_of_atom a1 ++ " " ++ string_of_atom a2
+      | Isubb c v a1 a2 => "subb " ++ VP.to_string c ++ " " ++ VP.to_string v ++ " "
+                                   ++ string_of_atom a1 ++ " " ++ string_of_atom a2
+      | Isbc v a1 a2 y => "sbc " ++ VP.to_string v ++ " "
+                                 ++ string_of_atom a1 ++ " " ++ string_of_atom a2 ++ " "
+                                 ++ string_of_atom y
+      | Isbcs c v a1 a2 y => "sbcs " ++ VP.to_string c ++ " " ++ VP.to_string v ++ " "
+                                     ++ string_of_atom a1 ++ " " ++ string_of_atom a2 ++ " "
+                                     ++ string_of_atom y
+      | Isbb v a1 a2 y => "sbb " ++ VP.to_string v ++ " "
+                                 ++ string_of_atom a1 ++ " " ++ string_of_atom a2 ++ " "
+                                 ++ string_of_atom y
+      | Isbbs c v a1 a2 y => "sbbs " ++ VP.to_string c ++ " " ++ VP.to_string v ++ " "
+                                     ++ string_of_atom a1 ++ " " ++ string_of_atom a2 ++ " "
+                                     ++ string_of_atom y
+      | Imul v a1 a2 => "mul " ++ VP.to_string v ++ " "
+                               ++ string_of_atom a1 ++ " " ++ string_of_atom a2
+      | Imull vh vl a1 a2 => "mull " ++ VP.to_string vh ++ " " ++ VP.to_string vl ++ " "
+                                     ++ string_of_atom a1 ++ " " ++ string_of_atom a2
+      | Imulj v a1 a2 => "mulj " ++ VP.to_string v ++ " "
+                                 ++ string_of_atom a1 ++ " " ++ string_of_atom a2
+      | Isplit vh vl a n => "split " ++ VP.to_string vh ++ " " ++ VP.to_string vl ++ " "
+                                     ++ string_of_atom a ++ " " ++ string_of_nat n
+      | Iand v t a1 a2 => "and " ++ string_of_var_with_typ (v, t) ++ " "
+                                 ++ string_of_atom a1 ++ " " ++ string_of_atom a2
+      | Ior v t a1 a2 => "or " ++ string_of_var_with_typ (v, t) ++ " "
+                               ++ string_of_atom a1 ++ " " ++ string_of_atom a2
+      | Ixor v t a1 a2 => "xor " ++ string_of_var_with_typ (v, t) ++ " "
+                                 ++ string_of_atom a1 ++ " " ++ string_of_atom a2
+      | Icast v t a => "cast " ++ VP.to_string v ++ "@" ++ string_of_typ t ++ " "
+                               ++ string_of_atom a
+      | Ivpc v t a => "vpc " ++ string_of_var_with_typ (v, t) ++ " "
+                             ++ string_of_atom a
+      | Ijoin v ah al => "join " ++ VP.to_string v ++ " "
+                                 ++ string_of_atom ah ++ " " ++ string_of_atom al
+      | Iassume e => "assume " ++ string_of_bexp e
+      end.
+
+    Definition string_of_instr' (i : instr) : string := string_of_instr i ++ ";".
+
+    Definition string_of_program (p : program) : string :=
+      concat newline (tmap string_of_instr' p).
+
+    Definition string_of_typenv (E : TE.env) : string :=
+      concat ", " (tmap string_of_var_with_typ (TE.elements E)).
+
+    Definition string_of_spec (s : spec) : string :=
+      "proc main(" ++ string_of_typenv (sinputs s) ++ ") =" ++ newline
+                   ++ "{ " ++ string_of_bexp (spre s) ++ "}" ++ newline
+                   ++ string_of_program (sprog s) ++ newline
+                   ++ "{ " ++ string_of_bexp (spost s) ++ "}" ++ newline.
+
+    Definition string_of_espec (s : espec) : string :=
+      "proc main(" ++ string_of_typenv (esinputs s) ++ ") =" ++ newline
+                   ++ "{ " ++ string_of_bexp (espre s) ++ "}" ++ newline
+                   ++ string_of_program (esprog s) ++ newline
+                   ++ "{ " ++ string_of_ebexp (espost s) ++ "}" ++ newline.
+
+    Definition string_of_rspec (s : rspec) : string :=
+      "proc main(" ++ string_of_typenv (rsinputs s) ++ ") = ++ newline"
+                   ++ "{ " ++ string_of_rbexp (rspre s) ++ "}" ++ newline
+                   ++ string_of_program (rsprog s) ++ newline
+                   ++ "{ " ++ string_of_rbexp (rspost s) ++ "} ++ newline".
+
+  End StringOutputs.
 
 
   (* Conversion from bits to integer *)
@@ -1876,6 +2134,21 @@ Module MakeDSL
         apply/IH. done.
   Qed.
 
+  Lemma eval_eands_split_eand e E s :
+    eval_ebexp (eands (split_eand e)) E s <-> eval_ebexp e E s.
+  Proof.
+    elim: e => //=.
+    - move=> e1 e2; split.
+      + move=> [H _]; assumption.
+      + move=> H; by split.
+    - move=> e1 e2 ms; split.
+      + move=> [H _]; assumption.
+      + move=> H; by split.
+    - move=> e1 IH1 e2 IH2; split.
+      + rewrite eval_ebexp_eands_cat; tauto.
+      + rewrite eval_ebexp_eands_cat; tauto.
+  Qed.
+
   Lemma eqn_program_succ_typenv p te :
     program_succ_typenv (eqn_program p) te = program_succ_typenv p te.
   Proof.
@@ -2006,6 +2279,30 @@ Module MakeDSL
     - exact: (He s1 s2 Hcon (conj Hepre Hrpre) Hprog).
     - exact: (Hr s1 s2 Hcon Hrpre (eval_rng_program Hprog)).
   Qed.
+
+  Lemma valid_espec_eand E f p e1 e2 :
+    valid_espec {| esinputs := E; espre := f; esprog := p; espost := Eand e1 e2 |} <->
+      valid_espec {| esinputs := E; espre := f; esprog := p; espost := e1 |} /\
+        valid_espec {| esinputs := E; espre := f; esprog := p; espost := e2 |}.
+  Proof.
+    rewrite /valid_espec /=. split.
+    - move=> H; split; move=> s1 s2 Hco Hpre Hprog; move: (H s1 s2 Hco Hpre Hprog); tauto.
+    - move=> [H1 H2] s1 s2 Hco Hpre Hprog.
+      exact: (conj (H1 s1 s2 Hco Hpre Hprog) (H2 s1 s2 Hco Hpre Hprog)).
+  Qed.
+
+  Lemma valid_rspec_rand E f p e1 e2 :
+    valid_rspec {| rsinputs := E; rspre := f; rsprog := p; rspost := Rand e1 e2 |} <->
+      valid_rspec {| rsinputs := E; rspre := f; rsprog := p; rspost := e1 |} /\
+        valid_rspec {| rsinputs := E; rspre := f; rsprog := p; rspost := e2 |}.
+  Proof.
+    rewrite /valid_rspec /=. split.
+    - move=> H; split; move=> s1 s2 Hco Hpre Hprog; move: (H s1 s2 Hco Hpre Hprog);
+                              move/andP; tauto.
+    - move=> [H1 H2] s1 s2 Hco Hpre Hprog.
+      by rewrite (H1 s1 s2 Hco Hpre Hprog) (H2 s1 s2 Hco Hpre Hprog).
+  Qed.
+
 
   (* Well-typedness *)
 
@@ -4722,9 +5019,2377 @@ Module MakeDSL
 
   End ForceConform.
 
+
+  (* Spec splitting *)
+
+  Definition split_espec (s : espec) : seq espec :=
+    tmap (fun q =>
+            {|
+              esinputs := esinputs s;
+              espre := espre s;
+              esprog := esprog s;
+              espost := q
+            |}) (split_eand (espost s)).
+
+  Definition split_rspec (s : rspec) : seq rspec :=
+    tmap (fun q =>
+            {|
+              rsinputs := rsinputs s;
+              rspre := rspre s;
+              rsprog := rsprog s;
+              rspost := q
+            |}) (split_rand (rspost s)).
+
+  Definition valid_especs (es : seq espec) : Prop :=
+    forall s, In s es -> valid_espec s.
+
+  Definition valid_rspecs (es : seq rspec) : Prop :=
+    forall s, In s es -> valid_rspec s.
+
+  Lemma split_espec_eand E f p e1 e2 :
+    split_espec {| esinputs := E; espre := f; esprog := p; espost := Eand e1 e2 |}
+    = split_espec {| esinputs := E; espre := f; esprog := p; espost := e1 |} ++
+                  split_espec {| esinputs := E; espre := f; esprog := p; espost := e2 |}.
+  Proof.
+    rewrite /split_espec /=. rewrite !tmap_map map_cat. reflexivity.
+  Qed.
+
+  Lemma split_rspec_rand E f p e1 e2 :
+    split_rspec {| rsinputs := E; rspre := f; rsprog := p; rspost := Rand e1 e2 |}
+    = split_rspec {| rsinputs := E; rspre := f; rsprog := p; rspost := e1 |} ++
+                  split_rspec {| rsinputs := E; rspre := f; rsprog := p; rspost := e2 |}.
+  Proof.
+    rewrite /split_rspec /=. rewrite !tmap_map map_cat. reflexivity.
+  Qed.
+
+  Lemma valid_especs_empty : valid_especs [::].
+  Proof. move=> s Hin. apply: False_ind. exact: (List.in_nil Hin). Qed.
+
+  Lemma valid_rspecs_empty : valid_rspecs [::].
+  Proof. move=> s Hin. apply: False_ind. exact: (List.in_nil Hin). Qed.
+
+  Lemma valid_especs_singleton s : valid_espec s <-> valid_especs [:: s].
+  Proof.
+    split; move=> H.
+    - move=> ss. case => //=. move=> <-. assumption.
+    - apply: H. left. reflexivity.
+  Qed.
+
+  Lemma valid_rspecs_singleton s : valid_rspec s <-> valid_rspecs [:: s].
+  Proof.
+    split; move=> H.
+    - move=> ss. case => //=. move=> <-. assumption.
+    - apply: H. left. reflexivity.
+  Qed.
+
+  Lemma valid_especs_cons1 s ss :
+    valid_especs (s::ss) -> valid_espec s /\ valid_especs ss.
+  Proof.
+    move=> H; split.
+    + apply: H. exact: in_eq.
+    + move=> t Hin; apply: H. exact: (List.in_cons _ _ _ Hin).
+  Qed.
+
+  Lemma valid_especs_cons2 s ss :
+    valid_espec s -> valid_especs ss -> valid_especs (s::ss).
+  Proof.
+    move=> Hs Hss t Hin. case: (in_inv Hin) => {}Hin.
+    - subst. assumption.
+    - exact: (Hss _ Hin).
+  Qed.
+
+  Lemma valid_rspecs_cons1 s ss :
+    valid_rspecs (s::ss) -> valid_rspec s /\ valid_rspecs ss.
+  Proof.
+    move=> H; split.
+    + apply: H. exact: in_eq.
+    + move=> t Hin; apply: H. exact: (List.in_cons _ _ _ Hin).
+  Qed.
+
+  Lemma valid_rspecs_cons2 s ss :
+    valid_rspec s -> valid_rspecs ss -> valid_rspecs (s::ss).
+  Proof.
+    move=> Hs Hss t Hin. case: (in_inv Hin) => {}Hin.
+    - subst. assumption.
+    - exact: (Hss _ Hin).
+  Qed.
+
+  Lemma valid_especs_cat1 ss1 ss2 :
+    valid_especs (ss1 ++ ss2) -> valid_especs ss1 /\ valid_especs ss2.
+  Proof.
+    move=> H; split; move=> s Hin; apply: H.
+    - exact: (in_cat_l _ Hin).
+    - exact: (in_cat_r _ Hin).
+  Qed.
+
+  Lemma valid_especs_cat2 ss1 ss2 :
+    valid_especs ss1 -> valid_especs ss2 -> valid_especs (ss1 ++ ss2).
+  Proof.
+    move=> H1 H2 s Hin. case: (in_cat Hin) => {}Hin.
+    - exact: (H1 _ Hin).
+    - exact: (H2 _ Hin).
+  Qed.
+
+  Lemma valid_rspecs_cat1 ss1 ss2 :
+    valid_rspecs (ss1 ++ ss2) -> valid_rspecs ss1 /\ valid_rspecs ss2.
+  Proof.
+    move=> H; split; move=> s Hin; apply: H.
+    - exact: (in_cat_l _ Hin).
+    - exact: (in_cat_r _ Hin).
+  Qed.
+
+  Lemma valid_rspecs_cat2 ss1 ss2 :
+    valid_rspecs ss1 -> valid_rspecs ss2 -> valid_rspecs (ss1 ++ ss2).
+  Proof.
+    move=> H1 H2 s Hin. case: (in_cat Hin) => {}Hin.
+    - exact: (H1 _ Hin).
+    - exact: (H2 _ Hin).
+  Qed.
+
+  Lemma split_espec_correct s :
+    valid_especs (split_espec s) <-> valid_espec s.
+  Proof.
+    case: s => E f p q. elim: q => /=.
+    - rewrite /split_espec /tmap /mapr /=. split.
+      + done.
+      + move=> H s Hin. move: (in_singleton Hin) => ?; subst. done.
+    - move=> e1 e2. rewrite /split_espec /tmap /mapr /=. split.
+      + apply. exact: in_eq.
+      + move=> H s Hin. move: (in_singleton Hin) => ?; subst. done.
+    - move=> e1 e2 ms. rewrite /split_espec /tmap /mapr /=. split.
+      + apply. exact: in_eq.
+      + move=> H s Hin. move: (in_singleton Hin) => ?; subst. done.
+    - move=> e1 [IH11 IH12] e2 [IH21 IH22]. rewrite split_espec_eand valid_espec_eand. split.
+      + move=> H. move: (valid_especs_cat1 H) => [H1 H2].
+        move: (IH11 H1) (IH21 H2). tauto.
+      + move=> [H1 H2]. move: (IH12 H1) (IH22 H2) => {}H1 {}H2.
+        apply: valid_especs_cat2; tauto.
+  Qed.
+
+  Lemma split_rspec_correct s :
+    valid_rspecs (split_rspec s) <-> valid_rspec s.
+  Proof.
+    case: s => E f p g. elim: g => /=.
+    - rewrite /split_rspec /tmap /mapr /=. split.
+      + done.
+      + move=> H s Hin. move: (in_singleton Hin) => ?; subst. done.
+    - move=> e1 e2. rewrite /split_rspec /tmap /mapr /=. split.
+      + apply. exact: in_eq.
+      + move=> H s Hin. move: (in_singleton Hin) => ?; subst. done.
+    - move=> e1 e2 ms. rewrite /split_rspec /tmap /mapr /=. split.
+      + apply. exact: in_eq.
+      + move=> H s Hin. move: (in_singleton Hin) => ?; subst. done.
+    - move=> e _. rewrite /split_rspec /tmap /mapr /=. split.
+      + apply. exact: in_eq.
+      + move=> H s Hin. move: (in_singleton Hin) => ?; subst. done.
+    - move=> e1 [IH11 IH12] e2 [IH21 IH22]. rewrite split_rspec_rand valid_rspec_rand. split.
+      + move=> H. move: (valid_rspecs_cat1 H) => [H1 H2].
+        move: (IH11 H1) (IH21 H2). tauto.
+      + move=> [H1 H2]. move: (IH12 H1) (IH22 H2) => {}H1 {}H2.
+        apply: valid_rspecs_cat2; tauto.
+    - move=> e1 _ e2 _. rewrite /split_rspec /tmap /mapr /=. split.
+      + apply. exact: in_eq.
+      + move=> H s Hin. move: (in_singleton Hin) => ?; subst. done.
+  Qed.
+
+
+  (* State eqmod *)
+
+  Module TSEQM := TStateEqmod V BitsValueType S VS.
+
+  Section StateEqm.
+
+    Lemma state_eqmod_eval_eexp E vs e s1 s2 :
+      TSEQM.state_eqmod vs s1 s2 ->
+      VS.subset (vars_eexp e) vs ->
+      eval_eexp e E s1 = eval_eexp e E s2.
+    Proof.
+      move=> Heqm. elim: e => //=.
+      - move=> x Hsub. rewrite /acc2z /bv2z.
+        move: (TSEQM.VSLemmas.subset_singleton1 Hsub) => Hmem.
+        rewrite (Heqm x Hmem). reflexivity.
+      - move=> op e IH Hsub. rewrite (IH Hsub). reflexivity.
+      - move=> op e1 IH1 e2 IH2 Hsub.
+        move: (TSEQM.VSLemmas.subset_union4 Hsub) (TSEQM.VSLemmas.subset_union5 Hsub)
+            => Hsub1 Hsub2. rewrite (IH1 Hsub1) (IH2 Hsub2). reflexivity.
+      - move=> e IH n Hsub. rewrite (IH Hsub). reflexivity.
+    Qed.
+
+    Lemma state_eqmod_eval_eexps E vs es s1 s2 :
+      TSEQM.state_eqmod vs s1 s2 ->
+      VS.subset (vars_eexps es) vs ->
+      eval_eexps es E s1 = eval_eexps es E s2.
+    Proof.
+      move=> Heqm. elim: es => [| e es IH] //=. move=> Hsub.
+      move: (TSEQM.VSLemmas.subset_union4 Hsub) (TSEQM.VSLemmas.subset_union5 Hsub)
+          => Hsub1 Hsub2. rewrite (state_eqmod_eval_eexp _ Heqm Hsub1) (IH Hsub2).
+      reflexivity.
+    Qed.
+
+    Lemma state_eqmod_eval_ebexp E vs e s1 s2 :
+      TSEQM.state_eqmod vs s1 s2 ->
+      VS.subset (vars_ebexp e) vs ->
+      eval_ebexp e E s1 <-> eval_ebexp e E s2.
+    Proof.
+      move=> Heqm. elim: e => //=.
+      - move=> e1 e2 Hsub.
+        move: (TSEQM.VSLemmas.subset_union4 Hsub) (TSEQM.VSLemmas.subset_union5 Hsub)
+            => Hsub1 Hsub2. rewrite (state_eqmod_eval_eexp _ Heqm Hsub1)
+                                    (state_eqmod_eval_eexp _ Heqm Hsub2). tauto.
+      - move=> e1 e2 ms Hsub.
+        move: (TSEQM.VSLemmas.subset_union4 Hsub) (TSEQM.VSLemmas.subset_union5 Hsub)
+            => Hsub1 Hsub2.
+        move: (TSEQM.VSLemmas.subset_union4 Hsub2) (TSEQM.VSLemmas.subset_union5 Hsub2)
+            => {} Hsub2 Hsub3.
+        rewrite (state_eqmod_eval_eexp _ Heqm Hsub1)
+                (state_eqmod_eval_eexp _ Heqm Hsub2)
+                (state_eqmod_eval_eexps _ Heqm Hsub3). tauto.
+      - move=> e1 IH1 e2 IH2 Hsub.
+        move: (TSEQM.VSLemmas.subset_union4 Hsub) (TSEQM.VSLemmas.subset_union5 Hsub)
+            => Hsub1 Hsub2. move: (IH1 Hsub1) (IH2 Hsub2). tauto.
+    Qed.
+
+    Lemma state_eqmod_eval_rexp vs e s1 s2 :
+      TSEQM.state_eqmod vs s1 s2 ->
+      VS.subset (vars_rexp e) vs ->
+      eval_rexp e s1 = eval_rexp e s2.
+    Proof.
+      move=> Heqm. elim: e => //=.
+      - move=> x Hsub. move: (TSEQM.VSLemmas.subset_singleton1 Hsub) => Hmem.
+        rewrite (Heqm x Hmem). reflexivity.
+      - move=> _ op e IH Hsub. rewrite (IH Hsub). reflexivity.
+      - move=> _ op e1 IH1 e2 IH2 Hsub.
+        move: (TSEQM.VSLemmas.subset_union4 Hsub) (TSEQM.VSLemmas.subset_union5 Hsub)
+            => Hsub1 Hsub2. rewrite (IH1 Hsub1) (IH2 Hsub2). reflexivity.
+      - move=> _ e IH n Hsub. rewrite (IH Hsub). reflexivity.
+      - move=> _ e IH n Hsub. rewrite (IH Hsub). reflexivity.
+    Qed.
+
+    Lemma state_eqmod_eval_rbexp vs e s1 s2 :
+      TSEQM.state_eqmod vs s1 s2 ->
+      VS.subset (vars_rbexp e) vs ->
+      eval_rbexp e s1 = eval_rbexp e s2.
+    Proof.
+      move=> Heqm. elim: e => //=.
+      - move=> _ e1 e2 Hsub.
+        move: (TSEQM.VSLemmas.subset_union4 Hsub) (TSEQM.VSLemmas.subset_union5 Hsub)
+            => Hsub1 Hsub2. rewrite (state_eqmod_eval_rexp Heqm Hsub1)
+                                    (state_eqmod_eval_rexp Heqm Hsub2). reflexivity.
+      - move=> _ op e1 e2 Hsub.
+        move: (TSEQM.VSLemmas.subset_union4 Hsub) (TSEQM.VSLemmas.subset_union5 Hsub)
+            => Hsub1 Hsub2.
+        rewrite (state_eqmod_eval_rexp Heqm Hsub1)
+                (state_eqmod_eval_rexp Heqm Hsub2). reflexivity.
+      - move=> e IH Hsub. rewrite (IH Hsub). reflexivity.
+      - move=> e1 IH1 e2 IH2 Hsub.
+        move: (TSEQM.VSLemmas.subset_union4 Hsub) (TSEQM.VSLemmas.subset_union5 Hsub)
+            => Hsub1 Hsub2. rewrite (IH1 Hsub1) (IH2 Hsub2). reflexivity.
+      - move=> e1 IH1 e2 IH2 Hsub.
+        move: (TSEQM.VSLemmas.subset_union4 Hsub) (TSEQM.VSLemmas.subset_union5 Hsub)
+            => Hsub1 Hsub2. rewrite (IH1 Hsub1) (IH2 Hsub2). reflexivity.
+    Qed.
+
+    Lemma state_eqmod_eval_atom vs a s1 s2 :
+      TSEQM.state_eqmod vs s1 s2 ->
+      VS.subset (vars_atom a) vs ->
+      eval_atom a s1 = eval_atom a s2.
+    Proof.
+      case: a => //=. move=> v Heqm Hsub.
+      move: (TSEQM.VSLemmas.subset_singleton1 Hsub) => Hmem.
+      rewrite (Heqm v Hmem). reflexivity.
+    Qed.
+
+  End StateEqm.
+
+
+  (* Agree *)
+
+  Module MA := MapAgree V TE VS.
+
+  Section Agree.
+
+    Lemma agree_vtyp v E1 E2 :
+      MA.agree (VS.singleton v) E1 E2 -> TE.vtyp v E1 = TE.vtyp v E2.
+    Proof.
+      move=> H; move: (H v (VSLemmas.mem_singleton2 (eq_refl v))) => Hfind.
+      case Hf: (TE.find v E2).
+      - rewrite Hf in Hfind. rewrite (TE.find_some_vtyp Hf) (TE.find_some_vtyp Hfind).
+        reflexivity.
+      - rewrite Hf in Hfind. rewrite (TE.find_none_vtyp Hf) (TE.find_none_vtyp Hfind).
+        reflexivity.
+    Qed.
+
+    Lemma agree_atyp a E1 E2 :
+      MA.agree (vars_atom a) E1 E2 -> atyp a E1 = atyp a E2.
+    Proof. case: a => //=. move=> v Ha. exact: (agree_vtyp Ha). Qed.
+
+    Lemma agree_asize a E1 E2 :
+      MA.agree (vars_atom a) E1 E2 -> asize a E1 = asize a E2.
+    Proof.
+      move=> Ha; rewrite /asize; rewrite (agree_atyp Ha). reflexivity.
+    Qed.
+
+    Ltac inversion_eval_instr :=
+      match goal with
+      | H : eval_instr _ _ _ _ |- _ => inversion_clear H
+      end.
+
+    Ltac dec_atom_typ :=
+      MA.simpl_agree;
+      repeat
+        match goal with
+        | H : MA.agree (vars_atom ?a) ?E1 ?E2 |- context f [atyp ?a ?E2] =>
+            rewrite -(agree_atyp H)
+        | H : MA.agree (vars_atom ?a) ?E1 ?E2 |- context f [atyp ?a ?E2] =>
+            rewrite -(agree_atyp H)
+        | H : ?e |- ?e => assumption
+        end.
+
+    Lemma agree_eval_eexp E1 E2 e s :
+      MA.agree (vars_eexp e) E1 E2 -> eval_eexp e E1 s = eval_eexp e E2 s.
+    Proof.
+      elim: e => //=.
+      - move=> v Ha. rewrite /acc2z. rewrite (agree_vtyp Ha). reflexivity.
+      - move=> op e IH Ha. rewrite (IH Ha). reflexivity.
+      - move=> op e1 IH1 e2 IH2 Ha. MA.simpl_agree.
+        rewrite (IH1 H) (IH2 H0). reflexivity.
+      - move=> e IH n Ha. rewrite (IH Ha). reflexivity.
+    Qed.
+
+    Lemma agree_eval_eexps E1 E2 es s :
+      MA.agree (vars_eexps es) E1 E2 -> eval_eexps es E1 s = eval_eexps es E2 s.
+    Proof.
+      elim: es => [| e es IH] //=. move=> H. MA.simpl_agree.
+      rewrite (agree_eval_eexp _ H0) (IH H1). reflexivity.
+    Qed.
+
+    Lemma agree_eval_ebexp E1 E2 e s :
+      MA.agree (vars_ebexp e) E1 E2 -> eval_ebexp e E1 s <-> eval_ebexp e E2 s.
+    Proof.
+      elim: e => //=.
+      - move=> e1 e2 Ha. MA.simpl_agree.
+        rewrite (agree_eval_eexp _ H) (agree_eval_eexp _ H0). tauto.
+      - move=> e1 e2 ms Ha. MA.simpl_agree.
+        rewrite (agree_eval_eexp _ H) (agree_eval_eexp _ H1)  (agree_eval_eexps _ H2). tauto.
+      - move=> e1 IH1 e2 IH2 Ha. MA.simpl_agree.
+        move: (IH1 H) (IH2 H0). tauto.
+    Qed.
+
+    Lemma agree_eval_bexp E1 E2 e s :
+      MA.agree (vars_ebexp (eqn_bexp e)) E1 E2 -> eval_bexp e E1 s <-> eval_bexp e E2 s.
+    Proof.
+      case: e => [e r] /=. split; move=> [/= He Hr]; split => /=; try assumption.
+      - apply/(agree_eval_ebexp _ H). assumption.
+      - apply/(agree_eval_ebexp _ H). assumption.
+    Qed.
+
+    Lemma agree_instr_succ_typenv i vs E1 E2 :
+      MA.agree vs E1 E2 ->
+      MA.agree (vars_instr i) E1 E2 ->
+      MA.agree vs (instr_succ_typenv i E1) (instr_succ_typenv i E2).
+    Proof.
+      case: i => //=; intros; dec_atom_typ; by MA.dp_agree.
+    Qed.
+
+    Lemma agree_program_succ_typenv p vs E1 E2 :
+      MA.agree vs E1 E2 ->
+      MA.agree (vars_program p) E1 E2 ->
+      MA.agree vs (program_succ_typenv p E1) (program_succ_typenv p E2).
+    Proof.
+      elim: p vs E1 E2 => [| i p IH] vs E1 E2 //=.
+      move=> Ha1 Ha2. MA.simpl_agree. apply: IH.
+      - exact: (agree_instr_succ_typenv Ha1 H).
+      - exact: (agree_instr_succ_typenv H0 H).
+    Qed.
+
+    Lemma agree_eval_instr E1 E2 i s1 s2 :
+      eval_instr E1 i s1 s2 -> MA.agree (vars_instr i) E1 E2 ->
+      eval_instr E2 i s1 s2.
+    Proof.
+      case: i => //=; intros; inversion_eval_instr.
+      - apply: EImov; assumption.
+      - apply: EIshl; assumption.
+      - apply: EIcshl; assumption.
+      - apply: (EInondet _ H1); assumption.
+      - apply: (EIcmovT _ _ H1); assumption.
+      - apply: (EIcmovF _ _ H1); assumption.
+      - exact: EInop.
+      - apply: EInot; assumption.
+      - apply: EIadd; assumption.
+      - apply: EIadds; assumption.
+      - apply: EIadc; assumption.
+      - apply: EIadcs; assumption.
+      - apply: EIsub; assumption.
+      - apply: EIsubc; assumption.
+      - apply: EIsubb; assumption.
+      - apply: EIsbc; assumption.
+      - apply: EIsbcs; assumption.
+      - apply: EIsbb; assumption.
+      - apply: EIsbbs; assumption.
+      - apply: EImul; assumption.
+      - apply: EImullU; by dec_atom_typ.
+      - apply: EImullS; by dec_atom_typ.
+      - apply: EImuljU; by dec_atom_typ.
+      - apply: EImuljS; by dec_atom_typ.
+      - apply: EIsplitU; by dec_atom_typ.
+      - apply: EIsplitS; by dec_atom_typ.
+      - apply: EIand; assumption.
+      - apply: EIor; assumption.
+      - apply: EIxor; assumption.
+      - apply: EIcast; by dec_atom_typ.
+      - apply: EIvpc; by dec_atom_typ.
+      - apply: EIjoin; assumption.
+      - apply: EIassume. apply/agree_eval_bexp; last exact: H1.
+        apply: MA.agree_sym. apply: (MA.subset_set_agree _ H0) => {H0 H1}.
+        case: b => [e r] /=. rewrite /vars_bexp /=. exact: VSLemmas.union_subset_1.
+    Qed.
+
+    Lemma agree_eval_program E1 E2 p s1 s2 :
+      eval_program E1 p s1 s2 -> MA.agree (vars_program p) E1 E2 ->
+      eval_program E2 p s1 s2.
+    Proof.
+      elim: p E1 E2 s1 s2 => [| i p IH] /= E1 E2 s1 s2.
+      - move=> Hev; inversion_clear Hev. move=> _. exact: Enil.
+      - move=> Hev; inversion_clear Hev. move=> Ha. MA.simpl_agree.
+        apply: (Econs (agree_eval_instr H H1)). apply: (IH _ _ _ _ H0).
+        exact: (agree_instr_succ_typenv H2 H1).
+    Qed.
+
+  End Agree.
+
+
+  (* Slicing *)
+
+  Section Slicing.
+
+    Definition depvars_ebexp vs e :=
+      foldl (fun vs e => let vse := vars_ebexp e in
+                         if VSLemmas.disjoint vs vse then vs
+                         else VS.union vs vse) vs (split_eand e).
+
+    Definition depvars_rexp vs e :=
+      let vse := vars_rexp e in
+      if VSLemmas.disjoint vs vse then vs
+      else VS.union vs vse.
+
+    Definition depvars_rbexp vs e :=
+      foldl (fun vs e => let vse := vars_rbexp e in
+                         if VSLemmas.disjoint vs vse then vs
+                         else VS.union vs vse) vs (split_rand e).
+
+    Definition depvars_einstr vs i :=
+      match i with
+      | Iassume (e, r) => depvars_ebexp vs e
+      (* It is possible that there is `mov x y` (or `vpc x@t y`)
+         but some relevant assumption only mentions x. *)
+      | Imov _ (Avar _) => if VSLemmas.disjoint vs (vars_instr i) then vs
+                           else VS.union vs (vars_instr i)
+      | Ivpc _ _ (Avar _) => if VSLemmas.disjoint vs (vars_instr i) then vs
+                             else VS.union vs (vars_instr i)
+      | _ => if VSLemmas.disjoint vs (lvs_instr i) then vs
+             else VS.union vs (vars_instr i)
+      end.
+
+    Definition depvars_rinstr vs i :=
+      match i with
+      | Iassume (e, r) => depvars_rbexp vs r
+      | Imov _ (Avar _) => if VSLemmas.disjoint vs (vars_instr i) then vs
+                           else VS.union vs (vars_instr i)
+      | Ivpc _ _ (Avar _) => if VSLemmas.disjoint vs (vars_instr i) then vs
+                             else VS.union vs (vars_instr i)
+      | _ => if VSLemmas.disjoint vs (lvs_instr i) then vs
+             else VS.union vs (vars_instr i)
+      end.
+
+    Definition depvars_eprogram vs p :=
+      foldl depvars_einstr vs (rev p).
+
+    Definition depvars_rprogram vs p :=
+      foldl depvars_rinstr vs (rev p).
+
+    Definition depvars_epre_eprogram vs e p :=
+      depvars_ebexp (depvars_eprogram vs p) e.
+
+    Definition depvars_rpre_rprogram vs e p :=
+      depvars_rbexp (depvars_rprogram vs p) e.
+
+
+    Lemma depvars_eand vs e1 e2 :
+      depvars_ebexp vs (Eand e1 e2) = depvars_ebexp (depvars_ebexp vs e1) e2.
+    Proof. rewrite /depvars_ebexp /=. rewrite foldl_cat. reflexivity. Qed.
+
+    Lemma depvars_rand vs e1 e2 :
+      depvars_rbexp vs (Rand e1 e2) = depvars_rbexp (depvars_rbexp vs e1) e2.
+    Proof. rewrite /depvars_rbexp /=. rewrite foldl_cat. reflexivity. Qed.
+
+    Lemma depvars_eprogram_rcons vs p i :
+      depvars_eprogram vs (rcons p i) =
+        depvars_eprogram (depvars_einstr vs i) p.
+    Proof.
+      move: p i vs. rewrite /depvars_eprogram.
+      apply: last_ind => [| p j _] i vs //=. rewrite rev_rcons /=. reflexivity.
+    Qed.
+
+    Lemma depvars_rprogram_rcons vs p i :
+      depvars_rprogram vs (rcons p i) =
+        depvars_rprogram (depvars_rinstr vs i) p.
+    Proof.
+      move: p i vs. rewrite /depvars_rprogram.
+      apply: last_ind => [| p j _] i vs //=. rewrite rev_rcons /=. reflexivity.
+    Qed.
+
+    Lemma depvars_epre_eprogram_rcons vs e p i :
+      depvars_epre_eprogram vs e (rcons p i) =
+        depvars_epre_eprogram (depvars_einstr vs i) e p.
+    Proof.
+      rewrite /depvars_epre_eprogram.
+      rewrite depvars_eprogram_rcons. reflexivity.
+    Qed.
+
+    Lemma depvars_rpre_rprogram_rcons vs e p i :
+      depvars_rpre_rprogram vs e (rcons p i) =
+        depvars_rpre_rprogram (depvars_rinstr vs i) e p.
+    Proof.
+      rewrite /depvars_rpre_rprogram.
+      rewrite depvars_rprogram_rcons. reflexivity.
+    Qed.
+
+    Ltac case_if' :=
+      repeat
+        case_if ||
+        match goal with
+        | |- context c [let (_, _) := ?b in _] =>
+            let e := fresh in
+            let r := fresh in
+            case: b => e r
+        end.
+
+    Ltac case_match_atom :=
+      repeat
+        match goal with
+        | H : context c [match ?a with
+                         | Avar _ => _
+                         | Aconst _ _ => _
+                         end] |- _ =>
+            (repeat match goal with
+                    | H : context c [a] |- _ => move: H
+                    end); case: a; simpl; intros
+        | |- context c [match ?a with
+                        | Avar _ => _
+                        | Aconst _ _ => _
+                        end] =>
+            (repeat match goal with
+                    | H : context c [a] |- _ => move: H
+                    end); case: a; simpl; intros
+        end.
+
+    Ltac mytac ::=
+      match goal with
+      | |- VS.Equal ?s ?s => exact: VSLemmas.OP.P.equal_refl
+      | Heq : VS.Equal ?s1 ?s2,
+          H1 : VSLemmas.disjoint ?s1 ?s = ?b1,
+            H2 : VSLemmas.disjoint ?s2 ?s = ?b2 |- _ =>
+          match b1 with
+          | true => match b2 with
+                    | false => rewrite Heq H2 in H1; discriminate
+                    | _ => idtac
+                    end
+          | false => match b2 with
+                     | true => rewrite Heq H2 in H1; discriminate
+                     | _ => idtac
+                     end
+          end
+      end.
+
+    Global Instance add_proper_depvars_ebexp_set :
+      Proper (VS.Equal ==> eq ==> VS.Equal) depvars_ebexp.
+    Proof.
+      move=> s1 s2 Heq e1 e2 ?; subst. elim: e2 s1 s2 Heq => /=.
+      - move=> s1 s2 Heq. rewrite /depvars_ebexp /=. case_if; VSLemmas.simpl_union; assumption.
+      - move=> e1 e2 s1 s2 Heq. rewrite /depvars_ebexp /=. case_if; rewrite Heq; by mytac.
+      - move=> e1 e2 ms s1 s2 Heq. rewrite /depvars_ebexp /=. case_if; rewrite Heq; by mytac.
+      - move=> e1 IH1 e2 IH2 s1 s2 Heq. rewrite !depvars_eand.
+        apply: IH2. apply: IH1. assumption.
+    Qed.
+
+    Global Instance add_proper_depvars_rbexp_set :
+      Proper (VS.Equal ==> eq ==> VS.Equal) depvars_rbexp.
+    Proof.
+      move=> s1 s2 Heq e1 e2 ?; subst. elim: e2 s1 s2 Heq => /=.
+      - move=> s1 s2 Heq. rewrite /depvars_rbexp /=. case_if; VSLemmas.simpl_union; assumption.
+      - move=> n e1 e2 s1 s2 Heq. rewrite /depvars_rbexp /=. case_if; rewrite Heq; by mytac.
+      - move=> n op e1 e2 s1 s2 Heq. rewrite /depvars_rbexp /=. case_if; rewrite Heq; by mytac.
+      - move=> e IH s1 s2 Heq. rewrite /depvars_rbexp /=. case_if; rewrite Heq; by mytac.
+      - move=> e1 IH1 e2 IH2 s1 s2 Heq. rewrite !depvars_rand.
+        apply: IH2. apply: IH1. assumption.
+      - move=> e1 IH1 e2 IH2 s1 s2 Heq. rewrite /depvars_rbexp /=. case_if; rewrite Heq; by mytac.
+    Qed.
+
+    Global Instance add_proper_depvars_einstr_set :
+      Proper (VS.Equal ==> eq ==> VS.Equal) depvars_einstr.
+    Proof.
+      move=> s1 s2 Heq i1 i2 ?; subst.
+      (case: i2 => /=); intros; case_match_atom; case_if'; rewrite Heq; by mytac.
+    Qed.
+
+    Global Instance add_proper_depvars_rinstr_set :
+      Proper (VS.Equal ==> eq ==> VS.Equal) depvars_rinstr.
+    Proof.
+      move=> s1 s2 Heq i1 i2 ?; subst.
+      (case: i2 => /=); intros; case_match_atom; case_if'; rewrite Heq; by mytac.
+    Qed.
+
+    Global Instance add_proper_depvars_eprogram_set :
+      Proper (VS.Equal ==> eq ==> VS.Equal) depvars_eprogram.
+    Proof.
+      move=> s1 s2 Heq p1 p2 ?; subst. move: p2 s1 s2 Heq.
+      apply: last_ind => [| p i IH] s1 s2 Heq //=. rewrite !depvars_eprogram_rcons.
+      apply: IH. rewrite Heq. reflexivity.
+    Qed.
+
+    Global Instance add_proper_depvars_rprogram_set :
+      Proper (VS.Equal ==> eq ==> VS.Equal) depvars_rprogram.
+    Proof.
+      move=> s1 s2 Heq p1 p2 ?; subst. move: p2 s1 s2 Heq.
+      apply: last_ind => [| p i IH] s1 s2 Heq //=. rewrite !depvars_rprogram_rcons.
+      apply: IH. rewrite Heq. reflexivity.
+    Qed.
+
+    Global Instance add_proper_depvars_epre_eprogram_set :
+      Proper (VS.Equal ==> eq ==> eq ==> VS.Equal) depvars_epre_eprogram.
+    Proof.
+      move=> s1 s2 Heq e1 e2 ? p1 p2 ?; subst. rewrite /depvars_epre_eprogram.
+      rewrite Heq. reflexivity.
+    Qed.
+
+    Global Instance add_proper_depvars_rpre_rprogram_set :
+      Proper (VS.Equal ==> eq ==> eq ==> VS.Equal) depvars_rpre_rprogram.
+    Proof.
+      move=> s1 s2 Heq e1 e2 ? p1 p2 ?; subst. rewrite /depvars_rpre_rprogram.
+      rewrite Heq. reflexivity.
+    Qed.
+
+
+    Lemma depvars_ebexp_lb vs e :
+      VS.subset vs (depvars_ebexp vs e).
+    Proof.
+      rewrite /depvars_ebexp. elim: e vs => //=.
+      - move=> vs. case: (VSLemmas.disjoint vs VS.empty).
+        + exact: VSLemmas.subset_refl.
+        + rewrite VSLemmas.union_emptyr. exact: VSLemmas.subset_refl.
+      - move=> e1 e2 vs.
+        case: (VSLemmas.disjoint vs (VS.union (vars_eexp e1) (vars_eexp e2))).
+        + exact: VSLemmas.subset_refl.
+        + exact: VSLemmas.union_subset_1.
+      - move=> e1 e2 ms vs.
+        case: (VSLemmas.disjoint
+                 vs
+                 (VS.union (vars_eexp e1) (VS.union (vars_eexp e2) (vars_eexps ms)))).
+        + exact: VSLemmas.subset_refl.
+        + exact: VSLemmas.union_subset_1.
+      - move=> e1 IH1 e2 IH2 vs. rewrite foldl_cat.
+        apply: (VSLemmas.subset_trans (IH1 vs)). exact: IH2.
+    Qed.
+
+    Lemma depvars_ebexp_ub vs e :
+      VS.subset (depvars_ebexp vs e) (VS.union vs (vars_ebexp e)).
+    Proof.
+      rewrite /depvars_ebexp. elim: e vs => //=.
+      - move=> vs. case: (VSLemmas.disjoint vs VS.empty).
+        + exact: VSLemmas.union_subset_1.
+        + exact: VSLemmas.subset_refl.
+      - move=> e1 e2 vs.
+        case: (VSLemmas.disjoint vs (VS.union (vars_eexp e1) (vars_eexp e2))).
+        + exact: VSLemmas.union_subset_1.
+        + exact: VSLemmas.subset_refl.
+      - move=> e1 e2 ms vs.
+        case: (VSLemmas.disjoint
+                 vs
+                 (VS.union (vars_eexp e1) (VS.union (vars_eexp e2) (vars_eexps ms)))).
+        + exact: VSLemmas.union_subset_1.
+        + exact: VSLemmas.subset_refl.
+      - move=> e1 IH1 e2 IH2 vs. rewrite foldl_cat.
+        rewrite -VSLemmas.P.union_assoc.
+        apply: (VSLemmas.subset_trans
+                  (IH2
+                     ((foldl
+                         (fun (vs0 : VS.t) (e : ebexp) =>
+                            if VSLemmas.disjoint vs0 (vars_ebexp e) then vs0 else VS.union vs0 (vars_ebexp e))
+                         vs (split_eand e1))))).
+        apply: VSLemmas.union_subsets.
+        + exact: IH1.
+        + exact: VSLemmas.subset_refl.
+    Qed.
+
+    Lemma depvars_rexp_lb vs e : VS.subset vs (depvars_rexp vs e).
+    Proof.
+      rewrite /depvars_rexp. case (VSLemmas.disjoint vs (vars_rexp e)).
+      - exact: VSLemmas.subset_refl.
+      - exact: VSLemmas.union_subset_1.
+    Qed.
+
+    Lemma depvars_rexp_ub vs e :
+      VS.subset (depvars_rexp vs e) (VS.union vs (vars_rexp e)).
+    Proof.
+      rewrite /depvars_rexp. case (VSLemmas.disjoint vs (vars_rexp e)).
+      - exact: VSLemmas.union_subset_1.
+      - exact: VSLemmas.subset_refl.
+    Qed.
+
+    Lemma depvars_rbexp_lb vs e :
+      VS.subset vs (depvars_rbexp vs e).
+    Proof.
+      rewrite /depvars_rbexp. elim: e vs => //=.
+      - move=> vs. case: (VSLemmas.disjoint vs VS.empty).
+        + exact: VSLemmas.subset_refl.
+        + rewrite VSLemmas.union_emptyr. exact: VSLemmas.subset_refl.
+      - move=> _ e1 e2 vs.
+        case: (VSLemmas.disjoint vs (VS.union (vars_rexp e1) (vars_rexp e2))).
+        + exact: VSLemmas.subset_refl.
+        + exact: VSLemmas.union_subset_1.
+      - move=> _ _ e1 e2 vs.
+        case: (VSLemmas.disjoint vs (VS.union (vars_rexp e1) (vars_rexp e2))).
+        + exact: VSLemmas.subset_refl.
+        + exact: VSLemmas.union_subset_1.
+      - move=> e _ vs. case: (VSLemmas.disjoint vs (vars_rbexp e)).
+        + exact: VSLemmas.subset_refl.
+        + exact: VSLemmas.union_subset_1.
+      - move=> e1 IH1 e2 IH2 vs. rewrite foldl_cat.
+        apply: (VSLemmas.subset_trans (IH1 vs)). exact: IH2.
+      - move=> e1 _ e2 _ vs.
+        case: (VSLemmas.disjoint vs (VS.union (vars_rbexp e1) (vars_rbexp e2))).
+        + exact: VSLemmas.subset_refl.
+        + exact: VSLemmas.union_subset_1.
+    Qed.
+
+    Lemma depvars_rbexp_ub vs e :
+      VS.subset (depvars_rbexp vs e) (VS.union vs (vars_rbexp e)).
+    Proof.
+      rewrite /depvars_rbexp. elim: e vs => //=.
+      - move=> vs. case: (VSLemmas.disjoint vs VS.empty).
+        + exact: VSLemmas.union_subset_1.
+        + exact: VSLemmas.subset_refl.
+      - move=> _ e1 e2 vs.
+        case: (VSLemmas.disjoint vs (VS.union (vars_rexp e1) (vars_rexp e2))).
+        + exact: VSLemmas.union_subset_1.
+        + exact: VSLemmas.subset_refl.
+      - move=> _ _ e1 e2 vs.
+        case: (VSLemmas.disjoint vs (VS.union (vars_rexp e1) (vars_rexp e2))).
+        + exact: VSLemmas.union_subset_1.
+        + exact: VSLemmas.subset_refl.
+      - move=> e _ vs. case: (VSLemmas.disjoint vs (vars_rbexp e)).
+        + exact: VSLemmas.union_subset_1.
+        + exact: VSLemmas.subset_refl.
+      - move=> e1 IH1 e2 IH2 vs. rewrite foldl_cat.
+        apply: (VSLemmas.subset_trans
+                  (IH2
+                     (foldl
+                        (fun (vs0 : VS.t) (e : rbexp) =>
+                           if VSLemmas.disjoint vs0 (vars_rbexp e) then vs0 else VS.union vs0 (vars_rbexp e))
+                        vs (split_rand e1)))).
+        rewrite -VSLemmas.P.union_assoc. apply: VSLemmas.union_subsets.
+        + exact: (IH1 vs).
+        + exact: VSLemmas.subset_refl.
+      - move=> e1 _ e2 _ vs.
+        case: (VSLemmas.disjoint vs (VS.union (vars_rbexp e1) (vars_rbexp e2))).
+        + exact: VSLemmas.union_subset_1.
+        + exact: VSLemmas.subset_refl.
+    Qed.
+
+    Ltac mytac ::=
+      (repeat match goal with
+              | |- context f [if ?e then _ else _] =>
+                  dcase e; case; intros
+              end); repeat case_match_atom; try VSLemmas.dp_subset.
+
+    Lemma depvars_einstr_lb vs i :
+      VS.subset vs (depvars_einstr vs i).
+    Proof.
+      case: i => //=; intros; mytac. case: b => e _. exact: depvars_ebexp_lb.
+    Qed.
+
+    Lemma depvars_einstr_ub vs i :
+      VS.subset (depvars_einstr vs i) (VS.union vs (vars_instr i)).
+    Proof.
+      case: i => //=; intros; mytac. case: b => e r. rewrite /vars_bexp /=.
+      apply: (VSLemmas.subset_trans (depvars_ebexp_ub vs e)).
+      by VSLemmas.dp_subset.
+    Qed.
+
+    Lemma depvars_rinstr_lb vs i :
+      VS.subset vs (depvars_rinstr vs i).
+    Proof.
+      case: i => //=; intros; mytac. case: b => _ r.
+      exact: depvars_rbexp_lb.
+    Qed.
+
+    Lemma depvars_rinstr_ub vs i :
+      VS.subset (depvars_rinstr vs i) (VS.union vs (vars_instr i)).
+    Proof.
+      case: i => //=; intros; mytac. case: b => e r. rewrite /vars_bexp /=.
+      apply: (VSLemmas.subset_trans (depvars_rbexp_ub vs r)).
+      by VSLemmas.dp_subset.
+    Qed.
+
+    Lemma depvars_eprogram_lb vs p :
+      VS.subset vs (depvars_eprogram vs p).
+    Proof.
+      move: p vs. apply: last_ind => [| p i IH] vs //=.
+      - exact: VSLemmas.subset_refl.
+      - rewrite depvars_eprogram_rcons. apply: (VSLemmas.subset_trans _ (IH _)).
+        exact: (depvars_einstr_lb vs i).
+    Qed.
+
+    Lemma depvars_eprogram_ub vs p :
+      VS.subset (depvars_eprogram vs p) (VS.union vs (vars_program p)).
+    Proof.
+      move: p vs. apply: last_ind => [| p i IH] vs //=.
+      - exact: VSLemmas.union_subset_1.
+      - rewrite depvars_eprogram_rcons. rewrite vars_program_rcons.
+        rewrite (VSLemmas.P.union_sym (vars_program p)). rewrite -VSLemmas.P.union_assoc.
+        apply: (VSLemmas.subset_trans (IH _)).
+        apply: VSLemmas.union_subsets; last exact: VSLemmas.subset_refl.
+        exact: (depvars_einstr_ub vs i).
+    Qed.
+
+    Lemma depvars_rprogram_lb vs p :
+      VS.subset vs (depvars_rprogram vs p).
+    Proof.
+      move: p vs. apply: last_ind => [| p i IH] vs //=.
+      - exact: VSLemmas.subset_refl.
+      - rewrite depvars_rprogram_rcons. apply: (VSLemmas.subset_trans _ (IH _)).
+        exact: (depvars_rinstr_lb vs i).
+    Qed.
+
+    Lemma depvars_rprogram_ub vs p :
+      VS.subset (depvars_rprogram vs p) (VS.union vs (vars_program p)).
+    Proof.
+      move: p vs. apply: last_ind => [| p i IH] vs //=.
+      - exact: VSLemmas.union_subset_1.
+      - rewrite depvars_rprogram_rcons. rewrite vars_program_rcons.
+        rewrite (VSLemmas.P.union_sym (vars_program p)). rewrite -VSLemmas.P.union_assoc.
+        apply: (VSLemmas.subset_trans (IH _)).
+        apply: VSLemmas.union_subsets; last exact: VSLemmas.subset_refl.
+        exact: (depvars_rinstr_ub vs i).
+    Qed.
+
+    Lemma depvars_epre_eprogram_lb vs e p :
+      VS.subset vs (depvars_epre_eprogram vs e p).
+    Proof.
+      rewrite /depvars_epre_eprogram.
+      apply: (VSLemmas.subset_trans _ (depvars_ebexp_lb _ e)).
+      exact: (depvars_eprogram_lb vs p).
+    Qed.
+
+    Lemma depvars_epre_eprogram_ub vs e p :
+      VS.subset (depvars_epre_eprogram vs e p)
+                (VS.union vs (VS.union (vars_ebexp e) (vars_program p))).
+    Proof.
+      rewrite /depvars_epre_eprogram.
+      apply: (VSLemmas.subset_trans (depvars_ebexp_ub _ e)).
+      apply: VSLemmas.subset_union3; last by VSLemmas.dp_subset.
+      apply: (VSLemmas.subset_trans (depvars_eprogram_ub vs p)).
+      by VSLemmas.dp_subset.
+    Qed.
+
+    Lemma depvars_rpre_rprogram_lb vs e p :
+      VS.subset vs (depvars_rpre_rprogram vs e p).
+    Proof.
+      rewrite /depvars_rpre_rprogram.
+      apply: (VSLemmas.subset_trans _ (depvars_rbexp_lb _ e)).
+      exact: (depvars_rprogram_lb vs p).
+    Qed.
+
+    Lemma depvars_rpre_rprogram_ub vs e p :
+      VS.subset (depvars_rpre_rprogram vs e p)
+                (VS.union vs (VS.union (vars_rbexp e) (vars_program p))).
+    Proof.
+      rewrite /depvars_rpre_rprogram.
+      apply: (VSLemmas.subset_trans (depvars_rbexp_ub _ e)).
+      apply: VSLemmas.subset_union3; last by VSLemmas.dp_subset.
+      apply: (VSLemmas.subset_trans (depvars_rprogram_ub vs p)).
+      by VSLemmas.dp_subset.
+    Qed.
+
+
+    Lemma depvars_ebexp_cardinal_sat vs e :
+      VS.cardinal (depvars_ebexp vs e) <= VS.cardinal vs ->
+      VS.Equal (depvars_ebexp vs e) vs.
+    Proof.
+      move=> Hc. move: (depvars_ebexp_lb vs e) => Hsub.
+      have Heq: VS.cardinal vs = VS.cardinal (depvars_ebexp vs e).
+      { move: (VSLemmas.subset_cardinal Hsub) Hc => {Hsub}.
+        move: (VS.cardinal vs) (VS.cardinal (depvars_ebexp vs e)) => n m H1 H2.
+        move: (eqn_leq n m). rewrite H1 H2 /=. by move/eqP. }
+      apply: VSLemmas.P.equal_sym. apply/VSLemmas.equalP.
+      exact: (VSLemmas.subset_cardinal_equal Hsub Heq).
+    Qed.
+
+    Lemma depvars_rbexp_cardinal_sat vs e :
+      VS.cardinal (depvars_rbexp vs e) <= VS.cardinal vs ->
+      VS.Equal (depvars_rbexp vs e) vs.
+    Proof.
+      move=> Hc. move: (depvars_rbexp_lb vs e) => Hsub.
+      have Heq: VS.cardinal vs = VS.cardinal (depvars_rbexp vs e).
+      { move: (VSLemmas.subset_cardinal Hsub) Hc => {Hsub}.
+        move: (VS.cardinal vs) (VS.cardinal (depvars_rbexp vs e)) => n m H1 H2.
+        move: (eqn_leq n m). rewrite H1 H2 /=. by move/eqP. }
+      apply: VSLemmas.P.equal_sym. apply/VSLemmas.equalP.
+      exact: (VSLemmas.subset_cardinal_equal Hsub Heq).
+    Qed.
+
+    Lemma depvars_einstr_cardinal_sat vs i :
+      VS.cardinal (depvars_einstr vs i) <= VS.cardinal vs ->
+      VS.Equal (depvars_einstr vs i) vs.
+    Proof.
+      move=> Hc. move: (depvars_einstr_lb vs i) => Hsub.
+      have Heq: VS.cardinal vs = VS.cardinal (depvars_einstr vs i).
+      { move: (VSLemmas.subset_cardinal Hsub) Hc => {Hsub}.
+        move: (VS.cardinal vs) (VS.cardinal (depvars_einstr vs i)) => n m H1 H2.
+        move: (eqn_leq n m). rewrite H1 H2 /=. by move/eqP. }
+      apply: VSLemmas.P.equal_sym. apply/VSLemmas.equalP.
+      exact: (VSLemmas.subset_cardinal_equal Hsub Heq).
+    Qed.
+
+    Lemma depvars_rinstr_cardinal_sat vs i :
+      VS.cardinal (depvars_rinstr vs i) <= VS.cardinal vs ->
+      VS.Equal (depvars_rinstr vs i) vs.
+    Proof.
+      move=> Hc. move: (depvars_rinstr_lb vs i) => Hsub.
+      have Heq: VS.cardinal vs = VS.cardinal (depvars_rinstr vs i).
+      { move: (VSLemmas.subset_cardinal Hsub) Hc => {Hsub}.
+        move: (VS.cardinal vs) (VS.cardinal (depvars_rinstr vs i)) => n m H1 H2.
+        move: (eqn_leq n m). rewrite H1 H2 /=. by move/eqP. }
+      apply: VSLemmas.P.equal_sym. apply/VSLemmas.equalP.
+      exact: (VSLemmas.subset_cardinal_equal Hsub Heq).
+    Qed.
+
+    Lemma depvars_eprogram_cardinal_sat vs p :
+      VS.cardinal (depvars_eprogram vs p) <= VS.cardinal vs ->
+      VS.Equal (depvars_eprogram vs p) vs.
+    Proof.
+      move=> Hc. move: (depvars_eprogram_lb vs p) => Hsub.
+      have Heq: VS.cardinal vs = VS.cardinal (depvars_eprogram vs p).
+      { move: (VSLemmas.subset_cardinal Hsub) Hc => {Hsub}.
+        move: (VS.cardinal vs) (VS.cardinal (depvars_eprogram vs p)) => n m H1 H2.
+        move: (eqn_leq n m). rewrite H1 H2 /=. by move/eqP. }
+      apply: VSLemmas.P.equal_sym. apply/VSLemmas.equalP.
+      exact: (VSLemmas.subset_cardinal_equal Hsub Heq).
+    Qed.
+
+    Lemma depvars_rprogram_cardinal_sat vs p :
+      VS.cardinal (depvars_rprogram vs p) <= VS.cardinal vs ->
+      VS.Equal (depvars_rprogram vs p) vs.
+    Proof.
+      move=> Hc. move: (depvars_rprogram_lb vs p) => Hsub.
+      have Heq: VS.cardinal vs = VS.cardinal (depvars_rprogram vs p).
+      { move: (VSLemmas.subset_cardinal Hsub) Hc => {Hsub}.
+        move: (VS.cardinal vs) (VS.cardinal (depvars_rprogram vs p)) => n m H1 H2.
+        move: (eqn_leq n m). rewrite H1 H2 /=. by move/eqP. }
+      apply: VSLemmas.P.equal_sym. apply/VSLemmas.equalP.
+      exact: (VSLemmas.subset_cardinal_equal Hsub Heq).
+    Qed.
+
+    Lemma depvars_epre_eprogram_cardinal_sat vs e p :
+      VS.cardinal (depvars_epre_eprogram vs e p) <= VS.cardinal vs ->
+      VS.Equal (depvars_epre_eprogram vs e p) vs.
+    Proof.
+      move=> Hc. move: (depvars_epre_eprogram_lb vs e p) => Hsub.
+      have Heq: VS.cardinal vs = VS.cardinal (depvars_epre_eprogram vs e p).
+      { move: (VSLemmas.subset_cardinal Hsub) Hc => {Hsub}.
+        move: (VS.cardinal vs) (VS.cardinal (depvars_epre_eprogram vs e p)) => n m H1 H2.
+        move: (eqn_leq n m). rewrite H1 H2 /=. by move/eqP. }
+      apply: VSLemmas.P.equal_sym. apply/VSLemmas.equalP.
+      exact: (VSLemmas.subset_cardinal_equal Hsub Heq).
+    Qed.
+
+    Lemma depvars_rpre_rprogram_cardinal_sat vs e p :
+      VS.cardinal (depvars_rpre_rprogram vs e p) <= VS.cardinal vs ->
+      VS.Equal (depvars_rpre_rprogram vs e p) vs.
+    Proof.
+      move=> Hc. move: (depvars_rpre_rprogram_lb vs e p) => Hsub.
+      have Heq: VS.cardinal vs = VS.cardinal (depvars_rpre_rprogram vs e p).
+      { move: (VSLemmas.subset_cardinal Hsub) Hc => {Hsub}.
+        move: (VS.cardinal vs) (VS.cardinal (depvars_rpre_rprogram vs e p)) => n m H1 H2.
+        move: (eqn_leq n m). rewrite H1 H2 /=. by move/eqP. }
+      apply: VSLemmas.P.equal_sym. apply/VSLemmas.equalP.
+      exact: (VSLemmas.subset_cardinal_equal Hsub Heq).
+    Qed.
+
+
+    Lemma depvars_ebexp_subset_sat vs e :
+      VS.subset (depvars_ebexp vs e) vs -> VS.Equal (depvars_ebexp vs e) vs.
+    Proof.
+      move=> Hsub. apply: depvars_ebexp_cardinal_sat.
+      exact: (VSLemmas.subset_cardinal Hsub).
+    Qed.
+
+    Lemma depvars_rbexp_subset_sat vs e :
+      VS.subset (depvars_rbexp vs e) vs -> VS.Equal (depvars_rbexp vs e) vs.
+    Proof.
+      move=> Hsub. apply: depvars_rbexp_cardinal_sat.
+      exact: (VSLemmas.subset_cardinal Hsub).
+    Qed.
+
+    Lemma depvars_einstr_subset_sat vs i :
+      VS.subset (depvars_einstr vs i) vs -> VS.Equal (depvars_einstr vs i) vs.
+    Proof.
+      move=> Hsub. apply: depvars_einstr_cardinal_sat.
+      exact: (VSLemmas.subset_cardinal Hsub).
+    Qed.
+
+    Lemma depvars_rinstr_subset_sat vs i :
+      VS.subset (depvars_rinstr vs i) vs -> VS.Equal (depvars_rinstr vs i) vs.
+    Proof.
+      move=> Hsub. apply: depvars_rinstr_cardinal_sat.
+      exact: (VSLemmas.subset_cardinal Hsub).
+    Qed.
+
+    Lemma depvars_eprogram_subset_sat vs p :
+      VS.subset (depvars_eprogram vs p) vs -> VS.Equal (depvars_eprogram vs p) vs.
+    Proof.
+      move=> Hsub. apply: depvars_eprogram_cardinal_sat.
+      exact: (VSLemmas.subset_cardinal Hsub).
+    Qed.
+
+    Lemma depvars_rprogram_subset_sat vs p :
+      VS.subset (depvars_rprogram vs p) vs -> VS.Equal (depvars_rprogram vs p) vs.
+    Proof.
+      move=> Hsub. apply: depvars_rprogram_cardinal_sat.
+      exact: (VSLemmas.subset_cardinal Hsub).
+    Qed.
+
+    Lemma depvars_epre_eprogram_subset_sat vs e p :
+      VS.subset (depvars_epre_eprogram vs e p) vs ->
+      VS.Equal (depvars_epre_eprogram vs e p) vs.
+    Proof.
+      move=> Hsub. apply: depvars_epre_eprogram_cardinal_sat.
+      exact: (VSLemmas.subset_cardinal Hsub).
+    Qed.
+
+    Lemma depvars_rpre_rprogram_subset_sat vs e p :
+      VS.subset (depvars_rpre_rprogram vs e p) vs ->
+      VS.Equal (depvars_rpre_rprogram vs e p) vs.
+    Proof.
+      move=> Hsub. apply: depvars_rpre_rprogram_cardinal_sat.
+      exact: (VSLemmas.subset_cardinal Hsub).
+    Qed.
+
+    Lemma depvars_eprogram_ind_sat1 vs p i :
+      VS.subset (depvars_eprogram (depvars_einstr vs i) p) vs ->
+      VS.Equal (depvars_einstr vs i) vs.
+    Proof.
+      move=> Hsub. move: (depvars_einstr_lb vs i) => Hsub1.
+      move: (VSLemmas.subset_trans (depvars_eprogram_lb (depvars_einstr vs i) p) Hsub) => Hsub2.
+      apply/VSLemmas.equalP. exact: (VSLemmas.subset_antisym Hsub2 Hsub1).
+    Qed.
+
+    Lemma depvars_eprogram_ind_sat2 vs p i :
+      VS.subset (depvars_eprogram (depvars_einstr vs i) p) vs ->
+      VS.Equal (depvars_eprogram (depvars_einstr vs i) p) vs.
+    Proof.
+      move=> Hsub. move: (depvars_eprogram_ind_sat1 Hsub) => H.
+      rewrite H in Hsub *. apply/VSLemmas.equalP.
+      exact: (VSLemmas.subset_antisym Hsub (depvars_eprogram_lb vs p)).
+    Qed.
+
+    Lemma depvars_rprogram_ind_sat1 vs p i :
+      VS.subset (depvars_rprogram (depvars_rinstr vs i) p) vs ->
+      VS.Equal (depvars_rinstr vs i) vs.
+    Proof.
+      move=> Hsub. move: (depvars_rinstr_lb vs i) => Hsub1.
+      move: (VSLemmas.subset_trans (depvars_rprogram_lb (depvars_rinstr vs i) p) Hsub) => Hsub2.
+      apply/VSLemmas.equalP. exact: (VSLemmas.subset_antisym Hsub2 Hsub1).
+    Qed.
+
+    Lemma depvars_rprogram_ind_sat2 vs p i :
+      VS.subset (depvars_rprogram (depvars_rinstr vs i) p) vs ->
+      VS.Equal (depvars_rprogram (depvars_rinstr vs i) p) vs.
+    Proof.
+      move=> Hsub. move: (depvars_rprogram_ind_sat1 Hsub) => H.
+      rewrite H in Hsub *. apply/VSLemmas.equalP.
+      exact: (VSLemmas.subset_antisym Hsub (depvars_rprogram_lb vs p)).
+    Qed.
+
+    Lemma depvars_epre_eprogram_ind_sat1 vs e p :
+      VS.subset (depvars_ebexp (depvars_eprogram vs p) e) vs ->
+      VS.Equal (depvars_eprogram vs p) vs.
+    Proof.
+      move=> Hsub. move: (depvars_eprogram_lb vs p) => Hsub1.
+      move: (VSLemmas.subset_trans (depvars_ebexp_lb (depvars_eprogram vs p) e) Hsub) => Hsub2.
+      apply/VSLemmas.equalP. exact: (VSLemmas.subset_antisym Hsub2 Hsub1).
+    Qed.
+
+    Lemma depvars_epre_eprogram_ind_sat2 vs e p :
+      VS.subset (depvars_ebexp (depvars_eprogram vs p) e) vs ->
+      VS.Equal (depvars_ebexp (depvars_eprogram vs p) e) vs.
+    Proof.
+      move=> Hsub. move: (depvars_epre_eprogram_ind_sat1 Hsub) => H.
+      rewrite H in Hsub *. apply/VSLemmas.equalP.
+      exact: (VSLemmas.subset_antisym Hsub (depvars_ebexp_lb vs e)).
+    Qed.
+
+    Lemma depvars_rpre_rprogram_ind_sat1 vs e p :
+      VS.subset (depvars_rbexp (depvars_rprogram vs p) e) vs ->
+      VS.Equal (depvars_rprogram vs p) vs.
+    Proof.
+      move=> Hsub. move: (depvars_rprogram_lb vs p) => Hsub1.
+      move: (VSLemmas.subset_trans (depvars_rbexp_lb (depvars_rprogram vs p) e) Hsub) => Hsub2.
+      apply/VSLemmas.equalP. exact: (VSLemmas.subset_antisym Hsub2 Hsub1).
+    Qed.
+
+    Lemma depvars_rpre_rprogram_ind_sat2 vs e p :
+      VS.subset (depvars_rbexp (depvars_rprogram vs p) e) vs ->
+      VS.Equal (depvars_rbexp (depvars_rprogram vs p) e) vs.
+    Proof.
+      move=> Hsub. move: (depvars_rpre_rprogram_ind_sat1 Hsub) => H.
+      rewrite H in Hsub *. apply/VSLemmas.equalP.
+      exact: (VSLemmas.subset_antisym Hsub (depvars_rbexp_lb vs e)).
+    Qed.
+
+
+    Fixpoint ebexp_partition vs e :=
+      match e with
+      | Eand e1 e2 => ebexp_partition vs e1 /\ ebexp_partition vs e2
+      | _ => VSLemmas.disjoint (vars_ebexp e) vs \/ VS.subset (vars_ebexp e) vs
+      end.
+
+    Fixpoint rbexp_partition vs e :=
+      match e with
+      | Rand e1 e2 => rbexp_partition vs e1 /\ rbexp_partition vs e2
+      | _ => VSLemmas.disjoint (vars_rbexp e) vs \/ VS.subset (vars_rbexp e) vs
+      end.
+
+    Definition einstr_partition vs i :=
+      match i with
+      | Iassume (e, r) => ebexp_partition vs e
+      | _ => VSLemmas.disjoint (lvs_instr i) vs \/ VS.subset (vars_instr i) vs
+      end.
+
+    Definition rinstr_partition vs i :=
+      match i with
+      | Iassume (e, r) => rbexp_partition vs r
+      | _ => VSLemmas.disjoint (lvs_instr i) vs \/ VS.subset (vars_instr i) vs
+      end.
+
+    Fixpoint eprogram_partition vs p :=
+      match p with
+      | [::] => True
+      | hd::tl => einstr_partition vs hd /\ eprogram_partition vs tl
+      end.
+
+    Fixpoint rprogram_partition vs p :=
+      match p with
+      | [::] => True
+      | hd::tl => rinstr_partition vs hd /\ rprogram_partition vs tl
+      end.
+
+
+    Lemma eprogram_partition_rcons vs p i :
+      eprogram_partition vs (rcons p i) <-> eprogram_partition vs p /\ einstr_partition vs i.
+    Proof.
+      elim: p i vs => [| i p IH] j vs //=.
+      - tauto.
+      - move: (IH j vs). tauto.
+    Qed.
+
+    Lemma rprogram_partition_rcons vs p i :
+      rprogram_partition vs (rcons p i) <-> rprogram_partition vs p /\ rinstr_partition vs i.
+    Proof.
+      elim: p i vs => [| i p IH] j vs //=.
+      - tauto.
+      - move: (IH j vs). tauto.
+    Qed.
+    Ltac mytac ::=
+      match goal with
+      | H : VSLemmas.disjoint ?vs1 ?vs2 = true |-
+          is_true (VSLemmas.disjoint ?vs2 ?vs1) \/ _ =>
+          left; rewrite VSLemmas.disjoint_sym; assumption
+      | H : is_true (VS.subset (VS.union _ ?vs2) ?vs1) |-
+          _ \/ is_true (VS.subset ?vs2 ?vs1) =>
+          right; exact: (VSLemmas.subset_union5 H)
+      end.
+
+    Ltac mytac ::=
+      match goal with
+      | H : VSLemmas.disjoint ?vs1 ?vs2 = true |-
+          is_true (VSLemmas.disjoint ?vs2 ?vs1) \/ _ =>
+          left; rewrite VSLemmas.disjoint_sym; assumption
+      | H : is_true (VS.subset (VS.union _ ?vs2) ?vs1) |-
+          _ \/ is_true (VS.subset ?vs2 ?vs1) =>
+          right; exact: (VSLemmas.subset_union5 H)
+      | H0 : VSLemmas.disjoint ?vs (VS.singleton ?t) = false,
+          H : VSLemmas.disjoint ?vs (VS.add ?t _) = true |- _ =>
+          (rewrite VSLemmas.disjoint_singleton in H0);
+          (rewrite VSLemmas.disjoint_add H0 /= in H);
+          discriminate
+      end.
+
+    Lemma depvars_ebexp_partition vs e :
+      VS.subset (depvars_ebexp vs e) vs -> ebexp_partition vs e.
+    Proof.
+      elim: e vs => /=.
+      - move=> vs _. right. exact: VSLemmas.subset_empty.
+      - move=> e1 e2 vs. rewrite /depvars_ebexp /=. case_if; by mytac.
+      - move=> e1 e2 ms vs. rewrite /depvars_ebexp /=. case_if; by mytac.
+      - move=> e1 IH1 e2 IH2 vs. rewrite depvars_eand => Hsub.
+        move: (VSLemmas.subset_trans (depvars_ebexp_lb (depvars_ebexp vs e1) e2) Hsub) => Hsub1.
+        split; first exact: (IH1 _ Hsub1). apply: IH2.
+        move: (depvars_ebexp_subset_sat Hsub1) => Heq.
+        rewrite Heq in Hsub. assumption.
+    Qed.
+
+    Lemma depvars_rbexp_partition vs e :
+      VS.subset (depvars_rbexp vs e) vs -> rbexp_partition vs e.
+    Proof.
+      elim: e vs => /=.
+      - move=> vs _. right. exact: VSLemmas.subset_empty.
+      - move=> n e1 e2 vs. rewrite /depvars_rbexp /=. case_if; by mytac.
+      - move=> n op e1 e2 vs. rewrite /depvars_rbexp /=. case_if; by mytac.
+      - move=> e IH vs. rewrite /depvars_rbexp /=. case_if; by mytac.
+      - move=> e1 IH1 e2 IH2 vs. rewrite depvars_rand => Hsub.
+        move: (VSLemmas.subset_trans (depvars_rbexp_lb (depvars_rbexp vs e1) e2) Hsub) => Hsub1.
+        split; first exact: (IH1 _ Hsub1). apply: IH2.
+        move: (depvars_rbexp_subset_sat Hsub1) => Heq.
+        rewrite Heq in Hsub. assumption.
+      - move=> e1 IH1 e2 IH2 vs. rewrite /depvars_rbexp /=. case_if; by mytac.
+    Qed.
+
+    Lemma depvars_einstr_partition vs i :
+      VS.subset (depvars_einstr vs i) vs -> einstr_partition vs i.
+    Proof.
+      case: i => //=; intros; case_if'; case_match_atom; try mytac.
+      move: H; case_if'. exact: depvars_ebexp_partition.
+    Qed.
+
+    Lemma depvars_rinstr_partition vs i :
+      VS.subset (depvars_rinstr vs i) vs -> rinstr_partition vs i.
+    Proof.
+      case: i => //=; intros; case_if'; case_match_atom; try mytac.
+      move: H; case_if'. exact: depvars_rbexp_partition.
+    Qed.
+
+    Lemma depvars_eprogram_partition vs p :
+      VS.subset (depvars_eprogram vs p) vs -> eprogram_partition vs p.
+    Proof.
+      move: p vs. apply: last_ind => [| p i IH] vs //=.
+      rewrite depvars_eprogram_rcons => Hsub. rewrite eprogram_partition_rcons.
+      move: (depvars_eprogram_ind_sat1 Hsub) => Hi.
+      move: (depvars_eprogram_ind_sat2 Hsub) => Hp. rewrite Hi in Hp. split.
+      - apply: IH. rewrite Hp. exact: VSLemmas.subset_refl.
+      - apply: depvars_einstr_partition. rewrite Hi. exact: VSLemmas.subset_refl.
+    Qed.
+
+    Lemma depvars_rprogram_partition vs p :
+      VS.subset (depvars_rprogram vs p) vs -> rprogram_partition vs p.
+    Proof.
+      move: p vs. apply: last_ind => [| p i IH] vs //=.
+      rewrite depvars_rprogram_rcons => Hsub. rewrite rprogram_partition_rcons.
+      move: (depvars_rprogram_ind_sat1 Hsub) => Hi.
+      move: (depvars_rprogram_ind_sat2 Hsub) => Hp. rewrite Hi in Hp. split.
+      - apply: IH. rewrite Hp. exact: VSLemmas.subset_refl.
+      - apply: depvars_rinstr_partition. rewrite Hi. exact: VSLemmas.subset_refl.
+    Qed.
+
+    Lemma depvars_epre_eprogram_partition1 vs e p :
+      VS.subset (depvars_epre_eprogram vs e p) vs -> ebexp_partition vs e.
+    Proof.
+      rewrite /depvars_epre_eprogram => Hsub.
+      move: (depvars_epre_eprogram_ind_sat1 Hsub) => Hp.
+      move: (depvars_epre_eprogram_ind_sat2 Hsub) => He.
+      apply: depvars_ebexp_partition. rewrite Hp in He. rewrite He.
+      exact: VSLemmas.subset_refl.
+    Qed.
+
+    Lemma depvars_epre_eprogram_partition2 vs e p :
+      VS.subset (depvars_epre_eprogram vs e p) vs -> eprogram_partition vs p.
+    Proof.
+      rewrite /depvars_epre_eprogram => Hsub.
+      move: (depvars_epre_eprogram_ind_sat1 Hsub) => Hp.
+      apply: depvars_eprogram_partition. rewrite Hp.
+      exact: VSLemmas.subset_refl.
+    Qed.
+
+    Lemma depvars_rpre_rprogram_partition1 vs e p :
+      VS.subset (depvars_rpre_rprogram vs e p) vs -> rbexp_partition vs e.
+    Proof.
+      rewrite /depvars_rpre_rprogram => Hsub.
+      move: (depvars_rpre_rprogram_ind_sat1 Hsub) => Hp.
+      move: (depvars_rpre_rprogram_ind_sat2 Hsub) => He.
+      apply: depvars_rbexp_partition. rewrite Hp in He. rewrite He.
+      exact: VSLemmas.subset_refl.
+    Qed.
+
+    Lemma depvars_rpre_rprogram_partition2 vs e p :
+      VS.subset (depvars_rpre_rprogram vs e p) vs -> rprogram_partition vs p.
+    Proof.
+      rewrite /depvars_rpre_rprogram => Hsub.
+      move: (depvars_rpre_rprogram_ind_sat1 Hsub) => Hp.
+      apply: depvars_rprogram_partition. rewrite Hp.
+      exact: VSLemmas.subset_refl.
+    Qed.
+
+
+    Section AddRelevantVarsRec.
+
+      Variable e : ebexp.
+      Variable r : rbexp.
+      Variable p : program.
+
+      Definition evsize vs :=
+        let vsall := VS.union vs (VS.union (vars_ebexp e) (vars_program p)) in
+        VS.cardinal vsall - VS.cardinal vs.
+
+      Definition rvsize vs :=
+        let vsall := VS.union vs (VS.union (vars_rbexp r) (vars_program p)) in
+        VS.cardinal vsall - VS.cardinal vs.
+
+      From Coq Require Import Recdef.
+
+      Function depvars_epre_eprogram_sat vs
+               {measure evsize vs} :=
+        let vs' := depvars_epre_eprogram vs e p in
+        match VS.cardinal vs' > VS.cardinal vs with
+        | true => depvars_epre_eprogram_sat vs'
+        | false => vs'
+        end.
+      Proof.
+        move=> vs H. rewrite /evsize.
+        have Hsub1:
+          (VS.subset
+             (VS.union (depvars_epre_eprogram vs e p)
+                       (VS.union (vars_ebexp e) (vars_program p)))
+             (VS.union vs (VS.union (vars_ebexp e) (vars_program p)))).
+        { apply: VSLemmas.subset_union3.
+          - exact: depvars_epre_eprogram_ub.
+          - by VSLemmas.dp_subset. }
+        have Hsub2:
+          (VS.subset
+             (VS.union vs (VS.union (vars_ebexp e) (vars_program p)))
+             (VS.union (depvars_epre_eprogram vs e p)
+                       (VS.union (vars_ebexp e) (vars_program p)))).
+        { apply: VSLemmas.union_subsets; last exact: VSLemmas.subset_refl.
+          exact: depvars_epre_eprogram_lb. }
+        move: (VSLemmas.subset_antisym Hsub1 Hsub2) => {Hsub1 Hsub2} /VSLemmas.equalP Heq.
+        rewrite Heq. apply: ltn_lt. apply: ltn_sub2l.
+        - apply: (ltn_leq_trans H). apply: VSLemmas.subset_cardinal.
+          exact: depvars_epre_eprogram_ub.
+        - exact: H.
+      Qed.
+
+      Function depvars_rpre_rprogram_sat vs
+               {measure rvsize vs} :=
+        let vs' := depvars_rpre_rprogram vs r p in
+        match VS.cardinal vs' > VS.cardinal vs with
+        | true => depvars_rpre_rprogram_sat vs'
+        | false => vs'
+        end.
+      Proof.
+        move=> vs H. rewrite /rvsize.
+        have Hsub1:
+          (VS.subset
+             (VS.union (depvars_rpre_rprogram vs r p)
+                       (VS.union (vars_rbexp r) (vars_program p)))
+             (VS.union vs (VS.union (vars_rbexp r) (vars_program p)))).
+        { apply: VSLemmas.subset_union3.
+          - exact: depvars_rpre_rprogram_ub.
+          - by VSLemmas.dp_subset. }
+        have Hsub2:
+          (VS.subset
+             (VS.union vs (VS.union (vars_rbexp r) (vars_program p)))
+             (VS.union (depvars_rpre_rprogram vs r p)
+                       (VS.union (vars_rbexp r) (vars_program p)))).
+        { apply: VSLemmas.union_subsets; last exact: VSLemmas.subset_refl.
+          exact: depvars_rpre_rprogram_lb. }
+        move: (VSLemmas.subset_antisym Hsub1 Hsub2) => {Hsub1 Hsub2} /VSLemmas.equalP Heq.
+        rewrite Heq. apply: ltn_lt. apply: ltn_sub2l.
+        - apply: (ltn_leq_trans H). apply: VSLemmas.subset_cardinal.
+          exact: depvars_rpre_rprogram_ub.
+        - exact: H.
+      Qed.
+
+      Lemma depvars_epre_eprogram_sat_lb vs :
+        VS.subset vs (depvars_epre_eprogram_sat vs).
+      Proof.
+        apply: (@depvars_epre_eprogram_sat_ind (fun vs vs' => VS.subset vs vs')).
+        - move=> {}vs vs' Hc Hsub.
+          apply: (VSLemmas.subset_trans (depvars_epre_eprogram_lb vs e p)).
+          exact: Hsub.
+        - move=> {}vs vs' Hc. exact: (depvars_epre_eprogram_lb vs e p).
+      Qed.
+
+      Lemma depvars_epre_eprogram_sat_ub vs :
+        VS.subset (depvars_epre_eprogram_sat vs)
+                  (VS.union vs (VS.union (vars_ebexp e) (vars_program p))).
+      Proof.
+        apply: (@depvars_epre_eprogram_sat_ind
+                  (fun vs vs' =>
+                     VS.subset vs' (VS.union vs (VS.union (vars_ebexp e) (vars_program p))))).
+        - move=> {}vs vs' Hc Hsub. apply: (VSLemmas.subset_trans Hsub).
+          apply: (VSLemmas.subset_union3 (depvars_epre_eprogram_ub vs e p)).
+          by VSLemmas.dp_subset.
+        - move=> {}vs vs' Hc. exact: (depvars_epre_eprogram_ub vs e p).
+      Qed.
+
+      Lemma depvars_rpre_rprogram_sat_lb vs :
+        VS.subset vs (depvars_rpre_rprogram_sat vs).
+      Proof.
+        apply: (@depvars_rpre_rprogram_sat_ind (fun vs vs' => VS.subset vs vs')).
+        - move=> {}vs vs' Hc Hsub.
+          apply: (VSLemmas.subset_trans (depvars_rpre_rprogram_lb vs r p)).
+          exact: Hsub.
+        - move=> {}vs vs' Hc. exact: (depvars_rpre_rprogram_lb vs r p).
+      Qed.
+
+      Lemma depvars_rpre_rprogram_sat_ub vs :
+        VS.subset (depvars_rpre_rprogram_sat vs)
+                  (VS.union vs (VS.union (vars_rbexp r) (vars_program p))).
+      Proof.
+        apply: (@depvars_rpre_rprogram_sat_ind
+                  (fun vs vs' =>
+                     VS.subset vs' (VS.union vs (VS.union (vars_rbexp r) (vars_program p))))).
+        - move=> {}vs vs' Hc Hsub. apply: (VSLemmas.subset_trans Hsub).
+          apply: (VSLemmas.subset_union3 (depvars_rpre_rprogram_ub vs r p)).
+          by VSLemmas.dp_subset.
+        - move=> {}vs vs' Hc. exact: (depvars_rpre_rprogram_ub vs r p).
+      Qed.
+
+
+      Lemma depvars_epre_eprogram_sat_partition1 vs :
+        ebexp_partition (depvars_epre_eprogram_sat vs) e.
+      Proof.
+        apply: (@depvars_epre_eprogram_sat_ind
+                  (fun vs vs' => ebexp_partition vs' e)).
+        - move=> {}vs vs' Hc Hp. assumption.
+        - move=> {}vs vs' Hc. move/idP/negP: Hc => Hc. rewrite -leqNgt in Hc.
+          move: (depvars_epre_eprogram_cardinal_sat Hc) => Heq.
+          apply: (depvars_epre_eprogram_partition1 (p := p)). rewrite /vs'.
+          rewrite !Heq. exact: VSLemmas.subset_refl.
+      Qed.
+
+      Lemma depvars_epre_eprogram_sat_partition2 vs :
+        eprogram_partition (depvars_epre_eprogram_sat vs) p.
+      Proof.
+        apply: (@depvars_epre_eprogram_sat_ind
+                  (fun vs vs' => eprogram_partition vs' p)).
+        - move=> {}vs vs' Hc Hp. assumption.
+        - move=> {}vs vs' Hc. move/idP/negP: Hc => Hc. rewrite -leqNgt in Hc.
+          move: (depvars_epre_eprogram_cardinal_sat Hc) => Heq.
+          apply: (depvars_epre_eprogram_partition2 (e := e)). rewrite /vs'.
+          rewrite !Heq. exact: VSLemmas.subset_refl.
+      Qed.
+
+      Lemma depvars_rpre_rprogram_sat_partition1 vs :
+        rbexp_partition (depvars_rpre_rprogram_sat vs) r.
+      Proof.
+        apply: (@depvars_rpre_rprogram_sat_ind
+                  (fun vs vs' => rbexp_partition vs' r)).
+        - move=> {}vs vs' Hc Hp. assumption.
+        - move=> {}vs vs' Hc. move/idP/negP: Hc => Hc. rewrite -leqNgt in Hc.
+          move: (depvars_rpre_rprogram_cardinal_sat Hc) => Heq.
+          apply: (depvars_rpre_rprogram_partition1 (p := p)). rewrite /vs'.
+          rewrite !Heq. exact: VSLemmas.subset_refl.
+      Qed.
+
+      Lemma depvars_rpre_rprogram_sat_partition2 vs :
+        rprogram_partition (depvars_rpre_rprogram_sat vs) p.
+      Proof.
+        apply: (@depvars_rpre_rprogram_sat_ind
+                  (fun vs vs' => rprogram_partition vs' p)).
+        - move=> {}vs vs' Hc Hp. assumption.
+        - move=> {}vs vs' Hc. move/idP/negP: Hc => Hc. rewrite -leqNgt in Hc.
+          move: (depvars_rpre_rprogram_cardinal_sat Hc) => Heq.
+          apply: (depvars_rpre_rprogram_partition2 (e := r)). rewrite /vs'.
+          rewrite !Heq. exact: VSLemmas.subset_refl.
+      Qed.
+
+    End AddRelevantVarsRec.
+
+    Local Notation mem1 v vs i := (if VS.mem v vs then Some i
+                                   else None) (only parsing).
+    Local Notation mem2 v1 v2 vs i := (if VS.mem v1 vs || VS.mem v2 vs then Some i
+                                       else None) (only parsing).
+
+    Fixpoint slice_ebexp vs e :=
+      match e with
+      | Etrue => e
+      | Eeq e1 e2 =>
+          if VSLemmas.disjoint vs (vars_eexp e1)
+             && VSLemmas.disjoint vs (vars_eexp e2) then etrue
+          else e
+      | Eeqmod e1 e2 ms =>
+          if VSLemmas.disjoint vs (vars_eexp e1)
+             && VSLemmas.disjoint vs (vars_eexp e2)
+             && VSLemmas.disjoint vs (vars_eexps ms) then etrue
+          else e
+      | Eand e1 e2 =>
+          match slice_ebexp vs e1, slice_ebexp vs e2 with
+          | e1, Etrue => e1
+          | Etrue, e2 => e2
+          | e1, e2 => Eand e1 e2
+          end
+      end.
+
+    Fixpoint slice_rbexp vs e :=
+      match e with
+      | Rtrue => e
+      | Req _ e1 e2 =>
+          if VSLemmas.disjoint vs (vars_rexp e1)
+             && VSLemmas.disjoint vs (vars_rexp e2) then rtrue
+          else e
+      | Rcmp _ _ e1 e2 =>
+          if VSLemmas.disjoint vs (vars_rexp e1)
+             && VSLemmas.disjoint vs (vars_rexp e2) then rtrue
+          else e
+      | Rneg e' => if VSLemmas.disjoint vs (vars_rbexp e') then rtrue
+                   else e
+      | Rand e1 e2 =>
+        match slice_rbexp vs e1, slice_rbexp vs e2 with
+        | e1, Rtrue => e1
+        | Rtrue, e2 => e2
+        | e1, e2 => Rand e1 e2
+        end
+      | Ror e1 e2 =>
+        if VSLemmas.disjoint vs (vars_rbexp e1)
+           && VSLemmas.disjoint vs (vars_rbexp e2) then rtrue
+        else e
+      end.
+
+    Definition slice_einstr vs i :=
+      match i with
+      | Iassume (e, _) => Some (Iassume (slice_ebexp vs e, rtrue))
+      | _ => if VSLemmas.disjoint vs (lvs_instr i) then None else Some i
+    end.
+
+    Definition slice_rinstr vs i :=
+      match i with
+      | Iassume (_, r) => Some (Iassume (etrue, slice_rbexp vs r))
+      | _ => if VSLemmas.disjoint vs (lvs_instr i) then None else Some i
+    end.
+
+    Fixpoint slice_eprogram vs p :=
+      match p with
+      | [::] => [::]
+      | hd::tl => match slice_einstr vs hd with
+                  | None => slice_eprogram vs tl
+                  | Some i => i::slice_eprogram vs tl
+                  end
+      end.
+
+    Fixpoint slice_rprogram vs p :=
+      match p with
+      | [::] => [::]
+      | hd::tl => match slice_rinstr vs hd with
+                  | None => slice_rprogram vs tl
+                  | Some i => i::slice_rprogram vs tl
+                  end
+      end.
+
+    Definition slice_espec (s : espec) :=
+      let vs := depvars_epre_eprogram_sat
+                  (eqn_bexp (espre s)) (esprog s) (vars_ebexp (espost s)) in
+      {| esinputs := esinputs s;
+         espre := (slice_ebexp vs (eqn_bexp (espre s)), rng_bexp (espre s));
+         esprog := slice_eprogram vs (esprog s);
+         espost := espost s |}.
+
+    Definition slice_rspec (s : rspec) :=
+      let vs := depvars_rpre_rprogram_sat
+                  (rspre s) (rsprog s) (vars_rbexp (rspost s)) in
+      {| rsinputs := rsinputs s;
+         rspre := slice_rbexp vs (rspre s);
+         rsprog := slice_rprogram vs (rsprog s);
+         rspost := rspost s |}.
+
+    Lemma slice_eprogram_rcons_none vs p i :
+      slice_einstr vs i = None ->
+      slice_eprogram vs (rcons p i) = slice_eprogram vs p.
+    Proof.
+      elim: p vs i => [| i p IH] vs i' /= Hsi.
+      - rewrite Hsi. reflexivity.
+      - rewrite !(IH _ _ Hsi). reflexivity.
+    Qed.
+
+    Lemma slice_rprogram_rcons_none vs p i :
+      slice_rinstr vs i = None ->
+      slice_rprogram vs (rcons p i) = slice_rprogram vs p.
+    Proof.
+      elim: p vs i => [| i p IH] vs i' /= Hsi.
+      - rewrite Hsi. reflexivity.
+      - rewrite !(IH _ _ Hsi). reflexivity.
+    Qed.
+
+    Lemma slice_eprogram_rcons_some vs p i i' :
+      slice_einstr vs i = Some i' ->
+      slice_eprogram vs (rcons p i) = rcons (slice_eprogram vs p) i'.
+    Proof.
+      elim: p vs i i' => [| i p IH] vs i1 i2 /= Hsi1.
+      - rewrite Hsi1. reflexivity.
+      - rewrite !(IH _ _ _ Hsi1). case Hsi: (slice_einstr vs i).
+        + rewrite rcons_cons. reflexivity.
+        + reflexivity.
+    Qed.
+
+    Lemma slice_rprogram_rcons_some vs p i i' :
+      slice_rinstr vs i = Some i' ->
+      slice_rprogram vs (rcons p i) = rcons (slice_rprogram vs p) i'.
+    Proof.
+      elim: p vs i i' => [| i p IH] vs i1 i2 /= Hsi1.
+      - rewrite Hsi1. reflexivity.
+      - rewrite !(IH _ _ _ Hsi1). case Hsi: (slice_rinstr vs i).
+        + rewrite rcons_cons. reflexivity.
+        + reflexivity.
+    Qed.
+
+
+    Global Instance add_proper_slice_ebexp_set :
+      Proper (VS.Equal ==> eq ==> eq) slice_ebexp.
+    Proof.
+      move=> s1 s2 Hs e1 e2 ?; subst. (elim: e2 => //=);
+                                      intros; try rewrite !Hs /=; try reflexivity.
+      rewrite H H0. reflexivity.
+    Qed.
+
+    Global Instance add_proper_slice_rbexp_set :
+      Proper (VS.Equal ==> eq ==> eq) slice_rbexp.
+    Proof.
+      move=> s1 s2 Hs e1 e2 ?; subst. (elim: e2 => //=);
+                                      intros; try rewrite !Hs /=; try reflexivity.
+      rewrite H H0. reflexivity.
+    Qed.
+
+    Global Instance add_proper_slice_einstr_set :
+      Proper (VS.Equal ==> eq ==> eq) slice_einstr.
+    Proof.
+      move=> s1 s2 Hs i1 i2 ?; subst. (case: i2 => //=);
+                                      intros; try rewrite !Hs /=; try reflexivity.
+      case: b => [e _] /=. rewrite Hs. reflexivity.
+    Qed.
+
+    Global Instance add_proper_slice_rinstr_set :
+      Proper (VS.Equal ==> eq ==> eq) slice_rinstr.
+    Proof.
+      move=> s1 s2 Hs i1 i2 ?; subst. (case: i2 => //=);
+                                      intros; try rewrite !Hs /=; try reflexivity.
+      case: b => [_ r] /=. rewrite Hs. reflexivity.
+    Qed.
+
+    Global Instance add_proper_slice_eprogram_set :
+      Proper (VS.Equal ==> eq ==> eq) slice_eprogram.
+    Proof.
+      move=> s1 s2 Hs p1 p2 ?; subst. (elim: p2 => //=);
+                                      intros; try rewrite !Hs /=; try reflexivity.
+      rewrite H Hs. reflexivity.
+    Qed.
+
+    Global Instance add_proper_slice_rprogram_set :
+      Proper (VS.Equal ==> eq ==> eq) slice_rprogram.
+    Proof.
+      move=> s1 s2 Hs p1 p2 ?; subst. (elim: p2 => //=);
+                                      intros; try rewrite !Hs /=; try reflexivity.
+      rewrite H Hs. reflexivity.
+    Qed.
+
+
+    Ltac mytac ::=
+      (repeat
+         match goal with
+         | H : is_true (_ && _) |- _ =>
+             let H1 := fresh in
+             let H2 := fresh in
+             move/andP: H => [H1 H2]
+         | H : None = Some _ |- _ => discriminate
+         | H : Some _ = None |- _ => discriminate
+         | H : Some _ = Some _ |- _ => case: H => H; subst; simpl
+         | |- is_true (VS.subset VS.empty _) => exact: VSLemmas.subset_empty
+         | H : _ \/ is_true (VS.subset ?vs1 ?vs2) |- is_true (VS.subset ?vs1 ?vs2) =>
+             case: H; [intros | by apply]
+         | H : is_true (VSLemmas.disjoint (VS.union _ _) _) |- _ =>
+             rewrite VSLemmas.disjoint_sym in H
+         | H : is_true (VSLemmas.disjoint _ (VS.union _ _)) |- _ =>
+             let Hdisj1 := fresh in
+             let Hdisj2 := fresh in
+             rewrite VSLemmas.disjoint_union in H; move/andP: H => [Hdisj1 Hdisj2]
+         | H1 : is_true (VSLemmas.disjoint ?vs1 ?vs2),
+             H2 : context c [VSLemmas.disjoint ?vs1 ?vs2]
+           |- _ =>
+             rewrite H1 /= in H2
+         | H1 : is_true (VSLemmas.disjoint ?vs1 ?vs2),
+             H2 : context c [VSLemmas.disjoint ?vs2 ?vs1]
+           |- _ =>
+             rewrite VSLemmas.disjoint_sym H1 /= in H2
+         | H : true = false |- _ => discriminate
+         | H1 : is_true (VS.subset (vars_ebexp (slice_ebexp ?vs ?e)) _),
+             H2 : slice_ebexp ?vs ?e = _ |- _ =>
+             rewrite H2 /= in H1
+         | H1 : is_true (VS.subset (vars_rbexp (slice_rbexp ?vs ?e)) _),
+             H2 : slice_rbexp ?vs ?e = _ |- _ =>
+             rewrite H2 /= in H1
+         | |- context c [vars_ebexp _] => rewrite /vars_ebexp /=
+         | |- context c [vars_rbexp _] => rewrite /vars_rbexp /=
+         end); try VSLemmas.dp_subset.
+
+    Lemma ebexp_partition_slice_subset vs e :
+      ebexp_partition vs e -> VS.subset (vars_ebexp (slice_ebexp vs e)) vs.
+    Proof.
+      elim: e vs => /=.
+      - intros; by mytac.
+      - intros; case_if; by mytac.
+      - intros; case_if; by mytac.
+      - move=> e1 IH1 e2 IH2 vs [Hpart1 Hpart2].
+        move: (IH1 _ Hpart1) (IH2 _ Hpart2) => Hsub1 Hsub2.
+        case Hs1: (slice_ebexp vs e1); case Hs2: (slice_ebexp vs e2); simpl; by mytac.
+    Qed.
+
+    Lemma rbexp_partition_slice_subset vs e :
+      rbexp_partition vs e -> VS.subset (vars_rbexp (slice_rbexp vs e)) vs.
+    Proof.
+      elim: e vs => /=.
+      - intros; by mytac.
+      - intros; case_if; by mytac.
+      - intros; case_if; by mytac.
+      - intros; case_if; by mytac.
+      - move=> e1 IH1 e2 IH2 vs [Hpart1 Hpart2].
+        move: (IH1 _ Hpart1) (IH2 _ Hpart2) => Hsub1 Hsub2.
+        case Hs1: (slice_rbexp vs e1); case Hs2: (slice_rbexp vs e2); simpl; by mytac.
+      - intros; case_if; by mytac.
+    Qed.
+
+    Lemma einstr_partition_slice_subset vs i i' :
+      slice_einstr vs i = Some i' ->
+      einstr_partition vs i -> VS.subset (vars_instr i') vs.
+    Proof.
+      case: i => //=; intros; case_if'; mytac.
+      case: b H H0 => [e r] /=. intros; mytac. rewrite /vars_bexp /=.
+      rewrite VSLemmas.union_emptyr. exact: (ebexp_partition_slice_subset H0).
+    Qed.
+
+    Lemma rinstr_partition_slice_subset vs i i' :
+      slice_rinstr vs i = Some i' ->
+      rinstr_partition vs i -> VS.subset (vars_instr i') vs.
+    Proof.
+      case: i => //=; intros; case_if'; mytac.
+      case: b H H0 => [e r] /=. intros; mytac. rewrite /vars_bexp /=.
+      rewrite VSLemmas.union_emptyl. exact: (rbexp_partition_slice_subset H0).
+    Qed.
+
+    Lemma eprogram_partition_slice_subset vs p :
+      eprogram_partition vs p -> VS.subset (vars_program (slice_eprogram vs p)) vs.
+    Proof.
+      elim: p vs => [| i p IH] vs /=.
+      - intros; by mytac.
+      - move=> [Hpi Hpp]. case Hsi: (slice_einstr vs i) => /=.
+        + apply: (VSLemmas.subset_union3 (einstr_partition_slice_subset Hsi Hpi)).
+          exact: (IH _ Hpp).
+        + exact: (IH _ Hpp).
+    Qed.
+
+    Lemma rprogram_partition_slice_subset vs p :
+      rprogram_partition vs p -> VS.subset (vars_program (slice_rprogram vs p)) vs.
+    Proof.
+      elim: p vs => [| i p IH] vs /=.
+      - intros; by mytac.
+      - move=> [Hpi Hpp]. case Hsi: (slice_rinstr vs i) => /=.
+        + apply: (VSLemmas.subset_union3 (rinstr_partition_slice_subset Hsi Hpi)).
+          exact: (IH _ Hpp).
+        + exact: (IH _ Hpp).
+    Qed.
+
+
+    Ltac mytac ::=
+      repeat match goal with
+             | H : context f [if ?e then _ else _] |- _ =>
+                 (move: H); (dcase e); case; intros
+             | |- context f [if ?e then _ else _] =>
+                 dcase e; case; intros
+             | H : Some _ = None |- _ => discriminate
+             | H : None = Some _ |- _ => discriminate
+             | H : Some _ = Some _ |- _ => case: H; intros; subst
+             | H : _ && _ = true |- _ =>
+                 let H1 := fresh in
+                 let H2 := fresh in
+                 move/andP: H => [H1 H2]
+             | H1 : slice_ebexp ?vs ?e = _,
+                 H2 : context f [slice_ebexp ?vs ?e] |- _ => rewrite /= H1 in H2
+             | H1 : slice_rbexp ?vs ?e = _,
+                 H2 : context f [slice_rbexp ?vs ?e] |- _ => rewrite /= H1 in H2
+             end.
+
+    Lemma slice_ebexp_vars_subset vs e :
+      VS.subset (vars_ebexp (slice_ebexp vs e)) (vars_ebexp e).
+    Proof.
+      elim: e => //=.
+      - by VSLemmas.dp_subset.
+      - intros; mytac; simpl; by VSLemmas.dp_subset.
+      - intros; mytac; simpl; by VSLemmas.dp_subset.
+      - move=> e1 IH1 e2 IH2. case Hs1: (slice_ebexp vs e1); case Hs2: (slice_ebexp vs e2);
+          mytac; simpl; by VSLemmas.dp_subset.
+    Qed.
+
+    Lemma slice_rbexp_vars_subset vs e :
+      VS.subset (vars_rbexp (slice_rbexp vs e)) (vars_rbexp e).
+    Proof.
+      elim: e => //=.
+      - by VSLemmas.dp_subset.
+      - intros; mytac; simpl; by VSLemmas.dp_subset.
+      - intros; mytac; simpl; by VSLemmas.dp_subset.
+      - intros; mytac; simpl; by VSLemmas.dp_subset.
+      - move=> e1 IH1 e2 IH2. case Hs1: (slice_rbexp vs e1); case Hs2: (slice_rbexp vs e2);
+          mytac; simpl; by VSLemmas.dp_subset.
+      - move=> e1 IH1 e2 IH2; mytac; simpl; by VSLemmas.dp_subset.
+    Qed.
+
+    Lemma slice_einstr_vars_subset vs i i' :
+      slice_einstr vs i = Some i' -> VS.subset (vars_instr i') (vars_instr i).
+    Proof.
+      case: i => //=; intros; mytac; simpl; try VSLemmas.dp_subset.
+      move: H; case: b; intros; mytac; simpl. rewrite /vars_bexp /=.
+      apply: VSLemmas.union_subsets.
+      - exact: slice_ebexp_vars_subset.
+      - exact: VSLemmas.subset_empty.
+    Qed.
+
+    Lemma slice_rinstr_vars_subset vs i i' :
+      slice_rinstr vs i = Some i' -> VS.subset (vars_instr i') (vars_instr i).
+    Proof.
+      case: i => //=; intros; mytac; simpl; try VSLemmas.dp_subset.
+      move: H; case: b; intros; mytac; simpl. rewrite /vars_bexp /=.
+      apply: VSLemmas.union_subsets.
+      - exact: VSLemmas.subset_empty.
+      - exact: slice_rbexp_vars_subset.
+    Qed.
+
+    Lemma slice_eprogram_vars_subset vs p :
+      VS.subset (vars_program (slice_eprogram vs p)) (vars_program p).
+    Proof.
+      elim: p => [| i p IH] //=.
+      - by VSLemmas.dp_subset.
+      - case Hi: (slice_einstr vs i) => /=.
+        + move: (slice_einstr_vars_subset Hi) => Hsub. by VSLemmas.dp_subset.
+        + apply: VSLemmas.subset_union2. assumption.
+    Qed.
+
+    Lemma slice_rprogram_vars_subset vs p :
+      VS.subset (vars_program (slice_rprogram vs p)) (vars_program p).
+    Proof.
+      elim: p => [| i p IH] //=.
+      - by VSLemmas.dp_subset.
+      - case Hi: (slice_rinstr vs i) => /=.
+        + move: (slice_rinstr_vars_subset Hi) => Hsub. by VSLemmas.dp_subset.
+        + apply: VSLemmas.subset_union2. assumption.
+    Qed.
+
+    Lemma depvars_epre_eprogram_slice_subset f p vs :
+      VS.cardinal vs < VS.cardinal (depvars_epre_eprogram vs f p) = false ->
+      VS.subset (vars_program (slice_eprogram (depvars_epre_eprogram vs f p) p))
+                (depvars_epre_eprogram vs f p).
+    Proof.
+      move=> H. move/idP/negP: H. rewrite -leqNgt => Hc.
+      move: (depvars_epre_eprogram_cardinal_sat Hc) => Heq.
+      rewrite Heq. apply: eprogram_partition_slice_subset.
+      apply: (depvars_epre_eprogram_partition2 (e:=f)).
+      rewrite Heq. exact: VSLemmas.subset_refl.
+    Qed.
+
+    Lemma depvars_rpre_rprogram_slice_subset f p vs :
+      VS.cardinal vs < VS.cardinal (depvars_rpre_rprogram vs f p) = false ->
+      VS.subset (vars_program (slice_rprogram (depvars_rpre_rprogram vs f p) p))
+                (depvars_rpre_rprogram vs f p).
+    Proof.
+      move=> H. move/idP/negP: H. rewrite -leqNgt => Hc.
+      move: (depvars_rpre_rprogram_cardinal_sat Hc) => Heq.
+      rewrite Heq. apply: rprogram_partition_slice_subset.
+      apply: (depvars_rpre_rprogram_partition2 (e:=f)).
+      rewrite Heq. exact: VSLemmas.subset_refl.
+    Qed.
+
+    Lemma depvars_epre_eprogram_sat_slice_subset f p vs :
+      VS.subset (vars_program (slice_eprogram (depvars_epre_eprogram_sat f p vs) p))
+                (depvars_epre_eprogram_sat f p vs).
+    Proof.
+      apply: eprogram_partition_slice_subset.
+      exact: depvars_epre_eprogram_sat_partition2.
+    Qed.
+
+    Lemma depvars_rpre_rprogram_sat_slice_subset f p vs :
+      VS.subset (vars_program (slice_rprogram (depvars_rpre_rprogram_sat f p vs) p))
+                (depvars_rpre_rprogram_sat f p vs).
+    Proof.
+      apply: rprogram_partition_slice_subset.
+      exact: depvars_rpre_rprogram_sat_partition2.
+    Qed.
+
+
+    Ltac mytac ::=
+      (repeat match goal with
+              | |- True => trivial
+              | H : ?e |- ?e => assumption
+              | |- is_true (?e == ?e) => exact: eqxx
+              | H : context f [if ?e then _ else _] |- _ =>
+                  (move: H); (dcase e); case; intros
+              | |- context f [if ?e then _ else _] =>
+                  dcase e; case; intros
+              | H : Some _ = None |- _ => discriminate
+              | H : None = Some _ |- _ => discriminate
+              | H : Some _ = Some _ |- _ => case: H; intros; subst
+              | H : VSLemmas.disjoint ?vs (VS.singleton ?v) = true |- _ =>
+                  rewrite VSLemmas.disjoint_singleton in H
+              | H : is_true (VSLemmas.disjoint ?vs (VS.singleton ?v)) |- _ =>
+                  rewrite VSLemmas.disjoint_singleton in H
+              | H : VSLemmas.disjoint _ (VS.add _ (VS.singleton _)) = true |- _ =>
+                  let H1 := fresh in
+                  let H2 := fresh in
+                  (rewrite VSLemmas.disjoint_add in H); (move/andP: H => [H1 H2])
+              | H : is_true (VS.subset (VS.add _ _) _) |- _ =>
+                  let H1 := fresh in
+                  let H2 := fresh in
+                  (rewrite VSLemmas.subset_add6 in H); (case/andP: H); (move=> H1 H2)
+              | H : is_true (VS.subset (VS.union _ _) _) |- _ =>
+                  let H1 := fresh in
+                  let H2 := fresh in
+                  (rewrite VSLemmas.subset_union6 in H); (case/andP: H); (move=> H1 H2)
+              | H : context f [vars_bexp (?e, ?r)] |- _ =>
+                  rewrite /vars_bexp /= in H
+              | H : eval_bexp (?e, ?r) ?E ?s |- _ =>
+                  let H1 := fresh in
+                  let H2 := fresh in
+                  (rewrite /eval_bexp /= in H); (case: H => H1 H2)
+              | |- eval_bexp (?e, ?r) ?E ?s =>
+                  rewrite /eval_bexp /=; split
+              | H : ~~ VS.mem ?t ?vs = true |-
+                  MA.agree ?vs (TE.add ?t _ _) _ =>
+                  apply: (MA.not_mem_add_map_l); [assumption |]
+              | H : is_true (~~ VS.mem ?t ?vs) |-
+                  MA.agree ?vs (TE.add ?t _ _) _ =>
+                  apply: (MA.not_mem_add_map_l); [assumption |]
+              | |- MA.agree _ ?E ?E => exact: MA.agree_refl
+              end).
+
+    Lemma slice_einstr_none_agree vs E i :
+      slice_einstr vs i = None ->
+      MA.agree vs (instr_succ_typenv i E) E.
+    Proof. case: i => //=; intros; by mytac. Qed.
+
+    Lemma slice_rinstr_none_agree vs E i :
+      slice_rinstr vs i = None ->
+      MA.agree vs (instr_succ_typenv i E) E.
+    Proof. case: i => //=; intros; by mytac. Qed.
+
+    Lemma slice_einstr_some_succ_typenv E vs i i' :
+      slice_einstr vs i = Some i' ->
+      instr_succ_typenv i E = instr_succ_typenv i' E.
+    Proof.
+      case: i => //=; intros; mytac; simpl; try reflexivity.
+      move: H; case: b => [e r]. case=> <- /=. reflexivity.
+    Qed.
+
+    Lemma slice_rinstr_some_succ_typenv E vs i i' :
+      slice_rinstr vs i = Some i' ->
+      instr_succ_typenv i E = instr_succ_typenv i' E.
+    Proof.
+      case: i => //=; intros; mytac; simpl; try reflexivity.
+      move: H; case: b => [e r]. case=> <- /=. reflexivity.
+    Qed.
+
+    Lemma slice_eprogram_succ_typenv E vs p :
+      eprogram_partition vs p ->
+      MA.agree vs (program_succ_typenv p E) (program_succ_typenv (slice_eprogram vs p) E).
+    Proof.
+      elim: p E vs => [| i p IH] E vs /=.
+      - move=> _. exact: MA.agree_refl.
+      - move=> [Hpi Hpp]. case Hsi: (slice_einstr vs i); simpl.
+        + rewrite (slice_einstr_some_succ_typenv _ Hsi). exact: IH.
+        + apply: (MA.agree_trans (IH (instr_succ_typenv i E) vs Hpp)).
+          apply: agree_program_succ_typenv.
+          * exact: (slice_einstr_none_agree E Hsi).
+          * apply: (MA.subset_set_agree (eprogram_partition_slice_subset Hpp)).
+            exact: (slice_einstr_none_agree _ Hsi).
+    Qed.
+
+    Lemma slice_rprogram_succ_typenv E vs p :
+      rprogram_partition vs p ->
+      MA.agree vs (program_succ_typenv p E) (program_succ_typenv (slice_rprogram vs p) E).
+    Proof.
+      elim: p E vs => [| i p IH] E vs /=.
+      - move=> _. exact: MA.agree_refl.
+      - move=> [Hpi Hpp]. case Hsi: (slice_rinstr vs i); simpl.
+        + rewrite (slice_rinstr_some_succ_typenv _ Hsi). exact: IH.
+        + apply: (MA.agree_trans (IH (instr_succ_typenv i E) vs Hpp)).
+          apply: agree_program_succ_typenv.
+          * exact: (slice_rinstr_none_agree E Hsi).
+          * apply: (MA.subset_set_agree (rprogram_partition_slice_subset Hpp)).
+            exact: (slice_rinstr_none_agree _ Hsi).
+    Qed.
+
+
+    Lemma slice_ebexp_eval E vs e s :
+      eval_ebexp e E s -> eval_ebexp (slice_ebexp vs e) E s.
+    Proof.
+      elim: e => //=.
+      - move=> e1 e2 H. by case_if.
+      - move=> e1 e2 ms H. by case_if.
+      - move=> e1 IH1 e2 IH2 [H1 H2].
+        case Hs1: (slice_ebexp vs e1) => //=; rewrite Hs1 /= in IH1.
+        + (case Hs2: (slice_ebexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+          move: (IH1 H1) (IH2 H2) => /=; tauto.
+        + (case Hs2: (slice_ebexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+          move: (IH1 H1) (IH2 H2) => /=; tauto.
+        + (case Hs2: (slice_ebexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+          move: (IH1 H1) (IH2 H2) => /=; tauto.
+        + (case Hs2: (slice_ebexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+          move: (IH1 H1) (IH2 H2) => /=; tauto.
+    Qed.
+
+    Ltac myauto :=
+      repeat match goal with
+             | H : is_true (_ == _) |- _ => move/eqP: H => H
+             | |- is_true (_ == _) => apply/eqP
+             | H : is_true (_ && _) |- _ =>
+                 let H1 := fresh in
+                 let H2 := fresh in
+                 move/andP: H => [H1 H2]
+             | |- is_true (_ && _) => apply/andP
+             | |- _ /\ _ => split
+             end.
+
+    Lemma slice_rbexp_eval vs e s :
+      eval_rbexp e s -> eval_rbexp (slice_rbexp vs e) s.
+    Proof.
+      elim: e => //=.
+      - move=> n e1 e2. by case_if.
+      - move=> n op e1 e2 H. by case_if.
+      - move=> e1 IH. by case_if.
+      - move=> e1 IH1 e2 IH2 /andP [H1 H2].
+        case Hs1: (slice_rbexp vs e1) => //=; rewrite Hs1 /= in IH1.
+        + (case Hs2: (slice_rbexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+          move: (IH1 H1) (IH2 H2) => /=; tauto.
+        + (case Hs2: (slice_rbexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+          move: (IH1 H1) (IH2 H2) => /=; intros; myauto; tauto.
+        + (case Hs2: (slice_rbexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+          move: (IH1 H1) (IH2 H2) => /=; intros; myauto; tauto.
+        + (case Hs2: (slice_rbexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+          move: (IH1 H1) (IH2 H2) => /=; intros; myauto; tauto.
+        + (case Hs2: (slice_rbexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+          move: (IH1 H1) (IH2 H2) => /=; intros; myauto; tauto.
+        + (case Hs2: (slice_rbexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+          move: (IH1 H1) (IH2 H2) => /=; intros; myauto; tauto.
+      - move=> e1 IH1 e2 IH2 /orP [] H.
+        + case: (VSLemmas.disjoint vs (vars_rbexp e1) && VSLemmas.disjoint vs (vars_rbexp e2))
+              => //=. by rewrite H orTb.
+        + case: (VSLemmas.disjoint vs (vars_rbexp e1) && VSLemmas.disjoint vs (vars_rbexp e2))
+              => //=. by rewrite H orbT.
+    Qed.
+
+    Ltac mytac ::=
+      (repeat match goal with
+              | H : context f [if ?e then _ else _] |- _ =>
+                  (move: H); (dcase e); case; intros
+              | |- context f [if ?e then _ else _] =>
+                  dcase e; case; intros
+              | H : eval_instr _ _ _ _,
+                  Heqm : TSEQM.state_eqmod _ _ _ |- _ =>
+                  (move: Heqm); (inversion_clear H); intros
+              | H : Some _ = None |- _ => discriminate
+              | H : VSLemmas.disjoint ?vs (VS.singleton ?v) = true |- _ =>
+                  rewrite VSLemmas.disjoint_singleton in H
+              | H : is_true (VSLemmas.disjoint ?vs (VS.singleton ?v)) |- _ =>
+                  rewrite VSLemmas.disjoint_singleton in H
+              | H : VSLemmas.disjoint _ (VS.add _ (VS.singleton _)) = true |- _ =>
+                  let H1 := fresh in let H2 := fresh in
+                  (rewrite VSLemmas.disjoint_add in H); (move/andP: H => [H1 H2])
+              | Heqm : TSEQM.state_eqmod ?vs ?s1 ?s1',
+                  Hnotin : ~~ VS.mem ?v ?vs = true,
+                    Hupd : S.Upd ?v _ ?s1 ?s2
+                |- TSEQM.state_eqmod ?vs ?s2 ?s1' =>
+                  exact: (TSEQM.state_eqmod_Upd_notin_l Heqm Hnotin Hupd)
+              | Heqm : TSEQM.state_eqmod ?vs ?s1 ?s1',
+                  Hupd2 : S.Upd2 ?v2 _ ?v1 _ ?s1 ?s2,
+                    Hnotin1 : is_true (~~ VS.mem ?v1 ?vs),
+                      Hnotin2 : is_true (~~ VS.mem ?v2 ?vs)
+                |- TSEQM.state_eqmod ?vs ?s2 ?s1' =>
+                  exact: (TSEQM.state_eqmod_Upd2_notin_l Heqm Hnotin2 Hnotin1 Hupd2)
+              | H : ?e |- ?e => assumption
+              end).
+
+    Lemma slice_einstr_none_eval E vs i s1 s2 s1' :
+      slice_einstr vs i = None ->
+      eval_instr E i s1 s2 -> TSEQM.state_eqmod vs s1 s1' ->
+      TSEQM.state_eqmod vs s1' s2.
+    Proof.
+      case: i => //=; intros; apply: TSEQM.state_eqmod_sym; by mytac.
+    Qed.
+
+    Lemma slice_rinstr_none_eval E vs i s1 s2 s1' :
+      slice_rinstr vs i = None ->
+      eval_instr E i s1 s2 -> TSEQM.state_eqmod vs s1 s1' ->
+      TSEQM.state_eqmod vs s1' s2.
+    Proof.
+      case: i => //=; intros; apply: TSEQM.state_eqmod_sym; by mytac.
+    Qed.
+
+    Ltac mytac ::=
+      (repeat match goal with
+              | |- True => trivial
+              | H : ?e |- ?e => assumption
+              | |- is_true (?e == ?e) => exact: eqxx
+              | H : context f [if ?e then _ else _] |- _ =>
+                  (move: H); (dcase e); case; intros
+              | |- context f [if ?e then _ else _] =>
+                  dcase e; case; intros
+              | H : Some _ = None |- _ => discriminate
+              | H : None = Some _ |- _ => discriminate
+              | H : Some _ = Some _ |- _ => case: H; intros; subst
+              | H : eval_instr _ _ _ _,
+                  Hsub : is_true (VS.subset (vars_instr _) _),
+                  Heqm : TSEQM.state_eqmod _ _ _ |- _ =>
+                  (move: Heqm Hsub); (inversion_clear H); simpl; intros
+              | H : VSLemmas.disjoint ?vs (VS.singleton ?v) = true |- _ =>
+                  rewrite VSLemmas.disjoint_singleton in H
+              | H : is_true (VSLemmas.disjoint ?vs (VS.singleton ?v)) |- _ =>
+                  rewrite VSLemmas.disjoint_singleton in H
+              | H : VSLemmas.disjoint _ (VS.add _ (VS.singleton _)) = true |- _ =>
+                  let H1 := fresh in
+                  let H2 := fresh in
+                  (rewrite VSLemmas.disjoint_add in H); (move/andP: H => [H1 H2])
+              | H : is_true (VS.subset (VS.add _ _) _) |- _ =>
+                  let H1 := fresh in
+                  let H2 := fresh in
+                  (rewrite VSLemmas.subset_add6 in H); (case/andP: H); (move=> H1 H2)
+              | H : is_true (VS.subset (VS.union _ _) _) |- _ =>
+                  let H1 := fresh in
+                  let H2 := fresh in
+                  (rewrite VSLemmas.subset_union6 in H); (case/andP: H); (move=> H1 H2)
+              | Hupd : S.Upd ?x ?v ?s1 ?s2,
+                  Heqm : TSEQM.state_eqmod ?vs ?s1 ?s1'
+                |- exists s2' : state, (TSEQM.state_eqmod ?vs ?s2 ?s2' /\ _) =>
+                  exists (S.upd x v s1'); split
+              | Hupd2 : S.Upd2 ?x ?v ?y ?u ?s1 ?s2,
+                  Heqm : TSEQM.state_eqmod ?vs ?s1 ?s1'
+                |- exists s2' : state, TSEQM.state_eqmod ?vs ?s2 ?s2' /\ _ =>
+                  exists (S.upd2 x v y u s1'); split
+              | Heqm : TSEQM.state_eqmod ?vs ?s1 ?s1',
+                  Hsub : is_true (VS.subset (vars_atom ?a) ?vs)
+                |- context f [eval_atom ?a ?s1] =>
+                  rewrite (state_eqmod_eval_atom Heqm Hsub)
+              | Heqm : TSEQM.state_eqmod ?vs ?s1 ?s1',
+                  Hsub : is_true (VS.subset (vars_atom ?a) ?vs),
+                    H : context f [eval_atom ?a ?s1] |- _ =>
+                  rewrite (state_eqmod_eval_atom Heqm Hsub) in H
+              | Heqm : TSEQM.state_eqmod ?vs ?s1 ?s1',
+                  Hsub : is_true (VS.subset (vars_rexp ?a) ?vs)
+                |- context f [eval_rexp ?a ?s1] =>
+                  rewrite (state_eqmod_eval_rexp Heqm Hsub)
+              | Heqm : TSEQM.state_eqmod ?vs ?s1 ?s1',
+                  Hsub : is_true (VS.subset (vars_rexp ?a) ?vs),
+                    H : context f [eval_rexp ?a ?s1] |- _ =>
+                  rewrite (state_eqmod_eval_rexp Heqm Hsub) in H
+              | Heqm : TSEQM.state_eqmod ?vs ?s1 ?s1',
+                  Hsub : is_true (VS.subset (vars_rbexp ?a) ?vs)
+                |- context f [eval_rbexp ?a ?s1] =>
+                  rewrite (state_eqmod_eval_rbexp Heqm Hsub)
+              | Heqm : TSEQM.state_eqmod ?vs ?s1 ?s1',
+                  Hsub : is_true (VS.subset (vars_rbexp ?a) ?vs),
+                    H : context f [eval_rbexp ?a ?s1] |- _ =>
+                  rewrite (state_eqmod_eval_rbexp Heqm Hsub) in H
+              | Hupd : S.Upd ?x ?v ?s1 ?s2,
+                  Heqm : TSEQM.state_eqmod ?vs ?s1 ?s1'
+                |- TSEQM.state_eqmod ?vs ?s2 (S.upd ?x ?v ?s1') =>
+                  apply: (TSEQM.state_eqmod_Upd Hupd _ Heqm);
+                  exact: S.Upd_upd
+              | Hupd2 : S.Upd2 ?x ?v ?y ?u ?s1 ?s2,
+                  Heqm : TSEQM.state_eqmod ?vs ?s1 ?s1'
+                |- TSEQM.state_eqmod ?vs ?s2 (S.upd2 ?x ?v ?y ?u ?s1') =>
+                  apply: (TSEQM.state_eqmod_Upd2 Hupd2 _ Heqm);
+                  exact: S.Upd2_upd2
+              | Heqm : TSEQM.state_eqmod ?vs ?s2 ?s1'
+                |- exists s2' : state, TSEQM.state_eqmod ?vs ?s2 s2' /\ eval_instr ?E Inop ?s1' ?s2' =>
+                  exists s1'; split; [assumption | exact: EInop]
+              | H : context f [vars_bexp (?e, ?r)] |- _ =>
+                  rewrite /vars_bexp /= in H
+              | H : eval_bexp (?e, ?r) ?E ?s |- _ =>
+                  let H1 := fresh in
+                  let H2 := fresh in
+                  (rewrite /eval_bexp /= in H); (case: H => H1 H2)
+              | |- eval_bexp (?e, ?r) ?E ?s =>
+                  rewrite /eval_bexp /=; split
+              | |- exists s2' : state,
+                  TSEQM.state_eqmod ?vs ?s2 ?s2' /\ eval_instr ?E (Iassume _) ?s1' ?s2' =>
+                  exists s1'; split
+              | |- eval_instr ?E (Iassume _) ?s ?s => apply: EIassume
+              end).
+
+    Lemma slice_einstr_some_eval E vs i i' s1 s2 s1' :
+      slice_einstr vs i = Some i' -> VS.subset (vars_instr i') vs ->
+      eval_instr E i s1 s2 -> TSEQM.state_eqmod vs s1 s1' ->
+      exists s2', TSEQM.state_eqmod vs s2 s2' /\ eval_instr E i' s1' s2'.
+    Proof.
+      case: i => //=; intros; mytac.
+      - apply: EImov; exact: S.Upd_upd.
+      - apply: EIshl; exact: S.Upd_upd.
+      - apply: EIcshl; exact: S.Upd2_upd2.
+      - apply: (EInondet _ H0); exact: S.Upd_upd.
+      - apply: (EIcmovT _ _ H0); exact: S.Upd_upd.
+      - apply: (EIcmovF _ _ H0); exact: S.Upd_upd.
+      - apply: EInot; exact: S.Upd_upd.
+      - apply: EIadd; exact: S.Upd_upd.
+      - apply: EIadds; exact: S.Upd2_upd2.
+      - apply: EIadc; exact: S.Upd_upd.
+      - apply: EIadcs; exact: S.Upd2_upd2.
+      - apply: EIsub; exact: S.Upd_upd.
+      - apply: EIsubc; exact: S.Upd2_upd2.
+      - apply: EIsubb; exact: S.Upd2_upd2.
+      - apply: EIsbc; exact: S.Upd_upd.
+      - apply: EIsbcs; exact: S.Upd2_upd2.
+      - apply: EIsbb; exact: S.Upd_upd.
+      - apply: EIsbbs; exact: S.Upd2_upd2.
+      - apply: EImul; exact: S.Upd_upd.
+      - apply: (EImullU H0). exact: S.Upd2_upd2.
+      - apply: (EImullS H0); exact: S.Upd2_upd2.
+      - apply: (EImuljU H0); exact: S.Upd_upd.
+      - apply: (EImuljS H0); exact: S.Upd_upd.
+      - apply: (EIsplitU H0); exact: S.Upd2_upd2.
+      - apply: (EIsplitS H0); exact: S.Upd2_upd2.
+      - apply: EIand; exact: S.Upd_upd.
+      - apply: EIor; exact: S.Upd_upd.
+      - apply: EIxor; exact: S.Upd_upd.
+      - apply: EIcast; exact: S.Upd_upd.
+      - apply: EIvpc; exact: S.Upd_upd.
+      - apply: EIjoin; exact: S.Upd_upd.
+      - move: H H0. case: b => [e r]. case=> ?; subst. simpl in H1.
+        intros; mytac.
+        + apply/(state_eqmod_eval_ebexp E H2 H). apply: slice_ebexp_eval. assumption.
+        + reflexivity.
+    Qed.
+
+    Lemma slice_rinstr_some_eval E vs i i' s1 s2 s1' :
+      slice_rinstr vs i = Some i' -> VS.subset (vars_instr i') vs ->
+      eval_instr E i s1 s2 -> TSEQM.state_eqmod vs s1 s1' ->
+      exists s2', TSEQM.state_eqmod vs s2 s2' /\ eval_instr E i' s1' s2'.
+    Proof.
+      case: i => //=; intros; mytac.
+      - apply: EImov; exact: S.Upd_upd.
+      - apply: EIshl; exact: S.Upd_upd.
+      - apply: EIcshl; exact: S.Upd2_upd2.
+      - apply: (EInondet _ H0); exact: S.Upd_upd.
+      - apply: (EIcmovT _ _ H0); exact: S.Upd_upd.
+      - apply: (EIcmovF _ _ H0); exact: S.Upd_upd.
+      - apply: EInot; exact: S.Upd_upd.
+      - apply: EIadd; exact: S.Upd_upd.
+      - apply: EIadds; exact: S.Upd2_upd2.
+      - apply: EIadc; exact: S.Upd_upd.
+      - apply: EIadcs; exact: S.Upd2_upd2.
+      - apply: EIsub; exact: S.Upd_upd.
+      - apply: EIsubc; exact: S.Upd2_upd2.
+      - apply: EIsubb; exact: S.Upd2_upd2.
+      - apply: EIsbc; exact: S.Upd_upd.
+      - apply: EIsbcs; exact: S.Upd2_upd2.
+      - apply: EIsbb; exact: S.Upd_upd.
+      - apply: EIsbbs; exact: S.Upd2_upd2.
+      - apply: EImul; exact: S.Upd_upd.
+      - apply: (EImullU H0). exact: S.Upd2_upd2.
+      - apply: (EImullS H0); exact: S.Upd2_upd2.
+      - apply: (EImuljU H0); exact: S.Upd_upd.
+      - apply: (EImuljS H0); exact: S.Upd_upd.
+      - apply: (EIsplitU H0); exact: S.Upd2_upd2.
+      - apply: (EIsplitS H0); exact: S.Upd2_upd2.
+      - apply: EIand; exact: S.Upd_upd.
+      - apply: EIor; exact: S.Upd_upd.
+      - apply: EIxor; exact: S.Upd_upd.
+      - apply: EIcast; exact: S.Upd_upd.
+      - apply: EIvpc; exact: S.Upd_upd.
+      - apply: EIjoin; exact: S.Upd_upd.
+      - move: H H0. case: b => [e r]. case=> ?; subst. simpl in H1.
+        intros; mytac. rewrite -(state_eqmod_eval_rbexp H2 H3).
+        apply: slice_rbexp_eval. assumption.
+    Qed.
+
+    Lemma slice_eprogram_eval E vs p s1 s2 s1' :
+      VS.subset (vars_program (slice_eprogram vs p)) vs ->
+      eval_program E p s1 s2 -> TSEQM.state_eqmod vs s1 s1' ->
+      exists s2', TSEQM.state_eqmod vs s2 s2' /\ eval_program E (slice_eprogram vs p) s1' s2'.
+    Proof.
+      elim: p E vs s1 s2 s1' => [| i p IH] E vs s1 s2 s1' /=.
+      - move=> _ Hev; inversion_clear Hev. move=> Heqm. exists s1'.
+        split; first assumption. exact: Enil.
+      - case Hsi: (slice_einstr vs i) => /=.
+        + rewrite VSLemmas.subset_union6. move/andP=> [Hsubi Hsubp].
+          move=> Hev; inversion_clear Hev. move=> Heqm.
+          move: (slice_einstr_some_eval Hsi Hsubi H Heqm) => [t' [Heqm' Hevi']].
+          move: (IH _ _ _ _ _ Hsubp H0 Heqm') => [s2' [Heqm'' Hevp']].
+          exists s2'. split; first assumption. apply: (Econs Hevi').
+          rewrite -(slice_einstr_some_succ_typenv E Hsi). exact: Hevp'.
+        + move=> Hsub Hev. inversion_clear Hev. move=> Heqm.
+          move: (slice_einstr_none_eval Hsi H Heqm) => /TSEQM.state_eqmod_sym Heqm'.
+          move: (IH _ _ _ _ _ Hsub H0 Heqm') => [s2' [Heqm'' Hev']].
+          exists s2'. split; first exact: Heqm''. apply: (agree_eval_program Hev').
+          apply: (MA.subset_set_agree Hsub). exact: (slice_einstr_none_agree E Hsi).
+    Qed.
+
+    Lemma slice_rprogram_eval E vs p s1 s2 s1' :
+      VS.subset (vars_program (slice_rprogram vs p)) vs ->
+      eval_program E p s1 s2 -> TSEQM.state_eqmod vs s1 s1' ->
+      exists s2', TSEQM.state_eqmod vs s2 s2' /\ eval_program E (slice_rprogram vs p) s1' s2'.
+    Proof.
+      elim: p E vs s1 s2 s1' => [| i p IH] E vs s1 s2 s1' /=.
+      - move=> _ Hev; inversion_clear Hev. move=> Heqm. exists s1'.
+        split; first assumption. exact: Enil.
+      - case Hsi: (slice_rinstr vs i) => /=.
+        + rewrite VSLemmas.subset_union6. move/andP=> [Hsubi Hsubp].
+          move=> Hev; inversion_clear Hev. move=> Heqm.
+          move: (slice_rinstr_some_eval Hsi Hsubi H Heqm) => [t' [Heqm' Hevi']].
+          move: (IH _ _ _ _ _ Hsubp H0 Heqm') => [s2' [Heqm'' Hevp']].
+          exists s2'. split; first assumption. apply: (Econs Hevi').
+          rewrite -(slice_rinstr_some_succ_typenv E Hsi). exact: Hevp'.
+        + move=> Hsub Hev. inversion_clear Hev. move=> Heqm.
+          move: (slice_rinstr_none_eval Hsi H Heqm) => /TSEQM.state_eqmod_sym Heqm'.
+          move: (IH _ _ _ _ _ Hsub H0 Heqm') => [s2' [Heqm'' Hev']].
+          exists s2'. split; first exact: Heqm''. apply: (agree_eval_program Hev').
+          apply: (MA.subset_set_agree Hsub). exact: (slice_rinstr_none_agree E Hsi).
+    Qed.
+
+    Lemma slice_espec_sound s :
+      valid_espec (slice_espec s) -> valid_espec s.
+    Proof.
+      case: s => E f p g. rewrite /valid_espec /=.
+      move=> H s1 s2 Hco [Hevfe Hevfr] Hevp.
+      set vs := (depvars_epre_eprogram_sat (eqn_bexp f) p (vars_ebexp g)).
+      move: (depvars_epre_eprogram_sat_slice_subset (eqn_bexp f) p (vars_ebexp g)) => Hsub.
+      move: (@TSEQM.state_eqmod_refl vs s1) => Heqms1.
+      move: (slice_eprogram_eval Hsub Hevp Heqms1) => [s2' [Heqms2' Hevs2']].
+      move: (slice_ebexp_eval vs Hevfe) => Hevfes.
+      move: (H s1 s2' Hco (conj Hevfes Hevfr) Hevs2') => Hevgs2'.
+      apply/(state_eqmod_eval_ebexp _ Heqms2' (depvars_epre_eprogram_sat_lb _ _ _)).
+      apply/(agree_eval_ebexp
+               (E2 := (program_succ_typenv (slice_eprogram vs p) E))); last assumption.
+      apply: (MA.subset_set_agree
+                (depvars_epre_eprogram_sat_lb (eqn_bexp f) p (vars_ebexp g))).
+      exact: (slice_eprogram_succ_typenv _
+                (depvars_epre_eprogram_sat_partition2 (eqn_bexp f) p (vars_ebexp g))).
+    Qed.
+
+    Lemma slice_rspec_sound s :
+      valid_rspec (slice_rspec s) -> valid_rspec s.
+    Proof.
+      case: s => E f p g. rewrite /valid_rspec /=.
+      move=> H s1 s2 Hco Hevfr Hevp.
+      set vs := (depvars_rpre_rprogram_sat f p (vars_rbexp g)).
+      move: (depvars_rpre_rprogram_sat_slice_subset f p (vars_rbexp g)) => Hsub.
+      move: (@TSEQM.state_eqmod_refl vs s1) => Heqms1.
+      move: (slice_rprogram_eval Hsub Hevp Heqms1) => [s2' [Heqms2' Hevs2']].
+      move: (slice_rbexp_eval vs Hevfr) => Hevfrs.
+      move: (H s1 s2' Hco Hevfrs Hevs2') => Hevgs2'.
+      rewrite (state_eqmod_eval_rbexp Heqms2' (depvars_rpre_rprogram_sat_lb _ _ _)).
+      exact: Hevgs2'.
+    Qed.
+
+  End Slicing.
+
 End MakeDSL.
 
-Module DSL := MakeDSL VarOrder VS VM TE Store.
+Module VarOrderPrinter <: Printer with Definition t := var.
+  Definition t := VarOrder.t.
+  Definition to_string (v : VarOrder.t) :=
+    ("v" ++ string_of_N v)%string.
+End VarOrderPrinter.
 
-Definition string_of_var (v : var) :=
-  ("v" ++ BinaryString.of_N v)%string.
+Module DSL := MakeDSL VarOrder VarOrderPrinter VS VM TE Store.

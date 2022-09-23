@@ -1,6 +1,5 @@
 open BinNat
 open BinNums
-open BinaryString
 open Bool
 open Datatypes
 open NBitsDef
@@ -13,14 +12,20 @@ open Seq
 
 type __ = Obj.t
 
-module SSA = DSL.MakeDSL(SSAVarOrder)(SSAVS)(SSAVM)(TypEnv.SSATE)(SSAStore)
+module SSAVarOrderPrinter =
+ struct
+  type t = SSAVarOrder.t
 
-(** val string_of_ssavar : ssavar -> char list **)
+  (** val to_string : SSAVarOrder.t -> char list **)
 
-let string_of_ssavar v =
-  append ('v'::[])
-    (append (of_N (fst (Obj.magic v)))
-      (append ('_'::[]) (of_N (snd (Obj.magic v)))))
+  let to_string v =
+    append ('v'::[])
+      (append (DSL.string_of_N (fst (Obj.magic v)))
+        (append ('_'::[]) (DSL.string_of_N (snd (Obj.magic v)))))
+ end
+
+module SSA =
+ DSL.MakeDSL(SSAVarOrder)(SSAVarOrderPrinter)(SSAVS)(SSAVM)(TypEnv.SSATE)(SSAStore)
 
 type vmap = coq_N VM.t
 

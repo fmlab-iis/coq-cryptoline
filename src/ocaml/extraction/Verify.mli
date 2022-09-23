@@ -25,6 +25,8 @@ val verify_areps : options -> arep list -> bool
 
 val verify_rep : options -> ZSSA.ZSSA.rep -> bool
 
+val verify_reps_seq : options -> ZSSA.ZSSA.rep list -> bool
+
 val ext_solve_imp_list :
   ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr list) list ->
   (coq_Z coq_PExpr list * coq_Z coq_PExpr list) list
@@ -39,7 +41,7 @@ val validate_imp_answer_list :
 
 val verify_areps_list : options -> arep list -> bool
 
-val verify_rep_list : options -> ZSSA.ZSSA.rep -> bool
+val verify_reps_paral : options -> ZSSA.ZSSA.rep list -> bool
 
 val verify_espec : options -> SSA.SSA.spec -> bool
 
