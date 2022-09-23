@@ -8,12 +8,14 @@ KEEP=0                     # 0
 FORK=1                     # 1
 CARRY_CONSTRAINT=0         # 0
 REWRITING=1                # 1
+REWRITING_AREP=1           # 1
+REWRITING_IMP=0            # 0
 VARS_CACHE_IN_REWRITING=1  # 1
 DEBUG=1                    # 0
 TMPDIR=.                   # .
 LOGDIR=logs                # logs
 
-FLAGS=
+FLAGS=${FLAGS:-}
 FLAGS+="-jobs ${JOBS}"
 FLAGS+=" -sat_solver ${SAT}"
 FLAGS+=" -sat_cert ${CERT}"
@@ -34,6 +36,16 @@ if [[ ${DEBUG} == 1 ]]; then
 fi
 if [[ ${VARS_CACHE_IN_REWRITING} == 0 ]]; then
   FLAGS+=" -disable_vars_cache_in_rewriting"
+fi
+if [[ ${REWRITING_AREP} == 0 ]]; then
+  FLAGS+=" -disable_rewriting_arep"
+else
+  FLAGS+=" -enable_rewriting_arep"
+fi
+if [[ ${REWRITING_IMP} == 0 ]]; then
+  FLAGS+=" -disable_rewriting_imp"
+else
+  FLAGS+=" -enable_rewriting_imp"
 fi
 FLAGS+=" -tmpdir ${TMPDIR}"
 
@@ -56,5 +68,5 @@ if [[ -f ${1} ]]; then
   OCAMLRUNPARAM=s=${MINOR_HEAP} \
     ./_build/default/coqcryptoline.exe -v ${FLAGS} \
     -o ${LOGDIR}/${debuglog} ${1} \
-    &> ${LOGDIR}/${runlog}
+    | tee ${LOGDIR}/${runlog}
 fi

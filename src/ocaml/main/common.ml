@@ -20,6 +20,8 @@ let args =
     ("-debug", Set debug, "    Log debug messages\n");
     ("-disable_rewriting", Unit (fun () -> apply_rewriting_arep := false; apply_rewriting_imp := false), "\n\t     Disable rewriting of equalities\n");
     ("-enable_rewriting_arep", Set apply_rewriting_arep, "\n\t     Enable rewriting of equalities in root entailment problems\n");
+    ("-disable_rewriting_arep", Clear apply_rewriting_arep, "\n\t     Enable rewriting of equalities in root entailment problems\n");
+    ("-enable_rewriting_imp", Set apply_rewriting_imp, "\n\t     Disable rewriting of equalities in ideal membership problems\n");
     ("-disable_rewriting_imp", Clear apply_rewriting_imp, "\n\t     Disable rewriting of equalities in ideal membership problems\n");
     ("-drat-trim", String (fun str -> Options.Std.drat_trim_path := str),
      "Set the path to drat-trim (default: " ^
