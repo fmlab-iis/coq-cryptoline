@@ -1,6 +1,6 @@
 #!/bin/bash
 
-JOBS=2                     # 2
+JOBS=${JOBS:-24}           # 24
 SAT=kissat                 # kissat
 CERT=grat                  # grat
 MINOR_HEAP=2G              # 2G
@@ -8,15 +8,17 @@ KEEP=0                     # 0
 FORK=1                     # 1
 CARRY_CONSTRAINT=0         # 0
 REWRITING=1                # 1
-REWRITING_AREP=1           # 1
-REWRITING_IMP=0            # 0
+REWRITING_AREP=${REWRITING_AREP:-1}           # 1
+REWRITING_IMP=${REWRITING_IMP:-1}             # 1
+SLICING_ESPEC=1            # 1
 VARS_CACHE_IN_REWRITING=1  # 1
-DEBUG=1                    # 0
-TMPDIR=.                   # .
-LOGDIR=logs                # logs
+DEBUG=0                    # 0
+TMPDIR=${TMPDIR:-./tmp}    # ./tmp
+LOGDIR=${LOGDIR:-./logs}   # ./logs
+COQCRYPTOLINE=./_build/default/coqcryptoline.exe
 
 FLAGS=${FLAGS:-}
-FLAGS+="-jobs ${JOBS}"
+FLAGS+=" -jobs ${JOBS}"
 FLAGS+=" -sat_solver ${SAT}"
 FLAGS+=" -sat_cert ${CERT}"
 if [[ ${CARRY_CONSTRAINT} == 0 ]]; then
@@ -47,6 +49,11 @@ if [[ ${REWRITING_IMP} == 0 ]]; then
 else
   FLAGS+=" -enable_rewriting_imp"
 fi
+if [[ ${SLICING_ESPEC} == 0 ]]; then
+  FLAGS+=" -disable_slicing_espec"
+else
+  FLAGS+=" -enable_slicing_espec"
+fi
 FLAGS+=" -tmpdir ${TMPDIR}"
 
 if [[ -f ${1} ]]; then
@@ -57,16 +64,14 @@ if [[ -f ${1} ]]; then
   else
     forkstr="_lwt"
   fi
-  debuglog=${runlog}_s${MINOR_HEAP}_${SAT}_${CERT}_ramfs_jobs${JOBS}${forkstr}_debug.log
-  runlog=${runlog}_s${MINOR_HEAP}_${SAT}_${CERT}_ramfs_jobs${JOBS}${forkstr}.log
+  debuglog=${LOGDIR}/${runlog}_s${MINOR_HEAP}_${SAT}_${CERT}_ramfs_jobs${JOBS}${forkstr}_debug.log
+  runlog=${LOGDIR}/${runlog}_s${MINOR_HEAP}_${SAT}_${CERT}_ramfs_jobs${JOBS}${forkstr}_run.log
 
-  rm -f ${debuglog}
-  rm -f ${runlog}
-
+  mkdir -p ${TMPDIR}
   mkdir -p ${LOGDIR}
 
+  rm -f ${debuglog} ${runlog}
+
   OCAMLRUNPARAM=s=${MINOR_HEAP} \
-    ./_build/default/coqcryptoline.exe -v ${FLAGS} \
-    -o ${LOGDIR}/${debuglog} ${1} \
-    | tee ${LOGDIR}/${runlog}
+    ${COQCRYPTOLINE} -v ${FLAGS} -o ${debuglog} ${1} &> ${runlog}
 fi
