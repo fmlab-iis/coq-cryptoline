@@ -276,14 +276,14 @@ Section AlgebraicSoundnessConditions.
       ssa_program_algsnd_at te [::] s
   | ssa_program_algsnd_at_cons te hd tl s :
       ssa_instr_algsnd_at te hd s ->
-      (forall s', eval_instr te (rng_instr hd) s s' ->
+      (forall s', eval_instr te hd s s' ->
                   ssa_program_algsnd_at (instr_succ_typenv hd te) tl s') ->
       ssa_program_algsnd_at te (hd::tl) s.
 
-  Definition ssa_spec_algsnd sp :=
-    forall s, SSAStore.conform s (sinputs sp) ->
-              eval_rbexp (rng_bexp (spre sp)) s ->
-              ssa_program_algsnd_at (sinputs sp) (sprog sp) s.
+  Definition ssa_spec_algsnd (sp : rspec) :=
+    forall s, SSAStore.conform s (rsinputs sp) ->
+              eval_rbexp (rspre sp) s ->
+              ssa_program_algsnd_at (rsinputs sp) (rsprog sp) s.
 
 
   Lemma ssa_instr_algsnd_at_eqn E i s :
@@ -321,10 +321,8 @@ Section AlgebraicSoundnessConditions.
       apply: ssa_program_algsnd_at_cons.
       + exact: (bvs_eqi_ssa_instr_algsnd_at Heqi Hwd_Ei H).
       + move=> t2 Hev2.
-        move: (well_defined_rng_instr Hwd_Ei) => Hwd_Eri.
-        move: (bvs_eqi_eval_instr_eqi Hwd_Eri (bvs_eqi_sym Heqi) Hev2) =>
+        move: (bvs_eqi_eval_instr_eqi Hwd_Ei (bvs_eqi_sym Heqi) Hev2) =>
         [t1 [Hev1 Heqi_t]]. move: (bvs_eqi_sym Heqi_t) => {Heqi_t} Heqi_t.
-        rewrite rng_instr_succ_typenv in Heqi_t.
         apply: (IH (instr_succ_typenv i E) t1 t2 Heqi_t Hwf_Eip).
         exact: (H0 _ Hev1).
   Qed.
@@ -373,35 +371,29 @@ Section AlgebraicSoundnessConditions.
       split; move=> Hsafe; inversion_clear Hsafe.
       + apply: ssa_program_algsnd_at_cons.
         * apply/(ssa_instr_algsnd_at_submap s Hsub Hwd_Ei). assumption.
-        * move=> t Hev1.
-          apply/(IH _ _ t (submap_instr_succ_typenv Hwf_Ei Hsub) Hwf_iEp).
-          apply: H0.
-          apply/(submap_eval_instr _ _ Hsub (well_defined_rng_instr Hwd_Ei)).
-          exact: Hev1.
+        * move=> t Hev1. apply/(IH _ _ t (submap_instr_succ_typenv Hwf_Ei Hsub) Hwf_iEp).
+          apply: H0. apply/(submap_eval_instr _ _ Hsub Hwd_Ei). exact: Hev1.
       + apply: ssa_program_algsnd_at_cons.
         * apply/(ssa_instr_algsnd_at_submap s Hsub Hwd_Ei). assumption.
-        * move=> t Hev1.
-          apply/(IH _ _ t (submap_instr_succ_typenv Hwf_Ei Hsub) Hwf_iEp).
-          apply: H0.
-          apply/(submap_eval_instr _ _ Hsub (well_defined_rng_instr Hwd_Ei)).
-          exact: Hev1.
+        * move=> t Hev1. apply/(IH _ _ t (submap_instr_succ_typenv Hwf_Ei Hsub) Hwf_iEp).
+          apply: H0. apply/(submap_eval_instr _ _ Hsub Hwd_Ei). exact: Hev1.
   Qed.
 
 
   (* Use the final typing environment *)
 
-  Definition ssa_spec_algsnd_final sp :=
-    let fE := (program_succ_typenv (sprog sp) (sinputs sp)) in
+  Definition ssa_spec_algsnd_final (sp : rspec) :=
+    let fE := (program_succ_typenv (rsprog sp) (rsinputs sp)) in
     forall s,
       SSAStore.conform s fE ->
-      eval_rbexp (rng_bexp (spre sp)) s ->
-      ssa_program_algsnd_at fE (sprog sp) s.
+      eval_rbexp (rspre sp) s ->
+      ssa_program_algsnd_at fE (rsprog sp) s.
 
   Lemma ssa_spec_algsnd_init_final sp :
-    well_formed_ssa_spec sp ->
+    well_formed_ssa_rspec sp ->
     ssa_spec_algsnd sp -> ssa_spec_algsnd_final sp.
   Proof.
-    rewrite /well_formed_ssa_spec /ssa_spec_algsnd /ssa_spec_algsnd_final.
+    rewrite /well_formed_ssa_rspec /ssa_spec_algsnd /ssa_spec_algsnd_final.
     case: sp => [E f p g] /=. rewrite /well_formed_spec /=.
     move=> /andP [/andP [/andP [/andP [Hwf_Ef Hwf_Ep] Hwf_pEg] Hun_Ep] Hssa].
     move=> H s Hco Hf.
@@ -411,17 +403,18 @@ Section AlgebraicSoundnessConditions.
   Qed.
 
   Lemma ssa_spec_algsnd_final_init sp :
-    well_formed_ssa_spec sp ->
+    well_formed_ssa_rspec sp ->
     ssa_spec_algsnd_final sp -> ssa_spec_algsnd sp.
   Proof.
-    rewrite /well_formed_ssa_spec /ssa_spec_algsnd /ssa_spec_algsnd_final.
+    rewrite /well_formed_ssa_rspec /ssa_spec_algsnd /ssa_spec_algsnd_final.
     case: sp => [E f p g] /=. rewrite /well_formed_spec /=.
     move=> /andP [/andP [/andP [/andP [Hwf_Ef Hwf_Ep] Hwf_pEg] Hun_Ep] Hssa].
     move=> H s Hco Hf.
     move: (ssa_unchanged_program_succ_typenv_submap Hun_Ep Hssa) => Hsub.
     move: (force_conform_conform Hsub Hco) => Hco_succ.
-    move: (well_formed_rng_bexp Hwf_Ef) => /andP [Hwd_Erf Hwt_Erf].
-    move/(force_conform_eval_rbexp s Hsub Hwd_Erf): Hf => Hwf.
+
+    move: Hwf_Ef => /andP [Hwd_Ef Hwt_Ef].
+    move/(force_conform_eval_rbexp s Hsub Hwd_Ef): Hf => Hwf.
     move: (H (force_conform E (program_succ_typenv p E) s) Hco_succ Hwf).
     move=> Hsafe. move/(ssa_program_algsnd_at_submap _ Hsub Hwf_Ep): Hsafe.
     apply: (bvs_eqi_ssa_program_algsnd_at _ Hwf_Ep).
@@ -2671,7 +2664,7 @@ Section SplitSpec.
     ssa_vars_unchanged_instr (vars_env E) i ->
     svar_notin avn (vars_instr i) ->
     SSAStore.conform bs1 E ->
-    ssa_instr_algsnd_at E i bs1 ->
+    ssa_instr_algsnd_at E (rng_instr i) bs1 ->
     eval_instr E i bs1 bs2 ->
     algred_instr o E avn g1 i = (g2, zes) ->
     algred_upd_avars_instr E avn g1 i zs1 = (g2', zs2) ->
@@ -2855,7 +2848,7 @@ Section SplitSpec.
     ssa_single_assignment p ->
     svar_notin avn (vars_env E) -> svar_notin avn (vars_program p) ->
     SSAStore.conform bs1 E ->
-    ssa_program_algsnd_at E p bs1 ->
+    ssa_program_algsnd_at E (rng_program p) bs1 ->
     eval_program E p bs1 bs2 ->
     algred_program o E avn g1 p = (g2, eprogs) ->
     ZSSA.eval_zbexp (eands eprogs)
@@ -2913,6 +2906,7 @@ Section SplitSpec.
                   (algred_upd_avars_program (instr_succ_typenv i E) avn g_hd' p zs_hd).2)
           by rewrite Hupd_tl; reflexivity.
         move: (conform_instr_succ_typenv Hwf_i Hco Hi) => Hco_3succi.
+        rewrite rng_instr_succ_typenv in Hsa_p.
         apply: (IH _ _ _ _ _ _ _ _ Hwf_p Hun_iep Hssa_p Hni_ie Hni_p
                    Hco_3succi (Hsa_p bs3 (eval_rng_instr Hi)) Hp Htl).
         apply: (bvz_zs_eqi Heqi2). apply: (algred_upd_avars_instr_eqi Hupd_hd).
@@ -3028,7 +3022,7 @@ Section SplitSpec.
 
   Lemma algred_espec_sound (o : options) (avn : var) (s : spec) :
     well_formed_ssa_spec s ->
-    ssa_spec_algsnd s ->
+    ssa_spec_algsnd (rspec_of_spec s) ->
     fresh_var_espec avn (espec_of_spec s) ->
     ZSSA.valid_rep (algred_espec o avn (espec_of_spec s)) ->
     valid_espec (SSA.espec_of_spec s).
@@ -3084,7 +3078,7 @@ Section SplitSpec.
 
   Theorem algred_spec_sound (o : options) avn (s : spec) :
     well_formed_ssa_spec s ->
-    ssa_spec_algsnd s ->
+    ssa_spec_algsnd (rspec_of_spec s) ->
     valid_rspec (rspec_of_spec s) ->
     fresh_var_espec avn (espec_of_spec s) ->
     ZSSA.valid_rep (algred_espec o avn (espec_of_spec s)) ->
@@ -3651,7 +3645,7 @@ Section SplitSpec.
 
   Theorem algred_spec_slice_sound (o : options) (avn : var) (s : spec) :
     well_formed_ssa_spec s ->
-    ssa_spec_algsnd s ->
+    ssa_spec_algsnd (rspec_of_spec s) ->
     fresh_var_espec avn (espec_of_spec s) ->
     valid_rspec (rspec_of_spec s) ->
     ZSSA.valid_reps (tmap (algred_espec o avn)

@@ -1604,6 +1604,12 @@ module MakeDSL :
 
   val rspec_of_spec : spec -> rspec
 
+  val vars_spec : spec -> VS.t
+
+  val vars_espec : espec -> VS.t
+
+  val vars_rspec : rspec -> VS.t
+
   val string_of_eunop : eunop -> char list
 
   val string_of_ebinop : ebinop -> char list
@@ -1647,6 +1653,12 @@ module MakeDSL :
   val string_of_espec : espec -> char list
 
   val string_of_rspec : rspec -> char list
+
+  val is_rng_instr : instr -> bool
+
+  val is_rng_program : program -> bool
+
+  val is_rng_rspec : rspec -> bool
 
   val bv2z : typ -> bits -> coq_Z
 
@@ -2343,6 +2355,10 @@ module MakeDSL :
   val well_formed_bexp : TE.env -> bexp -> bool
 
   val well_formed_spec : spec -> bool
+
+  val well_formed_espec : espec -> bool
+
+  val well_formed_rspec : rspec -> bool
 
   val defmemP : V.t -> TE.env -> reflect
 
@@ -4327,6 +4343,12 @@ module DSL :
 
   val rspec_of_spec : spec -> rspec
 
+  val vars_spec : spec -> VS.t
+
+  val vars_espec : espec -> VS.t
+
+  val vars_rspec : rspec -> VS.t
+
   val string_of_eunop : eunop -> char list
 
   val string_of_ebinop : ebinop -> char list
@@ -4370,6 +4392,12 @@ module DSL :
   val string_of_espec : espec -> char list
 
   val string_of_rspec : rspec -> char list
+
+  val is_rng_instr : instr -> bool
+
+  val is_rng_program : program -> bool
+
+  val is_rng_rspec : rspec -> bool
 
   val bv2z : typ -> bits -> coq_Z
 
@@ -5111,6 +5139,10 @@ module DSL :
   val well_formed_bexp : TypEnv.TE.env -> bexp -> bool
 
   val well_formed_spec : spec -> bool
+
+  val well_formed_espec : espec -> bool
+
+  val well_formed_rspec : rspec -> bool
 
   val defmemP : VarOrder.t -> TypEnv.TE.env -> reflect
 

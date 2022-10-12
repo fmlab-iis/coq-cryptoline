@@ -1745,7 +1745,7 @@ Section MakeSSA.
     TE.vsize v te = SSATE.vsize (ssa_var m v) (ssa_typenv m te).
   Proof.
     move: (ssa_typenv_preserve m te v) => H.
-      by rewrite (TE.vtyp_vsize H).
+      by rewrite TE.vtyp_vsize H.
   Qed.
 
   Lemma ssa_eval_eunop :
@@ -2694,6 +2694,16 @@ Section MakeSSA.
       && ssa_vars_unchanged_program (SSA.vars_env (SSA.sinputs s)) (SSA.sprog s)
       && ssa_single_assignment (SSA.sprog s).
 
+  Definition well_formed_ssa_espec (s : SSA.espec) : bool :=
+    (SSA.well_formed_espec s)
+      && ssa_vars_unchanged_program (SSA.vars_env (SSA.esinputs s)) (SSA.esprog s)
+      && ssa_single_assignment (SSA.esprog s).
+
+  Definition well_formed_ssa_rspec (s : SSA.rspec) : bool :=
+    (SSA.well_formed_rspec s)
+      && ssa_vars_unchanged_program (SSA.vars_env (SSA.rsinputs s)) (SSA.rsprog s)
+      && ssa_single_assignment (SSA.rsprog s).
+
   Ltac neq_store_upd_acc :=
     match goal with
     | Hupd : SSAStore.Upd _ _ ?s1 ?s2
@@ -3348,6 +3358,347 @@ Section MakeSSA.
     exact: (ssa_unchanged_program_subset Hun_ip (SSA.rng_lvs_instr_subset i)).
   Qed.
 
+  Lemma well_formed_ssa_eqn_spec s :
+    well_formed_ssa_spec s -> well_formed_ssa_espec (SSA.espec_of_spec s).
+  Proof.
+    rewrite /well_formed_ssa_spec /well_formed_ssa_espec.
+    move=> /andP [/andP [Hwf Hunch] Hssa].
+    by rewrite (SSA.well_formed_eqn_spec Hwf) Hunch Hssa.
+  Qed.
+
+  Lemma well_formed_ssa_rng_spec s :
+    well_formed_ssa_spec s -> well_formed_ssa_rspec (SSA.rspec_of_spec s).
+  Proof.
+    rewrite /well_formed_ssa_spec /well_formed_ssa_rspec.
+    move=> /andP [/andP [Hwf Hunch] Hssa].
+    by rewrite (SSA.well_formed_rng_spec Hwf)
+               (ssa_single_assignment_rng Hssa) ssa_vars_unchanged_rng_program Hunch.
+  Qed.
+
+  Lemma well_formed_ssa_espec_eand E f p e1 e2 :
+    well_formed_ssa_espec
+      {| SSA.esinputs := E; SSA.espre := f; SSA.esprog := p; SSA.espost := Eand e1 e2 |} <->
+      well_formed_ssa_espec
+        {| SSA.esinputs := E; SSA.espre := f; SSA.esprog := p; SSA.espost := e1 |} /\
+        well_formed_ssa_espec
+          {| SSA.esinputs := E; SSA.espre := f; SSA.esprog := p; SSA.espost := e2 |}.
+  Proof.
+    rewrite /well_formed_ssa_espec /=. split.
+    - move=> /andP [/andP [Hwf Hun] Hssa]. move/SSA.well_formed_espec_eand: Hwf => [Hwf1 Hwf2].
+      by rewrite Hwf1 Hwf2 Hun Hssa.
+    - move=> [/andP [/andP [Hwf1 Hun] Hssa] /andP [/andP [Hwf2 _] _]].
+      rewrite Hun Hssa !andbT. apply/SSA.well_formed_espec_eand. tauto.
+  Qed.
+
+  Lemma well_formed_ssa_rspec_rand E f p e1 e2 :
+    well_formed_ssa_rspec
+      {| SSA.rsinputs := E; SSA.rspre := f; SSA.rsprog := p; SSA.rspost := Rand e1 e2 |} <->
+      well_formed_ssa_rspec
+        {| SSA.rsinputs := E; SSA.rspre := f; SSA.rsprog := p; SSA.rspost := e1 |} /\
+        well_formed_ssa_rspec
+          {| SSA.rsinputs := E; SSA.rspre := f; SSA.rsprog := p; SSA.rspost := e2 |}.
+  Proof.
+    rewrite /well_formed_ssa_rspec /=. split.
+    - move=> /andP [/andP [Hwf Hun] Hssa]. move/SSA.well_formed_rspec_rand: Hwf => [Hwf1 Hwf2].
+      by rewrite Hwf1 Hwf2 Hun Hssa.
+    - move=> [/andP [/andP [Hwf1 Hun] Hssa] /andP [/andP [Hwf2 _] _]].
+      rewrite Hun Hssa !andbT. apply/SSA.well_formed_rspec_rand. tauto.
+  Qed.
+
+  Lemma ssa_vars_unchanged_program_split_espec s t :
+    In t (SSA.split_espec s) ->
+    ssa_vars_unchanged_program (SSA.vars_env (SSA.esinputs s)) (SSA.esprog s) ->
+    ssa_vars_unchanged_program (SSA.vars_env (SSA.esinputs t)) (SSA.esprog t).
+  Proof.
+    case: s => [E f p g] /= Hin. rewrite (SSA.split_espec_esinputs Hin) /=.
+    rewrite (SSA.split_espec_esprog Hin) /=. by apply.
+  Qed.
+
+  Lemma ssa_vars_unchanged_program_split_rspec s t :
+    In t (SSA.split_rspec s) ->
+    ssa_vars_unchanged_program (SSA.vars_env (SSA.rsinputs s)) (SSA.rsprog s) ->
+    ssa_vars_unchanged_program (SSA.vars_env (SSA.rsinputs t)) (SSA.rsprog t).
+  Proof.
+    case: s => [E f p g] /= Hin. rewrite (SSA.split_rspec_rsinputs Hin) /=.
+    rewrite (SSA.split_rspec_rsprog Hin) /=. by apply.
+  Qed.
+
+  Lemma split_espec_ssa_vars_unchanged_program s :
+    (forall t, In t (SSA.split_espec s) ->
+               ssa_vars_unchanged_program (SSA.vars_env (SSA.esinputs t)) (SSA.esprog t)) <->
+    ssa_vars_unchanged_program (SSA.vars_env (SSA.esinputs s)) (SSA.esprog s).
+  Proof.
+    case: s => [E f p g] /=. rewrite /SSA.split_espec tmap_map /=. split.
+    - elim: g => //=.
+      + move=> H. apply: (H (SSA.mkEspec E f p SSA.etrue)). by left.
+      + move=> e1 e2 H. apply: (H (SSA.mkEspec E f p (Eeq e1 e2))). by left.
+      + move=> e1 e2 ms H. apply: (H (SSA.mkEspec E f p (Eeqmod e1 e2 ms))). by left.
+      + move=> e1 IH1 e2 IH2. rewrite map_cat => H. apply: IH1 => t Hint.
+        apply: H. apply: in_cat_l. assumption.
+    - elim: g => //=.
+      + move=> Hun t [] //. move=> <- /=. assumption.
+      + move=> e1 e2 Hun t [] //. move=> <- /=. assumption.
+      + move=> e1 e2 ms Hun t [] //. move=> <- /=. assumption.
+      + move=> e1 IH1 e2 IH2 Hun t Hin. rewrite map_cat in Hin. case: (in_cat Hin) => {}Hin.
+        * exact: (IH1 Hun _ Hin).
+        * exact: (IH2 Hun _ Hin).
+  Qed.
+
+  Lemma split_rspec_ssa_vars_unchanged_program s :
+    (forall t, In t (SSA.split_rspec s) ->
+               ssa_vars_unchanged_program (SSA.vars_env (SSA.rsinputs t)) (SSA.rsprog t)) <->
+    ssa_vars_unchanged_program (SSA.vars_env (SSA.rsinputs s)) (SSA.rsprog s).
+  Proof.
+    case: s => [E f p g] /=. rewrite /SSA.split_rspec tmap_map /=. split.
+    - elim: g => //=.
+      + move=> H. apply: (H (SSA.mkRspec E f p SSA.rtrue)). by left.
+      + move=> n e1 e2 H. apply: (H (SSA.mkRspec E f p (Req n e1 e2))). by left.
+      + move=> n op e1 e2 H. apply: (H (SSA.mkRspec E f p (Rcmp n op e1 e2))). by left.
+      + move=> e IH H. apply: (H (SSA.mkRspec E f p (Rneg e))). by left.
+      + move=> e1 IH1 e2 IH2. rewrite map_cat => H. apply: IH1 => t Hint.
+        apply: H. apply: in_cat_l. assumption.
+      + move=> e1 IH1 e2 IH2 H. apply: (H (SSA.mkRspec E f p (Ror e1 e2))). by left.
+    - elim: g => //=.
+      + move=> Hun t [] //. move=> <- /=. assumption.
+      + move=> n e1 e2 Hun t [] //. move=> <- /=. assumption.
+      + move=> n op e1 e2 Hun t [] //. move=> <- /=. assumption.
+      + move=> e IH Hun t [] //. move=> <- /=. assumption.
+      + move=> e1 IH1 e2 IH2 Hun t Hin. rewrite map_cat in Hin. case: (in_cat Hin) => {}Hin.
+        * exact: (IH1 Hun _ Hin).
+        * exact: (IH2 Hun _ Hin).
+      + move=> e1 IH1 e2 IH2 Hun t [] //. move=> <- /=. assumption.
+  Qed.
+
+  Lemma ssa_single_assignment_split_espec s t :
+    In t (SSA.split_espec s) -> ssa_single_assignment (SSA.esprog s) ->
+    ssa_single_assignment (SSA.esprog t).
+  Proof.
+    rewrite /SSA.split_espec tmap_map. case: s => [E f p g] /=. elim: g => //=.
+    - case; [move=> ?; subst; simpl | done]. by apply.
+    - move=> e1 e2 []; [move=> ?; subst; simpl | done]. by apply.
+    - move=> e1 e2 ms []; [move=> ?; subst; simpl | done]. by apply.
+    - move=> e1 IH1 e2 IH2. rewrite map_cat => H. case: (in_cat H) => {}H.
+      + exact: (IH1 H).
+      + exact: (IH2 H).
+  Qed.
+
+  Lemma ssa_single_assignment_split_rspec s t :
+    In t (SSA.split_rspec s) -> ssa_single_assignment (SSA.rsprog s) ->
+    ssa_single_assignment (SSA.rsprog t).
+  Proof.
+    rewrite /SSA.split_rspec tmap_map. case: s => [E f p g] /=. elim: g => //=.
+    - case; [move=> ?; subst; simpl | done]. by apply.
+    - move=> n e1 e2 []; [move=> ?; subst; simpl | done]. by apply.
+    - move=> n op e1 e2 []; [move=> ?; subst; simpl | done]. by apply.
+    - move=> e IH []; [move=> ?; subst; simpl | done]. by apply.
+    - move=> e1 IH1 e2 IH2. rewrite map_cat => H. case: (in_cat H) => {}H.
+      + exact: (IH1 H).
+      + exact: (IH2 H).
+    - move=> e1 IH1 r2 IH2 []; [move=> ?; subst; simpl | done]. by apply.
+  Qed.
+
+  Lemma split_espec_ssa_single_assignment s :
+    (forall t, In t (SSA.split_espec s) -> ssa_single_assignment (SSA.esprog t)) <->
+    ssa_single_assignment (SSA.esprog s).
+  Proof.
+    rewrite /SSA.split_espec tmap_map. case: s => [E f p g] /=. split.
+    - elim: g => //=.
+      + move=> H. apply: (H (SSA.mkEspec E f p SSA.etrue)).
+        left; reflexivity.
+      + move=> e1 e2 H. apply: (H (SSA.mkEspec E f p (Eeq e1 e2))).
+        left; reflexivity.
+      + move=> e1 e2 ms H. apply: (H (SSA.mkEspec E f p (Eeqmod e1 e2 ms))).
+        left; reflexivity.
+      + move=> e1 IH1 e2 IH2 H. apply: IH1 => t Hin. apply: H. rewrite map_cat.
+        apply: in_cat_l. assumption.
+    - elim: g => //=.
+      + move=> Hssa t [] //. move=> <- /=. assumption.
+      + move=> e1 e2 Hssa t [] //. move=> <- /=. assumption.
+      + move=> e1 e2 ms Hssa t [] //. move=> <- /=. assumption.
+      + move=> e1 IH1 e2 IH2 Hssa t Hin. rewrite map_cat in Hin. case: (in_cat Hin) => {}Hin.
+        * exact: (IH1 Hssa _ Hin).
+        * exact: (IH2 Hssa _ Hin).
+  Qed.
+
+  Lemma split_rspec_ssa_single_assignment s :
+    (forall t, In t (SSA.split_rspec s) -> ssa_single_assignment (SSA.rsprog t)) <->
+    ssa_single_assignment (SSA.rsprog s).
+  Proof.
+    rewrite /SSA.split_rspec tmap_map. case: s => [E f p g] /=. split.
+    - elim: g => //=.
+      + move=> H. apply: (H (SSA.mkRspec E f p SSA.rtrue)).
+        left; reflexivity.
+      + move=> n e1 e2 H. apply: (H (SSA.mkRspec E f p (Req n e1 e2))).
+        left; reflexivity.
+      + move=> n op e1 e2 H. apply: (H (SSA.mkRspec E f p (Rcmp n op e1 e2))).
+        left; reflexivity.
+      + move=> e IH H. apply: (H (SSA.mkRspec E f p (Rneg e))).
+        left; reflexivity.
+      + move=> e1 IH1 e2 IH2 H. apply: IH1 => t Hin. apply: H. rewrite map_cat.
+        apply: in_cat_l. assumption.
+      + move=> e1 IH1 e2 IH2 H. apply: (H (SSA.mkRspec E f p (Ror e1 e2))).
+        left; reflexivity.
+    - elim: g => //=.
+      + move=> Hssa t [] //. move=> <- /=. assumption.
+      + move=> n e1 e2 Hssa t [] //. move=> <- /=. assumption.
+      + move=> n op e1 e2 Hssa t [] //. move=> <- /=. assumption.
+      + move=> e IH Hssa t [] //. move=> <- /=. assumption.
+      + move=> e1 IH1 e2 IH2 Hssa t Hin. rewrite map_cat in Hin. case: (in_cat Hin) => {}Hin.
+        * exact: (IH1 Hssa _ Hin).
+        * exact: (IH2 Hssa _ Hin).
+      + move=> e1 IH1 e2 IH2 Hssa t [] //. move=> <- /=. assumption.
+  Qed.
+
+  Lemma well_formed_ssa_split_espec s t :
+    List.In t (SSA.split_espec s) -> well_formed_ssa_espec s -> well_formed_ssa_espec t.
+  Proof.
+    rewrite /well_formed_ssa_espec. move=> Hin /andP [/andP [Hwf Hun] Hssa].
+    by rewrite (ssa_vars_unchanged_program_split_espec Hin Hun)
+         (ssa_single_assignment_split_espec Hin Hssa)
+         (SSA.well_formed_espec_split_espec Hin Hwf).
+  Qed.
+
+  Lemma well_formed_ssa_split_rspec s t :
+    List.In t (SSA.split_rspec s) -> well_formed_ssa_rspec s -> well_formed_ssa_rspec t.
+  Proof.
+    rewrite /well_formed_ssa_rspec. move=> Hin /andP [/andP [Hwf Hun] Hssa].
+    by rewrite (ssa_vars_unchanged_program_split_rspec Hin Hun)
+         (ssa_single_assignment_split_rspec Hin Hssa)
+         (SSA.well_formed_rspec_split_rspec Hin Hwf).
+  Qed.
+
+  Lemma split_espec_well_formed_ssa s :
+    (forall t, List.In t (SSA.split_espec s) -> well_formed_ssa_espec t) <->
+    well_formed_ssa_espec s.
+  Proof.
+    case: s => [E f p g] /=. split.
+    - elim: g => //=.
+      + move=> H. apply: (H (SSA.mkEspec E f p SSA.etrue)). left; reflexivity.
+      + move=> e1 e2 H. apply: (H (SSA.mkEspec E f p (Eeq e1 e2))). left; reflexivity.
+      + move=> e1 e2 ms H. apply: (H (SSA.mkEspec E f p (Eeqmod e1 e2 ms))). left; reflexivity.
+      + move=> e1 IH1 e2 IH2 H. apply/well_formed_ssa_espec_eand. split.
+        * apply: IH1 => t Hin. apply: H. rewrite SSA.split_espec_eand.
+          apply: in_cat_l. assumption.
+        * apply: IH2 => t Hin. apply: H. rewrite SSA.split_espec_eand.
+          apply: in_cat_r. assumption.
+    - elim: g => //=.
+      + move=> Hwf t [] //. move=> <-. assumption.
+      + move=> e1 e2 Hwf t [] //. move=> <-. assumption.
+      + move=> e1 e2 ms Hwf t [] //. move=> <-. assumption.
+      + move=> e1 IH1 e2 IH2 /well_formed_ssa_espec_eand [Hwf1 Hwf2] t Hin.
+        rewrite SSA.split_espec_eand in Hin. case: (in_cat Hin) => {}Hin.
+        * exact: (IH1 Hwf1 _ Hin).
+        * exact: (IH2 Hwf2 _ Hin).
+  Qed.
+
+  Lemma split_rspec_well_formed_ssa s :
+    (forall t, List.In t (SSA.split_rspec s) -> well_formed_ssa_rspec t) <->
+    well_formed_ssa_rspec s.
+  Proof.
+    case: s => [E f p g] /=. split.
+    - elim: g => //=.
+      + move=> H. apply: (H (SSA.mkRspec E f p SSA.rtrue)). left; reflexivity.
+      + move=> n e1 e2 H. apply: (H (SSA.mkRspec E f p (Req n e1 e2))). left; reflexivity.
+      + move=> n op e1 e2 H. apply: (H (SSA.mkRspec E f p (Rcmp n op e1 e2))). left; reflexivity.
+      + move=> e IH H. apply: (H (SSA.mkRspec E f p (Rneg e))). left; reflexivity.
+      + move=> e1 IH1 e2 IH2 H. apply/well_formed_ssa_rspec_rand. split.
+        * apply: IH1 => t Hin. apply: H. rewrite SSA.split_rspec_rand.
+          apply: in_cat_l. assumption.
+        * apply: IH2 => t Hin. apply: H. rewrite SSA.split_rspec_rand.
+          apply: in_cat_r. assumption.
+      + move=> e1 IH1 e2 IH2 H. apply: (H (SSA.mkRspec E f p (Ror e1 e2))). left; reflexivity.
+    - elim: g => //=.
+      + move=> Hwf t [] //. move=> <-. assumption.
+      + move=> n e1 e2 Hwf t [] //. move=> <-. assumption.
+      + move=> n op e1 e2 Hwf t [] //. move=> <-. assumption.
+      + move=> e IH Hwf t [] //. move=> <-. assumption.
+      + move=> e1 IH1 e2 IH2 /well_formed_ssa_rspec_rand [Hwf1 Hwf2] t Hin.
+        rewrite SSA.split_rspec_rand in Hin. case: (in_cat Hin) => {}Hin.
+        * exact: (IH1 Hwf1 _ Hin).
+        * exact: (IH2 Hwf2 _ Hin).
+      + move=> e1 IH1 e2 IH2 Hwf t [] //. move=> <-. assumption.
+  Qed.
+
+  Lemma ssa_unchanged_program_slice_einstr vs vs' i i' :
+    ssa_vars_unchanged_instr vs i -> SSA.slice_einstr vs' i = Some i' ->
+    ssa_vars_unchanged_instr vs i'.
+  Proof.
+    case: i => //=; intros; case_if; case_option; subst; simpl; try assumption.
+    case: b H H0 => [e r] /=. move=> Hun [] ?; subst.
+    rewrite ssa_unchanged_instr_disjoint_lvs /=. exact: SSA.VSLemmas.disjoint_empty_r.
+  Qed.
+
+  Lemma ssa_unchanged_program_slice_rinstr vs vs' i i' :
+    ssa_vars_unchanged_instr vs i -> SSA.slice_rinstr vs' i = Some i' ->
+    ssa_vars_unchanged_instr vs i'.
+  Proof.
+    case: i => //=; intros; case_if; case_option; subst; simpl; try assumption.
+    case: b H H0 => [e r] /=. move=> Hun [] ?; subst.
+    rewrite ssa_unchanged_instr_disjoint_lvs /=. exact: SSA.VSLemmas.disjoint_empty_r.
+  Qed.
+
+  Lemma ssa_unchanged_program_slice_eprogram vs vs' p :
+    ssa_vars_unchanged_program vs p -> ssa_vars_unchanged_program vs (SSA.slice_eprogram vs' p).
+  Proof.
+    elim: p => [| i p IH] //=. rewrite ssa_unchanged_program_cons. move/andP=> [Huni Hunp].
+    case Hs: (SSA.slice_einstr vs' i) => //=.
+    - rewrite ssa_unchanged_program_cons (ssa_unchanged_program_slice_einstr Huni Hs).
+      exact: (IH Hunp).
+    - exact: (IH Hunp).
+  Qed.
+
+  Lemma ssa_unchanged_program_slice_rprogram vs vs' p :
+    ssa_vars_unchanged_program vs p -> ssa_vars_unchanged_program vs (SSA.slice_rprogram vs' p).
+  Proof.
+    elim: p => [| i p IH] //=. rewrite ssa_unchanged_program_cons. move/andP=> [Huni Hunp].
+    case Hs: (SSA.slice_rinstr vs' i) => //=.
+    - rewrite ssa_unchanged_program_cons (ssa_unchanged_program_slice_rinstr Huni Hs).
+      exact: (IH Hunp).
+    - exact: (IH Hunp).
+  Qed.
+
+  Lemma ssa_single_assignment_slice_eprogram vs p :
+    ssa_single_assignment p -> ssa_single_assignment (SSA.slice_eprogram vs p).
+  Proof.
+    elim: p => [| i p IH] //=. move/andP => [Hun Hssa].
+    case Hs: (SSA.slice_einstr vs i) => //=.
+    - move: (ssa_unchanged_program_slice_eprogram vs Hun) => {}Hun.
+      rewrite (ssa_unchanged_program_subset Hun) /=.
+      + exact: (IH Hssa).
+      + rewrite (SSA.slice_einstr_lvs_equal Hs). exact: SSAVS.Lemmas.subset_refl.
+    - exact: (IH Hssa).
+  Qed.
+
+  Lemma ssa_single_assignment_slice_rprogram vs p :
+    ssa_single_assignment p -> ssa_single_assignment (SSA.slice_rprogram vs p).
+  Proof.
+    elim: p => [| i p IH] //=. move/andP => [Hun Hssa].
+    case Hs: (SSA.slice_rinstr vs i) => //=.
+    - move: (ssa_unchanged_program_slice_rprogram vs Hun) => {}Hun.
+      rewrite (ssa_unchanged_program_subset Hun) /=.
+      + exact: (IH Hssa).
+      + rewrite (SSA.slice_rinstr_lvs_equal Hs). exact: SSAVS.Lemmas.subset_refl.
+    - exact: (IH Hssa).
+  Qed.
+
+  Lemma well_formed_ssa_espec_slice_espec s :
+    well_formed_ssa_espec s -> well_formed_ssa_espec (SSA.slice_espec s).
+  Proof.
+    rewrite /well_formed_ssa_espec. move/andP=> [/andP [Hwf Hun] Hssa].
+    rewrite (SSA.well_formed_espec_slice_espec Hwf) /=.
+    rewrite (ssa_unchanged_program_slice_eprogram _ Hun) /=.
+    exact: (ssa_single_assignment_slice_eprogram _ Hssa).
+  Qed.
+
+  Lemma well_formed_ssa_rspec_slice_rspec s :
+    well_formed_ssa_rspec s -> well_formed_ssa_rspec (SSA.slice_rspec s).
+  Proof.
+    rewrite /well_formed_ssa_rspec. move/andP=> [/andP [Hwf Hun] Hssa].
+    rewrite (SSA.well_formed_rspec_slice_rspec Hwf) /=.
+    rewrite (ssa_unchanged_program_slice_rprogram _ Hun) /=.
+    exact: (ssa_single_assignment_slice_rprogram _ Hssa).
+  Qed.
+
 
   Lemma ssa_unchanged_instr_eval_singleton v te s1 s2 i :
     ssa_vars_unchanged_instr (SSAVS.singleton v) i ->
@@ -3996,6 +4347,49 @@ Section MakeSSA.
   Proof.
     move=> /andP [/andP [/andP [/andP [/andP Hpre Hwell] Hprog] Hvs] Hssa].
       by rewrite /well_formed_ssa_program Hwell Hvs Hssa.
+  Qed.
+
+  Corollary well_formed_ssa_espec_program s :
+    well_formed_ssa_espec s ->
+    well_formed_ssa_program (SSA.esinputs s) (SSA.esprog s).
+  Proof.
+    move=> /andP [/andP [/andP [/andP [/andP Hpre Hwell] Hprog] Hvs] Hssa].
+      by rewrite /well_formed_ssa_program Hwell Hvs Hssa.
+  Qed.
+
+  Corollary well_formed_ssa_rspec_program s :
+    well_formed_ssa_rspec s ->
+    well_formed_ssa_program (SSA.rsinputs s) (SSA.rsprog s).
+  Proof.
+    move=> /andP [/andP [/andP [/andP [/andP Hpre Hwell] Hprog] Hvs] Hssa].
+      by rewrite /well_formed_ssa_program Hwell Hvs Hssa.
+  Qed.
+
+  Lemma well_formed_ssa_spec_final_pre s :
+    well_formed_ssa_spec s ->
+    SSA.well_formed_bexp (SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s)) (SSA.spre s).
+  Proof.
+    move => /andP [/andP [/andP [/andP [Hf Hp] Hg] Hun] Hssa].
+    apply: (SSA.well_formed_bexp_submap (ssa_unchanged_program_succ_typenv_submap Hun Hssa)).
+    exact: Hf.
+  Qed.
+
+  Lemma well_formed_ssa_espec_final_pre s :
+    well_formed_ssa_espec s ->
+    SSA.well_formed_bexp (SSA.program_succ_typenv (SSA.esprog s) (SSA.esinputs s)) (SSA.espre s).
+  Proof.
+    move => /andP [/andP [/andP [/andP [Hf Hp] Hg] Hun] Hssa].
+    apply: (SSA.well_formed_bexp_submap (ssa_unchanged_program_succ_typenv_submap Hun Hssa)).
+    exact: Hf.
+  Qed.
+
+  Lemma well_formed_ssa_rspec_final_pre s :
+    well_formed_ssa_rspec s ->
+    SSA.well_formed_rbexp (SSA.program_succ_typenv (SSA.rsprog s) (SSA.rsinputs s)) (SSA.rspre s).
+  Proof.
+    move => /andP [/andP [/andP [/andP [Hf Hp] Hg] Hun] Hssa].
+    apply: (SSA.well_formed_rbexp_submap (ssa_unchanged_program_succ_typenv_submap Hun Hssa)).
+    exact: Hf.
   Qed.
 
   Corollary well_formed_ssa_spec_pre_unchanged s :

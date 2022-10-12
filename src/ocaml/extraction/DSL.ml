@@ -1449,7 +1449,7 @@ module MakeDSL =
 
   (** val size_of_rexp : rexp -> TE.env -> int **)
 
-  let rec size_of_rexp e te =
+  let size_of_rexp e te =
     match e with
     | Rvar v -> TE.vsize v te
     | Rconst (w, _) -> w
@@ -2549,6 +2549,24 @@ module MakeDSL =
     { rsinputs = (sinputs s); rspre = (rng_bexp (spre s)); rsprog =
       (rng_program (sprog s)); rspost = (rng_bexp (spost s)) }
 
+  (** val vars_spec : spec -> VS.t **)
+
+  let vars_spec s =
+    VS.union (vars_bexp (spre s))
+      (VS.union (vars_program (sprog s)) (vars_bexp (spost s)))
+
+  (** val vars_espec : espec -> VS.t **)
+
+  let vars_espec s =
+    VS.union (vars_bexp (espre s))
+      (VS.union (vars_program (esprog s)) (vars_ebexp (espost s)))
+
+  (** val vars_rspec : rspec -> VS.t **)
+
+  let vars_rspec s =
+    VS.union (vars_rbexp (rspre s))
+      (VS.union (vars_program (rsprog s)) (vars_rbexp (rspost s)))
+
   (** val string_of_eunop : eunop -> char list **)
 
   let string_of_eunop =
@@ -2874,6 +2892,23 @@ module MakeDSL =
                       (append ('{'::(' '::[]))
                         (append (string_of_rbexp (rspost s))
                           ('}'::(' '::('+'::('+'::(' '::('n'::('e'::('w'::('l'::('i'::('n'::('e'::[]))))))))))))))))))))))
+
+  (** val is_rng_instr : instr -> bool **)
+
+  let rec is_rng_instr = function
+  | Iassume b ->
+    let (e, _) = b in eq_op ebexp_eqType (Obj.magic e) (Obj.magic etrue)
+  | _ -> true
+
+  (** val is_rng_program : program -> bool **)
+
+  let is_rng_program p =
+    all is_rng_instr p
+
+  (** val is_rng_rspec : rspec -> bool **)
+
+  let is_rng_rspec s =
+    is_rng_program (rsprog s)
 
   (** val bv2z : typ -> bits -> coq_Z **)
 
@@ -3407,6 +3442,24 @@ module MakeDSL =
         (well_formed_program (sinputs s) (sprog s)))
       (well_formed_bexp (program_succ_typenv (sprog s) (sinputs s)) (spost s))
 
+  (** val well_formed_espec : espec -> bool **)
+
+  let well_formed_espec s =
+    (&&)
+      ((&&) (well_formed_bexp (esinputs s) (espre s))
+        (well_formed_program (esinputs s) (esprog s)))
+      (well_formed_ebexp (program_succ_typenv (esprog s) (esinputs s))
+        (espost s))
+
+  (** val well_formed_rspec : rspec -> bool **)
+
+  let well_formed_rspec s =
+    (&&)
+      ((&&) (well_formed_rbexp (rsinputs s) (rspre s))
+        (well_formed_program (rsinputs s) (rsprog s)))
+      (well_formed_rbexp (program_succ_typenv (rsprog s) (rsinputs s))
+        (rspost s))
+
   (** val defmemP : V.t -> TE.env -> reflect **)
 
   let defmemP v e =
@@ -3800,13 +3853,13 @@ module MakeDSL =
 
   let slice_einstr vs i = match i with
   | Iassume b -> let (e, _) = b in Some (Iassume ((slice_ebexp vs e), rtrue))
-  | _ -> if VSLemmas.disjoint vs (lvs_instr i) then None else Some i
+  | _ -> if VSLemmas.disjoint (lvs_instr i) vs then None else Some i
 
   (** val slice_rinstr : VS.t -> instr -> instr option **)
 
   let slice_rinstr vs i = match i with
   | Iassume b -> let (_, r) = b in Some (Iassume (etrue, (slice_rbexp vs r)))
-  | _ -> if VSLemmas.disjoint vs (lvs_instr i) then None else Some i
+  | _ -> if VSLemmas.disjoint (lvs_instr i) vs then None else Some i
 
   (** val slice_eprogram : VS.t -> instr list -> instr list **)
 

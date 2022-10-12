@@ -13,7 +13,7 @@ open Ssrnat
 
 val ext_all_unsat : cnf list -> bool
 
-val verify_rspec_algsnd : SSA.SSA.spec -> bool
+val verify_rspec_algsnd : options -> SSA.SSA.spec -> bool
 
 val ext_solve_imp :
   coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z coq_PExpr list -> coq_Z

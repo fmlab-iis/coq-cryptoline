@@ -15,14 +15,15 @@ open Ssrnat
 
 let ext_all_unsat = External.ext_all_unsat_impl
 
-(** val verify_rspec_algsnd : SSA.SSA.spec -> bool **)
+(** val verify_rspec_algsnd : options -> SSA.SSA.spec -> bool **)
 
-let verify_rspec_algsnd s =
-  let fE = SSA.SSA.program_succ_typenv (SSA.SSA.sprog s) (SSA.SSA.sinputs s)
+let verify_rspec_algsnd o s =
+  let rs = SSA.SSA.rspec_of_spec s in
+  let fE =
+    SSA.SSA.program_succ_typenv (SSA.SSA.rsprog rs) (SSA.SSA.rsinputs rs)
   in
-  let es = bb_range_algsnd_la_simplified_filtered s in
-  let (_, cnfs) = bb_hbexps_cache fE (tmap (Obj.magic hash_bexp) es) in
-  ext_all_unsat cnfs
+  let es = bb_rngred_algsnd o rs in
+  let (_, cnfs) = bb_hbexps_cache fE (tmap hash_bexp es) in ext_all_unsat cnfs
 
 (** val ext_solve_imp :
     coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z coq_PExpr list -> coq_Z
@@ -141,7 +142,7 @@ let verify_espec o s =
 (** val verify_ssa : options -> SSA.SSA.spec -> bool **)
 
 let verify_ssa o s =
-  (&&) (verify_rspec_algsnd s) (verify_espec o s)
+  (&&) (verify_rspec_algsnd o s) (verify_espec o s)
 
 (** val verify_dsl : options -> DSL.DSL.spec -> bool **)
 

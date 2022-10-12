@@ -30,36 +30,41 @@ Section Verification.
       (forall cs, cs \in css -> ~ sat cs) ->
       ext_all_unsat css.
 
-  Definition verify_rspec_algsnd (s : SSA.spec) : bool :=
-    let fE := SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s) in
-    let es := bb_range_algsnd_la_simplified_filtered s in
+  Definition verify_rspec_algsnd (o : options) (s : SSA.spec) : bool :=
+    let rs := SSA.rspec_of_spec s in
+    let fE := SSA.program_succ_typenv (SSA.rsprog rs) (SSA.rsinputs rs) in
+    let es := bb_rngred_algsnd o rs in
     let '(_, _, _, cnfs) := bb_hbexps_cache fE (tmap QFBVHash.hash_bexp es) in
     ext_all_unsat cnfs.
 
-  Lemma verify_rspec_algsnd_sound (s : SSA.spec) :
+  Lemma verify_rspec_algsnd_sound o (s : SSA.spec) :
     well_formed_ssa_spec s ->
-    verify_rspec_algsnd s ->
-    SSA.valid_rspec (SSA.rspec_of_spec s) /\ ssa_spec_algsnd s.
+    verify_rspec_algsnd o s ->
+    SSA.valid_rspec (SSA.rspec_of_spec s) /\ ssa_spec_algsnd (SSA.rspec_of_spec s).
   Proof.
-    move=> Hwf Hv. apply: (bb_range_algsnd_la_simplified_filtered_sound Hwf).
+    move=> Hwf Hv.
+    apply: (bb_rngred_algsnd_sound (o:=o)
+              (SSA.rspec_of_spec_is_rng_rspec s) (well_formed_ssa_rng_spec Hwf)).
     move=> m c g cnfs cnf Hbb Hin. rewrite /verify_rspec_algsnd in Hv.
     rewrite tmap_map Hbb in Hv. move: (all_unsat_sound Hv) => Hsat.
     move: (Hsat cnf Hin) => {} Hsat.
     move=> Hsat'; apply: Hsat. exact: Hsat'.
   Qed.
 
-  Lemma verify_rspec_algsnd_complete (s : SSA.spec) :
+  Lemma verify_rspec_algsnd_complete o (s : SSA.spec) :
+    apply_slicing_rspec o = false ->
     well_formed_ssa_spec s ->
-    SSA.valid_rspec (SSA.rspec_of_spec s) -> ssa_spec_algsnd s ->
-    verify_rspec_algsnd s.
+    SSA.valid_rspec (SSA.rspec_of_spec s) -> ssa_spec_algsnd (SSA.rspec_of_spec s) ->
+    verify_rspec_algsnd o s.
   Proof.
-    move=> Hwf Hrange Hsafe. rewrite /verify_rspec_algsnd. rewrite tmap_map.
-    dcase (bb_hbexps_cache (SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s))
+    move=> Ho Hwf Hrange Hsafe. rewrite /verify_rspec_algsnd. rewrite tmap_map.
+    dcase (bb_hbexps_cache (SSA.program_succ_typenv (SSA.rsprog (SSA.rspec_of_spec s)) (SSA.rsinputs (SSA.rspec_of_spec s)))
                            (map QFBVHash.hash_bexp
-                                (bb_range_algsnd_la_simplified_filtered s))) =>
+                                (bb_rngred_algsnd o (SSA.rspec_of_spec s)))) =>
     [[[[m c] g] cnfs] Hbb].
     apply: all_unsat_complete.
-    move: (bb_range_algsnd_la_simplified_filtered_complete Hwf Hrange Hsafe) => Hv.
+    move: (bb_rngred_algsnd_complete Ho
+             (SSA.rspec_of_spec_is_rng_rspec s) (well_formed_ssa_rng_spec Hwf) Hrange Hsafe) => Hv.
     move=> cs Hin. apply: (Hv _ _ _ _ _ Hbb). assumption.
   Qed.
 
@@ -256,7 +261,7 @@ Section Verification.
   (* Verify specifications *)
 
   Definition verify_ssa (o : options) (s : SSA.spec) :=
-    (verify_rspec_algsnd s) && (verify_espec o s).
+    (verify_rspec_algsnd o s) && (verify_espec o s).
 
   Definition verify_dsl (o : options) (s : DSL.spec) :=
     verify_ssa o (ssa_spec s).

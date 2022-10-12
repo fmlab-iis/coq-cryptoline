@@ -3,12 +3,12 @@ open BitBlastingCacheHash
 open BitBlastingInit
 open CNF
 open CacheHash
+open Options0
 open QFBVHash
 open SSA2QFBV
 open Seqs
 open Var
 open Eqtype
-open Seq
 
 (** val bb_hbexps_cache :
     TypEnv.SSATE.env -> hbexp list -> ((word
@@ -24,35 +24,10 @@ let rec bb_hbexps_cache e = function
   let (p2, cs) = p1 in
   (p2, ((add_prelude (((neg_lit lr) :: []) :: cs)) :: cnfs))
 
-(** val qfbv_spec_algsnd_la_rec :
-    QFBV.QFBV.bexp -> (QFBV.QFBV.bexp list * QFBV.QFBV.bexp) list ->
-    QFBV.QFBV.bexp list **)
+(** val simplify_bexps : QFBV.QFBV.bexp list -> QFBV.QFBV.bexp list **)
 
-let rec qfbv_spec_algsnd_la_rec f = function
-| [] -> []
-| y :: tl ->
-  let (pre_es, safe) = y in
-  (qfbv_imp (qfbv_conj f (qfbv_conjs_la pre_es)) safe) :: (qfbv_spec_algsnd_la_rec
-                                                            f tl)
-
-(** val qfbv_spec_algsnd_la : SSA.SSA.spec -> QFBV.QFBV.bexp list **)
-
-let qfbv_spec_algsnd_la s =
-  let fE = SSA.SSA.program_succ_typenv (SSA.SSA.sprog s) (SSA.SSA.sinputs s)
-  in
-  qfbv_spec_algsnd_la_rec (bexp_rbexp (SSA.SSA.rng_bexp (SSA.SSA.spre s)))
-    (bexp_program_algsnd_split_fixed_final fE (SSA.SSA.sprog s))
-
-(** val bb_range_algsnd_la : SSA.SSA.spec -> QFBV.QFBV.bexp list **)
-
-let bb_range_algsnd_la s =
-  cat (rngred_rspec_split_la s) (qfbv_spec_algsnd_la s)
-
-(** val bb_range_algsnd_la_simplified :
-    SSA.SSA.spec -> QFBV.QFBV.bexp list **)
-
-let bb_range_algsnd_la_simplified s =
-  map QFBV.QFBV.simplify_bexp2 (bb_range_algsnd_la s)
+let simplify_bexps es =
+  tmap QFBV.QFBV.simplify_bexp2 es
 
 (** val bexp_is_not_true : QFBV.QFBV.bexp -> bool **)
 
@@ -65,8 +40,11 @@ let bexp_is_not_true = function
 let filter_not_true es =
   tfilter QFBV.bexp_eqType (Obj.magic bexp_is_not_true) es
 
-(** val bb_range_algsnd_la_simplified_filtered :
-    SSA.SSA.spec -> Equality.sort list **)
+(** val bb_rngred_algsnd : options -> SSA.SSA.rspec -> QFBV.QFBV.bexp list **)
 
-let bb_range_algsnd_la_simplified_filtered s =
-  filter_not_true (Obj.magic bb_range_algsnd_la_simplified s)
+let bb_rngred_algsnd o s =
+  Obj.magic filter_not_true
+    (simplify_bexps
+      (if o.apply_slicing_rspec
+       then rngred_algsnd_slice_split_la s
+       else rngred_algsnd_split_la s))

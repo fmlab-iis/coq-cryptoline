@@ -1045,10 +1045,10 @@ Section ZRing.
   Qed.
 
   Lemma ZPEevals_pemuls l es1 es2 :
-    ZPEevals l (pemuls es1 es2) = zmuls (ZPEevals l es1) (ZPEevals l es2).
+    ZPEevals l (pemuls es1 es2) = zmuls2 (ZPEevals l es1) (ZPEevals l es2).
   Proof.
     elim: es1 es2 => [| e1 es1 IH] [| e2 es2] //=.
-    rewrite pemuls_cons /=. rewrite IH zmuls_cons. reflexivity.
+    rewrite pemuls_cons /=. rewrite IH zmuls2_cons. reflexivity.
   Qed.
 
   Lemma ZPEeval_peadds_cons l e es :
@@ -2693,7 +2693,7 @@ Section REP2IMP.
   Lemma zpexpr_of_conseq_vl_eval_azbexp st vl g t e vl' g' t' pe pms :
     zpexpr_of_conseq_vl st vl g t e = (vl', g', t', pe, pms) ->
     newer_than_vm g t -> vl_size_bounded vl g -> consistent st vl t ->
-    (exists ks : seq Z, ZPEeval vl' pe = zadds (zmuls ks (ZPEevals vl' pms))) ->
+    (exists ks : seq Z, ZPEeval vl' pe = zadds (zmuls2 ks (ZPEevals vl' pms))) ->
     eval_azbexp e st.
   Proof.
     elim: e vl g t vl' g' t' pe pms => /=.
@@ -2701,7 +2701,7 @@ Section REP2IMP.
       dcase (zpexpr_of_zexp_vl st ivl ig it e1) => [[[[vl1 g1] t1] pe1] Hpe1].
       dcase (zpexpr_of_zexp_vl st vl1 g1 t1 e2) => [[[[vl2 g2] t2] pe2] Hpe2].
       case=> ? ? ? ? ? Hnew Hsize Hcon [ks Heq]; subst.
-      rewrite /= in Heq. rewrite zadds_zmuls_all0_r in Heq; last by done.
+      rewrite /= in Heq. rewrite zadds_zmuls2_all0_r in Heq; last by done.
       move: (Zminus_eq _ _ Heq) => {Heq}.
       (* rewrite pe1 *)
       move: (zpexpr_of_zexp_vl_prefix_of Hpe2) => Hpre1o.
@@ -2780,7 +2780,7 @@ Section REP2IMP.
   Lemma vl_of_store_conseq st sp g t ps ms q :
     imp_of_arep sp = (g, t, ps, ms, q) ->
     forall pf : (forall e : azbexp, e \in apremises sp -> eval_azbexp e st),
-    (exists ks, ZPEeval (@vl_of_store st sp pf) q = zadds (zmuls ks (ZPEevals (@vl_of_store st sp pf) ms))) ->
+    (exists ks, ZPEeval (@vl_of_store st sp pf) q = zadds (zmuls2 ks (ZPEevals (@vl_of_store st sp pf) ms))) ->
     eval_azbexp (aconseq sp) st.
   Proof.
     case: sp => [pres post] /=. rewrite /vl_of_store.

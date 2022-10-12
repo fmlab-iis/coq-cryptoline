@@ -14,7 +14,7 @@ Record options : Set :=
       compute_coefficients_one_by_one : bool;
       (* true to apply slicing to algebraic specifications *)
       apply_slicing_espec : bool;
-      (* true to apply slicing to range specifications *)
+      (* true to apply slicing to range specifications (both in range reduction and algebraic soundness) *)
       apply_slicing_rspec : bool
     }.
 
@@ -26,5 +26,5 @@ Definition default_options : options :=
     vars_cache_in_rewrite_assignments := true;
     compute_coefficients_one_by_one := false;
     apply_slicing_espec := true;
-    apply_slicing_rspec := false
+    apply_slicing_rspec := true
   |}.

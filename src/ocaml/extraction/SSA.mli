@@ -1059,6 +1059,12 @@ module SSA :
 
   val rspec_of_spec : spec -> rspec
 
+  val vars_spec : spec -> SSAVS.t
+
+  val vars_espec : espec -> SSAVS.t
+
+  val vars_rspec : rspec -> SSAVS.t
+
   val string_of_eunop : DSL.eunop -> char list
 
   val string_of_ebinop : DSL.ebinop -> char list
@@ -1102,6 +1108,12 @@ module SSA :
   val string_of_espec : espec -> char list
 
   val string_of_rspec : rspec -> char list
+
+  val is_rng_instr : instr -> bool
+
+  val is_rng_program : program -> bool
+
+  val is_rng_rspec : rspec -> bool
 
   val bv2z : typ -> bits -> coq_Z
 
@@ -1870,6 +1882,10 @@ module SSA :
   val well_formed_bexp : TypEnv.SSATE.env -> bexp -> bool
 
   val well_formed_spec : spec -> bool
+
+  val well_formed_espec : espec -> bool
+
+  val well_formed_rspec : rspec -> bool
 
   val defmemP : SSAVarOrder.t -> TypEnv.SSATE.env -> reflect
 
