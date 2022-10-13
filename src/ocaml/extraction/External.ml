@@ -609,7 +609,7 @@ let coq_all_unsat_fork id_cnf_pairs =
             verify all_unsat rest
        else
          let all_unsat' = work_on_pending_fork delivered_helper all_unsat in
-         verify all_unsat' rest
+         verify all_unsat' id_cnf_pairs
   in
   verify true id_cnf_pairs
 
