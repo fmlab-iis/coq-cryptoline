@@ -772,7 +772,7 @@ Module MakeDSL
   Local Open Scope bits.
 
   Module VSLemmas := SsrFSetLemmas VS.
-  Module TELemmas := FMapLemmas TE.
+  Module TELemmas := TypEnvLemmas TE.
   Hint Immediate S.Upd_upd S.Upd2_upd2 : dsl.
 
   (* Variables *)
@@ -1408,6 +1408,21 @@ Module MakeDSL
     rewrite -cats1 lvs_program_cat /=. rewrite VSLemmas.union_emptyr. reflexivity.
   Qed.
 
+
+  (* Proper *)
+
+  Global Instance add_proper_atyp : Proper (eq ==> TE.Equal ==> eq) atyp.
+  Proof.
+    move=> a1 a2 ? E1 E2 Heq; subst. rewrite /atyp. case: a2 => //=.
+    move=> x. move: (Heq x). case H2: (TE.find x E2) => H1.
+    - rewrite (TE.find_some_vtyp H1) (TE.find_some_vtyp H2). reflexivity.
+    - rewrite (TE.find_none_vtyp H1) (TE.find_none_vtyp H2). reflexivity.
+  Qed.
+
+  Global Instance add_proper_asize : Proper (eq ==> TE.Equal ==> eq) asize.
+  Proof.
+    move=> a1 a2 ? E1 E2 Heq; subst. rewrite /asize. rewrite Heq. reflexivity.
+  Qed.
 
 
   (* Remove algebraic assumptions or range assumptions from programs *)
@@ -2130,6 +2145,20 @@ Module MakeDSL
 
   Definition eval_program (te : TE.env) p s t : Prop := eval_instrs te p s t.
 
+  Global Instance add_proper_instr_succ_typenv :
+    Proper (eq ==> TE.Equal ==> TE.Equal) instr_succ_typenv.
+  Proof.
+    move=> i1 i2 ? E1 E2 Heq; subst. case: i2 => //=; intros; rewrite Heq; reflexivity.
+  Qed.
+
+  Global Instance add_proper_program_succ_typenv :
+    Proper (eq ==> TE.Equal ==> TE.Equal) program_succ_typenv.
+  Proof.
+    move=> p1 p2 ? E1 E2 Heq; subst. elim: p2 E1 E2 Heq => [| i p IH] E1 E2 Heq //=.
+    apply: (IH (instr_succ_typenv i E1) (instr_succ_typenv i E2)).
+    rewrite Heq. reflexivity.
+  Qed.
+
   Lemma program_succ_typenv_cons E i p :
     program_succ_typenv (i::p) E = program_succ_typenv p (instr_succ_typenv i E).
   Proof. reflexivity. Qed.
@@ -2563,6 +2592,41 @@ Module MakeDSL
 
   Definition are_defined (vs : VS.t) (te : TE.env) : bool :=
     VS.for_all (is_defined^~ te) vs.
+
+  Lemma is_defined_compat_bool E : compat_bool VS.SE.eq (is_defined^~ E).
+  Proof. move=> x y Hxy. rewrite Hxy. reflexivity. Qed.
+
+  Global Instance add_proper_is_defined :
+    Proper (eq ==> TE.Equal ==> eq) is_defined.
+  Proof.
+    move=> x1 x2 ? E1 E2 Heq; subst. rewrite /is_defined. rewrite Heq. reflexivity.
+  Qed.
+
+  Global Instance add_proper_are_defined_vars :
+    Proper (VS.Equal ==> eq ==> eq) are_defined.
+  Proof.
+    move=> vs1 vs2 H E1 E2 ?; subst. rewrite /are_defined.
+    case H2: (VS.for_all (is_defined^~ E2) vs2).
+    - apply: (VS.for_all_1 (is_defined_compat_bool _)). move=> x Hin.
+      move: (VS.for_all_2 (is_defined_compat_bool _) H2). apply. rewrite -H. assumption.
+    - apply/negP => H1. move/negP: H2; apply.
+      apply: (VS.for_all_1 (is_defined_compat_bool _)). move=> x Hin.
+      move: (VS.for_all_2 (is_defined_compat_bool _) H1). apply. rewrite H. assumption.
+  Qed.
+
+  Global Instance add_proper_are_defined_env :
+    Proper (eq ==> TE.Equal ==> eq) are_defined.
+  Proof.
+    move=> vs1 vs2 ? E1 E2 Heq; subst. rewrite /are_defined.
+    case H2: (VS.for_all (is_defined^~ E2) vs2).
+    - apply: (VS.for_all_1 (is_defined_compat_bool _)). move=> x Hin.
+      move: (VS.for_all_2 (is_defined_compat_bool _) H2). rewrite Heq.
+      apply. assumption.
+    - apply/negP => H1. move/negP: H2; apply.
+      apply: (VS.for_all_1 (is_defined_compat_bool _)). move=> x Hin.
+      move: (VS.for_all_2 (is_defined_compat_bool _) H1). rewrite -Heq.
+      apply. assumption.
+  Qed.
 
   Lemma vars_env_mem v te: TE.mem v te = VS.mem v (vars_env te).
   Proof. rewrite TEKS.mem_key_set. reflexivity. Qed.
@@ -3643,56 +3707,37 @@ Module MakeDSL
     by rewrite -(Heq x).
   Qed.
 
-  (* TODO: move to coq-ssrlib FMaps.v *)
-  Lemma submap_add x v (te1 te2: TE.env) :
-    TELemmas.submap te1 te2 ->
-    TELemmas.submap (TE.add x v te1) (TE.add x v te2).
-  Proof.
-    move=> Hsm.
-    intros k typ.
-    case Heq: (k == x).
-    - move/idP: Heq => Heq.
-        by rewrite 2!(TELemmas.find_add_eq Heq).
-    - move/idP: Heq => Hneq.
-      rewrite 2!(TELemmas.find_add_neq Hneq).
-      exact: Hsm.
-  Qed.
-
-  Local Hint Resolve submap_add.
-
   Lemma submap_instr_succ_typenv i te1 te2:
     well_formed_instr te1 i ->
     TELemmas.submap te1 te2 ->
     TELemmas.submap (instr_succ_typenv i te1) (instr_succ_typenv i te2).
   Proof.
-    elim: i te1 te2 => //=; intros;
-      (let rec tac :=
-           match goal with
-           | H : ?a |- ?a => assumption
-           | H : ?l \/ ?r |- _ => case: H => H; tac
-           | |- ?l /\ ?r => split; tac
-           | |- is_true (_ && _) => apply /andP; tac
-           | H : is_true(well_formed_instr ?te ?i) |- _  =>
-             let Hwd := fresh "Hwd" in
-             let Hwt := fresh "Hwt" in
-             move/andP: H => [Hwd Hwt]; tac
-           | Hwd: is_true (well_defined_instr ?te ?i) |- _ =>
-             (rewrite /= in Hwd); tac
-           | H : is_true(well_typed_instr ?te ?i) |- _  =>
-             (rewrite /= in H); tac
-           | H : is_true (_ && _) |- _ =>
-             let H1 := fresh in let H2 := fresh in move/andP: H => [H1 H2]; tac
-           | Hsub: TELemmas.submap ?te1 ?te2, Hwd: is_true (are_defined ?vs ?te1)
-             |- is_true (are_defined ?vs ?te2) =>
-             exact: (are_defined_submap Hsub Hwd); tac
-           | Hsub: TELemmas.submap ?te1 ?te2,
-             Hwd: is_true (are_defined (vars_atom ?a) ?te1)
-             |- context [atyp ?a ?te2] =>
-             rewrite -(atyp_submap Hsub Hwd); tac
-           | |- ?e => progress (auto)
-           | |- _ => idtac
-           end
-       in tac).
+    (elim: i te1 te2 => //=); intros;
+    repeat match goal with
+      | H : ?a |- ?a => assumption
+      | H : ?l \/ ?r |- _ => case: H => H
+      | |- ?l /\ ?r => split
+      | |- is_true (_ && _) => apply /andP
+      | H : is_true(well_formed_instr ?te ?i) |- _  =>
+          let Hwd := fresh "Hwd" in
+          let Hwt := fresh "Hwt" in
+          move/andP: H => [Hwd Hwt]
+      | Hwd: is_true (well_defined_instr ?te ?i) |- _ =>
+          (rewrite /= in Hwd)
+      | H : is_true(well_typed_instr ?te ?i) |- _  =>
+          (rewrite /= in H)
+      | H : is_true (_ && _) |- _ =>
+          let H1 := fresh in let H2 := fresh in move/andP: H => [H1 H2]
+      | Hsub: TELemmas.submap ?te1 ?te2, Hwd: is_true (are_defined ?vs ?te1)
+        |- is_true (are_defined ?vs ?te2) =>
+          exact: (are_defined_submap Hsub Hwd)
+      | Hsub: TELemmas.submap ?te1 ?te2,
+          Hwd: is_true (are_defined (vars_atom ?a) ?te1)
+        |- context [atyp ?a ?te2] =>
+          rewrite -(atyp_submap Hsub Hwd)
+      | |- TELemmas.submap (TE.add ?x ?v ?E1) (TE.add ?x ?v ?E2) =>
+          apply: TELemmas.submap_add
+      end; done.
   Qed.
 
   Lemma well_formed_program_submap te1 te2 p :
@@ -8285,48 +8330,6 @@ Module MakeDSL
       move: (depvars_rpre_rprogram_sat_lb f p (vars_rbexp g)) => ?.
       by VSLemmas.dp_subset.
     Qed.
-
-
-    (* TELemmas.sbumap *)
-
-    (* TODO: Check if this lemma is used *)
-    Lemma slice_einstr_submap E1 E2 vs i i' :
-      slice_einstr vs i = Some i' ->
-      well_defined_instr E1 i' ->
-      TELemmas.submap E1 E2 ->
-      TELemmas.submap (instr_succ_typenv i' E1) (instr_succ_typenv i E2).
-    Proof.
-      case: i => //=; intros; case_if; case_option; subst; simpl; hyps_splitb;
-      repeat
-        match goal with
-        | H : is_true (well_defined_instr _ _) |- _ => simpl in H; hyps_splitb
-        | Hsub : TELemmas.submap ?E1 ?E2,
-            Hdef : is_true (are_defined (vars_atom ?a) ?E1)
-          |- context f [atyp ?a ?E2] =>
-            rewrite -(atyp_submap Hsub Hdef)
-        | Hsub : TELemmas.submap ?E1 ?E2,
-            Hdef : is_true (are_defined (vars_atom ?a) ?E1),
-              H : context f [atyp ?a ?E2] |- _ =>
-            rewrite -(atyp_submap Hsub Hdef) in H
-        | |- TELemmas.submap (TE.add ?x ?t _) (TE.add ?x ?t _) => apply: submap_add
-        | |- TELemmas.submap ?e ?e => exact: TELemmas.submap_refl
-        | H : ?p |- ?p => assumption
-        end.
-      case: b H H0 => [e r] /=. case=> <-. move=> _ /=. assumption.
-    Qed.
-
-    (* TODO: remove this lemma or prove it *)
-    Lemma slice_eprogram_submap E1 E2 vs p :
-      well_formed_program E1 (slice_eprogram vs p) ->
-      TELemmas.submap E1 E2 ->
-      TELemmas.submap (program_succ_typenv (slice_eprogram vs p) E1)
-                      (program_succ_typenv p E2).
-    Proof.
-      elim: p E1 E2 => [| i p IH] E1 E2 //=. case Hs: (slice_einstr vs i) => /=.
-      - move/andP => [Hwfi Hwfp] Hsub. apply: (IH _ _ Hwfp).
-        apply: (slice_einstr_submap Hs _ Hsub). exact: (well_formed_instr_well_defined Hwfi).
-      - move=> Hwfp Hsub. apply: (IH _ _ Hwfp).
-    Abort.
 
   End Slicing.
 

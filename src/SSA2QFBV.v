@@ -3,7 +3,7 @@
     Convert a range specification in SSA and algebraic soundness conditions
     to SMT QF_BV queries. *)
 
-From Coq Require Import Arith List.
+From Coq Require Import Arith List OrderedType.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun prime.
 From ssrlib Require Import Var Tactics Seqs.
 From Cryptoline Require Import DSL SSA SSA2ZSSA.
@@ -17,22 +17,8 @@ Unset Strict Implicit.
 Import Prenex Implicits.
 
 
-(* TODO: move to coq-ssrlib *)
-Lemma in_map_exists {A B : Type} (s : seq A) (f : A -> B) (x : B) :
-  In x (map f s) ->
-  exists y, In y s /\ x = f y.
-Proof.
-  elim: s => [| hd tl IH] //=. case=> Hin.
-  - subst. exists hd. tauto.
-  - move: (IH Hin) => [y [Hiny Hxy]]. exists y. tauto.
-Qed.
-
-
-Module SSATELemmas := MakeTypEnvLemmas SSATE.
-
 Section ForceConformDiff.
 
-  (* TODO: move to coq-qfbv *)
   Definition force_conform_diff (E : SSATE.env) (vs : SSAVS.t) (s : SSAStore.t) :=
     force_conform_vars E (SSAVS.elements (SSAVS.diff (vars_env E) vs)) s.
 
@@ -61,7 +47,7 @@ Section ForceConformDiff.
   Proof.
     move=> Hag Hco x Hmemx. case Hmemxvs: (SSAVS.mem x vs).
     - rewrite (force_conform_diff_in _ _ Hmemxvs). move: (Hag _ Hmemxvs) => Hfind.
-      rewrite -(SSATELemmas.find_same_vsize Hfind). rewrite Hco; first reflexivity.
+      rewrite -(SSA.TELemmas.find_same_vsize Hfind). rewrite Hco; first reflexivity.
       rewrite SSATE.Lemmas.mem_find_b Hfind. by move: (SSATE.Lemmas.mem_find_some Hmemx) => [y ->].
     - move/idP/negP: Hmemxvs => Hmemxvs. rewrite (force_conform_diff_notin _ Hmemx Hmemxvs).
       rewrite size_zeros. reflexivity.
@@ -130,7 +116,7 @@ Lemma agree_exp_size E1 E2 e :
   exp_size e E1 = exp_size e E2.
 Proof.
   elim: e => //=.
-  - move=> x H. apply: SSATELemmas.find_same_vsize. apply: (H x).
+  - move=> x H. apply: SSA.TELemmas.find_same_vsize. apply: (H x).
     apply: SSAVS.Lemmas.mem_singleton2. reflexivity.
   - move=> op e IH Hag. rewrite (IH Hag). reflexivity.
   - move=> op e1 IH1 e2 IH2 /MA.agree_union_set [Hag1 Hag2].
@@ -783,6 +769,29 @@ Section Rspec2QFBV.
     | [::] => [::]
     | hd::tl => (bexp_instr E hd)::(bexp_program (instr_succ_typenv hd E) tl)
     end.
+
+
+  Global Instance add_proper_bexp_instr : Proper (SSATE.Equal ==> eq ==> eq) bexp_instr.
+  Proof.
+    move=> E1 E2 Heq i1 i2 ?; subst.
+    (case: i2 => //=); intros; case_if; subst; simpl;
+    repeat match goal with
+      | Heq : SSATE.Equal ?E1 ?E2 |- context c [asize _ ?E1] => rewrite Heq
+      | Heq : SSATE.Equal ?E1 ?E2 |- context c [atyp _ ?E1] => rewrite Heq
+      | Heq : SSATE.Equal ?E1 ?E2, H : context c [asize _ ?E1] |- _ => rewrite Heq in H
+      | Heq : SSATE.Equal ?E1 ?E2, H : context c [atyp _ ?E1] |- _ => rewrite Heq in H
+      | H1 : ?e = true, H2 : ?e = false |- _ => rewrite H1 in H2; discriminate
+      end;
+    by reflexivity.
+  Qed.
+
+  Global Instance add_proper_bexp_program : Proper (SSATE.Equal ==> eq ==> eq) bexp_program.
+  Proof.
+    move=> E1 E2 Heq p1 p2 ?; subst. elim: p2 E1 E2 Heq => [| i p IH] E1 E2 Heq //=.
+    apply/eqP. rewrite eqseq_cons. apply/andP; split.
+    - rewrite Heq. exact: eqxx.
+    - apply/eqP. apply: IH. rewrite Heq. reflexivity.
+  Qed.
 
 
   (** Properties of the conversion from programs to QFBV.bexp *)
@@ -3088,14 +3097,6 @@ Section RngredSlicing.
   Definition valid_rngred_rspec_slice_split_la (s : rspec) :=
     let fE := program_succ_typenv (rsprog s) (rsinputs s) in
     valid_bexps fE (rngred_rspec_slice_split_la s).
-
-  (* TODO: move to coq-qfbv QFBV.v, not used *)
-  Lemma eval_bexps_tflatten ess s :
-    eval_bexps (tflatten ess) s = all (eval_bexps^~ s) ess.
-  Proof.
-    elim: ess => [| es ess IH] //=. rewrite tflatten_cons. rewrite eval_bexps_cat.
-    rewrite IH. rewrite andbC. rewrite eval_bexps_rev. reflexivity.
-  Qed.
 
   Lemma rngred_rspec_split_la_valid_rspecs fE rs :
     (forall r, In r rs -> MA.agree
@@ -5759,6 +5760,220 @@ Section AlgsndLeftAssoc.
 End AlgsndLeftAssoc.
 
 
+(* Algebraic soundness version 3 (with slicing) *)
+
+Section AlgsndSliceLeftAssoc.
+
+  (* algsnd_after *)
+
+  Definition algsnd_after (E : SSATE.env) (f : rbexp) (p : program) (i : instr) : Prop :=
+    forall s1 s2, SSAStore.conform s1 E ->
+                  eval_rbexp f s1 ->
+                  eval_program E p s1 s2 ->
+                  ssa_instr_algsnd_at (program_succ_typenv p E) i s2.
+
+
+  (* Algebraic soundness with slicing *)
+
+  Definition make_sndcond fE f p i :=
+    let ef := bexp_rbexp f in
+    let vs := depvars_rpre_rprogram (rvs_instr i) f p in
+    let ep := bexp_program fE (slice_rprogram vs p) in
+    let es := bexp_instr_algsnd fE i in
+    qfbv_imp (qfbv_conj ef (qfbv_conjs_la ep)) es.
+
+  Fixpoint algsnd_slice_la_rec fE (pre : program) (f : rbexp) (p : program) : seq QFBV.bexp :=
+    match p with
+    | [::] => [::]
+    | hd::tl => (make_sndcond fE f pre hd)::
+                  (algsnd_slice_la_rec fE (rcons pre hd) f tl)
+    end.
+
+  Definition algsnd_slice_la (s : rspec) : seq QFBV.bexp :=
+    let fE := program_succ_typenv (rsprog s) (rsinputs s) in
+    algsnd_slice_la_rec fE [::] (rspre s) (rsprog s).
+
+  Lemma slice_rbexp_eval_bexp vs r s :
+    eval_bexp (bexp_rbexp r) s -> eval_bexp (bexp_rbexp (slice_rbexp vs r)) s.
+  Proof.
+    elim: r => //=.
+    - move=> n e1 e2 Hev. by case Hs: (SSA.VSLemmas.disjoint vs (vars_rexp e1) &&
+                                         SSA.VSLemmas.disjoint vs (vars_rexp e2)).
+    - move=> n op e1 e2. by case Hs: (SSA.VSLemmas.disjoint vs (vars_rexp e1) &&
+                                        SSA.VSLemmas.disjoint vs (vars_rexp e2)).
+    - move=> e IH Hev. by case Hs: (SSA.VSLemmas.disjoint vs (vars_rbexp e)).
+    - move=> e1 IH1 e2 IH2 /andP [H1 H2]. move: (IH1 H1) (IH2 H2) => {}IH1 {}IH2.
+      (case Hs1: (slice_rbexp vs e1) IH1); (case Hs2: (slice_rbexp vs e2) IH2 => //=); intros;
+        by rewrite IH1 IH2.
+    - move=> e1 IH1 e2 IH2. by case: (SSA.VSLemmas.disjoint vs (vars_rbexp e1) &&
+                                        SSA.VSLemmas.disjoint vs (vars_rbexp e2)).
+  Qed.
+
+  Lemma slice_instr_eval_bexp fE vs i i' s :
+    slice_rinstr vs i = Some i' -> eval_bexp (bexp_instr fE i) s ->
+    eval_bexp (bexp_instr fE i') s.
+  Proof.
+    (case: i => //=); intros; case_if; case_option; subst; simpl;
+    repeat match goal with
+           | H : ?e = true |- context c [?e] => rewrite H /=
+           | H : ?e = false |- context c [?e] => rewrite H /=
+           end; try assumption.
+    case: b H H0 => [e r] /=. move=> [] ?; subst. rewrite /bexp_instr /=.
+    exact: slice_rbexp_eval_bexp.
+  Qed.
+
+  Lemma slice_rprogram_eval_bexp fE vs p s :
+    are_defined (lvs_program p) fE ->
+    env_unchanged_program fE p ->
+    eval_bexp (qfbv_conjs_la (bexp_program fE p)) s ->
+    eval_bexp (qfbv_conjs_la (bexp_program fE (slice_rprogram vs p))) s.
+  Proof.
+    rewrite !qfbv_conj_la_eval. elim: p fE => [| i p IH] fE //=.
+    rewrite are_defined_union => /andP [Hdefi Hdefp]. move/andP => [Huni Hunp].
+    move/andP=> [Hvi Hvp]. case Hs: (slice_rinstr vs i) => /=.
+    - rewrite (slice_instr_eval_bexp Hs Hvi) /=. rewrite -(slice_rinstr_some_succ_typenv _ Hs).
+      apply: (IH _ (are_defined_instr_succ_typenv _ Hdefp) _ Hvp).
+      exact: (env_unchanged_program_equal
+                (SSATE.Lemmas.Equal_sym (env_unchanged_instr_succ_equal Hdefi Huni)) Hunp).
+    - apply: (IH _ Hdefp Hunp).
+      rewrite (env_unchanged_instr_succ_equal Hdefi Huni) in Hvp. exact: Hvp.
+  Qed.
+
+  Lemma algsnd_slice_la_algsnd_la s :
+    let fE := program_succ_typenv (rsprog s) (rsinputs s) in
+    well_formed_ssa_rspec s ->
+    valid_bexps fE (algsnd_slice_la s) -> valid_qfbv_spec_algsnd_la s.
+  Proof.
+    case: s => [E f p g] /=. rewrite /algsnd_slice_la /valid_qfbv_spec_algsnd_la /=.
+    rewrite /qfbv_spec_algsnd_la /=. rewrite /bexp_program_algsnd_split_fixed_final /=.
+    rewrite /well_formed_ssa_rspec /=. rewrite /well_formed_rspec /=.
+    move=> /andP [/andP [/andP [/andP [Hwff Hwfp] _] Hun] Hssa]. clear g.
+    have: (are_defined (lvs_program ([::] ++ p)) (program_succ_typenv p E)).
+    { rewrite cat0s. exact: are_defined_lvs_program_succ_typenv. }
+    have: env_unchanged_program (program_succ_typenv p E) ([::] ++ p).
+    { rewrite cat0s. apply: env_unchanged_program_succ. rewrite /well_formed_ssa_program.
+      by rewrite Hwfp Hun Hssa. }
+    clear Hwff Hwfp Hun Hssa.
+    have: bexp_program (program_succ_typenv p E) [::] = [::] by reflexivity.
+    move: [::] => pre. move: [::] => pre_es.
+    elim: p E pre pre_es  => [| i p IH] E pre pre_es //= Hpre Hun Hdef.
+    rewrite /make_sndcond /=. rewrite !valid_bexps_cons. move=> [Hvi Hvp].
+    have Hdefpre: are_defined (lvs_program pre) (program_succ_typenv p (instr_succ_typenv i E)).
+    { move: Hdef. apply: are_defined_subset. rewrite lvs_program_cat.
+      exact: SSA.VSLemmas.union_subset_1. }
+    have Hunpre: env_unchanged_program (program_succ_typenv p (instr_succ_typenv i E)) pre.
+    { move: Hun. rewrite env_unchanged_program_cat. move/andP => [Hun _]. exact: Hun. }
+    split.
+    - move=> s Hco. move: (Hvi s Hco) => {Hvi} /=. case: (eval_bexp (bexp_rbexp f) s) => //=.
+      case: (eval_bexp (bexp_instr_algsnd (program_succ_typenv p (instr_succ_typenv i E)) i) s);
+        [by rewrite !orbT | rewrite !orbF]. move/negP=> Hvi. apply/negP => Hv.
+      apply: Hvi. rewrite -Hpre in Hv. exact: (slice_rprogram_eval_bexp _ Hdefpre Hunpre Hv).
+    - apply: (IH _ _ _ _ _ _ Hvp).
+      + rewrite bexp_program_rcons Hpre. rewrite env_unchanged_program_cat in Hun.
+        move/andP: Hun => [Hun _]. rewrite (env_unchanged_program_succ_equal Hdefpre Hun).
+        reflexivity.
+      + rewrite cat_rcons. assumption.
+      + rewrite cat_rcons. assumption.
+  Qed.
+
+  Theorem algsnd_slice_la_sound s :
+    let fE := program_succ_typenv (rsprog s) (rsinputs s) in
+    well_formed_ssa_rspec s ->
+    valid_bexps fE (algsnd_slice_la s) -> ssa_spec_algsnd s.
+  Proof.
+    move=> fE Hwf Hv. apply: (qfbv_spec_algsnd_la_sound Hwf).
+    exact: (algsnd_slice_la_algsnd_la Hwf Hv).
+  Qed.
+
+
+  Lemma well_formed_bexp_slice_rbexp E vs e :
+    well_formed_bexp (bexp_rbexp e) E ->
+    well_formed_bexp (bexp_rbexp (slice_rbexp vs e)) E.
+  Proof.
+    elim: e => //=.
+    - move=> n e1 e2. by case: (SSA.VSLemmas.disjoint vs (vars_rexp e1) &&
+                                  SSA.VSLemmas.disjoint vs (vars_rexp e2)).
+    - move=> n op e1 e2. by case: (SSA.VSLemmas.disjoint vs (vars_rexp e1) &&
+                                     SSA.VSLemmas.disjoint vs (vars_rexp e2)).
+    - move=> e IH. by case: (SSA.VSLemmas.disjoint vs (vars_rbexp e)).
+    - move=> e1 IH1 e2 IH2 /andP [Hwf1 Hwf2]. move: (IH1 Hwf1) (IH2 Hwf2).
+      case: (slice_rbexp vs e1); (case: (slice_rbexp vs e2) => //=); intros;
+        by repeat match goal with
+             | H : is_true ?e |- context c [?e] => rewrite H /=
+             end.
+    - move=> e1 IH1 e2 IH2. by case: (SSA.VSLemmas.disjoint vs (vars_rbexp e1) &&
+                                        SSA.VSLemmas.disjoint vs (vars_rbexp e2)).
+  Qed.
+
+  Lemma well_formed_bexp_slice_rinstr fE vs i i' :
+    well_formed_bexp (bexp_instr fE i) fE ->
+    slice_rinstr vs i = Some i' ->
+    well_formed_bexp (bexp_instr fE i') fE.
+  Proof.
+    (case: i => //=); intros; case_if; case_option; subst; simpl;
+    repeat match goal with
+      | H : ?e = true |- context c [?e] => rewrite H /=
+      | H : ?e = false |- context c [?e] => rewrite H /=
+      end; try assumption.
+    case: b H H0 => [e r]. move=> H [] ?; subst; simpl.
+    exact: (well_formed_bexp_slice_rbexp _ H).
+  Qed.
+
+  Lemma well_formed_bexp_slice_rprogram fE vs p :
+    are_defined (lvs_program p) fE ->
+    env_unchanged_program fE p ->
+    well_formed_bexp (qfbv_conjs_la (bexp_program fE p)) fE ->
+    well_formed_bexp (qfbv_conjs_la (bexp_program fE (slice_rprogram vs p))) fE.
+  Proof.
+    rewrite -!well_formed_bexp_ra_la. elim: p fE => [| i p IH] fE //=.
+    rewrite are_defined_union => /andP [Hdefi Hdefp]. move/andP => [Huni Hunp].
+    move/andP=> [Hi Hp]. case Hs: (slice_rinstr vs i) => /=.
+    - rewrite (well_formed_bexp_slice_rinstr Hi Hs) /=.
+      rewrite -(slice_rinstr_some_succ_typenv _ Hs).
+      rewrite (env_unchanged_instr_succ_equal Hdefi Huni) in Hp *.
+      exact: (IH _ Hdefp Hunp Hp).
+    - rewrite (env_unchanged_instr_succ_equal Hdefi Huni) in Hp.
+      exact: (IH _ Hdefp Hunp Hp).
+  Qed.
+
+  Lemma algsnd_slice_la_well_formed s :
+    let fE := program_succ_typenv (rsprog s) (rsinputs s) in
+    well_formed_ssa_rspec s ->
+    well_formed_bexps (algsnd_slice_la s) fE.
+  Proof.
+    move=> fE Hwf. rewrite /fE => {fE}. move: Hwf (qfbv_spec_algsnd_la_well_formed Hwf).
+    case: s => [E f p g] /=. rewrite /qfbv_spec_algsnd_la /algsnd_slice_la /=.
+    rewrite /well_formed_ssa_rspec /=. rewrite /well_formed_rspec /=.
+    move=> /andP [/andP [/andP [/andP [Hwff Hwfp] _] Hun] Hssa]. clear g.
+    have: (are_defined (lvs_program ([::] ++ p)) (program_succ_typenv p E)).
+    { rewrite cat0s. exact: are_defined_lvs_program_succ_typenv. }
+    have: env_unchanged_program (program_succ_typenv p E) ([::] ++ p).
+    { rewrite cat0s. apply: env_unchanged_program_succ. rewrite /well_formed_ssa_program.
+      by rewrite Hwfp Hun Hssa. }
+    clear Hwff Hwfp Hun Hssa. rewrite /bexp_program_algsnd_split_fixed_final.
+    have: bexp_program (program_succ_typenv p E) [::] = [::] by reflexivity.
+    move: [::] => pre. move: [::] => pre_es.
+    elim: p E pre pre_es  => [| i p IH] E pre pre_es //= Hpre Hun Hdef.
+    move/andP => [/andP [/andP [Hf Hpre_es] Hi] Hp].
+    rewrite Hf /=. rewrite Hi andbT.
+    have Hdefpre: are_defined (lvs_program pre) (program_succ_typenv p (instr_succ_typenv i E)).
+    { move: Hdef. apply: are_defined_subset. rewrite lvs_program_cat.
+      exact: SSA.VSLemmas.union_subset_1. }
+    have Hunpre: env_unchanged_program (program_succ_typenv p (instr_succ_typenv i E)) pre.
+    { move: Hun. rewrite env_unchanged_program_cat. move/andP => [Hun _]. exact: Hun. }
+    apply/andP; split.
+    - rewrite -Hpre in Hpre_es. exact: (well_formed_bexp_slice_rprogram _ Hdefpre Hunpre Hpre_es).
+    - apply: (IH _ _ _ _ _ _ Hp).
+      + rewrite bexp_program_rcons Hpre. rewrite env_unchanged_program_cat in Hun.
+        move/andP: Hun => [Hun _]. rewrite (env_unchanged_program_succ_equal Hdefpre Hun).
+        reflexivity.
+      + rewrite cat_rcons. assumption.
+      + rewrite cat_rcons. assumption.
+  Qed.
+
+End AlgsndSliceLeftAssoc.
+
+
 
 (* Combine range reduction and algebraic soundness (version 1) *)
 
@@ -5911,14 +6126,14 @@ Section RngredAlgsndSlicing.
   (* Combine range spec and safety conditions for bit-blasting *)
 
   Definition rngred_algsnd_slice_split_la (s : rspec) : seq QFBV.bexp :=
-    (rngred_rspec_slice_split_la s) ++ (qfbv_spec_algsnd_la s).
+    (rngred_rspec_slice_split_la s) ++ (algsnd_slice_la s).
 
   Lemma valid_rngred_algsnd_slice_split_la_rngred fE s :
     valid_bexps fE (rngred_algsnd_slice_split_la s) -> valid_bexps fE (rngred_rspec_slice_split_la s).
   Proof. rewrite /rngred_algsnd_slice_split_la. rewrite valid_bexps_cat. tauto. Qed.
 
   Lemma valid_rngred_algsnd_slice_split_la_algsnd fE s :
-    valid_bexps fE (rngred_algsnd_slice_split_la s) -> valid_bexps fE (qfbv_spec_algsnd_la s).
+    valid_bexps fE (rngred_algsnd_slice_split_la s) -> valid_bexps fE (algsnd_slice_la s).
   Proof. rewrite /rngred_algsnd_slice_split_la. rewrite valid_bexps_cat. tauto. Qed.
 
   Lemma rngred_algsnd_slice_split_la_valid_rspec s :
@@ -5936,7 +6151,7 @@ Section RngredAlgsndSlicing.
     well_formed_ssa_rspec s -> valid_bexps fE (rngred_algsnd_slice_split_la s) ->
     ssa_spec_algsnd s.
   Proof.
-    move=> fE. rewrite /fE => {fE} Hwf Hv. apply: (qfbv_spec_algsnd_la_sound Hwf).
+    move=> fE. rewrite /fE => {fE} Hwf Hv. apply: (algsnd_slice_la_sound Hwf).
     exact: (valid_rngred_algsnd_slice_split_la_algsnd Hv).
   Qed.
 
@@ -5959,7 +6174,7 @@ Section RngredAlgsndSlicing.
   Proof.
     move=> fE Hwf. rewrite /rngred_algsnd_slice_split_la. rewrite well_formed_bexps_cat.
     rewrite (rngred_rspec_slice_split_la_well_formed Hwf) andTb.
-    exact: (qfbv_spec_algsnd_la_well_formed Hwf).
+    exact: (algsnd_slice_la_well_formed Hwf).
   Qed.
 
 End RngredAlgsndSlicing.

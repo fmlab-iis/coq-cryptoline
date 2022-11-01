@@ -700,6 +700,10 @@ module SSA :
       (TypEnv.SSATE.key * 'a1) list -> TypEnv.SSATE.key option
 
     val min_key : 'a1 TypEnv.SSATE.t -> TypEnv.SSATE.key option
+
+    val equalP : typ TypEnv.SSATE.t -> typ TypEnv.SSATE.t -> reflect
+
+    val eequalP : typ TypEnv.SSATE.t -> typ TypEnv.SSATE.t -> reflect
    end
 
   type eexp = DSL.eexp

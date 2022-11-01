@@ -648,6 +648,10 @@ module MakeDSL :
     val min_key_elements : (TE.key * 'a1) list -> TE.key option
 
     val min_key : 'a1 TE.t -> TE.key option
+
+    val equalP : typ TE.t -> typ TE.t -> reflect
+
+    val eequalP : typ TE.t -> typ TE.t -> reflect
    end
  end) ->
  sig
@@ -1257,6 +1261,10 @@ module MakeDSL :
     val min_key_elements : (TE.key * 'a1) list -> TE.key option
 
     val min_key : 'a1 TE.t -> TE.key option
+
+    val equalP : typ TE.t -> typ TE.t -> reflect
+
+    val eequalP : typ TE.t -> typ TE.t -> reflect
    end
 
   type eexp = Coq__1.eexp
@@ -3989,6 +3997,10 @@ module DSL :
     val min_key_elements : (TypEnv.TE.key * 'a1) list -> TypEnv.TE.key option
 
     val min_key : 'a1 TypEnv.TE.t -> TypEnv.TE.key option
+
+    val equalP : typ TypEnv.TE.t -> typ TypEnv.TE.t -> reflect
+
+    val eequalP : typ TypEnv.TE.t -> typ TypEnv.TE.t -> reflect
    end
 
   type eexp = Coq__1.eexp

@@ -118,6 +118,16 @@ val qfbv_spec_algsnd_la_rec :
 
 val qfbv_spec_algsnd_la : SSA.SSA.rspec -> QFBV.QFBV.bexp list
 
+val make_sndcond :
+  TypEnv.SSATE.env -> SSA.SSA.rbexp -> SSA.SSA.instr list -> SSA.SSA.instr ->
+  QFBV.QFBV.bexp
+
+val algsnd_slice_la_rec :
+  TypEnv.SSATE.env -> SSA.SSA.program -> SSA.SSA.rbexp -> SSA.SSA.program ->
+  QFBV.QFBV.bexp list
+
+val algsnd_slice_la : SSA.SSA.rspec -> QFBV.QFBV.bexp list
+
 val rngred_algsnd_split_la : SSA.SSA.rspec -> QFBV.QFBV.bexp list
 
 val rngred_algsnd_slice_split_la : SSA.SSA.rspec -> QFBV.QFBV.bexp list

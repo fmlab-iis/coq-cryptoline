@@ -1316,12 +1316,16 @@ module MakeDSL =
     val min_key_elements : (TE.key * 'a1) list -> TE.key option
 
     val min_key : 'a1 TE.t -> TE.key option
+
+    val equalP : typ TE.t -> typ TE.t -> reflect
+
+    val eequalP : typ TE.t -> typ TE.t -> reflect
    end
  end) ->
  struct
   module VSLemmas = SsrFSetLemmas(VS)
 
-  module TELemmas = FMapLemmas(TE)
+  module TELemmas = TypEnv.TypEnvLemmas(TE)
 
   type eexp = Coq__1.eexp
 

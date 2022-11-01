@@ -1691,8 +1691,7 @@ Section MakeSSA.
     move: (@ssa_typenv_add_submap (upd_index x m) (TE.add x xty te) y yty) => Hsub.
     eapply SSA.TELemmas.submap_trans.
     - exact: Hsub.
-    - apply SSA.submap_add.
-      exact: ssa_typenv_add_submap.
+    - apply: SSA.TELemmas.submap_add. exact: ssa_typenv_add_submap.
   Qed.
 
   Lemma ssa_atom_atyp m a te:
@@ -4763,6 +4762,55 @@ Section MakeSSA.
       move=> Hwf_ssa_Ep. apply: env_unchanged_program_succ_equal.
       - exact: (are_defined_lvs_program_succ_typenv E p).
       - exact: (env_unchanged_program_succ Hwf_ssa_Ep).
+    Qed.
+
+
+
+    Definition env_equal_instr (E : SSATE.env) (i : instr) : bool :=
+      SSATE.equal typ_eqn (instr_succ_typenv i E) E.
+
+    Fixpoint env_equal_program (E : SSATE.env) (p : program) : bool :=
+      match p with
+      | [::] => true
+      | hd::tl => (env_equal_instr E hd) && (env_equal_program E tl)
+      end.
+
+    Global Instance add_proper_env_equal_instr :
+      Proper (SSATE.Equal ==> eq ==> eq) env_equal_instr.
+    Proof.
+      move=> E1 E2 Heq i1 i2 ?; subst. case H2: (env_equal_instr E2 i2).
+      - apply/SSA.TELemmas.equalP. move/SSA.TELemmas.equalP: H2. rewrite Heq. by apply.
+      - apply/negP=> H1. move/negP: H2; apply. apply/SSA.TELemmas.equalP.
+        move/SSA.TELemmas.equalP: H1. rewrite Heq. by apply.
+    Qed.
+
+    Global Instance add_proper_env_equal_program :
+      Proper (SSATE.Equal ==> eq ==> eq) env_equal_program.
+    Proof.
+      move=> E1 E2 Heq p1 p2 ?; subst. elim: p2 => [| i p IH] //=.
+      rewrite IH Heq. reflexivity.
+    Qed.
+
+    Lemma env_unchanged_instr_env_equal_instr E i :
+      are_defined (lvs_instr i) E -> env_unchanged_instr E i -> env_equal_instr E i.
+    Proof.
+      move=> Hdef Hun. apply/SSA.TELemmas.equalP. exact: (env_unchanged_instr_succ_equal Hdef Hun).
+    Qed.
+
+    Lemma env_unchanged_program_env_equal_program E p :
+      are_defined (lvs_program p) E -> env_unchanged_program E p -> env_equal_program E p.
+    Proof.
+      elim: p E => [| i p IH] E //=. rewrite are_defined_union => /andP [Hdefi Hdefp].
+      move/andP=> [Henvi Henvp]. rewrite (env_unchanged_instr_env_equal_instr Hdefi Henvi) /=.
+      exact: (IH _ Hdefp Henvp).
+    Qed.
+
+    Lemma well_formed_ssa_program_final_env_unchanged E p :
+      well_formed_ssa_program E p ->
+      env_equal_program (program_succ_typenv p E) p.
+    Proof.
+      move=> Hwf. apply: (env_unchanged_program_env_equal_program _ (env_unchanged_program_succ Hwf)).
+      move/andP: Hwf => [/andP [Hwf Hun] Hssa]. exact: are_defined_lvs_program_succ_typenv.
     Qed.
 
   End EnvUnchanged.

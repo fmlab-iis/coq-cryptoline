@@ -5,6 +5,7 @@ open FSets
 open NBitsDef
 open NBitsOp
 open State
+open Typ
 open Var
 open Eqtype
 open Seq
@@ -395,6 +396,10 @@ module MakeQFBV =
     val min_key_elements : (TE.key * 'a1) list -> TE.key option
 
     val min_key : 'a1 TE.t -> TE.key option
+
+    val equalP : typ TE.t -> typ TE.t -> reflect
+
+    val eequalP : typ TE.t -> typ TE.t -> reflect
    end
  end) ->
  struct
