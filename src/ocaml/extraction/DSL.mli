@@ -1471,6 +1471,14 @@ module MakeDSL :
 
   val asize : atom -> TE.env -> int
 
+  val atom_eqn : atom -> atom -> bool
+
+  val atom_eqP : atom -> atom -> reflect
+
+  val atom_eqMixin : atom Equality.mixin_of
+
+  val atom_eqType : Equality.coq_type
+
   type instr =
   | Imov of V.t * atom
   | Ishl of V.t * atom * int
@@ -1537,14 +1545,6 @@ module MakeDSL :
     'a1) -> (bexp -> 'a1) -> instr -> 'a1
 
   type program = instr list
-
-  val atom_eqn : atom -> atom -> bool
-
-  val atom_eqP : atom -> atom -> reflect
-
-  val atom_eqMixin : atom Equality.mixin_of
-
-  val atom_eqType : Equality.coq_type
 
   val instr_eqn : instr -> instr -> bool
 
@@ -1672,6 +1672,10 @@ module MakeDSL :
 
   val acc2z : TE.env -> V.t -> S.t -> coq_Z
 
+  val instr_succ_typenv : instr -> TE.env -> TE.env
+
+  val program_succ_typenv : program -> TE.env -> TE.env
+
   val eval_eunop : eunop -> coq_Z -> coq_Z
 
   val eval_ebinop : ebinop -> coq_Z -> coq_Z -> coq_Z
@@ -1691,10 +1695,6 @@ module MakeDSL :
   val eval_rbexp : rbexp -> S.t -> bool
 
   val eval_atom : atom -> S.t -> bits
-
-  val instr_succ_typenv : instr -> TE.env -> TE.env
-
-  val program_succ_typenv : program -> TE.env -> TE.env
 
   val well_typed_eexp : TE.env -> eexp -> bool
 
@@ -2344,12 +2344,6 @@ module MakeDSL :
 
   val well_defined_instr : TE.env -> instr -> bool
 
-  val well_formed_instr : TE.env -> instr -> bool
-
-  val well_formed_program : TE.env -> program -> bool
-
-  val find_non_well_formed_instr : TE.env -> program -> instr option
-
   val well_formed_eexp : TE.env -> eexp -> bool
 
   val well_formed_eexps : TE.env -> eexp list -> bool
@@ -2361,6 +2355,12 @@ module MakeDSL :
   val well_formed_rbexp : TE.env -> rbexp -> bool
 
   val well_formed_bexp : TE.env -> bexp -> bool
+
+  val well_formed_instr : TE.env -> instr -> bool
+
+  val well_formed_program : TE.env -> program -> bool
+
+  val find_non_well_formed_instr : TE.env -> program -> instr option
 
   val well_formed_spec : spec -> bool
 
@@ -4207,6 +4207,14 @@ module DSL :
 
   val asize : atom -> TypEnv.TE.env -> int
 
+  val atom_eqn : atom -> atom -> bool
+
+  val atom_eqP : atom -> atom -> reflect
+
+  val atom_eqMixin : atom Equality.mixin_of
+
+  val atom_eqType : Equality.coq_type
+
   type instr =
   | Imov of VarOrder.t * atom
   | Ishl of VarOrder.t * atom * int
@@ -4279,14 +4287,6 @@ module DSL :
     -> (VarOrder.t -> atom -> atom -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1
 
   type program = instr list
-
-  val atom_eqn : atom -> atom -> bool
-
-  val atom_eqP : atom -> atom -> reflect
-
-  val atom_eqMixin : atom Equality.mixin_of
-
-  val atom_eqType : Equality.coq_type
 
   val instr_eqn : instr -> instr -> bool
 
@@ -4415,6 +4415,10 @@ module DSL :
 
   val acc2z : TypEnv.TE.env -> VarOrder.t -> State.Store.t -> coq_Z
 
+  val instr_succ_typenv : instr -> TypEnv.TE.env -> TypEnv.TE.env
+
+  val program_succ_typenv : program -> TypEnv.TE.env -> TypEnv.TE.env
+
   val eval_eunop : eunop -> coq_Z -> coq_Z
 
   val eval_ebinop : ebinop -> coq_Z -> coq_Z -> coq_Z
@@ -4434,10 +4438,6 @@ module DSL :
   val eval_rbexp : rbexp -> State.Store.t -> bool
 
   val eval_atom : atom -> State.Store.t -> bits
-
-  val instr_succ_typenv : instr -> TypEnv.TE.env -> TypEnv.TE.env
-
-  val program_succ_typenv : program -> TypEnv.TE.env -> TypEnv.TE.env
 
   val well_typed_eexp : TypEnv.TE.env -> eexp -> bool
 
@@ -5132,12 +5132,6 @@ module DSL :
 
   val well_defined_instr : TypEnv.TE.env -> instr -> bool
 
-  val well_formed_instr : TypEnv.TE.env -> instr -> bool
-
-  val well_formed_program : TypEnv.TE.env -> program -> bool
-
-  val find_non_well_formed_instr : TypEnv.TE.env -> program -> instr option
-
   val well_formed_eexp : TypEnv.TE.env -> eexp -> bool
 
   val well_formed_eexps : TypEnv.TE.env -> eexp list -> bool
@@ -5149,6 +5143,12 @@ module DSL :
   val well_formed_rbexp : TypEnv.TE.env -> rbexp -> bool
 
   val well_formed_bexp : TypEnv.TE.env -> bexp -> bool
+
+  val well_formed_instr : TypEnv.TE.env -> instr -> bool
+
+  val well_formed_program : TypEnv.TE.env -> program -> bool
+
+  val find_non_well_formed_instr : TypEnv.TE.env -> program -> instr option
 
   val well_formed_spec : spec -> bool
 

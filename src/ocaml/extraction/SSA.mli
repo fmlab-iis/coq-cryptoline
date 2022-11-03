@@ -911,6 +911,14 @@ module SSA :
 
   val asize : atom -> TypEnv.SSATE.env -> int
 
+  val atom_eqn : atom -> atom -> bool
+
+  val atom_eqP : atom -> atom -> reflect
+
+  val atom_eqMixin : atom Equality.mixin_of
+
+  val atom_eqType : Equality.coq_type
+
   type instr =
   | Imov of SSAVarOrder.t * atom
   | Ishl of SSAVarOrder.t * atom * int
@@ -987,14 +995,6 @@ module SSA :
     -> atom -> atom -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1
 
   type program = instr list
-
-  val atom_eqn : atom -> atom -> bool
-
-  val atom_eqP : atom -> atom -> reflect
-
-  val atom_eqMixin : atom Equality.mixin_of
-
-  val atom_eqType : Equality.coq_type
 
   val instr_eqn : instr -> instr -> bool
 
@@ -1123,6 +1123,10 @@ module SSA :
 
   val acc2z : TypEnv.SSATE.env -> SSAVarOrder.t -> SSAStore.t -> coq_Z
 
+  val instr_succ_typenv : instr -> TypEnv.SSATE.env -> TypEnv.SSATE.env
+
+  val program_succ_typenv : program -> TypEnv.SSATE.env -> TypEnv.SSATE.env
+
   val eval_eunop : DSL.eunop -> coq_Z -> coq_Z
 
   val eval_ebinop : DSL.ebinop -> coq_Z -> coq_Z -> coq_Z
@@ -1142,10 +1146,6 @@ module SSA :
   val eval_rbexp : rbexp -> SSAStore.t -> bool
 
   val eval_atom : atom -> SSAStore.t -> bits
-
-  val instr_succ_typenv : instr -> TypEnv.SSATE.env -> TypEnv.SSATE.env
-
-  val program_succ_typenv : program -> TypEnv.SSATE.env -> TypEnv.SSATE.env
 
   val well_typed_eexp : TypEnv.SSATE.env -> eexp -> bool
 
@@ -1867,12 +1867,6 @@ module SSA :
 
   val well_defined_instr : TypEnv.SSATE.env -> instr -> bool
 
-  val well_formed_instr : TypEnv.SSATE.env -> instr -> bool
-
-  val well_formed_program : TypEnv.SSATE.env -> program -> bool
-
-  val find_non_well_formed_instr : TypEnv.SSATE.env -> program -> instr option
-
   val well_formed_eexp : TypEnv.SSATE.env -> eexp -> bool
 
   val well_formed_eexps : TypEnv.SSATE.env -> eexp list -> bool
@@ -1884,6 +1878,12 @@ module SSA :
   val well_formed_rbexp : TypEnv.SSATE.env -> rbexp -> bool
 
   val well_formed_bexp : TypEnv.SSATE.env -> bexp -> bool
+
+  val well_formed_instr : TypEnv.SSATE.env -> instr -> bool
+
+  val well_formed_program : TypEnv.SSATE.env -> program -> bool
+
+  val find_non_well_formed_instr : TypEnv.SSATE.env -> program -> instr option
 
   val well_formed_spec : spec -> bool
 

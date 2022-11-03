@@ -804,16 +804,16 @@ let string_of_eexp _ string_of_var =
   | Eunop (op0, e0) ->
     append ('('::[])
       (append (string_of_eunop op0)
-        (append (' '::[]) (append (string_of_eexp' e0) (')'::[]))))
+        (append (' '::[]) (append (string_of_eexp0 e0) (')'::[]))))
   | Ebinop (op0, e1, e2) ->
     append ('('::[])
-      (append (string_of_eexp' e1)
+      (append (string_of_eexp0 e1)
         (append (' '::[])
           (append (string_of_ebinop op0)
-            (append (' '::[]) (append (string_of_eexp' e2) (')'::[]))))))
+            (append (' '::[]) (append (string_of_eexp0 e2) (')'::[]))))))
   | Epow (e0, n) ->
     append ('('::[])
-      (append (string_of_eexp' e0)
+      (append (string_of_eexp0 e0)
         (append (' '::('^'::(' '::[]))) (append (string_of_N n) (')'::[]))))
   in string_of_eexp0
 
@@ -873,20 +873,20 @@ let string_of_rexp _ string_of_var =
   | Runop (_, op0, e0) ->
     append ('('::[])
       (append (string_of_runop op0)
-        (append (' '::[]) (append (string_of_rexp' e0) (')'::[]))))
+        (append (' '::[]) (append (string_of_rexp0 e0) (')'::[]))))
   | Rbinop (_, op0, e1, e2) ->
     append ('('::[])
-      (append (string_of_rexp' e1)
+      (append (string_of_rexp0 e1)
         (append (' '::[])
           (append (string_of_rbinop op0)
             (append (' '::[]) (append (string_of_rexp' e2) (')'::[]))))))
   | Ruext (_, e0, i) ->
     append ('('::('u'::('e'::('x'::('t'::(' '::[]))))))
-      (append (string_of_rexp' e0)
+      (append (string_of_rexp0 e0)
         (append (' '::[]) (append (string_of_nat i) (')'::[]))))
   | Rsext (_, e0, i) ->
     append ('('::('s'::('e'::('x'::('t'::(' '::[]))))))
-      (append (string_of_rexp' e0)
+      (append (string_of_rexp0 e0)
         (append (' '::[]) (append (string_of_nat i) (')'::[]))))
   in string_of_rexp0
 
@@ -1877,6 +1877,38 @@ module MakeDSL =
   let asize a te =
     sizeof_typ (atyp a te)
 
+  (** val atom_eqn : atom -> atom -> bool **)
+
+  let atom_eqn a1 a2 =
+    match a1 with
+    | Avar v1 ->
+      (match a2 with
+       | Avar v2 -> eq_op V.coq_T v1 v2
+       | Aconst (_, _) -> false)
+    | Aconst (ty1, n1) ->
+      (match a2 with
+       | Avar _ -> false
+       | Aconst (ty2, n2) ->
+         (&&) (eq_op typ_eqType (Obj.magic ty1) (Obj.magic ty2))
+           (eq_op bitseq_eqType (Obj.magic n1) (Obj.magic n2)))
+
+  (** val atom_eqP : atom -> atom -> reflect **)
+
+  let atom_eqP a1 a2 =
+    let _evar_0_ = fun _ -> ReflectT in
+    let _evar_0_0 = fun _ -> ReflectF in
+    if atom_eqn a1 a2 then _evar_0_ __ else _evar_0_0 __
+
+  (** val atom_eqMixin : atom Equality.mixin_of **)
+
+  let atom_eqMixin =
+    { Equality.op = atom_eqn; Equality.mixin_of__1 = atom_eqP }
+
+  (** val atom_eqType : Equality.coq_type **)
+
+  let atom_eqType =
+    Obj.magic atom_eqMixin
+
   type instr =
   | Imov of V.t * atom
   | Ishl of V.t * atom * int
@@ -2005,38 +2037,6 @@ module MakeDSL =
   | Iassume b -> f27 b
 
   type program = instr list
-
-  (** val atom_eqn : atom -> atom -> bool **)
-
-  let atom_eqn a1 a2 =
-    match a1 with
-    | Avar v1 ->
-      (match a2 with
-       | Avar v2 -> eq_op V.coq_T v1 v2
-       | Aconst (_, _) -> false)
-    | Aconst (ty1, n1) ->
-      (match a2 with
-       | Avar _ -> false
-       | Aconst (ty2, n2) ->
-         (&&) (eq_op typ_eqType (Obj.magic ty1) (Obj.magic ty2))
-           (eq_op bitseq_eqType (Obj.magic n1) (Obj.magic n2)))
-
-  (** val atom_eqP : atom -> atom -> reflect **)
-
-  let atom_eqP a1 a2 =
-    let _evar_0_ = fun _ -> ReflectT in
-    let _evar_0_0 = fun _ -> ReflectF in
-    if atom_eqn a1 a2 then _evar_0_ __ else _evar_0_0 __
-
-  (** val atom_eqMixin : atom Equality.mixin_of **)
-
-  let atom_eqMixin =
-    { Equality.op = atom_eqn; Equality.mixin_of__1 = atom_eqP }
-
-  (** val atom_eqType : Equality.coq_type **)
-
-  let atom_eqType =
-    Obj.magic atom_eqMixin
 
   (** val instr_eqn : instr -> instr -> bool **)
 
@@ -2899,7 +2899,7 @@ module MakeDSL =
 
   (** val is_rng_instr : instr -> bool **)
 
-  let rec is_rng_instr = function
+  let is_rng_instr = function
   | Iassume b ->
     let (e, _) = b in eq_op ebexp_eqType (Obj.magic e) (Obj.magic etrue)
   | _ -> true
@@ -2925,6 +2925,47 @@ module MakeDSL =
 
   let acc2z e v s =
     bv2z (TE.vtyp v e) (S.acc v s)
+
+  (** val instr_succ_typenv : instr -> TE.env -> TE.env **)
+
+  let instr_succ_typenv i te =
+    match i with
+    | Imov (v, a) -> TE.add v (atyp a te) te
+    | Ishl (v, a, _) -> TE.add v (atyp a te) te
+    | Icshl (v1, v2, a1, a2, _) ->
+      TE.add v1 (atyp a1 te) (TE.add v2 (atyp a2 te) te)
+    | Inondet (v, t0) -> TE.add v t0 te
+    | Icmov (v, _, a1, _) -> TE.add v (atyp a1 te) te
+    | Inot (v, t0, _) -> TE.add v t0 te
+    | Iadd (v, a1, _) -> TE.add v (atyp a1 te) te
+    | Iadds (c, v, a1, _) -> TE.add c coq_Tbit (TE.add v (atyp a1 te) te)
+    | Iadc (v, a1, _, _) -> TE.add v (atyp a1 te) te
+    | Iadcs (c, v, a1, _, _) -> TE.add c coq_Tbit (TE.add v (atyp a1 te) te)
+    | Isub (v, a1, _) -> TE.add v (atyp a1 te) te
+    | Isubc (c, v, a1, _) -> TE.add c coq_Tbit (TE.add v (atyp a1 te) te)
+    | Isubb (c, v, a1, _) -> TE.add c coq_Tbit (TE.add v (atyp a1 te) te)
+    | Isbc (v, a1, _, _) -> TE.add v (atyp a1 te) te
+    | Isbcs (c, v, a1, _, _) -> TE.add c coq_Tbit (TE.add v (atyp a1 te) te)
+    | Isbb (v, a1, _, _) -> TE.add v (atyp a1 te) te
+    | Isbbs (c, v, a1, _, _) -> TE.add c coq_Tbit (TE.add v (atyp a1 te) te)
+    | Imul (v, a1, _) -> TE.add v (atyp a1 te) te
+    | Imull (vh, vl, a1, a2) ->
+      TE.add vh (atyp a1 te) (TE.add vl (unsigned_typ (atyp a2 te)) te)
+    | Imulj (v, a1, _) -> TE.add v (double_typ (atyp a1 te)) te
+    | Isplit (vh, vl, a, _) ->
+      TE.add vh (atyp a te) (TE.add vl (unsigned_typ (atyp a te)) te)
+    | Iand (v, t0, _, _) -> TE.add v t0 te
+    | Ior (v, t0, _, _) -> TE.add v t0 te
+    | Ixor (v, t0, _, _) -> TE.add v t0 te
+    | Icast (v, t0, _) -> TE.add v t0 te
+    | Ivpc (v, t0, _) -> TE.add v t0 te
+    | Ijoin (v, ah, _) -> TE.add v (double_typ (atyp ah te)) te
+    | _ -> te
+
+  (** val program_succ_typenv : program -> TE.env -> TE.env **)
+
+  let program_succ_typenv p te =
+    foldl (fun te0 i -> instr_succ_typenv i te0) te p
 
   (** val eval_eunop : eunop -> coq_Z -> coq_Z **)
 
@@ -3021,47 +3062,6 @@ module MakeDSL =
     match a with
     | Avar v -> S.acc v s
     | Aconst (_, n) -> n
-
-  (** val instr_succ_typenv : instr -> TE.env -> TE.env **)
-
-  let instr_succ_typenv i te =
-    match i with
-    | Imov (v, a) -> TE.add v (atyp a te) te
-    | Ishl (v, a, _) -> TE.add v (atyp a te) te
-    | Icshl (v1, v2, a1, a2, _) ->
-      TE.add v1 (atyp a1 te) (TE.add v2 (atyp a2 te) te)
-    | Inondet (v, t0) -> TE.add v t0 te
-    | Icmov (v, _, a1, _) -> TE.add v (atyp a1 te) te
-    | Inot (v, t0, _) -> TE.add v t0 te
-    | Iadd (v, a1, _) -> TE.add v (atyp a1 te) te
-    | Iadds (c, v, a1, _) -> TE.add c coq_Tbit (TE.add v (atyp a1 te) te)
-    | Iadc (v, a1, _, _) -> TE.add v (atyp a1 te) te
-    | Iadcs (c, v, a1, _, _) -> TE.add c coq_Tbit (TE.add v (atyp a1 te) te)
-    | Isub (v, a1, _) -> TE.add v (atyp a1 te) te
-    | Isubc (c, v, a1, _) -> TE.add c coq_Tbit (TE.add v (atyp a1 te) te)
-    | Isubb (c, v, a1, _) -> TE.add c coq_Tbit (TE.add v (atyp a1 te) te)
-    | Isbc (v, a1, _, _) -> TE.add v (atyp a1 te) te
-    | Isbcs (c, v, a1, _, _) -> TE.add c coq_Tbit (TE.add v (atyp a1 te) te)
-    | Isbb (v, a1, _, _) -> TE.add v (atyp a1 te) te
-    | Isbbs (c, v, a1, _, _) -> TE.add c coq_Tbit (TE.add v (atyp a1 te) te)
-    | Imul (v, a1, _) -> TE.add v (atyp a1 te) te
-    | Imull (vh, vl, a1, a2) ->
-      TE.add vh (atyp a1 te) (TE.add vl (unsigned_typ (atyp a2 te)) te)
-    | Imulj (v, a1, _) -> TE.add v (double_typ (atyp a1 te)) te
-    | Isplit (vh, vl, a, _) ->
-      TE.add vh (atyp a te) (TE.add vl (unsigned_typ (atyp a te)) te)
-    | Iand (v, t0, _, _) -> TE.add v t0 te
-    | Ior (v, t0, _, _) -> TE.add v t0 te
-    | Ixor (v, t0, _, _) -> TE.add v t0 te
-    | Icast (v, t0, _) -> TE.add v t0 te
-    | Ivpc (v, t0, _) -> TE.add v t0 te
-    | Ijoin (v, ah, _) -> TE.add v (double_typ (atyp ah te)) te
-    | _ -> te
-
-  (** val program_succ_typenv : program -> TE.env -> TE.env **)
-
-  let program_succ_typenv p te =
-    foldl (fun te0 i -> instr_succ_typenv i te0) te p
 
   (** val well_typed_eexp : TE.env -> eexp -> bool **)
 
@@ -3385,28 +3385,6 @@ module MakeDSL =
   | Iassume e -> are_defined (vars_bexp e) te
   | _ -> true
 
-  (** val well_formed_instr : TE.env -> instr -> bool **)
-
-  let well_formed_instr te i =
-    (&&) (well_defined_instr te i) (well_typed_instr te i)
-
-  (** val well_formed_program : TE.env -> program -> bool **)
-
-  let rec well_formed_program te = function
-  | [] -> true
-  | hd :: tl ->
-    (&&) (well_formed_instr te hd)
-      (well_formed_program (instr_succ_typenv hd te) tl)
-
-  (** val find_non_well_formed_instr : TE.env -> program -> instr option **)
-
-  let rec find_non_well_formed_instr te = function
-  | [] -> None
-  | hd :: tl ->
-    if well_formed_instr te hd
-    then find_non_well_formed_instr (instr_succ_typenv hd te) tl
-    else Some hd
-
   (** val well_formed_eexp : TE.env -> eexp -> bool **)
 
   let well_formed_eexp te e =
@@ -3437,6 +3415,28 @@ module MakeDSL =
 
   let well_formed_bexp te e =
     (&&) (are_defined (vars_bexp e) te) (well_typed_bexp te e)
+
+  (** val well_formed_instr : TE.env -> instr -> bool **)
+
+  let well_formed_instr te i =
+    (&&) (well_defined_instr te i) (well_typed_instr te i)
+
+  (** val well_formed_program : TE.env -> program -> bool **)
+
+  let rec well_formed_program te = function
+  | [] -> true
+  | hd :: tl ->
+    (&&) (well_formed_instr te hd)
+      (well_formed_program (instr_succ_typenv hd te) tl)
+
+  (** val find_non_well_formed_instr : TE.env -> program -> instr option **)
+
+  let rec find_non_well_formed_instr te = function
+  | [] -> None
+  | hd :: tl ->
+    if well_formed_instr te hd
+    then find_non_well_formed_instr (instr_succ_typenv hd te) tl
+    else Some hd
 
   (** val well_formed_spec : spec -> bool **)
 

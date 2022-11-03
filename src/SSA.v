@@ -936,6 +936,23 @@ Section MakeSSA.
   Definition state_equiv (m : vmap) (s :Store.t) (ss : SSAStore.t) : Prop :=
     forall x, Store.acc x s = SSAStore.acc (x, get_index x m) ss.
 
+  Global Instance add_proper_state_equiv_store :
+    Proper (eq ==> Store.Equal ==> eq ==> iff) state_equiv.
+  Proof.
+    move=> m1 m2 ? s1 s2 Heq t1 t2 ?; subst. split.
+    - move=> H x. rewrite <- Heq. exact: (H x).
+    - move=> H x. rewrite -> Heq. exact: (H x).
+  Qed.
+
+  Global Instance add_proper_state_equiv_ssastore :
+    Proper (eq ==> eq ==> SSAStore.Equal ==> iff) state_equiv.
+  Proof.
+    move=> m1 m2 ? s1 s2 ? t1 t2 Heq; subst. split.
+    - move=> H x. rewrite <- Heq. exact: (H x).
+    - move=> H x. rewrite -> Heq. exact: (H x).
+  Qed.
+
+
   (** Convert a DSL state to an SSA state. *)
 
   Definition ssa_store_key (m : vmap) (v : var) : option ssavar := Some (ssa_var m v).
@@ -2060,7 +2077,7 @@ Section MakeSSA.
     | H: ssa_instr _ _ = (?p1, ?p2) |- _ =>
       case: H => <- <-
     | |- _ /\ _ => split
-    | |- exists ss2 , _ => eexists
+    | |- exists ss2, _ => eexists
     | H: ?e |- ?e => exact: H
     | |- context [SSA.instr_succ_typenv _ _] => rewrite /=
     | Heq: state_equiv ?m ?s ?ss |- context [SSA.eval_atom (ssa_atom ?m ?a) ?ss]
@@ -2083,6 +2100,9 @@ Section MakeSSA.
       |- typenv_equiv (upd_index ?t2 (upd_index ?t ?m1)) (TE.add ?t2 ?typ2 (TE.add ?t ?typ ?te1)) ?ste2
       => eapply typenv_equiv_add2
     | H: DSL.eval_instr _ _ _ _ |- _ => inversion H; subst; clear H
+    | |- SSAStore.Equal ?ss1 _ => exact: SSAStore.Equal_refl
+    | H1 : state_equiv ?m1 ?s1 ?ss1, H2 : Store.Equal ?s1 ?s2 |- state_equiv ?m1 ?s2 ?ss1 =>
+        rewrite <- H2; exact: H1
     | |- ?e => progress (eauto)
     | |- ?e => fail "not match" e
     end.
@@ -2100,131 +2120,75 @@ Section MakeSSA.
       typenv_equiv m2 te2 ste2.
   Proof.
     elim: i m1 m2 s1 s2 te1 te2 ste1 ss1 si; intros.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - ssa_eval_instr_succ_tac.
-      inversion_clear H2.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - ssa_eval_instr_succ_tac. inversion_clear H2.
       exists (SSAStore.upd (ssa_var (upd_index t m1) t) n ss1).
-      repeat ssa_eval_instr_succ_tac.
-    - ssa_eval_instr_succ_tac.
-      inversion_clear H2.
+      by repeat ssa_eval_instr_succ_tac.
+    - ssa_eval_instr_succ_tac. inversion_clear H2.
       + (* cmovT *)
-        repeat ssa_eval_instr_succ_tac.
+        by repeat ssa_eval_instr_succ_tac.
       + (* cmovF *)
-        ssa_eval_instr_succ_tac.
-        ssa_eval_instr_succ_tac.
-        ssa_eval_instr_succ_tac.
-        apply SSA.EIcmovF; repeat ssa_eval_instr_succ_tac.
-        repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - ssa_eval_instr_succ_tac.
-      rewrite /= in H3.
-      inversion H2; subst;clear H2.
-      + ssa_eval_instr_succ_tac.
-        ssa_eval_instr_succ_tac.
-        ssa_eval_instr_succ_tac.
-        eapply SSA.EImullU.
-        repeat ssa_eval_instr_succ_tac.
-        repeat ssa_eval_instr_succ_tac.
-        repeat ssa_eval_instr_succ_tac.
-      + ssa_eval_instr_succ_tac.
-        ssa_eval_instr_succ_tac.
-        ssa_eval_instr_succ_tac.
-        eapply SSA.EImullS.
-        repeat ssa_eval_instr_succ_tac.
-        repeat ssa_eval_instr_succ_tac.
-        repeat ssa_eval_instr_succ_tac.
-    - ssa_eval_instr_succ_tac.
-      rewrite /= in H3.
-      inversion H2; subst;clear H2.
-      + ssa_eval_instr_succ_tac.
-        ssa_eval_instr_succ_tac.
-        ssa_eval_instr_succ_tac.
-        eapply SSA.EImuljU.
-        repeat ssa_eval_instr_succ_tac.
-        repeat ssa_eval_instr_succ_tac.
-        repeat ssa_eval_instr_succ_tac.
-      + ssa_eval_instr_succ_tac.
-        ssa_eval_instr_succ_tac.
-        ssa_eval_instr_succ_tac.
-        eapply SSA.EImuljS.
-        repeat ssa_eval_instr_succ_tac.
-        repeat ssa_eval_instr_succ_tac.
-        repeat ssa_eval_instr_succ_tac.
-    - ssa_eval_instr_succ_tac.
-      rewrite /= in H3.
-      inversion H2; subst;clear H2.
-      + ssa_eval_instr_succ_tac.
-        ssa_eval_instr_succ_tac.
-        ssa_eval_instr_succ_tac.
-        eapply SSA.EIsplitU.
-        repeat ssa_eval_instr_succ_tac.
-        repeat ssa_eval_instr_succ_tac.
-        repeat ssa_eval_instr_succ_tac.
-      + ssa_eval_instr_succ_tac.
-        ssa_eval_instr_succ_tac.
-        ssa_eval_instr_succ_tac.
-        eapply SSA.EIsplitS.
-        repeat ssa_eval_instr_succ_tac.
-        repeat ssa_eval_instr_succ_tac.
-        repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - ssa_eval_instr_succ_tac.
+        do 3 ssa_eval_instr_succ_tac.
+        * apply SSA.EIcmovF; by repeat ssa_eval_instr_succ_tac.
+        * by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - ssa_eval_instr_succ_tac. rewrite /= in H3.
       inversion H2; subst; clear H2.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      rewrite ssa_var_upd_eq.
-      repeat ssa_eval_instr_succ_tac.
-      rewrite /=.
-      repeat ssa_eval_instr_succ_tac.
-    - ssa_eval_instr_succ_tac.
-      inversion H2; subst; clear H2.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      rewrite ssa_var_upd_eq.
-      rewrite /=.
-      repeat ssa_eval_instr_succ_tac.
-    - repeat ssa_eval_instr_succ_tac.
-    - ssa_eval_instr_succ_tac.
-      inversion H2; subst; clear H2.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      ssa_eval_instr_succ_tac.
-      erewrite (ssa_eval_bexp).
-      all: repeat ssa_eval_instr_succ_tac.
+      + do 3 ssa_eval_instr_succ_tac.
+        * eapply SSA.EImullU; by repeat ssa_eval_instr_succ_tac.
+        * by repeat ssa_eval_instr_succ_tac.
+      + do 3 ssa_eval_instr_succ_tac.
+        * eapply SSA.EImullS; by repeat ssa_eval_instr_succ_tac.
+        * by repeat ssa_eval_instr_succ_tac.
+    - ssa_eval_instr_succ_tac. rewrite /= in H3.
+      inversion H2; subst;clear H2.
+      + do 3 ssa_eval_instr_succ_tac.
+        * eapply SSA.EImuljU; by repeat ssa_eval_instr_succ_tac.
+        * by repeat ssa_eval_instr_succ_tac.
+      + do 3 ssa_eval_instr_succ_tac.
+        * eapply SSA.EImuljS; by repeat ssa_eval_instr_succ_tac.
+        * by repeat ssa_eval_instr_succ_tac.
+    - ssa_eval_instr_succ_tac. rewrite /= in H3.
+      inversion H2; subst;clear H2.
+      + do 3 ssa_eval_instr_succ_tac.
+        * eapply SSA.EIsplitU; by repeat ssa_eval_instr_succ_tac.
+        * by repeat ssa_eval_instr_succ_tac.
+      + do 3 ssa_eval_instr_succ_tac.
+        * eapply SSA.EIsplitS; by repeat ssa_eval_instr_succ_tac.
+        * by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - ssa_eval_instr_succ_tac. inversion H2; subst; clear H2.
+      do 3 ssa_eval_instr_succ_tac; first by repeat ssa_eval_instr_succ_tac.
+      ssa_eval_instr_succ_tac; first by repeat ssa_eval_instr_succ_tac.
+      ssa_eval_instr_succ_tac; first by repeat ssa_eval_instr_succ_tac.
+      rewrite ssa_var_upd_eq /=. by repeat ssa_eval_instr_succ_tac.
+    - ssa_eval_instr_succ_tac. inversion H2; subst; clear H2.
+      do 3 ssa_eval_instr_succ_tac; first by repeat ssa_eval_instr_succ_tac.
+      ssa_eval_instr_succ_tac; first by repeat ssa_eval_instr_succ_tac.
+      ssa_eval_instr_succ_tac; first by repeat ssa_eval_instr_succ_tac.
+      rewrite ssa_var_upd_eq /=. by repeat ssa_eval_instr_succ_tac.
+    - by repeat ssa_eval_instr_succ_tac.
+    - ssa_eval_instr_succ_tac. inversion H2; subst; clear H2.
+      do 3 ssa_eval_instr_succ_tac.
+      + repeat ssa_eval_instr_succ_tac. erewrite (ssa_eval_bexp); by repeat ssa_eval_instr_succ_tac.
+      + by repeat ssa_eval_instr_succ_tac.
   Qed.
 
   Lemma ssa_eval_program_succ m1 m2 s1 s2 te1 te2 p sp ss1 ste1:
@@ -2239,50 +2203,35 @@ Section MakeSSA.
       state_equiv m2 s2 ss2 /\
       typenv_equiv m2 te2 ste2.
   Proof.
-    elim: p m1 m2 s1 s2 te1 te2 sp ss1 ste1.
-    - move=> m1 m2 s1 s2 te1 te2 sp ss1 ste1 /=.
-      case=> <- <-.
-      move=> Hse Hte Hep Hteq.
-      rewrite /DSL.eval_program in Hep.
-      rewrite /= in Hep.
-      inversion Hep; subst.
-      exists ss1, ste1. split_andb_goal.
-      + constructor.
-      + constructor.
+    elim: p m1 m2 s1 s2 te1 te2 sp ss1 ste1 => [| hd tl IH].
+    - move=> m1 m2 s1 s2 te1 te2 sp ss1 ste1 /=. case=> <- <-.
+      move=> Hse Hte Hep Hteq. rewrite /DSL.eval_program in Hep.
+      rewrite /= in Hep. inversion Hep; subst. exists ss1, ste1. split_andb_goal.
+      + by constructor.
+      + by constructor.
+      + by rewrite <- H.
       + assumption.
-      + assumption.
-    - move=> hd tl IH m1 m2 s1 s2 te1 te2 [| shd stl] ss1 ste1.
+    - move=> m1 m2 s1 s2 te1 te2 [| shd stl] ss1 ste1.
       + move=> Hsp. rewrite /= in Hsp. move: Hsp.
         case Hsi_hd: (ssa_instr m1 hd) => [sm1 shd].
         case Hsp_tl: (ssa_program sm1 tl) => [sm2 stl].
-        inversion 1.
-      + move=> Hsp Hseq Hteq Hep Hpst.
-        inversion Hsp.
-        move: H0.
+        by inversion 1.
+      + move=> Hsp Hseq Hteq Hep Hpst. inversion Hsp. move: H0.
         case Hsi_hd: (ssa_instr m1 hd) => [sm1 sshd].
         case Hsp_tl: (ssa_program sm1 tl) => [sm2 sstl].
-        move=> Hpair.
-        case: Hpair => <- <- <-.
-        move: Hpst.
-        inversion Hep; subst.
-        move=> Hpst.
-        rewrite /= in Hpst.
-        remember (DSL.instr_succ_typenv hd te1) as te3.
-        symmetry in Heqte3.
+        move=> Hpair. case: Hpair => <- <- <-. move: Hpst.
+        inversion Hep; subst. move=> Hpst. rewrite /= in Hpst.
+        remember (DSL.instr_succ_typenv hd te1) as te3. symmetry in Heqte3.
         move: (ssa_eval_instr_succ Hsi_hd Hseq Hteq H1 Heqte3) => Htmp.
         destruct Htmp as [ss3 [ste3 Hwit]].
         inversion Hwit as [Hseval [Hsstyp [Hseq2 Hteq2]]].
         move: (IH _ _ _ _ _ _ _ _ _ Hsp_tl Hseq2 Hteq2 H4 Hpst) => HIH.
         destruct HIH as [ss2 [ste2 Hswit]].
         inversion Hswit as [Hsep [Hstyp [Hseq3 Hteq3]]].
-        exists ss2, ste2.
-        split_andb_goal.
-        eapply SSA.Econs.
+        exists ss2, ste2. split_andb_goal. eapply SSA.Econs.
         * exact: Hseval.
-        * rewrite Hsstyp.
-        * exact: Hsep.
-        * rewrite /=.
-            by rewrite Hsstyp.
+        * by rewrite Hsstyp.
+        * rewrite /=. by rewrite Hsstyp.
         * exact: Hseq3.
         * exact: Hteq3.
   Qed.
@@ -2332,81 +2281,60 @@ Section MakeSSA.
       typenv_equiv m2 te2 ste2.
   Proof.
     elim: i m1 m2 s1 te1 ste1 ste2 ss1 ss2 si; intros.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - dessa_eval_instr_succ_tac.
-      inversion_clear H2.
-      exists (Store.upd t n s1).
-      repeat dessa_eval_instr_succ_tac.
-    - dessa_eval_instr_succ_tac.
-      inversion_clear H2.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - dessa_eval_instr_succ_tac. SSA.eval_instr_elim. exists (Store.upd t n s1).
+      by repeat dessa_eval_instr_succ_tac.
+    - dessa_eval_instr_succ_tac. SSA.eval_instr_elim.
       + (* cmovT *)
-        repeat dessa_eval_instr_succ_tac.
+        by repeat dessa_eval_instr_succ_tac.
       + (* cmovF *)
-        dessa_eval_instr_succ_tac.
-        dessa_eval_instr_succ_tac.
-        dessa_eval_instr_succ_tac.
-        apply DSL.EIcmovF; repeat dessa_eval_instr_succ_tac.
-        repeat dessa_eval_instr_succ_tac.
+        do 3 dessa_eval_instr_succ_tac.
+        + apply DSL.EIcmovF; by repeat dessa_eval_instr_succ_tac.
+        + by repeat dessa_eval_instr_succ_tac.
     - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - dessa_eval_instr_succ_tac.
-      inversion H2; subst;clear H2.
-      + repeat dessa_eval_instr_succ_tac.
-      + dessa_eval_instr_succ_tac.
-        dessa_eval_instr_succ_tac.
-        dessa_eval_instr_succ_tac.
-        eapply DSL.EImullS.
-        repeat dessa_eval_instr_succ_tac.
-        repeat dessa_eval_instr_succ_tac.
-        repeat dessa_eval_instr_succ_tac.
-    - dessa_eval_instr_succ_tac.
-      inversion H2; subst;clear H2.
-      + repeat dessa_eval_instr_succ_tac.
-      + dessa_eval_instr_succ_tac.
-        dessa_eval_instr_succ_tac.
-        dessa_eval_instr_succ_tac.
-        eapply DSL.EImuljS.
-        repeat dessa_eval_instr_succ_tac.
-        repeat dessa_eval_instr_succ_tac.
-        repeat dessa_eval_instr_succ_tac.
-    - dessa_eval_instr_succ_tac.
-      inversion H2; subst;clear H2.
-      + repeat dessa_eval_instr_succ_tac.
-      + dessa_eval_instr_succ_tac.
-        dessa_eval_instr_succ_tac.
-        dessa_eval_instr_succ_tac.
-        eapply DSL.EIsplitS.
-        repeat dessa_eval_instr_succ_tac.
-        repeat dessa_eval_instr_succ_tac.
-        repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - repeat dessa_eval_instr_succ_tac.
-    - dessa_eval_instr_succ_tac.
-      inversion H2; subst; clear H2.
-      dessa_eval_instr_succ_tac.
-      dessa_eval_instr_succ_tac.
-      dessa_eval_instr_succ_tac.
-      dessa_eval_instr_succ_tac.
-      erewrite <- (ssa_eval_bexp).
-      all: repeat dessa_eval_instr_succ_tac.
+      + exact: Store.Equal_refl.
+      + by rewrite <- H.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - dessa_eval_instr_succ_tac. SSA.eval_instr_elim.
+      + by repeat dessa_eval_instr_succ_tac.
+      + do 3 dessa_eval_instr_succ_tac.
+        * eapply DSL.EImullS; by repeat dessa_eval_instr_succ_tac.
+        * by repeat dessa_eval_instr_succ_tac.
+    - dessa_eval_instr_succ_tac. SSA.eval_instr_elim.
+      + by repeat dessa_eval_instr_succ_tac.
+      + do 3 dessa_eval_instr_succ_tac.
+        * eapply DSL.EImuljS; by repeat dessa_eval_instr_succ_tac.
+        * by repeat dessa_eval_instr_succ_tac.
+    - dessa_eval_instr_succ_tac. SSA.eval_instr_elim.
+      + by repeat dessa_eval_instr_succ_tac.
+      + do 3 dessa_eval_instr_succ_tac.
+        * eapply DSL.EIsplitS; by repeat dessa_eval_instr_succ_tac.
+        * by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - by repeat dessa_eval_instr_succ_tac.
+    - dessa_eval_instr_succ_tac. SSA.eval_instr_elim.
+      do 4 dessa_eval_instr_succ_tac; first exact: Store.Equal_refl.
+      + rewrite <- (ssa_eval_bexp); by repeat dessa_eval_instr_succ_tac.
+      + by repeat dessa_eval_instr_succ_tac.
+      + repeat dessa_eval_instr_succ_tac. by rewrite <- H.
   Qed.
 
   Lemma dessa_eval_program_succ m1 m2 s1 ss1 ss2 te1 ste1 ste2 p sp:
@@ -2421,35 +2349,26 @@ Section MakeSSA.
       state_equiv m2 s2 ss2 /\
       typenv_equiv m2 te2 ste2.
   Proof.
-    elim: p m1 m2 s1 te1 sp ss1 ss2 ste1 ste2.
+    elim: p m1 m2 s1 te1 sp ss1 ss2 ste1 ste2 => [| hd tl IH].
     - move=> m1 m2 s1 te1 sp ss1 ss2 ste1 ste2 /=.
-      case=> <- <-.
-      move=> Hse Hte Hep Hteq.
-      rewrite /SSA.eval_program in Hep.
-      rewrite /= in Hep.
-      inversion Hep; subst.
+      case=> <- <-. move=> Hse Hte Hep Hteq.
+      rewrite /SSA.eval_program in Hep. rewrite /= in Hep. inversion Hep; subst.
       exists s1, te1. split_andb_goal.
-      + constructor.
-      + constructor.
+      + by constructor.
+      + reflexivity.
+      + by rewrite <- H.
       + assumption.
-      + assumption.
-    - move=> hd tl IH m1 m2 s1 te1 [| shd stl] ss1 ss2 ste1 ste2.
+    - move=> m1 m2 s1 te1 [| shd stl] ss1 ss2 ste1 ste2.
       + move=> Hsp. rewrite /= in Hsp. move: Hsp.
         case Hsi_hd: (ssa_instr m1 hd) => [sm1 shd].
         case Hsp_tl: (ssa_program sm1 tl) => [sm2 stl].
-        inversion 1.
-      + move=> Hsp Hseq Hteq Hep Hpst.
-        inversion Hsp.
-        move: H0.
+        by inversion 1.
+      + move=> Hsp Hseq Hteq Hep Hpst. inversion Hsp. move: H0.
         case Hsi_hd: (ssa_instr m1 hd) => [sm1 sshd].
         case Hsp_tl: (ssa_program sm1 tl) => [sm2 sstl].
-        move=> Hpair.
-        case: Hpair => Htmp1 Htmp2 Htmp3.
-        move: Hpst.
-        inversion Hep; subst.
-        move=> Hpst.
-        rewrite /= in Hpst.
-        remember (SSA.instr_succ_typenv shd ste1) as ste3.
+        move=> Hpair. case: Hpair => Htmp1 Htmp2 Htmp3.
+        move: Hpst. inversion Hep; subst. move=> Hpst.
+        rewrite /= in Hpst. remember (SSA.instr_succ_typenv shd ste1) as ste3.
         symmetry in Heqste3.
         move: (dessa_eval_instr_succ Hsi_hd Hseq Hteq H1 Heqste3) => Htmp.
         destruct Htmp as [s3 [te3 Hwit]].
@@ -2457,14 +2376,11 @@ Section MakeSSA.
         move: (IH _ _ _ _ _ _ _ _ _ Hsp_tl Hseq2 Hteq2 H4 Hpst) => HIH.
         destruct HIH as [s2 [te2 Hswit]].
         inversion Hswit as [Hsep [Hstyp [Hseq3 Hteq3]]].
-        exists s2, te2.
-        split_andb_goal.
-        eapply DSL.Econs.
-        * exact: Hseval.
-        * rewrite Hsstyp.
-        * exact: Hsep.
-        * rewrite /=.
-            by rewrite Hsstyp.
+        exists s2, te2. split_andb_goal.
+        * eapply DSL.Econs.
+          -- exact: Hseval.
+          -- by rewrite Hsstyp.
+        * rewrite /=. by rewrite Hsstyp.
         * exact: Hseq3.
         * exact: Hteq3.
   Qed.
@@ -2755,31 +2671,26 @@ Section MakeSSA.
     SSA.eval_program te p s1 s2 ->
     SSAStore.acc v s1 = SSAStore.acc v s2.
   Proof .
-    elim: p te s1 s2 => /= .
-    - move=> te s1 s2 _ Hep.
-      inversion_clear Hep.
-      reflexivity.
+    elim: p te s1 s2 => /=.
+    - move=> te s1 s2 _ Hep. inversion_clear Hep. rewrite -> H. reflexivity.
     - move=> hd tl IH te s1 s2 /andP [Huchd Huctl] Hep.
-      inversion_clear Hep .
-      rewrite (acc_unchanged_instr Huchd H).
-      apply (IH _ _ _ Huctl H0) .
+      inversion_clear Hep. rewrite (acc_unchanged_instr Huchd H).
+      exact: (IH _ _ _ Huctl H0).
   Qed.
 
   Lemma ssa_var_unchanged_program_cons1 v hd tl :
     ssa_unchanged_program_var (hd::tl) v ->
-    ssa_var_unchanged_instr v hd /\ ssa_unchanged_program_var tl v .
-  Proof.
-    move => /andP H // .
-  Qed .
+    ssa_var_unchanged_instr v hd /\ ssa_unchanged_program_var tl v.
+  Proof. by move => /andP H //. Qed.
 
   Lemma ssa_var_unchanged_program_cons2 v hd tl :
     ssa_var_unchanged_instr v hd ->
     ssa_unchanged_program_var tl v ->
-    ssa_unchanged_program_var (hd::tl) v .
-  Proof .
+    ssa_unchanged_program_var (hd::tl) v.
+  Proof.
     move=> Hhd Htl.
-    rewrite /ssa_unchanged_program_var /= -/(ssa_unchanged_program_var tl v) Hhd Htl // .
-  Qed .
+    by rewrite /ssa_unchanged_program_var /= -/(ssa_unchanged_program_var tl v) Hhd Htl //.
+  Qed.
 
   Lemma ssa_var_unchanged_program_cons v hd tl :
     ssa_unchanged_program_var (hd::tl) v =
@@ -4497,9 +4408,9 @@ Section MakeSSA.
           | H : is_true (SSATE.vtyp _ _ == _) |- _ => move: H
           | |- context f [SSATE.vtyp _ _] => rewrite /SSATE.vtyp
           | H : SSATE.Equal ?E1 ?E2 |- context f [atyp ?a ?E1] =>
-            rewrite (atyp_equal a H)
+            rewrite -> H
           | H : SSATE.Equal ?E1 ?E2 |- context f [SSATE.find ?x ?E1] =>
-            rewrite (H x)
+            rewrite -> H
           | |- _ -> _ =>
             let H := fresh in
             move=> H; try rewrite H /=
@@ -4762,55 +4673,6 @@ Section MakeSSA.
       move=> Hwf_ssa_Ep. apply: env_unchanged_program_succ_equal.
       - exact: (are_defined_lvs_program_succ_typenv E p).
       - exact: (env_unchanged_program_succ Hwf_ssa_Ep).
-    Qed.
-
-
-
-    Definition env_equal_instr (E : SSATE.env) (i : instr) : bool :=
-      SSATE.equal typ_eqn (instr_succ_typenv i E) E.
-
-    Fixpoint env_equal_program (E : SSATE.env) (p : program) : bool :=
-      match p with
-      | [::] => true
-      | hd::tl => (env_equal_instr E hd) && (env_equal_program E tl)
-      end.
-
-    Global Instance add_proper_env_equal_instr :
-      Proper (SSATE.Equal ==> eq ==> eq) env_equal_instr.
-    Proof.
-      move=> E1 E2 Heq i1 i2 ?; subst. case H2: (env_equal_instr E2 i2).
-      - apply/SSA.TELemmas.equalP. move/SSA.TELemmas.equalP: H2. rewrite Heq. by apply.
-      - apply/negP=> H1. move/negP: H2; apply. apply/SSA.TELemmas.equalP.
-        move/SSA.TELemmas.equalP: H1. rewrite Heq. by apply.
-    Qed.
-
-    Global Instance add_proper_env_equal_program :
-      Proper (SSATE.Equal ==> eq ==> eq) env_equal_program.
-    Proof.
-      move=> E1 E2 Heq p1 p2 ?; subst. elim: p2 => [| i p IH] //=.
-      rewrite IH Heq. reflexivity.
-    Qed.
-
-    Lemma env_unchanged_instr_env_equal_instr E i :
-      are_defined (lvs_instr i) E -> env_unchanged_instr E i -> env_equal_instr E i.
-    Proof.
-      move=> Hdef Hun. apply/SSA.TELemmas.equalP. exact: (env_unchanged_instr_succ_equal Hdef Hun).
-    Qed.
-
-    Lemma env_unchanged_program_env_equal_program E p :
-      are_defined (lvs_program p) E -> env_unchanged_program E p -> env_equal_program E p.
-    Proof.
-      elim: p E => [| i p IH] E //=. rewrite are_defined_union => /andP [Hdefi Hdefp].
-      move/andP=> [Henvi Henvp]. rewrite (env_unchanged_instr_env_equal_instr Hdefi Henvi) /=.
-      exact: (IH _ Hdefp Henvp).
-    Qed.
-
-    Lemma well_formed_ssa_program_final_env_unchanged E p :
-      well_formed_ssa_program E p ->
-      env_equal_program (program_succ_typenv p E) p.
-    Proof.
-      move=> Hwf. apply: (env_unchanged_program_env_equal_program _ (env_unchanged_program_succ Hwf)).
-      move/andP: Hwf => [/andP [Hwf Hun] Hssa]. exact: are_defined_lvs_program_succ_typenv.
     Qed.
 
   End EnvUnchanged.
@@ -5729,11 +5591,6 @@ Section SSAStoreEq.
       try intro_neqs
     end.
 
-  Ltac invert_eval_instr :=
-    match goal with
-    | H : eval_instr _ _ _ _ |- _ => inversion_clear H
-    end.
-
   Ltac decide_eqi :=
     match goal with
     | |- bvs_eqi ?E ?s ?s => exact: bvs_eqi_refl
@@ -5750,6 +5607,7 @@ Section SSAStoreEq.
       let Hx := fresh in
       move=> x Hx; intro_neqs; rewrite (SSAStore.acc_Upd2_neq _ _ Hupd);
              [ reflexivity | assumption | assumption ]
+    | H : SSAStore.Equal ?s1 ?s2 |- bvs_eqi _ ?s1 ?s2 => rewrite -> H; reflexivity
     end.
 
   Lemma bvs_eqi_eval_instr E i s1 s2 :
@@ -5757,8 +5615,8 @@ Section SSAStoreEq.
     bvs_eqi E s1 s2.
   Proof.
     (case: i => /=);
-      try (move=> *; ssa_vars_unchanged_instr_to_mem;
-                  invert_eval_instr; by decide_eqi).
+      by (move=> *; ssa_vars_unchanged_instr_to_mem;
+                 eval_instr_elim; decide_eqi).
   Qed.
 
   Lemma bvs_eqi_eval_rng_instr E i s1 s2 :
@@ -5768,8 +5626,8 @@ Section SSAStoreEq.
   Proof.
     (case: i => /=);
       try (move=> *; ssa_vars_unchanged_instr_to_mem;
-                  invert_eval_instr; by decide_eqi).
-    case => e r /=. move=> Hun Hei. inversion_clear Hei. exact: bvs_eqi_refl.
+                  eval_instr_elim; by decide_eqi).
+    case => e r /=. move=> Hun Hei. eval_instr_elim. by decide_eqi.
   Qed.
 
   Lemma bvs_eqi_eval_program E p s1 s2 :
@@ -5778,7 +5636,7 @@ Section SSAStoreEq.
     bvs_eqi E s1 s2.
   Proof.
     elim: p E s1 s2 => [| i P IH] E s1 s2 /=.
-    - move=>_ _ Hev; inversion_clear Hev; exact: bvs_eqi_refl.
+    - move=>_ _ Hev; inversion_clear Hev; by decide_eqi.
     - rewrite ssa_unchanged_program_cons => /andP [Hun_i Hun_p] /andP [Hssa_i Hssa_p]
                                              Hev. inversion_clear Hev.
       have Hun_succ: (ssa_vars_unchanged_program (vars_env (instr_succ_typenv i E)) P).

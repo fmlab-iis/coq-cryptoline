@@ -2839,7 +2839,7 @@ Section SplitSpec.
     (* Iassume *)
     - move=> [e r] /= Hwf Hun Hni Hco Hsa Hev [] ? ? [] ? ? Heq; subst.
       mytac. rewrite are_defined_union /= in Hdef. move/andP: Hdef => [Hdef _].
-      move: H => [/= He _]. apply/(bvz_eqi_eval_ebexp Heq Hdef). exact: He.
+      move: H0 => [/= He _]. apply/(bvz_eqi_eval_ebexp Heq Hdef). rewrite <- H. exact: He.
   Qed.
 
   Lemma algred_upd_avars_sat_program o E avn g1 p g2 eprogs bs1 bs2 :

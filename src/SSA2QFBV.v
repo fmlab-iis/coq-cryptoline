@@ -787,10 +787,10 @@ Section Rspec2QFBV.
 
   Global Instance add_proper_bexp_program : Proper (SSATE.Equal ==> eq ==> eq) bexp_program.
   Proof.
-    move=> E1 E2 Heq p1 p2 ?; subst. elim: p2 E1 E2 Heq => [| i p IH] E1 E2 Heq //=.
-    apply/eqP. rewrite eqseq_cons. apply/andP; split.
-    - rewrite Heq. exact: eqxx.
-    - apply/eqP. apply: IH. rewrite Heq. reflexivity.
+    move=> E1 E2 Heq p1 p2 ?; subst.
+    elim: p2 E1 E2 Heq => [| i p IH] E1 E2 Heq //=. f_equal.
+    - by rewrite Heq.
+    - apply: IH. by rewrite Heq.
   Qed.
 
 
@@ -1831,9 +1831,8 @@ Section Rspec2QFBV.
     move => /andP [Hdef _] Hcon Hun Hinst.
     well_defined_to_vs_subset.
     inversion_clear Hinst; repeat qfbv_store_acc.
-    case H; case b => /= ebexp rbexp _ Hrbexp.
-    case (eval_bexp_rbexp rbexp s2) => _ Hqfbv.
-    by apply: Hqfbv => //.
+    rewrite <- H. case: b H0 Hun Hdef => [e r] [] /= He Hr Hun Hdef.
+    apply/eval_bexp_rbexp. assumption.
   Qed.
 
   Lemma bexp_instr_eval E i s1 s2 :
@@ -2397,8 +2396,8 @@ Section Rspec2QFBV.
       eval_instr E (Iassume b) s s.
   Proof.
     move=> /= b Hrng Hwf Hco1 Hco2 Hev. case: b Hrng Hwf Hev => e r /= Hrng Hwf Hev.
-    apply: EIassume. rewrite /eval_bexp /=. split; first by rewrite (eqP Hrng).
-    apply/eval_bexp_rbexp. assumption.
+    apply: (EIassume (SSAStore.Equal_refl _)). rewrite /eval_bexp /=.
+    split; first by rewrite (eqP Hrng). apply/eval_bexp_rbexp. assumption.
   Qed.
 
   Lemma eval_bexp_instr E i s :
@@ -3720,9 +3719,11 @@ Section AlgsndInstr.
 End AlgsndInstr.
 
 
-(* Program safety - fixed typing environment - initial typing environment *)
+(* Algebraic soundness version 1:
+   - fixed typing environment - initial typing environment
+   - a single QF_BV predicate *)
 
-Section SafetyFixedInit.
+Section AlgsndFixedInit.
 
   Fixpoint bexp_program_algsnd_fixed_init E p : QFBV.bexp :=
     match p with
@@ -3820,16 +3821,13 @@ Section SafetyFixedInit.
     by rewrite Hwf_p Hun_Ep Hssa.
   Qed.
 
-End SafetyFixedInit.
+End AlgsndFixedInit.
 
 
-(* Program safety - varying typing environment *)
+(* Evaluation of algebraic soundness conditions one by one with varying typing environments *)
 
-Section SafetyVarying.
+Section AlgsndVarying.
 
-  (* Evaluate safety conditions one by one.
-   Typing environments are different for the safety conditions of
-   different instructions. *)
   Fixpoint bexp_program_algsnd_steps E p s : Prop :=
     SSAStore.conform s E ->
     match p with
@@ -3947,10 +3945,14 @@ Section SafetyVarying.
       + apply/eval_bexp_rbexp. exact: Hf.
   Qed.
 
-End SafetyVarying.
+End AlgsndVarying.
 
 
-Section SafetySplitConditionsVarying.
+(* Algebraic soundness version 2:
+   - varying typing environments
+   - one QF_BV predicate for one instruction *)
+
+Section AlgsndSplitVarying.
 
   Import QFBV.
 
@@ -3962,7 +3964,8 @@ Section SafetySplitConditionsVarying.
    * pre_es: the QFBV expressions encoding the prefix of instructions
    * p: the remaining program to be converted
    *)
-  Fixpoint bexp_program_algsnd_split_full_rec E pre_is (pre_es : seq QFBV.bexp) p :=
+  Fixpoint bexp_program_algsnd_split_full_rec E pre_is (pre_es : seq QFBV.bexp) p :
+    seq (SSATE.env * seq instr * seq QFBV.bexp * instr * seq instr * QFBV.bexp) :=
     match p with
     | [::] => [::]
     | hd::tl =>
@@ -3972,7 +3975,8 @@ Section SafetySplitConditionsVarying.
              (rcons pre_es (bexp_instr E hd)) tl)
     end.
 
-  Definition bexp_program_algsnd_split_full E p :=
+  Definition bexp_program_algsnd_split_full E p :
+    seq (SSATE.env * seq instr * seq QFBV.bexp * instr * seq instr * QFBV.bexp) :=
     bexp_program_algsnd_split_full_rec E [::] [::] p.
 
   Lemma bexp_program_algsnd_split_full_rec_env E pre_is pre_es p :
@@ -4397,7 +4401,8 @@ Section SafetySplitConditionsVarying.
 
   (* Construct safety conditions with less prefix information. *)
 
-  Fixpoint bexp_program_algsnd_split_rec E (pre_es : seq QFBV.bexp) p :=
+  Fixpoint bexp_program_algsnd_split_rec E (pre_es : seq QFBV.bexp) p :
+    seq (SSATE.env * seq QFBV.bexp * QFBV.bexp) :=
     match p with
     | [::] => [::]
     | hd::tl =>
@@ -4406,7 +4411,8 @@ Section SafetySplitConditionsVarying.
              (instr_succ_typenv hd E) (rcons pre_es (bexp_instr E hd)) tl)
     end.
 
-  Definition bexp_program_algsnd_split E p := bexp_program_algsnd_split_rec E [::] p.
+  Definition bexp_program_algsnd_split E p : seq (SSATE.env * seq QFBV.bexp * QFBV.bexp) :=
+    bexp_program_algsnd_split_rec E [::] p.
 
   Lemma bexp_program_algsnd_split_rec_full_partial E pre_is pre_es p :
     forall E' pre_is' pre_es' hd tl safe,
@@ -4684,12 +4690,14 @@ Section SafetySplitConditionsVarying.
     exact: (ssa_spec_algsnd_split_complete Hrng Hwf Hsp).
   Qed.
 
-End SafetySplitConditionsVarying.
+End AlgsndSplitVarying.
 
 
-(** Program safety - fixed typing environment - final typing environment *)
+(* Algebraic soundness version 3:
+   - fixed typing environment - final typing environment
+   - a single QF_BV predicate *)
 
-Section SafetyFixedFinal.
+Section AlgsndFixedFinal.
 
   Import QFBV.
 
@@ -4914,10 +4922,14 @@ Section SafetyFixedFinal.
     exact: Hsafe.
   Qed.
 
-End SafetyFixedFinal.
+End AlgsndFixedFinal.
 
 
-Section SafetySplitConditionsFixedFinal.
+(* Algebraic soundness of programs:
+   - fixed typing environment - final typing environment
+   - one QF_BV predicate for one instruction *)
+
+Section AlgsndSplitFixedFinal.
 
   Import QFBV.
 
@@ -5507,15 +5519,18 @@ Section SafetySplitConditionsFixedFinal.
     rewrite -well_formed_bexp_ra_la. assumption.
   Qed.
 
-End SafetySplitConditionsFixedFinal.
+End AlgsndSplitFixedFinal.
 
 
 Import QFBV.
 
 
-(** Construct QF_BV expressions by qfbv_conjs for safety conditions *)
+(* Algebraic soundness version 4:
+   - fixed typing environment - final typing environment
+   - one QF_BV predicate for one instruction
+   - use qfbv_conjs to make conjunctions *)
 
-Section Algsnd.
+Section AlgsndSplitFixedFinal.
 
   Fixpoint qfbv_spec_algsnd_rec f es :=
     match es with
@@ -5616,12 +5631,15 @@ Section Algsnd.
     apply/qfbv_spec_algsnd_rec_in. exact: Hin.
   Qed.
 
-End Algsnd.
+End AlgsndSplitFixedFinal.
 
 
-(* Use qfbv_conjs_la to combine QFBV formulas *)
+(* Algebraic soundness version 5:
+   - fixed typing environment - final typing environment
+   - one QF_BV predicate for one instruction
+   - use qfbv_conjs_la to make conjunctions *)
 
-Section AlgsndLeftAssoc.
+Section AlgsndSplitFixedFinalLeftAssoc.
 
   Fixpoint qfbv_spec_algsnd_la_rec f es :=
     match es with
@@ -5757,12 +5775,16 @@ Section AlgsndLeftAssoc.
     - by simpl; rewrite -eval_qfbv_conjs_ra_la.
   Qed.
 
-End AlgsndLeftAssoc.
+End AlgsndSplitFixedFinalLeftAssoc.
 
 
-(* Algebraic soundness version 3 (with slicing) *)
+(* Algebraic soundness version 6:
+   - fixed typing environment - final typing environment
+   - one QF_BV predicate for one instruction
+   - use qfbv_conjs_la to make conjunctions
+   - apply slicing *)
 
-Section AlgsndSliceLeftAssoc.
+Section AlgsndSliceSplitFixedFinalLeftAssoc.
 
   (* algsnd_after *)
 
@@ -5971,11 +5993,12 @@ Section AlgsndSliceLeftAssoc.
       + rewrite cat_rcons. assumption.
   Qed.
 
-End AlgsndSliceLeftAssoc.
+End AlgsndSliceSplitFixedFinalLeftAssoc.
 
 
 
-(* Combine range reduction and algebraic soundness (version 1) *)
+(* Combine range reduction and algebraic soundness
+   (version 1, the simplest version) *)
 
 Section RngredAlgsnd.
 
@@ -6048,7 +6071,8 @@ Section RngredAlgsnd.
 End RngredAlgsnd.
 
 
-(* Combine range reduction and algebraic soundness (version 2) *)
+(* Combine range reduction and algebraic soundness
+   (version 2, split range conditions and use qfbv_conjs_la) *)
 
 Section RngredAlgsndLeftAssoc.
 
@@ -6119,7 +6143,8 @@ Section RngredAlgsndLeftAssoc.
 End RngredAlgsndLeftAssoc.
 
 
-(* Combine range reduction and algebraic soundness (version 3) *)
+(* Combine range reduction and algebraic soundness
+   (version 3, apply slicing, split range conditions, and use qfbv_conjs_la) *)
 
 Section RngredAlgsndSlicing.
 
