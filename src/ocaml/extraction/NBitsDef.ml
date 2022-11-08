@@ -1,4 +1,5 @@
 open BinInt
+open BinNat
 open BinNums
 open Datatypes
 open String0
@@ -139,6 +140,14 @@ let rec from_nat n x =
   (fun fO fS n -> if n=0 then fO () else fS (n-1))
     (fun _ -> [])
     (fun m -> joinlsb (odd x) (from_nat m (half x)))
+    n
+
+(** val from_N : int -> coq_N -> bits **)
+
+let rec from_N n x =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> [])
+    (fun m -> joinlsb (N.odd x) (from_N m (N.div x (Npos (Coq_xO Coq_xH)))))
     n
 
 (** val to_Zpos : bits -> coq_Z **)

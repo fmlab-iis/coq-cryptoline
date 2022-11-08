@@ -1,3 +1,5 @@
+open NBitsDef
+open NBitsOp
 open Seqs
 open Typ
 open Eqtype

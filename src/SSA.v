@@ -5,18 +5,12 @@ From Coq Require Import List ZArith FSets OrderedType String Decimal DecimalStri
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
-From ssrlib Require Import Var SsrOrder FMaps ZAriths Tactics Lists FSets Seqs.
+From ssrlib Require Import Var SsrOrder FMaps ZAriths Tactics Lists FSets Seqs Strings.
 From Cryptoline Require Import DSL.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
-
-Module SSAVarOrderPrinter <: Printer with Definition t := ssavar.
-  Definition t := SSAVarOrder.t.
-  Definition to_string (v : SSAVarOrder.t) : string :=
-    ("v" ++ string_of_N (fst v) ++ "_" ++ string_of_N (snd v))%string.
-End SSAVarOrderPrinter.
 
 Module SSA := MakeDSL SSAVarOrder SSAVarOrderPrinter SSAVS SSAVM SSATE SSAStore.
 

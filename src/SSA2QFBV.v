@@ -7,7 +7,7 @@ From Coq Require Import Arith List OrderedType.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun prime.
 From ssrlib Require Import Var Tactics Seqs.
 From Cryptoline Require Import DSL SSA SSA2ZSSA.
-From BitBlasting Require Import State QFBV TypEnv.
+From BitBlasting Require Import State QFBV Typ TypEnv.
 From nbits Require Import NBits.
 
 Import QFBV SSA.
@@ -223,8 +223,8 @@ Qed.
 Lemma to_nat_zext_bool n bs :
   size bs = 1 -> to_nat (zext n bs) == to_bool bs.
 Proof.
-  move => Hsz1; elim (size1 Hsz1); case => /eqP -> /=;
-    by rewrite to_nat_zeros /=.
+  move => Hsz1; elim: (size1 Hsz1); move/eqP => -> /=;
+         by rewrite to_nat_zeros /=.
 Qed.
 
 Lemma from_nat_idem m n0 n1 n2 :
@@ -281,7 +281,7 @@ Proof.
   move=> H. rewrite to_nat_from_nat. apply: div.modn_small.
   elim: w n H => [| w IH n H] //=. case: n H => [| n] H /=.
   - exact: Nats.expn2_gt0.
-  - rewrite ltnS in H. move: (IH _ H) => {IH H} H.
+  - rewrite ltnS in H. move: (IH _ H) => {IH} H.
     case: w H => [| w] H //=. rewrite -(addn1 n) expnS mul2n -addnn.
     apply: (Nats.ltn_addn H). exact: Nats.expn2_gt1.
 Qed.
@@ -810,15 +810,15 @@ Section Rspec2QFBV.
     elim: e => //=.
     - move=> n bs /andP /= [Hdef [/andP [Hw Hs]]]. apply/eqP. exact: Hs.
     - move=> w op e IH Hwf. move: (well_formed_rexp_unop Hwf) => {Hwf} [Hwfe [Hw Hse]].
-      move: (IH Hwfe) => {IH} IH. case: op => /=; rewrite IH; exact: Hse.
+      move: (IH Hwfe) => {} IH. case: op => /=; rewrite IH; exact: Hse.
     - move=> w op e1 IH1 e2 IH2 Hwf.
       move: (well_formed_rexp_binop Hwf) => {Hwf} [Hwf1 [Hwf2 [Hw [Hs1 Hs2]]]].
-      move: (IH1 Hwf1) (IH2 Hwf2) => {IH1 IH2} IH1 IH2.
+      move: (IH1 Hwf1) (IH2 Hwf2) => {}IH1 {}IH2.
       case: op => /=; rewrite ?IH1 ?IH2 ?Hs1 ?Hs2 ?minnn ?maxnn; reflexivity.
     - move=> w e IH n Hwf. move: (well_formed_rexp_uext Hwf) => {Hwf} [Hwfe [Hw Hse]].
-      move: (IH Hwfe) => {IH} IH. rewrite IH Hse. reflexivity.
+      move: (IH Hwfe) => {} IH. rewrite IH Hse. reflexivity.
     - move=> w e IH n Hwf. move: (well_formed_rexp_sext Hwf) => {Hwf} [Hwfe [Hw Hse]].
-      move: (IH Hwfe) => {IH} IH. rewrite IH Hse. reflexivity.
+      move: (IH Hwfe) => {} IH. rewrite IH Hse. reflexivity.
   Qed.
 
   Lemma eval_exp_atom a s :
@@ -1064,9 +1064,9 @@ Section Rspec2QFBV.
     - (* assume *)
       case : b H H1 => eb rb.
       rewrite /vars_bexp /= => Hun.
-      move : (ssa_unchanged_program_union1 Hun) => {Hun} Hun.
+      move : (ssa_unchanged_program_union1 Hun) => {} Hun.
       rewrite (eval_bexp_rbexp rb s1) (eval_bexp_rbexp rb s2) => Hs1.
-      elim Hun => {Hun} _ Hun.
+      elim: Hun => _ Hun.
       elim : (ssa_unchanged_program_eval_rbexp Hun H0) => Hs1s2 _.
       by apply : Hs1s2.
   Qed.
@@ -1087,7 +1087,7 @@ Section Rspec2QFBV.
     | Hsub : is_true (SSAVS.subset (SSAVS.singleton ?v) ?vs),
         Hun : is_true (ssa_vars_unchanged_instr ?vs ?i)
       |- _ =>
-        move : (ssa_unchanged_instr_subset Hun Hsub) => {Hun} Hun; unchanged_instr_subset
+        move : (ssa_unchanged_instr_subset Hun Hsub) => {} Hun; unchanged_instr_subset
     | Hun : is_true (ssa_vars_unchanged_instr (SSAVS.singleton ?v) ?i)
       |- _ =>
         let H0 := fresh in
@@ -3148,15 +3148,21 @@ Section RngredSlicing.
 End RngredSlicing.
 
 
-(* Define the safety condition in terms of a QFBV expression *)
+(* Define the algebraic soundness condition in terms of a QF_BV predicate *)
 
 Section AlgsndInstr.
 
   Definition bexp_atom_uaddB_algsnd a1 a2 : QFBV.bexp :=
-    qfbv_lneg (qfbv_uaddo (qfbv_atom a1) (qfbv_atom a2)).
+    match a1, a2 with
+    | Aconst _ bs1, Aconst _ bs2 => if Uaddo bs1 bs2 then qfbv_false else qfbv_true
+    | _, _ => qfbv_lneg (qfbv_uaddo (qfbv_atom a1) (qfbv_atom a2))
+    end.
 
   Definition bexp_atom_saddB_algsnd a1 a2 : QFBV.bexp :=
-    qfbv_lneg (qfbv_saddo (qfbv_atom a1) (qfbv_atom a2)).
+    match a1, a2 with
+    | Aconst _ bs1, Aconst _ bs2 => if Saddo bs1 bs2 then qfbv_false else qfbv_true
+    | _ , _ => qfbv_lneg (qfbv_saddo (qfbv_atom a1) (qfbv_atom a2))
+    end.
 
   Definition bexp_atom_addB_algsnd E a1 a2 : QFBV.bexp :=
     let 'a_typ := atyp a1 E in
@@ -3169,24 +3175,46 @@ Section AlgsndInstr.
     else bexp_atom_saddB_algsnd a1 a2.
 
   Definition bexp_atom_uadcB_algsnd a_size a1 a2 ac : QFBV.bexp :=
-    qfbv_conj
-      (qfbv_lneg
-         (qfbv_uaddo (qfbv_atom a1)
-            (qfbv_atom a2)))
-      (qfbv_lneg
-         (qfbv_uaddo (qfbv_add (qfbv_atom a1)
-                        (qfbv_atom a2))
-            (qfbv_zext (a_size - 1) (qfbv_atom ac)))).
+    match a1, a2, ac with
+    | Aconst _ bs1, Aconst _ bs2, Aconst _ c =>
+        if Uaddo bs1 bs2 || Uaddo (addB bs1 bs2) (zext (a_size - 1) c)
+        then qfbv_false else qfbv_true
+    | Aconst _ bs1, Aconst _ bs2, Avar _ =>
+        if Uaddo bs1 bs2
+        then qfbv_false
+        else if Uaddo (addB bs1 bs2) (zext (a_size - 1) [::b1])
+             then qfbv_lneg (qfbv_uaddo (Econst (addB bs1 bs2)) (qfbv_zext (a_size - 1) (qfbv_atom ac)))
+             else qfbv_true
+    | _, _, _ => qfbv_conj
+                   (qfbv_lneg
+                      (qfbv_uaddo (qfbv_atom a1)
+                         (qfbv_atom a2)))
+                   (qfbv_lneg
+                      (qfbv_uaddo (qfbv_add (qfbv_atom a1)
+                                     (qfbv_atom a2))
+                         (qfbv_zext (a_size - 1) (qfbv_atom ac))))
+    end.
 
   Definition bexp_atom_sadcB_algsnd a_size a1 a2 ac : QFBV.bexp :=
-    qfbv_conj
-      (qfbv_lneg
-         (qfbv_saddo (qfbv_atom a1)
-            (qfbv_atom a2)))
-      (qfbv_lneg
-         (qfbv_saddo (qfbv_add (qfbv_atom a1)
-                        (qfbv_atom a2))
-            (qfbv_zext (a_size - 1) (qfbv_atom ac)))).
+    match a1, a2, ac with
+    | Aconst _ bs1, Aconst _ bs2, Aconst _ c =>
+        if Saddo bs1 bs2 || Saddo (addB bs1 bs2) (zext (a_size - 1) c)
+        then qfbv_false else qfbv_true
+    | Aconst _ bs1, Aconst _ bs2, Avar _ =>
+        if Saddo bs1 bs2
+        then qfbv_false
+        else if Saddo (addB bs1 bs2) (zext (a_size - 1) [::b1])
+             then qfbv_lneg (qfbv_saddo (Econst (addB bs1 bs2)) (qfbv_zext (a_size - 1) (qfbv_atom ac)))
+             else qfbv_true
+    | _, _, _ => qfbv_conj
+                   (qfbv_lneg
+                      (qfbv_saddo (qfbv_atom a1)
+                         (qfbv_atom a2)))
+                   (qfbv_lneg
+                      (qfbv_saddo (qfbv_add (qfbv_atom a1)
+                                     (qfbv_atom a2))
+                         (qfbv_zext (a_size - 1) (qfbv_atom ac))))
+    end.
 
   Definition bexp_atom_adcB_algsnd E a1 a2 ac : QFBV.bexp :=
     let a_typ := atyp a1 E in
@@ -3201,10 +3229,16 @@ Section AlgsndInstr.
     else bexp_atom_sadcB_algsnd a_size a1 a2 ac.
 
   Definition bexp_atom_usubB_algsnd a1 a2 : QFBV.bexp :=
-    qfbv_lneg (qfbv_usubo (qfbv_atom a1) (qfbv_atom a2)).
+    match a1, a2 with
+    | Aconst _ bs1, Aconst _ bs2 => if borrow_subB bs1 bs2 then qfbv_false else qfbv_true
+    | _, _ => qfbv_lneg (qfbv_usubo (qfbv_atom a1) (qfbv_atom a2))
+    end.
 
   Definition bexp_atom_ssubB_algsnd a1 a2 : QFBV.bexp :=
-    qfbv_lneg (qfbv_ssubo (qfbv_atom a1) (qfbv_atom a2)).
+    match a1, a2 with
+    | Aconst _ bs1, Aconst _ bs2 => if Ssubo bs1 bs2 then qfbv_false else qfbv_true
+    | _, _ => qfbv_lneg (qfbv_ssubo (qfbv_atom a1) (qfbv_atom a2))
+    end.
 
   Definition bexp_atom_subB_algsnd E a1 a2 : QFBV.bexp :=
     let 'a_typ := atyp a1 E in
@@ -3412,42 +3446,107 @@ Section AlgsndInstr.
   Proof.
     case Ht : (Typ.is_unsigned (atyp a1 E));
       rewrite /bexp_atom_addB_algsnd /addB_algsnd Ht /=.
-    - by rewrite /uaddB_algsnd /= !eval_exp_atom.
-    - by rewrite /saddB_algsnd /= !eval_exp_atom.
+    - rewrite /bexp_atom_uaddB_algsnd /uaddB_algsnd /=.
+      case: a1 Ht; case: a2 => //=. move=> _ bs1 ty bs2 Hty.
+      rewrite /Uaddo. by case: (carry_addB bs2 bs1).
+    - rewrite /bexp_atom_saddB_algsnd /saddB_algsnd /=.
+      case: a1 Ht; case: a2 => //=. move=> _ bs1 ty bs2 Hty.
+      by case: (Saddo bs2 bs1).
   Qed.
 
   Lemma eval_bexp_atom_adds_algsnd E a1 a2 s :
     QFBV.eval_bexp (bexp_atom_adds_algsnd E a1 a2) s <->
       adds_algsnd (atyp a1 E) (eval_atom a1 s) (eval_atom a2 s).
   Proof.
+    move: (eval_bexp_atom_addB_algsnd E a1 a2 s).
     rewrite /bexp_atom_adds_algsnd /adds_algsnd.
-    case: (Typ.is_unsigned (atyp a1 E)) => //=.
-    rewrite /saddB_algsnd !eval_exp_atom. done.
+    rewrite /bexp_atom_addB_algsnd /addB_algsnd.
+    by case: (Typ.is_unsigned (atyp a1 E)).
   Qed.
 
   Lemma eval_bexp_atom_adcB_algsnd E a1 a2 ac s :
     SSAStore.conform s E ->
     SSAVS.subset (vars_atom a1) (vars_env E) ->
+    well_sized_atom E a1 ->
     size_matched_atom a1 ->
+    size_matched_atom a2 ->
+    atyp a1 E == atyp a2 E ->
+    atyp ac E == Typ.Tbit ->
+    are_defined (vars_atom ac) E ->
     QFBV.eval_bexp (bexp_atom_adcB_algsnd E a1 a2 ac) s <->
       adcB_algsnd (atyp a1 E) (eval_atom a1 s) (eval_atom a2 s) (eval_atom ac s).
   Proof.
-    move=> Hco Hsub Hsm. rewrite /bexp_atom_adcB_algsnd /adcB_algsnd /=.
-    case: (Typ.is_unsigned (atyp a1 E)).
-    - of_asize. by rewrite /uadcB_algsnd /= !eval_exp_atom.
-    - of_asize. by rewrite /sadcB_algsnd /= !eval_exp_atom.
+    move=> Hco Hsub Hws1 Hsm1 Hsm2 Hat12 Hatc Hdac.
+    rewrite /bexp_atom_adcB_algsnd /adcB_algsnd /=.
+    case Ht: (Typ.is_unsigned (atyp a1 E)).
+    - of_asize. rewrite /bexp_atom_uadcB_algsnd /uadcB_algsnd /=.
+      case: a1 Hsub Hws1 Hsm1 Hat12 Ht => /=.
+      + move=> v Hsub Hws1 Hsm1 Hat12 Ht. by rewrite !eval_exp_atom.
+      + move=> ty1 bs1 Hsub Hws1 Hsm1 Hat12 Ht. case: a2 Hsm2 Hat12 => /=.
+        * move=> v2 Hsm2 Hat12. by rewrite !eval_exp_atom.
+        * move=> ty2 bs2 Hsm2 Hat12. move/eqP: Hat12 => ?; subst.
+          rewrite /well_sized_atom /= in Hws1. rewrite Ht /asize /= in Hws1.
+          case: ac Hatc Hdac => /=.
+          -- move=> vc Hatc Hdac. rewrite are_defined_singleton in Hdac.
+             move/memdefP: Hdac => Hmemac. rewrite /Uaddo /=.
+             case Hov1: (carry_addB bs1 bs2) => //=.
+             case Hov2: (carry_addB (bs1 +# bs2)%bits (zext (size bs1 - 1) [:: b1])) => //=.
+             split=> //=. move=> _. move: (Hco vc Hmemac).
+             rewrite SSATE.vtyp_vsize (eqP Hatc) /=. move=> {}Hatc.
+             case: (size1 (Logic.eq_sym Hatc)) => /eqP ->.
+             ++ rewrite /carry_addB adcB_is_zero_r => //=.
+                ** exact: zeros_is_zero.
+                ** rewrite size_zeros size_addB. rewrite (eqP Hsm1) (eqP Hsm2) minnn.
+                   rewrite subn1 (prednK Hws1). exact: leqnn.
+             ++ by rewrite Hov2.
+          -- move=> tyc bsc /eqP ? _; subst. rewrite /Uaddo.
+             case Hov: (carry_addB bs1 bs2 ||
+                          carry_addB (bs1 +# bs2)%bits (zext (size bs1 - 1) bsc)) => /=.
+             ++ split => //=. by case/orP: Hov => ->; rewrite ?andbF.
+             ++ split => //=. move=> _. by move: (Bool.orb_false_elim _ _ Hov) => [-> ->].
+    - of_asize. rewrite /bexp_atom_sadcB_algsnd /sadcB_algsnd /=.
+      case: a1 Hsub Hws1 Hsm1 Hat12 Ht => /=.
+      + move=> v Hsub Hws1 Hsm1 Hat12 Ht. by rewrite !eval_exp_atom.
+      + move=> ty1 bs1 Hsub Hws1 Hsm1 Hat12 Ht. case: a2 Hsm2 Hat12 => /=.
+        * move=> v2 Hsm2 Hat12. by rewrite !eval_exp_atom.
+        * move=> ty2 bs2 Hsm2 Hat12. move/eqP: Hat12 => ?; subst.
+          rewrite /well_sized_atom /= in Hws1. rewrite Ht /asize /= in Hws1.
+          case: ac Hatc Hdac => /=.
+          -- move=> vc Hatc Hdac. rewrite are_defined_singleton in Hdac.
+             move/memdefP: Hdac => Hmemac. case Hov1: (Saddo bs1 bs2) => //=.
+             case Hov2: (Saddo (bs1 +# bs2)%bits (zext (size bs1 - 1) [:: b1])) => //=.
+             split=> //=. move=> _. move: (Hco vc Hmemac).
+             rewrite SSATE.vtyp_vsize (eqP Hatc) /=. move=> {}Hatc.
+             case: (size1 (Logic.eq_sym Hatc)) => /eqP ->.
+             ++ apply: Saddo_is_zero_r.
+                ** exact: zeros_is_zero.
+                ** rewrite size_zext size_addB. rewrite (eqP Hsm1) (eqP Hsm2) minnn /=.
+                   rewrite addnC. rewrite subn1 addn1.
+                   have Hsty2: (0 < sizeof_typ ty2) by apply: (ltn_trans _ Hws1).
+                   rewrite (prednK Hsty2). exact: leqnn.
+             ++ by rewrite Hov2.
+          -- move=> tyc bsc /eqP ? _; subst.
+             case Hov: (Saddo bs1 bs2 || Saddo (bs1 +# bs2)%bits (zext (size bs1 - 1) bsc)) => /=.
+             ++ split => //=. by case/orP: Hov => ->; rewrite ?andbF.
+             ++ split => //=. move=> _. by move: (Bool.orb_false_elim _ _ Hov) => [-> ->].
   Qed.
 
   Lemma eval_bexp_atom_adcs_algsnd E a1 a2 ac s :
     SSAStore.conform s E ->
     SSAVS.subset (vars_atom a1) (vars_env E) ->
+    well_sized_atom E a1 ->
     size_matched_atom a1 ->
+    size_matched_atom a2 ->
+    atyp a1 E == atyp a2 E ->
+    atyp ac E == Typ.Tbit ->
+    are_defined (vars_atom ac) E ->
     QFBV.eval_bexp (bexp_atom_adcs_algsnd E a1 a2 ac) s <->
       adcs_algsnd (atyp a1 E) (eval_atom a1 s) (eval_atom a2 s) (eval_atom ac s).
   Proof.
-    move=> Hco Hsub Hsm. rewrite /bexp_atom_adcs_algsnd /adcs_algsnd.
-    case: (Typ.is_unsigned (atyp a1 E)) => //=.
-    rewrite /sadcB_algsnd !eval_exp_atom. of_asize. done.
+    move=> Hco Hsub Hws1 Hsm1 Hsm2 Hat1 Hat2 Hdac.
+    move: (eval_bexp_atom_adcB_algsnd Hco Hsub Hws1 Hsm1 Hsm2 Hat1 Hat2 Hdac).
+    rewrite /bexp_atom_adcB_algsnd /adcB_algsnd /bexp_atom_adcs_algsnd /adcs_algsnd.
+    by case: (Typ.is_unsigned (atyp a1 E)).
   Qed.
 
   Lemma eval_bexp_atom_subB_algsnd E a1 a2 s :
@@ -3456,26 +3555,32 @@ Section AlgsndInstr.
   Proof.
     case Ht : (Typ.is_unsigned (atyp a1 E));
       rewrite /bexp_atom_subB_algsnd /subB_algsnd Ht /=.
-    - by rewrite /usubB_algsnd /= !eval_exp_atom.
-    - by rewrite /ssubB_algsnd /= !eval_exp_atom.
+    - rewrite /bexp_atom_usubB_algsnd /usubB_algsnd /=.
+      case: a1 Ht; case: a2 => //=. move=> _ bs1 ty bs2 Hty.
+      by case: (borrow_subB bs2 bs1).
+    - rewrite /bexp_atom_ssubB_algsnd /ssubB_algsnd /=.
+      case: a1 Ht; case: a2 => //=. move=> _ bs1 ty bs2 Hty.
+      by case Hc: (Ssubo bs2 bs1).
   Qed.
 
   Lemma eval_bexp_atom_subc_algsnd E a1 a2 s :
     QFBV.eval_bexp (bexp_atom_subc_algsnd E a1 a2) s <->
       subc_algsnd (atyp a1 E) (eval_atom a1 s) (eval_atom a2 s).
   Proof.
+    move: (eval_bexp_atom_subB_algsnd E a1 a2 s).
     rewrite /bexp_atom_subc_algsnd /subc_algsnd.
-    case: (Typ.is_unsigned (atyp a1 E)) => //=.
-    rewrite /ssubB_algsnd !eval_exp_atom. done.
+    rewrite /bexp_atom_subB_algsnd /subB_algsnd.
+    by case: (Typ.is_unsigned (atyp a1 E)).
   Qed.
 
   Lemma eval_bexp_atom_subb_algsnd E a1 a2 s :
     QFBV.eval_bexp (bexp_atom_subb_algsnd E a1 a2) s <->
       subb_algsnd (atyp a1 E) (eval_atom a1 s) (eval_atom a2 s).
   Proof.
+    move: (eval_bexp_atom_subB_algsnd E a1 a2 s).
     rewrite /bexp_atom_subb_algsnd /subb_algsnd.
-    case: (Typ.is_unsigned (atyp a1 E)) => //=.
-    rewrite /ssubB_algsnd !eval_exp_atom. done.
+    rewrite /bexp_atom_subB_algsnd /subB_algsnd.
+    by case: (Typ.is_unsigned (atyp a1 E)).
   Qed.
 
   Lemma eval_bexp_atom_sbbB_algsnd E a1 a2 ac s :
@@ -3658,6 +3763,8 @@ Section AlgsndInstr.
         match goal with
         | |- context f [if ?c then _ else _] =>
             dcase c; case => /=; intros
+        | |- context c [_ && true] => rewrite andbT
+        | |- context c [true && _] => rewrite /=
         | H : is_true (are_defined (vars_atom ?a) ?E)
           |- context f [QFBV.well_formed_exp (qfbv_atom ?a) ?E] =>
             rewrite (well_formed_qfbv_atom H) /=
@@ -3688,8 +3795,33 @@ Section AlgsndInstr.
         | H : is_true (well_sized_atom ?E ?a)
           |- is_true (0 < Typ.sizeof_typ (atyp ?a ?E)) =>
             exact: (well_sized_atom_gt0 H)
+        | H : is_true (well_sized_atom ?E (Avar ?v))
+          |- is_true (0 < Typ.sizeof_typ (SSATE.vtyp ?v ?E)) =>
+            exact: (well_sized_atom_gt0 H)
+        | H : is_true (well_sized_atom ?E (Aconst ?t _))
+          |- is_true (0 < Typ.sizeof_typ ?t) =>
+            exact: (well_sized_atom_gt0 H)
         | H : (?n <= ?m) = false |- is_true (?m <= ?n) =>
             move/idP/negP: H; rewrite -ltnNge => H; exact: (ltnW H)
+        | |- context c [match ?a with | Avar _ => _ | Aconst _ _ => _ end] =>
+            repeat match goal with
+              | H : context c [a] |- _ => move: H
+              end; (case: a => /=); intros
+        | H : is_true (are_defined (SSAVS.singleton _) _) |- _ =>
+            rewrite are_defined_singleton in H
+        | H : is_true (is_defined _ _) |- _ => move/memdefP: H => H
+        | H : is_true ?e |- context c [?e] => rewrite H /=
+        | H : ?e = true |- context c [?e] => rewrite H /=
+        | |- context c [SSATE.vsize ?t ?E] => rewrite SSATE.vtyp_vsize
+        | H : is_true (?x == _) |- context c [?x] => rewrite (eqP H)
+        | |- is_true (?e == ?e) => exact: eqxx
+        | |- is_true true => exact: is_true_true
+        | |- context c [size (addB _ _)] => rewrite size_addB
+        | H1 : is_true (size ?b == sizeof_typ ?t),
+            H2 : is_true (size ?b0 == sizeof_typ ?t0),
+              H3 : is_true (?t == ?t0) |- context c [minn (size ?b) (size ?b0)] =>
+            rewrite (eqP H1) (eqP H2) (eqP H3) minnn
+        | H : is_true (?t1 == ?t2) |- _ => move/eqP: H => ?; subst
         end.
 
     Lemma bexp_instr_algsnd_well_formed E i :
@@ -3699,13 +3831,16 @@ Section AlgsndInstr.
       case: i => //=.
       - move=> *. rewrite /bexp_atom_shl_algsnd /=. by norm_tac.
       - move=> *. rewrite /bexp_atom_cshl_algsnd /=. by norm_tac.
-      - move=> *. rewrite /bexp_atom_addB_algsnd /=. by norm_tac.
-      - move=> *. rewrite /bexp_atom_adds_algsnd /=. by norm_tac.
-      - move=> *. rewrite /bexp_atom_adcB_algsnd /=. by norm_tac.
-      - move=> *. rewrite /bexp_atom_adcs_algsnd /=. by norm_tac.
-      - move=> *. rewrite /bexp_atom_subB_algsnd /=. by norm_tac.
-      - move=> *. rewrite /bexp_atom_subc_algsnd /=. by norm_tac.
-      - move=> *. rewrite /bexp_atom_subb_algsnd /=. by norm_tac.
+      - move=> *. rewrite /bexp_atom_addB_algsnd /bexp_atom_uaddB_algsnd /bexp_atom_saddB_algsnd /=.
+        by norm_tac.
+      - move=> *. rewrite /bexp_atom_adds_algsnd /bexp_atom_saddB_algsnd /=. by norm_tac.
+      - move=> *. rewrite /bexp_atom_adcB_algsnd /bexp_atom_uadcB_algsnd /bexp_atom_sadcB_algsnd /=.
+        by norm_tac.
+      - move=> *. rewrite /bexp_atom_adcs_algsnd /bexp_atom_sadcB_algsnd /=. by norm_tac.
+      - move=> *. rewrite /bexp_atom_subB_algsnd /bexp_atom_usubB_algsnd /bexp_atom_ssubB_algsnd /=.
+        by norm_tac.
+      - move=> *. rewrite /bexp_atom_subc_algsnd /bexp_atom_ssubB_algsnd /=. by norm_tac.
+      - move=> *. rewrite /bexp_atom_subb_algsnd /bexp_atom_ssubB_algsnd /=. by norm_tac.
       - move=> *. rewrite /bexp_atom_sbcB_algsnd /=. by norm_tac.
       - move=> *. rewrite /bexp_atom_sbcs_algsnd /=. by norm_tac.
       - move=> *. rewrite /bexp_atom_sbbB_algsnd /=. by norm_tac.
@@ -3924,7 +4059,7 @@ Section AlgsndVarying.
             /ssa_spec_algsnd /ssa_spec_algsnd_qfbv_steps /=.
     move=> Hrng /andP [/andP [/andP [/andP [Hwf_f Hwf_p] Hwf_g] Hun_Ep] Hssa]
                 Hsafe s Hf.
-    clear g Hwf_g. move: (Hsafe s) => {Hsafe} Hsafe.
+    clear g Hwf_g. move: (Hsafe s) => {} Hsafe.
     elim: p E f Hrng Hwf_f Hwf_p Hun_Ep Hssa s Hsafe Hf => [| i p IH] //=.
     move=> E f /andP [Hrng_i Hrng_p] Hwf /andP [Hwf_i Hwf_p] Hun_Eip /andP [Hun_ip Hssa_p]
              s Hsafe Hf Hco.
@@ -4854,7 +4989,7 @@ Section AlgsndFixedFinal.
     move: (TELemmas.Equal_submap Heq) => Hsub.
 
     move/eval_bexp_rbexp: Hpre_s => Hpre_s.
-    move: (Hsafe s (bvs_eqi_refl s) Hco Hpre_s) => {Hsafe} Hsafe.
+    move: (Hsafe s (bvs_eqi_refl s) Hco Hpre_s) => {} Hsafe.
     inversion_clear Hsafe. apply/andP; split.
     - apply/(eval_bexp_instr_algsnd Hco (well_formed_instr_submap Hwf_Ei Hsub_EpiE)).
       assumption.

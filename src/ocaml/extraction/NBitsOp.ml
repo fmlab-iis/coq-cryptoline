@@ -122,6 +122,11 @@ let addB bs1 bs2 =
 let carry_addB bs1 bs2 =
   fst (adcB false bs1 bs2)
 
+(** val coq_Uaddo : bits -> bits -> bool **)
+
+let coq_Uaddo =
+  carry_addB
+
 (** val sbbB : bool -> bits -> bits -> bool * bits **)
 
 let sbbB b bs1 bs2 =

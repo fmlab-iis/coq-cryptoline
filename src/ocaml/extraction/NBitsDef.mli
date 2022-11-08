@@ -1,4 +1,5 @@
 open BinInt
+open BinNat
 open BinNums
 open Datatypes
 open String0
@@ -56,6 +57,8 @@ val invB : bits -> bits
 val to_nat : bits -> int
 
 val from_nat : int -> int -> bits
+
+val from_N : int -> coq_N -> bits
 
 val to_Zpos : bits -> coq_Z
 

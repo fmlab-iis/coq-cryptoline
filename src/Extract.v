@@ -26,6 +26,7 @@ Separate Extraction
          int_of_pos pos_of_int int_of_n n_of_int int_of_nat nat_of_int
          NBitsDef.from_Zpos NBitsDef.from_Zneg NBitsDef.from_Z
          (* String outputs *)
+         QFBV.string_of_exp QFBV.string_of_bexp
          DSL.string_of_spec SSA.string_of_spec
          DSL.string_of_espec SSA.string_of_espec
          DSL.string_of_rspec SSA.string_of_rspec

@@ -1,20 +1,15 @@
-open Ascii
 open BinInt
-open BinNat
 open BinNums
-open BinPos
 open Bool
 open Datatypes
-open Decimal
-open DecimalString
 open FMaps
 open FSets
 open NBitsDef
 open NBitsOp
-open PeanoNat
 open Seqs
 open Store
 open String0
+open Strings
 open Typ
 open Var
 open ZAriths
@@ -23,26 +18,6 @@ open Seq
 open Ssrnat
 
 type __ = Obj.t
-
-val newline : char list
-
-type signed_int =
-| Pos of uint
-| Neg of uint
-
-val nat_to_signed_int : int -> signed_int
-
-val coq_N_to_signed_int : coq_N -> signed_int
-
-val coq_Z_to_signed_int : coq_Z -> signed_int
-
-val string_of_signed_int : signed_int -> char list
-
-val string_of_nat : int -> char list
-
-val string_of_N : coq_N -> char list
-
-val string_of_Z : coq_Z -> char list
 
 type eunop =
 | Eneg
@@ -257,13 +232,6 @@ val is_rbexp_or : Equality.coq_type -> rbexp -> bool
 
 val string_of_rbexp :
   Equality.coq_type -> (Equality.sort -> char list) -> rbexp -> char list
-
-module type Printer =
- sig
-  type t
-
-  val to_string : t -> char list
- end
 
 module MakeDSL :
  functor (V:SsrOrder.SsrOrder) ->
@@ -3343,13 +3311,6 @@ module MakeDSL :
   val slice_espec : espec -> espec
 
   val slice_rspec : rspec -> rspec
- end
-
-module VarOrderPrinter :
- sig
-  type t = VarOrder.t
-
-  val to_string : VarOrder.t -> char list
  end
 
 module DSL :

@@ -4,25 +4,12 @@ open Bool
 open Datatypes
 open NBitsDef
 open State
-open String0
 open Typ
 open Var
 open Eqtype
 open Seq
 
 type __ = Obj.t
-
-module SSAVarOrderPrinter =
- struct
-  type t = SSAVarOrder.t
-
-  (** val to_string : SSAVarOrder.t -> char list **)
-
-  let to_string v =
-    append ('v'::[])
-      (append (DSL.string_of_N (fst (Obj.magic v)))
-        (append ('_'::[]) (DSL.string_of_N (snd (Obj.magic v)))))
- end
 
 module SSA =
  DSL.MakeDSL(SSAVarOrder)(SSAVarOrderPrinter)(SSAVS)(SSAVM)(TypEnv.SSATE)(SSAStore)

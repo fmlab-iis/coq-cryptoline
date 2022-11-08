@@ -1,20 +1,15 @@
-open Ascii
 open BinInt
-open BinNat
 open BinNums
-open BinPos
 open Bool
 open Datatypes
-open Decimal
-open DecimalString
 open FMaps
 open FSets
 open NBitsDef
 open NBitsOp
-open PeanoNat
 open Seqs
 open Store
 open String0
+open Strings
 open Typ
 open Var
 open ZAriths
@@ -24,53 +19,6 @@ open Ssrnat
 
 type __ = Obj.t
 let __ = let rec f _ = Obj.repr f in Obj.repr f
-
-(** val newline : char list **)
-
-let newline =
-  (ascii_of_N (Npos (Coq_xO (Coq_xI (Coq_xO Coq_xH)))))::[]
-
-type signed_int =
-| Pos of uint
-| Neg of uint
-
-(** val nat_to_signed_int : int -> signed_int **)
-
-let nat_to_signed_int n =
-  Pos (Nat.to_uint n)
-
-(** val coq_N_to_signed_int : coq_N -> signed_int **)
-
-let coq_N_to_signed_int n =
-  Pos (N.to_uint n)
-
-(** val coq_Z_to_signed_int : coq_Z -> signed_int **)
-
-let coq_Z_to_signed_int = function
-| Z0 -> Pos (Nat.to_uint 0)
-| Zpos m -> Pos (Pos.to_uint m)
-| Zneg m -> Neg (Pos.to_uint m)
-
-(** val string_of_signed_int : signed_int -> char list **)
-
-let string_of_signed_int = function
-| Pos d0 -> NilEmpty.string_of_uint d0
-| Neg d0 -> '-'::(NilEmpty.string_of_uint d0)
-
-(** val string_of_nat : int -> char list **)
-
-let string_of_nat n =
-  string_of_signed_int (nat_to_signed_int n)
-
-(** val string_of_N : coq_N -> char list **)
-
-let string_of_N n =
-  string_of_signed_int (coq_N_to_signed_int n)
-
-(** val string_of_Z : coq_Z -> char list **)
-
-let string_of_Z n =
-  string_of_signed_int (coq_Z_to_signed_int n)
 
 type eunop =
 | Eneg
@@ -925,13 +873,6 @@ let rec string_of_rbexp var string_of_var = function
   append (string_of_rbexp var string_of_var e1)
     (append (' '::('\\'::('/'::(' '::[]))))
       (string_of_rbexp var string_of_var e2))
-
-module type Printer =
- sig
-  type t
-
-  val to_string : t -> char list
- end
 
 module MakeDSL =
  functor (V:SsrOrder.SsrOrder) ->
@@ -3902,16 +3843,6 @@ module MakeDSL =
     in
     { rsinputs = (rsinputs s); rspre = (slice_rbexp vs (rspre s)); rsprog =
     (slice_rprogram vs (rsprog s)); rspost = (rspost s) }
- end
-
-module VarOrderPrinter =
- struct
-  type t = VarOrder.t
-
-  (** val to_string : VarOrder.t -> char list **)
-
-  let to_string v =
-    append ('v'::[]) (string_of_N (Obj.magic v))
  end
 
 module DSL =

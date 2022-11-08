@@ -73,5 +73,5 @@ if [[ -f ${1} ]]; then
   rm -f ${debuglog} ${runlog}
 
   OCAMLRUNPARAM=s=${MINOR_HEAP} \
-    ${COQCRYPTOLINE} -v ${FLAGS} -o ${debuglog} ${1} &> ${runlog}
+    ${COQCRYPTOLINE} -v ${FLAGS} -o ${debuglog} ${1} | tee ${runlog}
 fi

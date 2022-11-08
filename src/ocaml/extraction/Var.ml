@@ -5,6 +5,8 @@ open Datatypes
 open FMaps
 open FSets
 open Int0
+open String0
+open Strings
 open ZAriths
 open Eqtype
 
@@ -47,11 +49,33 @@ module VarOrder =
     Obj.magic N0
  end
 
+module VarOrderPrinter =
+ struct
+  type t = VarOrder.t
+
+  (** val to_string : VarOrder.t -> char list **)
+
+  let to_string v =
+    append ('v'::[]) (string_of_N (Obj.magic v))
+ end
+
 module VS = MakeTreeSetWithNew(VarOrder)
 
 module VM = MakeTreeMapWithNew(VarOrder)
 
 module SSAVarOrder = SsrOrder.MakeProdOrderWithDefaultSucc(VarOrder)(VarOrder)
+
+module SSAVarOrderPrinter =
+ struct
+  type t = SSAVarOrder.t
+
+  (** val to_string : SSAVarOrder.t -> char list **)
+
+  let to_string v =
+    append ('v'::[])
+      (append (string_of_N (fst (Obj.magic v)))
+        (append ('_'::[]) (string_of_N (snd (Obj.magic v)))))
+ end
 
 type ssavar = SSAVarOrder.t
 

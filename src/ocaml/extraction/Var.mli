@@ -5,6 +5,8 @@ open Datatypes
 open FMaps
 open FSets
 open Int0
+open String0
+open Strings
 open ZAriths
 open Eqtype
 
@@ -27,6 +29,13 @@ module VarOrder :
   val succ : t -> t
 
   val default : t
+ end
+
+module VarOrderPrinter :
+ sig
+  type t = VarOrder.t
+
+  val to_string : VarOrder.t -> char list
  end
 
 module VS :
@@ -4475,6 +4484,13 @@ module SSAVarOrder :
   val default : t
 
   val succ : t -> t
+ end
+
+module SSAVarOrderPrinter :
+ sig
+  type t = SSAVarOrder.t
+
+  val to_string : SSAVarOrder.t -> char list
  end
 
 type ssavar = SSAVarOrder.t

@@ -90,6 +90,19 @@ module N =
     | Lt -> true
     | _ -> false
 
+  (** val even : coq_N -> bool **)
+
+  let even = function
+  | N0 -> true
+  | Npos p -> (match p with
+               | Coq_xO _ -> true
+               | _ -> false)
+
+  (** val odd : coq_N -> bool **)
+
+  let odd n =
+    negb (even n)
+
   (** val pos_div_eucl : positive -> coq_N -> coq_N * coq_N **)
 
   let rec pos_div_eucl a b =
@@ -109,6 +122,20 @@ module N =
          (match p with
           | Coq_xH -> ((Npos Coq_xH), N0)
           | _ -> (N0, (Npos Coq_xH))))
+
+  (** val div_eucl : coq_N -> coq_N -> coq_N * coq_N **)
+
+  let div_eucl a b =
+    match a with
+    | N0 -> (N0, N0)
+    | Npos na -> (match b with
+                  | N0 -> (N0, a)
+                  | Npos _ -> pos_div_eucl na b)
+
+  (** val div : coq_N -> coq_N -> coq_N **)
+
+  let div a b =
+    fst (div_eucl a b)
 
   (** val to_uint : coq_N -> uint **)
 

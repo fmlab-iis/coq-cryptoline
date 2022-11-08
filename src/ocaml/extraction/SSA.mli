@@ -4,20 +4,12 @@ open Bool
 open Datatypes
 open NBitsDef
 open State
-open String0
 open Typ
 open Var
 open Eqtype
 open Seq
 
 type __ = Obj.t
-
-module SSAVarOrderPrinter :
- sig
-  type t = SSAVarOrder.t
-
-  val to_string : SSAVarOrder.t -> char list
- end
 
 module SSA :
  sig

@@ -41,6 +41,8 @@ val addB : bits -> bits -> bits
 
 val carry_addB : bits -> bits -> bool
 
+val coq_Uaddo : bits -> bits -> bool
+
 val sbbB : bool -> bits -> bits -> bool * bits
 
 val subB : bits -> bits -> bits
