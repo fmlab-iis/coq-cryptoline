@@ -1,0 +1,113 @@
+#!/bin/bash
+
+JOBS=${JOBS:-24}                                      # 24
+SAT=${SAT:-kissat}                                    # kissat
+CERT=${CERT:-grat}                                    # grat
+MINOR_HEAP=${MINOR_HEAP:-2G}                          # 2G
+KEEP=${KEEP:-0}                                       # 0
+FORK=${FORK:-1}                                       # 1
+CARRY_CONSTRAINT=${CARRY_CONSTRAINT:-0}               # 0
+REWRITING=${REWRITING:-1}                             # 1
+REWRITING_AREP=${REWRITING_AREP:-1}                   # 1
+REWRITING_IMP=${REWRITING_IMP:-1}                     # 1
+SLICING_ESPEC=${SLICING_ESPEC:-1}                     # 1
+SLICING_RSPEC=${SLICING_RSPEC:-1}                     # 1
+VARS_CACHE_IN_REWRITING=${VARS_CACHE_IN_REWRITING-1}  # 1
+DEBUG=${DEBUG:-0}                                     # 0
+TMPDIR=${TMPDIR:-./tmp}                               # ./tmp
+LOGDIR=${LOGDIR:-./logs}                              # ./logs
+COQCRYPTOLINE=./_build/default/coqcryptoline.exe      # ./_build/default/coqcryptoline.exe
+CRYPTOLINE=${CRYPTOLINE:-cv}                          # cv
+PREPROCESS=${PREPROCESS:-0}                           # 0
+QUIET=${QUIET:-0}                                     # 0
+
+FLAGS=${FLAGS:-}
+FLAGS+=" -jobs ${JOBS}"
+FLAGS+=" -sat_solver ${SAT}"
+FLAGS+=" -sat_cert ${CERT}"
+if [[ ${CARRY_CONSTRAINT} == 0 ]]; then
+  FLAGS+=" -no_carry_constraint"
+fi
+if [[ ${FORK} == 1 ]]; then
+  FLAGS+=" -fork"
+fi
+if [[ ${REWRITING} == 0 ]]; then
+  FLAGS+=" -disable_rewriting"
+fi
+if [[ ${KEEP} == 1 ]]; then
+  FLAGS+=" -keep"
+fi
+if [[ ${DEBUG} == 1 ]]; then
+  FLAGS+=" -debug"
+fi
+if [[ ${VARS_CACHE_IN_REWRITING} == 0 ]]; then
+  FLAGS+=" -disable_vars_cache_in_rewriting"
+fi
+if [[ ${REWRITING_AREP} == 0 ]]; then
+  FLAGS+=" -disable_rewriting_arep"
+else
+  FLAGS+=" -enable_rewriting_arep"
+fi
+if [[ ${REWRITING_IMP} == 0 ]]; then
+  FLAGS+=" -disable_rewriting_imp"
+else
+  FLAGS+=" -enable_rewriting_imp"
+fi
+if [[ ${SLICING_ESPEC} == 0 ]]; then
+  FLAGS+=" -disable_slicing_espec"
+else
+  FLAGS+=" -enable_slicing_espec"
+fi
+if [[ ${SLICING_RSPEC} == 0 ]]; then
+  FLAGS+=" -disable_slicing_rspec"
+else
+  FLAGS+=" -enable_slicing_rspec"
+fi
+FLAGS+=" -tmpdir ${TMPDIR}"
+
+if [[ -f ${1} ]]; then
+  clfile=${1}
+  clname=`basename ${clfile}`
+  runlog=${clname/.cl/}
+  if [[ ${FORK} == 1 ]]; then
+    forkstr="_fork"
+  else
+    forkstr="_lwt"
+  fi
+  debuglog=${LOGDIR}/${runlog}_s${MINOR_HEAP}_${SAT}_${CERT}_ramfs_jobs${JOBS}${forkstr}_debug.log
+  runlog=${LOGDIR}/${runlog}_s${MINOR_HEAP}_${SAT}_${CERT}_ramfs_jobs${JOBS}${forkstr}_run.log
+
+  mkdir -p ${TMPDIR}
+  mkdir -p ${LOGDIR}
+
+  rm -f ${debuglog} ${runlog}
+
+  if [[ ${QUIET} == 0 ]]; then
+    OUTDEV="/dev/tty"
+  else
+    OUTDEV="/dev/null"
+  fi
+
+  if [[ ${PREPROCESS} == 0 ]]; then
+    OCAMLRUNPARAM=s=${MINOR_HEAP} \
+      ${COQCRYPTOLINE} -v ${FLAGS} -o ${debuglog} ${1} | tee -a ${runlog} >${OUTDEV}
+  else
+    tmpcl=`mktemp ${TMPDIR}/${clname/.cl/-XXX}`
+    ${CRYPTOLINE} -save_coqcryptoline ${tmpcl} ${clfile}
+    ret=$?
+    if [[ "${ret}" != "0" ]]; then
+      echo "Failed to preprocess the input file by CryptoLine."
+      exit
+    fi
+    for i in `ls ${tmpcl}*.cl`; do
+      cutno=`echo "${i}" | grep -o "\-[a-zA-Z0-9][a-zA-Z0-9][a-zA-Z0-9]_[0-9]*.cl" | grep -o "_[0-9]*.cl" | grep -o "[0-9]*"`
+      echo '' | tee -a ${runlog} >${OUTDEV}
+      echo "===== Cut #${cutno} =====" | tee -a ${runlog} >${OUTDEV}
+      echo '' | tee -a ${runlog} >${OUTDEV}
+      OCAMLRUNPARAM=s=${MINOR_HEAP} \
+        ${COQCRYPTOLINE} -v ${FLAGS} -o ${debuglog} ${i} | tee -a ${runlog} >${OUTDEV}
+      rm -f ${i}
+    done
+    rm -f ${tmpcl}
+  fi
+fi
