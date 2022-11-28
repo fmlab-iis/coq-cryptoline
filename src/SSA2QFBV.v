@@ -770,16 +770,15 @@ Section Rspec2QFBV.
     | hd::tl => (bexp_instr E hd)::(bexp_program (instr_succ_typenv hd E) tl)
     end.
 
-
   Global Instance add_proper_bexp_instr : Proper (SSATE.Equal ==> eq ==> eq) bexp_instr.
   Proof.
     move=> E1 E2 Heq i1 i2 ?; subst.
     (case: i2 => //=); intros; case_if; subst; simpl;
     repeat match goal with
-      | Heq : SSATE.Equal ?E1 ?E2 |- context c [asize _ ?E1] => rewrite Heq
-      | Heq : SSATE.Equal ?E1 ?E2 |- context c [atyp _ ?E1] => rewrite Heq
-      | Heq : SSATE.Equal ?E1 ?E2, H : context c [asize _ ?E1] |- _ => rewrite Heq in H
-      | Heq : SSATE.Equal ?E1 ?E2, H : context c [atyp _ ?E1] |- _ => rewrite Heq in H
+      | Heq : SSATE.Equal ?E1 ?E2 |- context c [asize _ ?E1] => rewrite -> Heq
+      | Heq : SSATE.Equal ?E1 ?E2 |- context c [atyp _ ?E1] => rewrite -> Heq
+      | Heq : SSATE.Equal ?E1 ?E2, H : context c [asize _ ?E1] |- _ => rewrite -> Heq in H
+      | Heq : SSATE.Equal ?E1 ?E2, H : context c [atyp _ ?E1] |- _ => rewrite -> Heq in H
       | H1 : ?e = true, H2 : ?e = false |- _ => rewrite H1 in H2; discriminate
       end;
     by reflexivity.
@@ -5993,7 +5992,7 @@ Section AlgsndSliceSplitFixedFinalLeftAssoc.
       exact: (env_unchanged_program_equal
                 (SSATE.Lemmas.Equal_sym (env_unchanged_instr_succ_equal Hdefi Huni)) Hunp).
     - apply: (IH _ Hdefp Hunp).
-      rewrite (env_unchanged_instr_succ_equal Hdefi Huni) in Hvp. exact: Hvp.
+      rewrite -> (env_unchanged_instr_succ_equal Hdefi Huni) in Hvp. exact: Hvp.
   Qed.
 
   Lemma algsnd_slice_la_algsnd_la s :
@@ -6087,9 +6086,9 @@ Section AlgsndSliceSplitFixedFinalLeftAssoc.
     move/andP=> [Hi Hp]. case Hs: (slice_rinstr vs i) => /=.
     - rewrite (well_formed_bexp_slice_rinstr Hi Hs) /=.
       rewrite -(slice_rinstr_some_succ_typenv _ Hs).
-      rewrite (env_unchanged_instr_succ_equal Hdefi Huni) in Hp *.
+      rewrite -> (env_unchanged_instr_succ_equal Hdefi Huni) in *.
       exact: (IH _ Hdefp Hunp Hp).
-    - rewrite (env_unchanged_instr_succ_equal Hdefi Huni) in Hp.
+    - rewrite -> (env_unchanged_instr_succ_equal Hdefi Huni) in Hp.
       exact: (IH _ Hdefp Hunp Hp).
   Qed.
 

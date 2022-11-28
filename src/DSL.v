@@ -2327,8 +2327,8 @@ Module MakeDSL
           rewrite -(add_proper_asize (erefl _) H1) in H2
       end;
     try eval_instr_intro; eauto.
-    - rewrite Heq in H1. assumption.
-    - rewrite -Heq in H1. assumption.
+    - rewrite -> Heq in H1. assumption.
+    - rewrite <- Heq in H1. assumption.
   Qed.
 
   Global Instance add_proper_eval_instr_store1 :
@@ -2338,17 +2338,17 @@ Module MakeDSL
     (case: i2 => //=); intros; split; intros; eval_instr_elim;
     repeat match goal with
       | H1 : S.Equal ?s1 ?s2, H2 : context c [eval_atom ?a ?s1] |- context c [eval_instr _ _ ?s2 _] =>
-          rewrite (add_proper_eval_atom (erefl a) H1) in H2
+          rewrite -> (add_proper_eval_atom (erefl a) H1) in H2
       | H1 : S.Equal ?s1 ?s2, H2 : context c [eval_atom ?a ?s2] |- context c [eval_instr _ _ ?s1 _] =>
-          rewrite -(add_proper_eval_atom (erefl a) H1) in H2
+          rewrite <- (add_proper_eval_atom (erefl a) H1) in H2
       | H1 : S.Equal ?s1 ?s2, H2 : S.Upd _ _ ?s1 _ |- context c [eval_instr _ _ ?s2] =>
-          rewrite (S.add_proper_Upd1 (erefl _) (erefl _) H1 (erefl _)) in H2
+          rewrite -> (S.add_proper_Upd1 (erefl _) (erefl _) H1 (erefl _)) in H2
       | H1 : S.Equal ?s1 ?s2, H2 : S.Upd _ _ ?s2 _ |- context c [eval_instr _ _ ?s1] =>
-          rewrite -(S.add_proper_Upd1 (erefl _) (erefl _) H1 (erefl _)) in H2
+          rewrite <- (S.add_proper_Upd1 (erefl _) (erefl _) H1 (erefl _)) in H2
       | H1 : S.Equal ?s1 ?s2, H2 : S.Upd2 _ _ _ _ ?s1 _ |- context c [eval_instr _ _ ?s2] =>
-          rewrite (S.add_proper_Upd2_1 (erefl _) (erefl _) (erefl _) (erefl _) H1 (erefl _)) in H2
+          rewrite -> (S.add_proper_Upd2_1 (erefl _) (erefl _) (erefl _) (erefl _) H1 (erefl _)) in H2
       | H1 : S.Equal ?s1 ?s2, H2 : S.Upd2 _ _ _ _ ?s2 _ |- context c [eval_instr _ _ ?s1] =>
-          rewrite -(S.add_proper_Upd2_1 (erefl _) (erefl _) (erefl _) (erefl _) H1 (erefl _)) in H2
+          rewrite <- (S.add_proper_Upd2_1 (erefl _) (erefl _) (erefl _) (erefl _) H1 (erefl _)) in H2
       end;
     try (by eval_instr_intro; eauto).
     - apply: EInop. by rewrite <- Heq.
@@ -6649,11 +6649,11 @@ Module MakeDSL
             H2 : VSLemmas.disjoint ?s2 ?s = ?b2 |- _ =>
           match b1 with
           | true => match b2 with
-                    | false => rewrite Heq H2 in H1; discriminate
+                    | false => rewrite -> Heq, H2 in H1; discriminate
                     | _ => idtac
                     end
           | false => match b2 with
-                     | true => rewrite Heq H2 in H1; discriminate
+                     | true => rewrite -> Heq, H2 in H1; discriminate
                      | _ => idtac
                      end
           end
@@ -7119,7 +7119,7 @@ Module MakeDSL
       VS.Equal (depvars_eprogram (depvars_einstr vs i) p) vs.
     Proof.
       move=> Hsub. move: (depvars_eprogram_ind_sat1 Hsub) => H.
-      rewrite H in Hsub *. apply/VSLemmas.equalP.
+      rewrite -> H in *. apply/VSLemmas.equalP.
       exact: (VSLemmas.subset_antisym Hsub (depvars_eprogram_lb vs p)).
     Qed.
 
@@ -7137,7 +7137,7 @@ Module MakeDSL
       VS.Equal (depvars_rprogram (depvars_rinstr vs i) p) vs.
     Proof.
       move=> Hsub. move: (depvars_rprogram_ind_sat1 Hsub) => H.
-      rewrite H in Hsub *. apply/VSLemmas.equalP.
+      rewrite -> H in *. apply/VSLemmas.equalP.
       exact: (VSLemmas.subset_antisym Hsub (depvars_rprogram_lb vs p)).
     Qed.
 
@@ -7155,7 +7155,7 @@ Module MakeDSL
       VS.Equal (depvars_ebexp (depvars_eprogram vs p) e) vs.
     Proof.
       move=> Hsub. move: (depvars_epre_eprogram_ind_sat1 Hsub) => H.
-      rewrite H in Hsub *. apply/VSLemmas.equalP.
+      rewrite -> H in *. apply/VSLemmas.equalP.
       exact: (VSLemmas.subset_antisym Hsub (depvars_ebexp_lb vs e)).
     Qed.
 
@@ -7173,7 +7173,7 @@ Module MakeDSL
       VS.Equal (depvars_rbexp (depvars_rprogram vs p) e) vs.
     Proof.
       move=> Hsub. move: (depvars_rpre_rprogram_ind_sat1 Hsub) => H.
-      rewrite H in Hsub *. apply/VSLemmas.equalP.
+      rewrite -> H in *. apply/VSLemmas.equalP.
       exact: (VSLemmas.subset_antisym Hsub (depvars_rbexp_lb vs e)).
     Qed.
 
@@ -7339,7 +7339,7 @@ Module MakeDSL
         move: (VSLemmas.subset_trans (depvars_ebexp_lb (depvars_ebexp vs e1) e2) Hsub) => Hsub1.
         split; first exact: (IH1 _ Hsub1). apply: IH2.
         move: (depvars_ebexp_subset_sat Hsub1) => Heq.
-        rewrite Heq in Hsub. assumption.
+        rewrite -> Heq in Hsub. assumption.
     Qed.
 
     Lemma depvars_rbexp_partition vs e :
@@ -7354,7 +7354,7 @@ Module MakeDSL
         move: (VSLemmas.subset_trans (depvars_rbexp_lb (depvars_rbexp vs e1) e2) Hsub) => Hsub1.
         split; first exact: (IH1 _ Hsub1). apply: IH2.
         move: (depvars_rbexp_subset_sat Hsub1) => Heq.
-        rewrite Heq in Hsub. assumption.
+        rewrite -> Heq in Hsub. assumption.
       - move=> e1 IH1 e2 IH2 vs. rewrite /depvars_rbexp /=. case_if; by mytac.
     Qed.
 
@@ -7378,7 +7378,7 @@ Module MakeDSL
       move: p vs. apply: last_ind => [| p i IH] vs //=.
       rewrite depvars_eprogram_rcons => Hsub. rewrite eprogram_partition_rcons.
       move: (depvars_eprogram_ind_sat1 Hsub) => Hi.
-      move: (depvars_eprogram_ind_sat2 Hsub) => Hp. rewrite Hi in Hp. split.
+      move: (depvars_eprogram_ind_sat2 Hsub) => Hp. rewrite -> Hi in Hp. split.
       - apply: IH. rewrite Hp. exact: VSLemmas.subset_refl.
       - apply: depvars_einstr_partition. rewrite Hi. exact: VSLemmas.subset_refl.
     Qed.
@@ -7389,7 +7389,7 @@ Module MakeDSL
       move: p vs. apply: last_ind => [| p i IH] vs //=.
       rewrite depvars_rprogram_rcons => Hsub. rewrite rprogram_partition_rcons.
       move: (depvars_rprogram_ind_sat1 Hsub) => Hi.
-      move: (depvars_rprogram_ind_sat2 Hsub) => Hp. rewrite Hi in Hp. split.
+      move: (depvars_rprogram_ind_sat2 Hsub) => Hp. rewrite -> Hi in Hp. split.
       - apply: IH. rewrite Hp. exact: VSLemmas.subset_refl.
       - apply: depvars_rinstr_partition. rewrite Hi. exact: VSLemmas.subset_refl.
     Qed.
@@ -7400,7 +7400,7 @@ Module MakeDSL
       rewrite /depvars_epre_eprogram => Hsub.
       move: (depvars_epre_eprogram_ind_sat1 Hsub) => Hp.
       move: (depvars_epre_eprogram_ind_sat2 Hsub) => He.
-      apply: depvars_ebexp_partition. rewrite Hp in He. rewrite He.
+      apply: depvars_ebexp_partition. rewrite -> Hp in He. rewrite He.
       exact: VSLemmas.subset_refl.
     Qed.
 
@@ -7419,7 +7419,7 @@ Module MakeDSL
       rewrite /depvars_rpre_rprogram => Hsub.
       move: (depvars_rpre_rprogram_ind_sat1 Hsub) => Hp.
       move: (depvars_rpre_rprogram_ind_sat2 Hsub) => He.
-      apply: depvars_rbexp_partition. rewrite Hp in He. rewrite He.
+      apply: depvars_rbexp_partition. rewrite -> Hp in He. rewrite He.
       exact: VSLemmas.subset_refl.
     Qed.
 

@@ -3574,16 +3574,16 @@ Section IdealMembershipRewriting.
       assumption.
     - move=> {vpre vps vq} vpre vps vq ve ves Hps Ha IH [vps' vq']  // Hrec Hs s He.
       apply: (IH _ Hrec Hs). rewrite split_cons rev_cons.
-      rewrite !zpexpr_all0_cat in He *. move: He => [He1 He2].
+      rewrite -> !zpexpr_all0_cat in *. move: He => [He1 He2].
       rewrite split_cons /= in He2. move: He2 => [He2 He3]. rewrite zpexpr_all0_rcons.
       tauto.
     - move=> {vpre vps vq} vpre vps vq ve ves Hps p r Ha IH [vps' vq'] // Hrec Hs s He.
-      rewrite zpexpr_all0_cat split_cons zpexpr_all0_cons in He.
-      move: He => [He1 [He2 He3]]. simpl in Hs.
+      rewrite -> zpexpr_all0_cat in He. rewrite split_cons in He.
+      move: He => [He1 /= [He2 He3]]. simpl in Hs.
       rewrite (zpexpr_subst_vars_cache_assignment_valid ve.1 vq Ha He2).
       apply: (IH _ Hrec Hs). rewrite zpexpr_all0_cat.
       rewrite zpexpr_all0_rev. move: (zpexpr_is_assignment_equal Ha He2) => Hpr.
-      rewrite zpexpr_all0_rev in He1. split.
+      rewrite -> zpexpr_all0_rev in He1. split.
       + move/(zpexpr_subst_vars_cache_all0 ve.1 _ Hpr): He1. by apply.
       + move/(zpexpr_subst_vars_cache_all0 ve.1 _ Hpr): He3. by apply.
   Qed.
