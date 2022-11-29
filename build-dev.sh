@@ -1,15 +1,24 @@
 #!/bin/bash
 
-SWITCHES=" \
+SWITCHES=${SWITCHES:- \
 	ocaml4.12.1-coq8.13.2-ssr1.12.0 \
 	ocaml4.13.1-coq8.14.1-ssr1.13.0 \
+	ocaml4.13.1-coq8.15.0-ssr1.14.0 \
 	ocaml4.14.0-coq8.15.2-ssr1.14.0 \
-"
+}
 
-BUILD_DIR=_build
+BUILD_DIR=${BUILD_DIR:-_build}
 
 if [[ "$1" == "clean" ]]; then
-  rm -rf ${BUILD_DIR}
+  read -n 1 -p "Delete ${BUILD_DIR} (y/N)? " answer
+  echo
+  case ${answer:-N} in
+    y|Y )
+      rm -rf ${BUILD_DIR}
+      ;;
+    * )
+      ;;
+  esac
   exit
 fi
 
