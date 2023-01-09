@@ -666,6 +666,7 @@ let pexpr_get_rewrite_pattern e =
     'a1 coq_PExpr -> (positive * 'a1 coq_PExpr) option **)
 
 let pexpr_is_assignment e = match e with
+| PEX j -> Some (j, PEO)
 | PEadd (e0, e1) ->
   (match e0 with
    | PEX j -> Some (j, (PEopp e1))

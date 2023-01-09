@@ -2923,6 +2923,8 @@ Section PExprAux.
      Otherwise it will take much more time in proving zpexpr_is_assignment_equal. *)
   Definition pexpr_is_assignment (e : PExpr C) : option (positive * PExpr C) :=
     match e with
+    (* v = 0 *)
+    | PEX j => Some (j, PEO)
     (* v - e = 0, e - v = 0; v = e*)
     | PEsub (PEX j) e
     | PEsub e (PEX j) => Some (j, e)
