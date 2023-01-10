@@ -431,7 +431,7 @@ Section AlgebraicReduction.
 
   Import SSA ZSSA.
 
-  Variable options : options.
+  Variable o : options.
 
 
   Ltac split_disjoint :=
@@ -460,7 +460,7 @@ Section AlgebraicReduction.
     eeq (emul (evar c) (esub (evar c) (econst 1)))
         (econst 0).
   Definition carry_constr (c : ssavar) :=
-    if (add_carry_constraints options) then [:: algred_is_carry c] else [::].
+    if (add_carry_constraints o) then [:: algred_is_carry c] else [::].
 
   Definition algred_cast (avn : VarOrder.t) (g : N) v vtyp a atyp :=
     match vtyp, atyp with
@@ -778,9 +778,9 @@ Section AlgebraicReduction.
   Lemma vars_carry_constr c :
     SSAVS.Equal
       (vars_zbexp (eands (carry_constr c)))
-      (if add_carry_constraints options then SSAVS.singleton c else SSAVS.empty).
+      (if add_carry_constraints o then SSAVS.singleton c else SSAVS.empty).
   Proof.
-    rewrite /carry_constr. case: (add_carry_constraints options) => //=.
+    rewrite /carry_constr. case: (add_carry_constraints o) => //=.
     rewrite !SSAVS.Lemmas.union_emptyr. rewrite SSAVS.Lemmas.union_same.
     reflexivity.
   Qed.
@@ -1001,7 +1001,7 @@ Section AlgebraicReduction.
     | |- avars_newer_than _ _ (vars_zbexp (eands (carry_constr ?c))) =>
       apply: (avars_newer_than_equal
                 (SSAVS.Lemmas.P.equal_sym (vars_carry_constr c)));
-      case: (add_carry_constraints options); solve_avars_newer_than
+      case: (add_carry_constraints o); solve_avars_newer_than
     | H : is_true (?avn != Var.svar ?t) |- avars_newer_than_var ?avn _ ?t =>
       left; rewrite eq_sym; assumption
     | H : svar_notin ?avn (vars_atom ?a) |-
@@ -1073,6 +1073,8 @@ End AlgebraicReduction.
 (** Split a specification into algebraic soundness conditions, range specification,
     and algebraic specification *)
 Section SplitSpec.
+
+  Variable o : options.
 
   Arguments Z.sub m n : simpl nomatch.
 
@@ -1555,7 +1557,7 @@ Section SplitSpec.
       + case: (m <= n); move=> *; repeat case_pairs; reflexivity.
   Qed.
 
-  Lemma algred_upd_avars_instr_gen o E avn i g1 g2 g3 zs zs1 zs2 :
+  Lemma algred_upd_avars_instr_gen E avn i g1 g2 g3 zs zs1 zs2 :
     algred_instr o E avn g1 i = (g2, zs) ->
     algred_upd_avars_instr E avn g1 i zs1 = (g3, zs2) ->
     g2 = g3.
@@ -1567,7 +1569,7 @@ Section SplitSpec.
     - rewrite /algred_vpc in H. repeat case_pairs. reflexivity.
   Qed.
 
-  Lemma algred_upd_avars_program_gen o E avn p g1 g2 g3 zs zs1 zs2 :
+  Lemma algred_upd_avars_program_gen E avn p g1 g2 g3 zs zs1 zs2 :
     algred_program o E avn g1 p = (g2, zs) ->
     algred_upd_avars_program E avn g1 p zs1 = (g3, zs2) ->
     g2 = g3.
@@ -1599,8 +1601,8 @@ Section SplitSpec.
     algred_upd_avars_instr E avn g1 i zs1 = (g2, zs2) ->
     (g1 <= g2)%num.
   Proof.
-    move=> Hupd. move: (Logic.eq_refl (algred_instr default_options E avn g1 i)).
-    move: {2}(algred_instr default_options E avn g1 i) => [g3 zi] Hbvz.
+    move=> Hupd. move: (Logic.eq_refl (algred_instr o E avn g1 i)).
+    move: {2}(algred_instr o E avn g1 i) => [g3 zi] Hbvz.
     move: (algred_instr_idx_inc Hbvz) => Hg13.
     rewrite (algred_upd_avars_instr_gen Hbvz Hupd) in Hg13. assumption.
   Qed.
@@ -1609,8 +1611,8 @@ Section SplitSpec.
     algred_upd_avars_program E avn g1 p zs1 = (g2, zs2) ->
     (g1 <= g2)%num.
   Proof.
-    move=> Hupd. move: (Logic.eq_refl (algred_program default_options E avn g1 p)).
-    move: {2}(algred_program default_options E avn g1 p) => [g3 zp] Hbvz.
+    move=> Hupd. move: (Logic.eq_refl (algred_program o E avn g1 p)).
+    move: {2}(algred_program o E avn g1 p) => [g3 zp] Hbvz.
     move: (algred_program_idx_inc Hbvz) => Hg13.
     rewrite (algred_upd_avars_program_gen Hbvz Hupd) in Hg13. assumption.
   Qed.
@@ -2659,7 +2661,7 @@ Section SplitSpec.
       exact: algred_carry_constraint
     end.
 
-  Lemma algred_upd_avars_sat_instr o E avn i bs1 bs2 g1 g2 g2' zes zs1 zs2 :
+  Lemma algred_upd_avars_sat_instr E avn i bs1 bs2 g1 g2 g2' zes zs1 zs2 :
     well_formed_instr E i ->
     ssa_vars_unchanged_instr (vars_env E) i ->
     svar_notin avn (vars_instr i) ->
@@ -2842,7 +2844,7 @@ Section SplitSpec.
       move: H0 => [/= He _]. apply/(bvz_eqi_eval_ebexp Heq Hdef). rewrite <- H. exact: He.
   Qed.
 
-  Lemma algred_upd_avars_sat_program o E avn g1 p g2 eprogs bs1 bs2 :
+  Lemma algred_upd_avars_sat_program E avn g1 p g2 eprogs bs1 bs2 :
     well_formed_program E p ->
     ssa_vars_unchanged_program (vars_env E) p ->
     ssa_single_assignment p ->
@@ -3020,7 +3022,7 @@ Section SplitSpec.
     move=> ?; by mytac.
   Qed.
 
-  Lemma algred_espec_sound (o : options) (avn : var) (s : spec) :
+  Lemma algred_espec_sound (avn : var) (s : spec) :
     well_formed_ssa_spec s ->
     ssa_spec_algsnd (rspec_of_spec s) ->
     fresh_var_espec avn (espec_of_spec s) ->
@@ -3076,7 +3078,7 @@ Section SplitSpec.
     apply/(algred_upd_avars_eval_ebexp Hni_eqn_g). exact: Hzg.
   Qed.
 
-  Theorem algred_spec_sound (o : options) avn (s : spec) :
+  Theorem algred_spec_sound avn (s : spec) :
     well_formed_ssa_spec s ->
     ssa_spec_algsnd (rspec_of_spec s) ->
     valid_rspec (rspec_of_spec s) ->
@@ -3101,7 +3103,7 @@ Section SplitSpec.
 
   (* With slicing *)
 
-  Lemma algred_spec_split o s avn :
+  Lemma algred_spec_split s avn :
     ZSSA.valid_reps (tmap (algred_espec o avn) (split_espec s)) ->
     ZSSA.valid_rep (algred_espec o avn s).
   Proof.
@@ -3292,7 +3294,7 @@ Section SplitSpec.
     rewrite /algred_instr_upd_avn /succ_gen. case: i => //=; intros; by mytac.
   Qed.
 
-  Lemma slice_einstr_some_upd_avn_gen o E1 E2 avn vs i i' g1 g2 eg1 ei1 g1' g2' s1 s2 t :
+  Lemma slice_einstr_some_upd_avn_gen E1 E2 avn vs i i' g1 g2 eg1 ei1 g1' g2' s1 s2 t :
     slice_einstr vs i = Some i' ->
     MA.agree (vars_instr i') E1 E2 ->
     algred_instr o E1 avn g1 i' = (eg1, ei1) ->
@@ -3316,7 +3318,7 @@ Section SplitSpec.
        end.
   Qed.
 
-  Lemma algred_instr_upd_avn_gen o E2 avn vs i g1 g2 eg2 ei2 g1' g2' s1 s2 t :
+  Lemma algred_instr_upd_avn_gen E2 avn vs i g1 g2 eg2 ei2 g1' g2' s1 s2 t :
     algred_instr o E2 avn g2 i = (eg2, ei2) ->
     algred_instr_upd_avn E2 avn vs i g1 g2 s1 s2 = (g1', g2', t) ->
     eg2 = g2'.
@@ -3332,7 +3334,7 @@ Section SplitSpec.
     rewrite /algred_instr_upd_avn /succ_gen. case: i => /=; by mytac.
   Qed.
 
-  Lemma algred_instr_upd_avn_eval o vs E1 E2 avn i i' g1 g2 eg1 ei1 eg2 ei2 eg1' eg2' s1 s2 t2 :
+  Lemma algred_instr_upd_avn_eval vs E1 E2 avn i i' g1 g2 eg1 ei1 eg2 ei2 eg1' eg2' s1 s2 t2 :
     slice_einstr vs i = Some i' ->
     svar_notin avn (vars_instr i) ->
     MA.agree (vars_instr i') E1 E2 ->
@@ -3497,7 +3499,7 @@ Section SplitSpec.
       exact: (N.lt_le_trans _ _  _ Hg Hg1).
   Qed.
 
-  Lemma algred_program_upd_avn_eval o vs E1 E2 avn p g1 g2 eg1 ep1 eg2 ep2 eg1' eg2' s1 s2 t2 :
+  Lemma algred_program_upd_avn_eval vs E1 E2 avn p g1 g2 eg1 ep1 eg2 ep2 eg1' eg2' s1 s2 t2 :
     svar_notin avn (vars_program p) ->
     SSAVS.subset (vars_program (slice_eprogram vs p)) vs ->
     MA.agree (vars_program (slice_eprogram vs p)) E1 E2 ->
@@ -3508,8 +3510,8 @@ Section SplitSpec.
     store_pvareq avn s1 s2 ->
     store_pvareq avn s1 t2 /\ ZSSA.eval_zbexp (eands ep1) t2.
   Proof.
-    elim: p o vs E1 E2 avn g1 g2 eg1 ep1 eg2 ep2 eg1' eg2' s1 s2
-        => [| i p IH]  o vs E1 E2 avn g1 g2 eg1 ep1 eg2 ep2 eg1' eg2' s1 s2 /=.
+    elim: p vs E1 E2 avn g1 g2 eg1 ep1 eg2 ep2 eg1' eg2' s1 s2
+        => [| i p IH] vs E1 E2 avn g1 g2 eg1 ep1 eg2 ep2 eg1' eg2' s1 s2 /=.
     - move=> _ _ Hag [] ? ? [] ? ? Hev [] ? ? ?; subst. move=> Heq.
       split; [assumption | done].
     - move=> /svar_notin_union [Hnotin_i Hnotin_p]. dcase (slice_einstr vs i); case.
@@ -3529,7 +3531,7 @@ Section SplitSpec.
         move: (slice_einstr_some_upd_avn_gen Hsi Hag_i Hhd1 Hupd_hd) => ?; subst.
         move: (algred_instr_upd_avn_gen Hhd2 Hupd_hd) => ?; subst.
 
-        move: (IH o vs (instr_succ_typenv i E1) (instr_succ_typenv i E2)
+        move: (IH vs (instr_succ_typenv i E1) (instr_succ_typenv i E2)
                   avn g_hd1' g_hd2' eg1 ztl1 eg2 ztl2 eg1' eg2' s1 t Hnotin_p).
         rewrite -(slice_einstr_some_succ_typenv _ Hsi) in Htl1 *.
         have Hag_succ: MA.agree (vars_program (slice_eprogram vs p)) (instr_succ_typenv i E1) (instr_succ_typenv i E2).
@@ -3558,13 +3560,13 @@ Section SplitSpec.
         { apply: (MA.agree_trans Hag).
           exact: (MA.subset_set_agree Hsub (MA.agree_sym (slice_einstr_none_agree E2 Hsi))). }
 
-        apply: (IH o vs E1 (instr_succ_typenv i E2) _ _ _ _ _ _ _ _ _ _ _ Hnotin_p Hsub Hag_succ
+        apply: (IH vs E1 (instr_succ_typenv i E2) _ _ _ _ _ _ _ _ _ _ _ Hnotin_p Hsub Hag_succ
                Htl1 Htl2 Hev_tl Hupd_tl).
         move: (slice_einstr_none_upd_avn_store Hsi Hupd_hd) => ?; subst.
         assumption.
   Qed.
 
-  Lemma algred_program_exists o avn vs E1 E2 p g1 g2 eg1 ep1 eg2 ep2 st  :
+  Lemma algred_program_exists avn vs E1 E2 p g1 g2 eg1 ep1 eg2 ep2 st  :
     svar_notin avn (vars_program p) ->
     SSAVS.subset (vars_program (slice_eprogram vs p)) vs ->
     MA.agree vs E1 E2 ->
@@ -3581,26 +3583,29 @@ Section SplitSpec.
     exact: store_pvareq_refl.
   Qed.
 
-  Lemma algred_spec_slice_espec o avn s :
+  Lemma algred_spec_slice_espec avn s :
     fresh_var_espec avn s ->
-    ZSSA.valid_rep (algred_espec o avn (slice_espec s)) ->
+    ZSSA.valid_rep (algred_espec o avn (slice_espec o s)) ->
     ZSSA.valid_rep (algred_espec o avn s).
   Proof.
     case: s => E f p g. rewrite /fresh_var_espec /slice_espec /algred_espec /=.
     dcase (algred_program
              o E avn initial_index
-             (slice_eprogram (depvars_epre_eprogram_sat (eqn_bexp f) p (ZSSA.vars_zbexp g)) p))
+             (slice_eprogram (depvars_epre_eprogram_sat
+                                o (eqn_bexp f) p (ZSSA.vars_zbexp g)) p))
           => [[eg1 ep1] Har1].
     dcase (algred_program o E avn initial_index p) => [[eg2 ep2] Har2].
     rewrite /ZSSA.valid_rep /=. move=> Hnotin Hent st /ZSSA.eval_zbexp_eands_cons [Hef Hep].
 
-    move: (@MA.agree_refl _ (depvars_epre_eprogram_sat (eqn_bexp f) p (ZSSA.vars_zbexp g)) E)
+    move: (@MA.agree_refl _ (depvars_epre_eprogram_sat
+                               o (eqn_bexp f) p (ZSSA.vars_zbexp g)) E)
         => Hag.
     move/svar_notin_union: Hnotin.
     move=> [Hnotin_E /svar_notin_union [Hnotin_f /svar_notin_union [Hnotin_p Hnotin_g]]].
 
     move: (algred_program_exists
-             Hnotin_p (depvars_epre_eprogram_sat_slice_subset (eqn_bexp f) p (ZSSA.vars_zbexp g))
+             Hnotin_p (depvars_epre_eprogram_sat_slice_subset
+                         o (eqn_bexp f) p (ZSSA.vars_zbexp g))
              Hag Har1 Har2 Hep) => [st' [Hseq Hevp1]].
     apply: (store_pvareq_eval_zbexp Hnotin_g (store_pvareq_sym Hseq)).
     apply: Hent. split.
@@ -3631,9 +3636,9 @@ Section SplitSpec.
       + apply: (IH2 _ Hin). by dp_svar_notin.
   Qed.
 
-  Lemma algred_spec_slice_especs o avn ss :
+  Lemma algred_spec_slice_especs avn ss :
     (forall s, In s ss -> fresh_var_espec avn s) ->
-    ZSSA.valid_reps (tmap (algred_espec o avn) (tmap slice_espec ss)) ->
+    ZSSA.valid_reps (tmap (algred_espec o avn) (tmap (slice_espec o) ss)) ->
     ZSSA.valid_reps (tmap (algred_espec o avn) ss).
   Proof.
     rewrite !tmap_map. elim: ss => [| s ss IH] Hnotins //=.
@@ -3643,17 +3648,17 @@ Section SplitSpec.
     - apply: (IH _ Hrepss). move=> s' Hin. apply: Hnotins. right. assumption.
   Qed.
 
-  Theorem algred_spec_slice_sound (o : options) (avn : var) (s : spec) :
+  Theorem algred_spec_slice_sound (avn : var) (s : spec) :
     well_formed_ssa_spec s ->
     ssa_spec_algsnd (rspec_of_spec s) ->
     fresh_var_espec avn (espec_of_spec s) ->
     valid_rspec (rspec_of_spec s) ->
     ZSSA.valid_reps (tmap (algred_espec o avn)
-                          (tmap slice_espec (split_espec (espec_of_spec s)))) ->
+                          (tmap (slice_espec o) (split_espec (espec_of_spec s)))) ->
     valid_spec s.
   Proof.
     move=> Hwf Hsnd Hnotin Hvr Hrep.
-    apply: (algred_spec_sound (o:=o) Hwf Hsnd Hvr Hnotin).
+    apply: (algred_spec_sound Hwf Hsnd Hvr Hnotin).
     apply: algred_spec_split. apply: (algred_spec_slice_especs _ Hrep).
     move=> s'. exact: (fresh_var_espec_split Hnotin).
   Qed.

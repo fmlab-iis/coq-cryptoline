@@ -15,7 +15,9 @@ Record options : Set :=
       (* true to apply slicing to algebraic specifications *)
       apply_slicing_espec : bool;
       (* true to apply slicing to range specifications (both in range reduction and algebraic soundness) *)
-      apply_slicing_rspec : bool
+      apply_slicing_rspec : bool;
+      (* true to slice predicates in assume statements *)
+      apply_slicing_assume : bool
     }.
 
 Definition default_options : options :=
@@ -26,5 +28,6 @@ Definition default_options : options :=
     vars_cache_in_rewrite_assignments := true;
     compute_coefficients_one_by_one := false;
     apply_slicing_espec := true;
-    apply_slicing_rspec := true
+    apply_slicing_rspec := true;
+    apply_slicing_assume := true
   |}.

@@ -1,5 +1,6 @@
 open NBitsDef
 open NBitsOp
+open Options0
 open Seqs
 open Typ
 open Eqtype
@@ -357,10 +358,12 @@ let rngred_rspec_split_la s =
 let rngred_rspec_split_las rs =
   tflatten (tmap rngred_rspec_split_la rs)
 
-(** val rngred_rspec_slice_split_la : SSA.SSA.rspec -> QFBV.QFBV.bexp list **)
+(** val rngred_rspec_slice_split_la :
+    options -> SSA.SSA.rspec -> QFBV.QFBV.bexp list **)
 
-let rngred_rspec_slice_split_la s =
-  rngred_rspec_split_las (tmap SSA.SSA.slice_rspec (SSA.SSA.split_rspec s))
+let rngred_rspec_slice_split_la o s =
+  rngred_rspec_split_las
+    (tmap (SSA.SSA.slice_rspec o) (SSA.SSA.split_rspec s))
 
 (** val bexp_atom_uaddB_algsnd :
     SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
@@ -818,31 +821,32 @@ let qfbv_spec_algsnd_la s =
     (bexp_program_algsnd_split_fixed_final fE (SSA.SSA.rsprog s))
 
 (** val make_sndcond :
-    TypEnv.SSATE.env -> SSA.SSA.rbexp -> SSA.SSA.instr list -> SSA.SSA.instr
-    -> QFBV.QFBV.bexp **)
+    options -> TypEnv.SSATE.env -> SSA.SSA.rbexp -> SSA.SSA.instr list ->
+    SSA.SSA.instr -> QFBV.QFBV.bexp **)
 
-let make_sndcond fE f p i =
+let make_sndcond o fE f p i =
   let ef = bexp_rbexp f in
-  let vs = SSA.SSA.depvars_rpre_rprogram (SSA.SSA.rvs_instr i) f p in
+  let vs = SSA.SSA.depvars_rpre_rprogram o (SSA.SSA.rvs_instr i) f p in
   let ep = bexp_program fE (SSA.SSA.slice_rprogram vs p) in
   let es = bexp_instr_algsnd fE i in
   QFBV.QFBV.qfbv_imp (QFBV.QFBV.qfbv_conj ef (QFBV.QFBV.qfbv_conjs_la ep)) es
 
 (** val algsnd_slice_la_rec :
-    TypEnv.SSATE.env -> SSA.SSA.program -> SSA.SSA.rbexp -> SSA.SSA.program
-    -> QFBV.QFBV.bexp list **)
+    options -> TypEnv.SSATE.env -> SSA.SSA.program -> SSA.SSA.rbexp ->
+    SSA.SSA.program -> QFBV.QFBV.bexp list **)
 
-let rec algsnd_slice_la_rec fE pre f = function
+let rec algsnd_slice_la_rec o fE pre f = function
 | [] -> []
 | hd :: tl ->
-  (make_sndcond fE f pre hd) :: (algsnd_slice_la_rec fE (rcons pre hd) f tl)
+  (make_sndcond o fE f pre hd) :: (algsnd_slice_la_rec o fE (rcons pre hd) f
+                                    tl)
 
-(** val algsnd_slice_la : SSA.SSA.rspec -> QFBV.QFBV.bexp list **)
+(** val algsnd_slice_la : options -> SSA.SSA.rspec -> QFBV.QFBV.bexp list **)
 
-let algsnd_slice_la s =
+let algsnd_slice_la o s =
   let fE = SSA.SSA.program_succ_typenv (SSA.SSA.rsprog s) (SSA.SSA.rsinputs s)
   in
-  algsnd_slice_la_rec fE [] (SSA.SSA.rspre s) (SSA.SSA.rsprog s)
+  algsnd_slice_la_rec o fE [] (SSA.SSA.rspre s) (SSA.SSA.rsprog s)
 
 (** val rngred_algsnd_split_la : SSA.SSA.rspec -> QFBV.QFBV.bexp list **)
 
@@ -850,7 +854,7 @@ let rngred_algsnd_split_la s =
   cat (rngred_rspec_split_la s) (qfbv_spec_algsnd_la s)
 
 (** val rngred_algsnd_slice_split_la :
-    SSA.SSA.rspec -> QFBV.QFBV.bexp list **)
+    options -> SSA.SSA.rspec -> QFBV.QFBV.bexp list **)
 
-let rngred_algsnd_slice_split_la s =
-  cat (rngred_rspec_slice_split_la s) (algsnd_slice_la s)
+let rngred_algsnd_slice_split_la o s =
+  cat (rngred_rspec_slice_split_la o s) (algsnd_slice_la o s)

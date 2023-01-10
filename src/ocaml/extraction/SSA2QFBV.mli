@@ -1,5 +1,6 @@
 open NBitsDef
 open NBitsOp
+open Options0
 open Seqs
 open Typ
 open Eqtype
@@ -25,7 +26,8 @@ val rngred_rspec_split_la : SSA.SSA.rspec -> QFBV.QFBV.bexp list
 
 val rngred_rspec_split_las : SSA.SSA.rspec list -> QFBV.QFBV.bexp list
 
-val rngred_rspec_slice_split_la : SSA.SSA.rspec -> QFBV.QFBV.bexp list
+val rngred_rspec_slice_split_la :
+  options -> SSA.SSA.rspec -> QFBV.QFBV.bexp list
 
 val bexp_atom_uaddB_algsnd : SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp
 
@@ -121,15 +123,16 @@ val qfbv_spec_algsnd_la_rec :
 val qfbv_spec_algsnd_la : SSA.SSA.rspec -> QFBV.QFBV.bexp list
 
 val make_sndcond :
-  TypEnv.SSATE.env -> SSA.SSA.rbexp -> SSA.SSA.instr list -> SSA.SSA.instr ->
-  QFBV.QFBV.bexp
+  options -> TypEnv.SSATE.env -> SSA.SSA.rbexp -> SSA.SSA.instr list ->
+  SSA.SSA.instr -> QFBV.QFBV.bexp
 
 val algsnd_slice_la_rec :
-  TypEnv.SSATE.env -> SSA.SSA.program -> SSA.SSA.rbexp -> SSA.SSA.program ->
-  QFBV.QFBV.bexp list
+  options -> TypEnv.SSATE.env -> SSA.SSA.program -> SSA.SSA.rbexp ->
+  SSA.SSA.program -> QFBV.QFBV.bexp list
 
-val algsnd_slice_la : SSA.SSA.rspec -> QFBV.QFBV.bexp list
+val algsnd_slice_la : options -> SSA.SSA.rspec -> QFBV.QFBV.bexp list
 
 val rngred_algsnd_split_la : SSA.SSA.rspec -> QFBV.QFBV.bexp list
 
-val rngred_algsnd_slice_split_la : SSA.SSA.rspec -> QFBV.QFBV.bexp list
+val rngred_algsnd_slice_split_la :
+  options -> SSA.SSA.rspec -> QFBV.QFBV.bexp list

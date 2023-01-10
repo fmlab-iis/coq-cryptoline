@@ -3,6 +3,7 @@ open BinNums
 open Bool
 open Datatypes
 open NBitsDef
+open Options0
 open State
 open Typ
 open Var
@@ -2837,29 +2838,32 @@ module SSA :
 
   val depvars_rbexp : SSAVS.t -> DSL.rbexp -> SSAVS.t
 
-  val depvars_einstr : SSAVS.t -> instr -> SSAVS.t
+  val depvars_einstr : options -> SSAVS.t -> instr -> SSAVS.t
 
-  val depvars_rinstr : SSAVS.t -> instr -> SSAVS.t
+  val depvars_rinstr : options -> SSAVS.t -> instr -> SSAVS.t
 
-  val depvars_eprogram : SSAVS.t -> instr list -> SSAVS.t
+  val depvars_eprogram : options -> SSAVS.t -> instr list -> SSAVS.t
 
-  val depvars_rprogram : SSAVS.t -> instr list -> SSAVS.t
+  val depvars_rprogram : options -> SSAVS.t -> instr list -> SSAVS.t
 
-  val depvars_epre_eprogram : SSAVS.t -> ebexp -> instr list -> SSAVS.t
+  val depvars_epre_eprogram :
+    options -> SSAVS.t -> ebexp -> instr list -> SSAVS.t
 
-  val depvars_rpre_rprogram : SSAVS.t -> DSL.rbexp -> instr list -> SSAVS.t
+  val depvars_rpre_rprogram :
+    options -> SSAVS.t -> DSL.rbexp -> instr list -> SSAVS.t
 
   val evsize : ebexp -> program -> SSAVS.t -> int
 
   val rvsize : rbexp -> program -> SSAVS.t -> int
 
   val depvars_epre_eprogram_sat_F :
-    ebexp -> program -> (SSAVS.t -> SSAVS.t) -> SSAVS.t -> SSAVS.t
+    options -> ebexp -> program -> (SSAVS.t -> SSAVS.t) -> SSAVS.t -> SSAVS.t
 
   val depvars_epre_eprogram_sat_terminate :
-    ebexp -> program -> SSAVS.t -> SSAVS.t
+    options -> ebexp -> program -> SSAVS.t -> SSAVS.t
 
-  val depvars_epre_eprogram_sat : ebexp -> program -> SSAVS.t -> SSAVS.t
+  val depvars_epre_eprogram_sat :
+    options -> ebexp -> program -> SSAVS.t -> SSAVS.t
 
   type coq_R_depvars_epre_eprogram_sat =
   | R_depvars_epre_eprogram_sat_0 of SSAVS.t * SSAVS.t
@@ -2867,33 +2871,35 @@ module SSA :
   | R_depvars_epre_eprogram_sat_1 of SSAVS.t
 
   val coq_R_depvars_epre_eprogram_sat_rect :
-    ebexp -> program -> (SSAVS.t -> __ -> SSAVS.t ->
+    options -> ebexp -> program -> (SSAVS.t -> __ -> SSAVS.t ->
     coq_R_depvars_epre_eprogram_sat -> 'a1 -> 'a1) -> (SSAVS.t -> __ -> 'a1)
     -> SSAVS.t -> SSAVS.t -> coq_R_depvars_epre_eprogram_sat -> 'a1
 
   val coq_R_depvars_epre_eprogram_sat_rec :
-    ebexp -> program -> (SSAVS.t -> __ -> SSAVS.t ->
+    options -> ebexp -> program -> (SSAVS.t -> __ -> SSAVS.t ->
     coq_R_depvars_epre_eprogram_sat -> 'a1 -> 'a1) -> (SSAVS.t -> __ -> 'a1)
     -> SSAVS.t -> SSAVS.t -> coq_R_depvars_epre_eprogram_sat -> 'a1
 
   val depvars_epre_eprogram_sat_rect :
-    ebexp -> program -> (SSAVS.t -> __ -> 'a1 -> 'a1) -> (SSAVS.t -> __ ->
-    'a1) -> SSAVS.t -> 'a1
+    options -> ebexp -> program -> (SSAVS.t -> __ -> 'a1 -> 'a1) -> (SSAVS.t
+    -> __ -> 'a1) -> SSAVS.t -> 'a1
 
   val depvars_epre_eprogram_sat_rec :
-    ebexp -> program -> (SSAVS.t -> __ -> 'a1 -> 'a1) -> (SSAVS.t -> __ ->
-    'a1) -> SSAVS.t -> 'a1
+    options -> ebexp -> program -> (SSAVS.t -> __ -> 'a1 -> 'a1) -> (SSAVS.t
+    -> __ -> 'a1) -> SSAVS.t -> 'a1
 
   val coq_R_depvars_epre_eprogram_sat_correct :
-    ebexp -> program -> SSAVS.t -> SSAVS.t -> coq_R_depvars_epre_eprogram_sat
+    options -> ebexp -> program -> SSAVS.t -> SSAVS.t ->
+    coq_R_depvars_epre_eprogram_sat
 
   val depvars_rpre_rprogram_sat_F :
-    rbexp -> program -> (SSAVS.t -> SSAVS.t) -> SSAVS.t -> SSAVS.t
+    options -> rbexp -> program -> (SSAVS.t -> SSAVS.t) -> SSAVS.t -> SSAVS.t
 
   val depvars_rpre_rprogram_sat_terminate :
-    rbexp -> program -> SSAVS.t -> SSAVS.t
+    options -> rbexp -> program -> SSAVS.t -> SSAVS.t
 
-  val depvars_rpre_rprogram_sat : rbexp -> program -> SSAVS.t -> SSAVS.t
+  val depvars_rpre_rprogram_sat :
+    options -> rbexp -> program -> SSAVS.t -> SSAVS.t
 
   type coq_R_depvars_rpre_rprogram_sat =
   | R_depvars_rpre_rprogram_sat_0 of SSAVS.t * SSAVS.t
@@ -2901,25 +2907,26 @@ module SSA :
   | R_depvars_rpre_rprogram_sat_1 of SSAVS.t
 
   val coq_R_depvars_rpre_rprogram_sat_rect :
-    rbexp -> program -> (SSAVS.t -> __ -> SSAVS.t ->
+    options -> rbexp -> program -> (SSAVS.t -> __ -> SSAVS.t ->
     coq_R_depvars_rpre_rprogram_sat -> 'a1 -> 'a1) -> (SSAVS.t -> __ -> 'a1)
     -> SSAVS.t -> SSAVS.t -> coq_R_depvars_rpre_rprogram_sat -> 'a1
 
   val coq_R_depvars_rpre_rprogram_sat_rec :
-    rbexp -> program -> (SSAVS.t -> __ -> SSAVS.t ->
+    options -> rbexp -> program -> (SSAVS.t -> __ -> SSAVS.t ->
     coq_R_depvars_rpre_rprogram_sat -> 'a1 -> 'a1) -> (SSAVS.t -> __ -> 'a1)
     -> SSAVS.t -> SSAVS.t -> coq_R_depvars_rpre_rprogram_sat -> 'a1
 
   val depvars_rpre_rprogram_sat_rect :
-    rbexp -> program -> (SSAVS.t -> __ -> 'a1 -> 'a1) -> (SSAVS.t -> __ ->
-    'a1) -> SSAVS.t -> 'a1
+    options -> rbexp -> program -> (SSAVS.t -> __ -> 'a1 -> 'a1) -> (SSAVS.t
+    -> __ -> 'a1) -> SSAVS.t -> 'a1
 
   val depvars_rpre_rprogram_sat_rec :
-    rbexp -> program -> (SSAVS.t -> __ -> 'a1 -> 'a1) -> (SSAVS.t -> __ ->
-    'a1) -> SSAVS.t -> 'a1
+    options -> rbexp -> program -> (SSAVS.t -> __ -> 'a1 -> 'a1) -> (SSAVS.t
+    -> __ -> 'a1) -> SSAVS.t -> 'a1
 
   val coq_R_depvars_rpre_rprogram_sat_correct :
-    rbexp -> program -> SSAVS.t -> SSAVS.t -> coq_R_depvars_rpre_rprogram_sat
+    options -> rbexp -> program -> SSAVS.t -> SSAVS.t ->
+    coq_R_depvars_rpre_rprogram_sat
 
   val slice_ebexp : SSAVS.t -> DSL.ebexp -> DSL.ebexp
 
@@ -2933,9 +2940,9 @@ module SSA :
 
   val slice_rprogram : SSAVS.t -> instr list -> instr list
 
-  val slice_espec : espec -> espec
+  val slice_espec : options -> espec -> espec
 
-  val slice_rspec : rspec -> rspec
+  val slice_rspec : options -> rspec -> rspec
  end
 
 type vmap = coq_N VM.t

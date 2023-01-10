@@ -248,7 +248,8 @@ Section Verification.
     let avn := new_svar_spec s in
     let apply_algred s := algred_espec o avn s in
     if apply_slicing_espec o
-    then let reps := tmap apply_algred (tmap SSA.slice_espec (SSA.split_espec (SSA.espec_of_spec s))) in
+    then let reps := tmap apply_algred
+                          (tmap (SSA.slice_espec o) (SSA.split_espec (SSA.espec_of_spec s))) in
          if compute_coefficients_one_by_one o
          then verify_reps_seq o reps
          else verify_reps_paral o reps

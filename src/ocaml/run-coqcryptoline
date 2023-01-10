@@ -12,6 +12,7 @@ REWRITING_AREP=${REWRITING_AREP:-1}                   # 1
 REWRITING_IMP=${REWRITING_IMP:-1}                     # 1
 SLICING_ESPEC=${SLICING_ESPEC:-1}                     # 1
 SLICING_RSPEC=${SLICING_RSPEC:-1}                     # 1
+SLICING_ASSUME=${SLICING_ASSUME:-1}                   # 1
 VARS_CACHE_IN_REWRITING=${VARS_CACHE_IN_REWRITING-1}  # 1
 DEBUG=${DEBUG:-0}                                     # 0
 TMPDIR=${TMPDIR:-./tmp}                               # ./tmp
@@ -62,6 +63,11 @@ if [[ ${SLICING_RSPEC} == 0 ]]; then
   FLAGS+=" -disable_slicing_rspec"
 else
   FLAGS+=" -enable_slicing_rspec"
+fi
+if [[ ${SLICING_ASSUME} == 0 ]]; then
+  FLAGS+=" -disable_slicing_assume"
+else
+  FLAGS+=" -enable_slicing_assume"
 fi
 FLAGS+=" -tmpdir ${TMPDIR}"
 

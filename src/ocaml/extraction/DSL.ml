@@ -6,6 +6,7 @@ open FMaps
 open FSets
 open NBitsDef
 open NBitsOp
+open Options0
 open Seqs
 open Store
 open String0
@@ -3483,9 +3484,9 @@ module MakeDSL =
       if VSLemmas.disjoint vs0 vse then vs0 else VS.union vs0 vse) vs
       (split_rand V.coq_T e)
 
-  (** val depvars_einstr : VS.t -> instr -> VS.t **)
+  (** val depvars_einstr : options -> VS.t -> instr -> VS.t **)
 
-  let depvars_einstr vs i = match i with
+  let depvars_einstr o vs i = match i with
   | Imov (_, a) ->
     (match a with
      | Avar _ ->
@@ -3506,15 +3507,19 @@ module MakeDSL =
        if VSLemmas.disjoint vs (lvs_instr i)
        then vs
        else VS.union vs (vars_instr i))
-  | Iassume b -> let (e, _) = b in depvars_ebexp vs e
+  | Iassume b ->
+    let (e, _) = b in
+    if o.apply_slicing_assume
+    then depvars_ebexp vs e
+    else VS.union vs (vars_ebexp e)
   | _ ->
     if VSLemmas.disjoint vs (lvs_instr i)
     then vs
     else VS.union vs (vars_instr i)
 
-  (** val depvars_rinstr : VS.t -> instr -> VS.t **)
+  (** val depvars_rinstr : options -> VS.t -> instr -> VS.t **)
 
-  let depvars_rinstr vs i = match i with
+  let depvars_rinstr o vs i = match i with
   | Imov (_, a) ->
     (match a with
      | Avar _ ->
@@ -3535,32 +3540,37 @@ module MakeDSL =
        if VSLemmas.disjoint vs (lvs_instr i)
        then vs
        else VS.union vs (vars_instr i))
-  | Iassume b -> let (_, r) = b in depvars_rbexp vs r
+  | Iassume b ->
+    let (_, r) = b in
+    if o.apply_slicing_assume
+    then depvars_rbexp vs r
+    else VS.union vs (vars_rbexp r)
   | _ ->
     if VSLemmas.disjoint vs (lvs_instr i)
     then vs
     else VS.union vs (vars_instr i)
 
-  (** val depvars_eprogram : VS.t -> instr list -> VS.t **)
+  (** val depvars_eprogram : options -> VS.t -> instr list -> VS.t **)
 
-  let depvars_eprogram vs p =
-    foldl depvars_einstr vs (rev p)
+  let depvars_eprogram o vs p =
+    foldl (depvars_einstr o) vs (rev p)
 
-  (** val depvars_rprogram : VS.t -> instr list -> VS.t **)
+  (** val depvars_rprogram : options -> VS.t -> instr list -> VS.t **)
 
-  let depvars_rprogram vs p =
-    foldl depvars_rinstr vs (rev p)
+  let depvars_rprogram o vs p =
+    foldl (depvars_rinstr o) vs (rev p)
 
-  (** val depvars_epre_eprogram : VS.t -> ebexp -> instr list -> VS.t **)
+  (** val depvars_epre_eprogram :
+      options -> VS.t -> ebexp -> instr list -> VS.t **)
 
-  let depvars_epre_eprogram vs e p =
-    depvars_ebexp (depvars_eprogram vs p) e
+  let depvars_epre_eprogram o vs e p =
+    depvars_ebexp (depvars_eprogram o vs p) e
 
   (** val depvars_rpre_rprogram :
-      VS.t -> Coq__4.rbexp -> instr list -> VS.t **)
+      options -> VS.t -> Coq__4.rbexp -> instr list -> VS.t **)
 
-  let depvars_rpre_rprogram vs e p =
-    depvars_rbexp (depvars_rprogram vs p) e
+  let depvars_rpre_rprogram o vs e p =
+    depvars_rbexp (depvars_rprogram o vs p) e
 
   (** val evsize : ebexp -> program -> VS.t -> int **)
 
@@ -3575,25 +3585,26 @@ module MakeDSL =
     subn (VS.cardinal vsall) (VS.cardinal vs)
 
   (** val depvars_epre_eprogram_sat_F :
-      ebexp -> program -> (VS.t -> VS.t) -> VS.t -> VS.t **)
+      options -> ebexp -> program -> (VS.t -> VS.t) -> VS.t -> VS.t **)
 
-  let depvars_epre_eprogram_sat_F e p depvars_epre_eprogram_sat0 vs =
+  let depvars_epre_eprogram_sat_F o e p depvars_epre_eprogram_sat0 vs =
     if leq (Pervasives.succ (VS.cardinal vs))
-         (VS.cardinal (depvars_epre_eprogram vs e p))
-    then depvars_epre_eprogram_sat0 (depvars_epre_eprogram vs e p)
-    else depvars_epre_eprogram vs e p
+         (VS.cardinal (depvars_epre_eprogram o vs e p))
+    then depvars_epre_eprogram_sat0 (depvars_epre_eprogram o vs e p)
+    else depvars_epre_eprogram o vs e p
 
   (** val depvars_epre_eprogram_sat_terminate :
-      ebexp -> program -> VS.t -> VS.t **)
+      options -> ebexp -> program -> VS.t -> VS.t **)
 
-  let rec depvars_epre_eprogram_sat_terminate e p vs =
+  let rec depvars_epre_eprogram_sat_terminate o e p vs =
     if leq (Pervasives.succ (VS.cardinal vs))
-         (VS.cardinal (depvars_epre_eprogram vs e p))
-    then depvars_epre_eprogram_sat_terminate e p
-           (depvars_epre_eprogram vs e p)
-    else depvars_epre_eprogram vs e p
+         (VS.cardinal (depvars_epre_eprogram o vs e p))
+    then depvars_epre_eprogram_sat_terminate o e p
+           (depvars_epre_eprogram o vs e p)
+    else depvars_epre_eprogram o vs e p
 
-  (** val depvars_epre_eprogram_sat : ebexp -> program -> VS.t -> VS.t **)
+  (** val depvars_epre_eprogram_sat :
+      options -> ebexp -> program -> VS.t -> VS.t **)
 
   let depvars_epre_eprogram_sat =
     depvars_epre_eprogram_sat_terminate
@@ -3604,81 +3615,83 @@ module MakeDSL =
   | R_depvars_epre_eprogram_sat_1 of VS.t
 
   (** val coq_R_depvars_epre_eprogram_sat_rect :
-      ebexp -> program -> (VS.t -> __ -> VS.t ->
+      options -> ebexp -> program -> (VS.t -> __ -> VS.t ->
       coq_R_depvars_epre_eprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
       -> VS.t -> VS.t -> coq_R_depvars_epre_eprogram_sat -> 'a1 **)
 
-  let rec coq_R_depvars_epre_eprogram_sat_rect e p f f0 _ _ = function
+  let rec coq_R_depvars_epre_eprogram_sat_rect o e p f f0 _ _ = function
   | R_depvars_epre_eprogram_sat_0 (vs, x, x0) ->
-    let vs' = depvars_epre_eprogram vs e p in
-    f vs __ x x0 (coq_R_depvars_epre_eprogram_sat_rect e p f f0 vs' x x0)
+    let vs' = depvars_epre_eprogram o vs e p in
+    f vs __ x x0 (coq_R_depvars_epre_eprogram_sat_rect o e p f f0 vs' x x0)
   | R_depvars_epre_eprogram_sat_1 vs -> f0 vs __
 
   (** val coq_R_depvars_epre_eprogram_sat_rec :
-      ebexp -> program -> (VS.t -> __ -> VS.t ->
+      options -> ebexp -> program -> (VS.t -> __ -> VS.t ->
       coq_R_depvars_epre_eprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
       -> VS.t -> VS.t -> coq_R_depvars_epre_eprogram_sat -> 'a1 **)
 
-  let rec coq_R_depvars_epre_eprogram_sat_rec e p f f0 _ _ = function
+  let rec coq_R_depvars_epre_eprogram_sat_rec o e p f f0 _ _ = function
   | R_depvars_epre_eprogram_sat_0 (vs, x, x0) ->
-    let vs' = depvars_epre_eprogram vs e p in
-    f vs __ x x0 (coq_R_depvars_epre_eprogram_sat_rec e p f f0 vs' x x0)
+    let vs' = depvars_epre_eprogram o vs e p in
+    f vs __ x x0 (coq_R_depvars_epre_eprogram_sat_rec o e p f f0 vs' x x0)
   | R_depvars_epre_eprogram_sat_1 vs -> f0 vs __
 
   (** val depvars_epre_eprogram_sat_rect :
-      ebexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
-      -> VS.t -> 'a1 **)
+      options -> ebexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t ->
+      __ -> 'a1) -> VS.t -> 'a1 **)
 
-  let rec depvars_epre_eprogram_sat_rect e p f f0 vs =
+  let rec depvars_epre_eprogram_sat_rect o e p f f0 vs =
     let f1 = f0 vs in
     let f2 = f vs in
     if leq (Pervasives.succ (VS.cardinal vs))
-         (VS.cardinal (depvars_epre_eprogram vs e p))
+         (VS.cardinal (depvars_epre_eprogram o vs e p))
     then let f3 = f2 __ in
          let hrec =
-           depvars_epre_eprogram_sat_rect e p f f0
-             (depvars_epre_eprogram vs e p)
+           depvars_epre_eprogram_sat_rect o e p f f0
+             (depvars_epre_eprogram o vs e p)
          in
          f3 hrec
     else f1 __
 
   (** val depvars_epre_eprogram_sat_rec :
-      ebexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
-      -> VS.t -> 'a1 **)
+      options -> ebexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t ->
+      __ -> 'a1) -> VS.t -> 'a1 **)
 
   let depvars_epre_eprogram_sat_rec =
     depvars_epre_eprogram_sat_rect
 
   (** val coq_R_depvars_epre_eprogram_sat_correct :
-      ebexp -> program -> VS.t -> VS.t -> coq_R_depvars_epre_eprogram_sat **)
+      options -> ebexp -> program -> VS.t -> VS.t ->
+      coq_R_depvars_epre_eprogram_sat **)
 
-  let coq_R_depvars_epre_eprogram_sat_correct e p vs _res =
-    depvars_epre_eprogram_sat_rect e p (fun y _ y1 _ _ ->
+  let coq_R_depvars_epre_eprogram_sat_correct o e p vs _res =
+    depvars_epre_eprogram_sat_rect o e p (fun y _ y1 _ _ ->
       R_depvars_epre_eprogram_sat_0 (y,
-      (depvars_epre_eprogram_sat e p (depvars_epre_eprogram y e p)),
-      (y1 (depvars_epre_eprogram_sat e p (depvars_epre_eprogram y e p)) __)))
-      (fun y _ _ _ -> R_depvars_epre_eprogram_sat_1 y) vs _res __
+      (depvars_epre_eprogram_sat o e p (depvars_epre_eprogram o y e p)),
+      (y1 (depvars_epre_eprogram_sat o e p (depvars_epre_eprogram o y e p))
+        __))) (fun y _ _ _ -> R_depvars_epre_eprogram_sat_1 y) vs _res __
 
   (** val depvars_rpre_rprogram_sat_F :
-      rbexp -> program -> (VS.t -> VS.t) -> VS.t -> VS.t **)
+      options -> rbexp -> program -> (VS.t -> VS.t) -> VS.t -> VS.t **)
 
-  let depvars_rpre_rprogram_sat_F r p depvars_rpre_rprogram_sat0 vs =
+  let depvars_rpre_rprogram_sat_F o r p depvars_rpre_rprogram_sat0 vs =
     if leq (Pervasives.succ (VS.cardinal vs))
-         (VS.cardinal (depvars_rpre_rprogram vs r p))
-    then depvars_rpre_rprogram_sat0 (depvars_rpre_rprogram vs r p)
-    else depvars_rpre_rprogram vs r p
+         (VS.cardinal (depvars_rpre_rprogram o vs r p))
+    then depvars_rpre_rprogram_sat0 (depvars_rpre_rprogram o vs r p)
+    else depvars_rpre_rprogram o vs r p
 
   (** val depvars_rpre_rprogram_sat_terminate :
-      rbexp -> program -> VS.t -> VS.t **)
+      options -> rbexp -> program -> VS.t -> VS.t **)
 
-  let rec depvars_rpre_rprogram_sat_terminate r p vs =
+  let rec depvars_rpre_rprogram_sat_terminate o r p vs =
     if leq (Pervasives.succ (VS.cardinal vs))
-         (VS.cardinal (depvars_rpre_rprogram vs r p))
-    then depvars_rpre_rprogram_sat_terminate r p
-           (depvars_rpre_rprogram vs r p)
-    else depvars_rpre_rprogram vs r p
+         (VS.cardinal (depvars_rpre_rprogram o vs r p))
+    then depvars_rpre_rprogram_sat_terminate o r p
+           (depvars_rpre_rprogram o vs r p)
+    else depvars_rpre_rprogram o vs r p
 
-  (** val depvars_rpre_rprogram_sat : rbexp -> program -> VS.t -> VS.t **)
+  (** val depvars_rpre_rprogram_sat :
+      options -> rbexp -> program -> VS.t -> VS.t **)
 
   let depvars_rpre_rprogram_sat =
     depvars_rpre_rprogram_sat_terminate
@@ -3689,60 +3702,61 @@ module MakeDSL =
   | R_depvars_rpre_rprogram_sat_1 of VS.t
 
   (** val coq_R_depvars_rpre_rprogram_sat_rect :
-      rbexp -> program -> (VS.t -> __ -> VS.t ->
+      options -> rbexp -> program -> (VS.t -> __ -> VS.t ->
       coq_R_depvars_rpre_rprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
       -> VS.t -> VS.t -> coq_R_depvars_rpre_rprogram_sat -> 'a1 **)
 
-  let rec coq_R_depvars_rpre_rprogram_sat_rect r p f f0 _ _ = function
+  let rec coq_R_depvars_rpre_rprogram_sat_rect o r p f f0 _ _ = function
   | R_depvars_rpre_rprogram_sat_0 (vs, x, x0) ->
-    let vs' = depvars_rpre_rprogram vs r p in
-    f vs __ x x0 (coq_R_depvars_rpre_rprogram_sat_rect r p f f0 vs' x x0)
+    let vs' = depvars_rpre_rprogram o vs r p in
+    f vs __ x x0 (coq_R_depvars_rpre_rprogram_sat_rect o r p f f0 vs' x x0)
   | R_depvars_rpre_rprogram_sat_1 vs -> f0 vs __
 
   (** val coq_R_depvars_rpre_rprogram_sat_rec :
-      rbexp -> program -> (VS.t -> __ -> VS.t ->
+      options -> rbexp -> program -> (VS.t -> __ -> VS.t ->
       coq_R_depvars_rpre_rprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
       -> VS.t -> VS.t -> coq_R_depvars_rpre_rprogram_sat -> 'a1 **)
 
-  let rec coq_R_depvars_rpre_rprogram_sat_rec r p f f0 _ _ = function
+  let rec coq_R_depvars_rpre_rprogram_sat_rec o r p f f0 _ _ = function
   | R_depvars_rpre_rprogram_sat_0 (vs, x, x0) ->
-    let vs' = depvars_rpre_rprogram vs r p in
-    f vs __ x x0 (coq_R_depvars_rpre_rprogram_sat_rec r p f f0 vs' x x0)
+    let vs' = depvars_rpre_rprogram o vs r p in
+    f vs __ x x0 (coq_R_depvars_rpre_rprogram_sat_rec o r p f f0 vs' x x0)
   | R_depvars_rpre_rprogram_sat_1 vs -> f0 vs __
 
   (** val depvars_rpre_rprogram_sat_rect :
-      rbexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
-      -> VS.t -> 'a1 **)
+      options -> rbexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t ->
+      __ -> 'a1) -> VS.t -> 'a1 **)
 
-  let rec depvars_rpre_rprogram_sat_rect r p f f0 vs =
+  let rec depvars_rpre_rprogram_sat_rect o r p f f0 vs =
     let f1 = f0 vs in
     let f2 = f vs in
     if leq (Pervasives.succ (VS.cardinal vs))
-         (VS.cardinal (depvars_rpre_rprogram vs r p))
+         (VS.cardinal (depvars_rpre_rprogram o vs r p))
     then let f3 = f2 __ in
          let hrec =
-           depvars_rpre_rprogram_sat_rect r p f f0
-             (depvars_rpre_rprogram vs r p)
+           depvars_rpre_rprogram_sat_rect o r p f f0
+             (depvars_rpre_rprogram o vs r p)
          in
          f3 hrec
     else f1 __
 
   (** val depvars_rpre_rprogram_sat_rec :
-      rbexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
-      -> VS.t -> 'a1 **)
+      options -> rbexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t ->
+      __ -> 'a1) -> VS.t -> 'a1 **)
 
   let depvars_rpre_rprogram_sat_rec =
     depvars_rpre_rprogram_sat_rect
 
   (** val coq_R_depvars_rpre_rprogram_sat_correct :
-      rbexp -> program -> VS.t -> VS.t -> coq_R_depvars_rpre_rprogram_sat **)
+      options -> rbexp -> program -> VS.t -> VS.t ->
+      coq_R_depvars_rpre_rprogram_sat **)
 
-  let coq_R_depvars_rpre_rprogram_sat_correct r p vs _res =
-    depvars_rpre_rprogram_sat_rect r p (fun y _ y1 _ _ ->
+  let coq_R_depvars_rpre_rprogram_sat_correct o r p vs _res =
+    depvars_rpre_rprogram_sat_rect o r p (fun y _ y1 _ _ ->
       R_depvars_rpre_rprogram_sat_0 (y,
-      (depvars_rpre_rprogram_sat r p (depvars_rpre_rprogram y r p)),
-      (y1 (depvars_rpre_rprogram_sat r p (depvars_rpre_rprogram y r p)) __)))
-      (fun y _ _ _ -> R_depvars_rpre_rprogram_sat_1 y) vs _res __
+      (depvars_rpre_rprogram_sat o r p (depvars_rpre_rprogram o y r p)),
+      (y1 (depvars_rpre_rprogram_sat o r p (depvars_rpre_rprogram o y r p))
+        __))) (fun y _ _ _ -> R_depvars_rpre_rprogram_sat_1 y) vs _res __
 
   (** val slice_ebexp : VS.t -> Coq__3.ebexp -> Coq__3.ebexp **)
 
@@ -3824,22 +3838,22 @@ module MakeDSL =
      | Some i -> i :: (slice_rprogram vs tl)
      | None -> slice_rprogram vs tl)
 
-  (** val slice_espec : espec -> espec **)
+  (** val slice_espec : options -> espec -> espec **)
 
-  let slice_espec s =
+  let slice_espec o s =
     let vs =
-      depvars_epre_eprogram_sat (eqn_bexp (espre s)) (esprog s)
+      depvars_epre_eprogram_sat o (eqn_bexp (espre s)) (esprog s)
         (vars_ebexp (espost s))
     in
     { esinputs = (esinputs s); espre =
     ((slice_ebexp vs (eqn_bexp (espre s))), (rng_bexp (espre s))); esprog =
     (slice_eprogram vs (esprog s)); espost = (espost s) }
 
-  (** val slice_rspec : rspec -> rspec **)
+  (** val slice_rspec : options -> rspec -> rspec **)
 
-  let slice_rspec s =
+  let slice_rspec o s =
     let vs =
-      depvars_rpre_rprogram_sat (rspre s) (rsprog s) (vars_rbexp (rspost s))
+      depvars_rpre_rprogram_sat o (rspre s) (rsprog s) (vars_rbexp (rspost s))
     in
     { rsinputs = (rsinputs s); rspre = (slice_rbexp vs (rspre s)); rsprog =
     (slice_rprogram vs (rsprog s)); rspost = (rspost s) }

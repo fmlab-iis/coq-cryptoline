@@ -6,6 +6,7 @@ From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
 From ssrlib Require Import Var SsrOrder ZAriths Store FSets FMaps Tactics Seqs Nats Strings.
+From Cryptoline Require Import Options.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -6520,6 +6521,8 @@ Module MakeDSL
 
   Section Slicing.
 
+    Variable o : options.
+
     Definition depvars_ebexp vs e :=
       foldl (fun vs e => let vse := vars_ebexp e in
                          if VSLemmas.disjoint vs vse then vs
@@ -6537,7 +6540,8 @@ Module MakeDSL
 
     Definition depvars_einstr vs i :=
       match i with
-      | Iassume (e, r) => depvars_ebexp vs e
+      | Iassume (e, r) => if apply_slicing_assume o then depvars_ebexp vs e
+                          else VS.union vs (vars_ebexp e)
       (* It is possible that there is `mov x y` (or `vpc x@t y`)
          but some relevant assumption only mentions x. *)
       | Imov _ (Avar _) => if VSLemmas.disjoint vs (vars_instr i) then vs
@@ -6550,7 +6554,8 @@ Module MakeDSL
 
     Definition depvars_rinstr vs i :=
       match i with
-      | Iassume (e, r) => depvars_rbexp vs r
+      | Iassume (e, r) => if apply_slicing_assume o then depvars_rbexp vs r
+                          else VS.union vs (vars_rbexp r)
       | Imov _ (Avar _) => if VSLemmas.disjoint vs (vars_instr i) then vs
                            else VS.union vs (vars_instr i)
       | Ivpc _ _ (Avar _) => if VSLemmas.disjoint vs (vars_instr i) then vs
@@ -6687,14 +6692,14 @@ Module MakeDSL
       Proper (VS.Equal ==> eq ==> VS.Equal) depvars_einstr.
     Proof.
       move=> s1 s2 Heq i1 i2 ?; subst.
-      (case: i2 => /=); intros; case_match_atom; case_if'; rewrite Heq; by mytac.
+      (case: i2 => /=); intros; case_match_atom; case_if'; try rewrite Heq; by mytac.
     Qed.
 
     Global Instance add_proper_depvars_rinstr_set :
       Proper (VS.Equal ==> eq ==> VS.Equal) depvars_rinstr.
     Proof.
       move=> s1 s2 Heq i1 i2 ?; subst.
-      (case: i2 => /=); intros; case_match_atom; case_if'; rewrite Heq; by mytac.
+      (case: i2 => /=); intros; case_match_atom; case_if'; try rewrite Heq; by mytac.
     Qed.
 
     Global Instance add_proper_depvars_eprogram_set :
@@ -6835,30 +6840,37 @@ Module MakeDSL
     Lemma depvars_einstr_lb vs i :
       VS.subset vs (depvars_einstr vs i).
     Proof.
-      case: i => //=; intros; mytac. case: b => e _. exact: depvars_ebexp_lb.
+      case: i => //=; intros; mytac.
+      - case: b => e _. exact: depvars_ebexp_lb.
+      - case: b => e _. by VSLemmas.dp_subset.
     Qed.
 
     Lemma depvars_einstr_ub vs i :
       VS.subset (depvars_einstr vs i) (VS.union vs (vars_instr i)).
     Proof.
-      case: i => //=; intros; mytac. case: b => e r. rewrite /vars_bexp /=.
-      apply: (VSLemmas.subset_trans (depvars_ebexp_ub vs e)).
-      by VSLemmas.dp_subset.
+      case: i => //=; intros; mytac.
+      - case: b => e r. rewrite /vars_bexp /=.
+        apply: (VSLemmas.subset_trans (depvars_ebexp_ub vs e)).
+        by VSLemmas.dp_subset.
+      - case: b => e r. rewrite /vars_bexp /=. by VSLemmas.dp_subset.
     Qed.
 
     Lemma depvars_rinstr_lb vs i :
       VS.subset vs (depvars_rinstr vs i).
     Proof.
-      case: i => //=; intros; mytac. case: b => _ r.
-      exact: depvars_rbexp_lb.
+      case: i => //=; intros; mytac.
+      - case: b => _ r. exact: depvars_rbexp_lb.
+      - case: b => _ r. by VSLemmas.dp_subset.
     Qed.
 
     Lemma depvars_rinstr_ub vs i :
       VS.subset (depvars_rinstr vs i) (VS.union vs (vars_instr i)).
     Proof.
-      case: i => //=; intros; mytac. case: b => e r. rewrite /vars_bexp /=.
-      apply: (VSLemmas.subset_trans (depvars_rbexp_ub vs r)).
-      by VSLemmas.dp_subset.
+      case: i => //=; intros; mytac.
+      - case: b => e r. rewrite /vars_bexp /=.
+        apply: (VSLemmas.subset_trans (depvars_rbexp_ub vs r)).
+        by VSLemmas.dp_subset.
+      - case: b => e r. rewrite /vars_bexp /=. by VSLemmas.dp_subset.
     Qed.
 
     Lemma depvars_eprogram_lb vs p :
@@ -7110,7 +7122,8 @@ Module MakeDSL
       VS.Equal (depvars_einstr vs i) vs.
     Proof.
       move=> Hsub. move: (depvars_einstr_lb vs i) => Hsub1.
-      move: (VSLemmas.subset_trans (depvars_eprogram_lb (depvars_einstr vs i) p) Hsub) => Hsub2.
+      move: (VSLemmas.subset_trans
+               (depvars_eprogram_lb (depvars_einstr vs i) p) Hsub) => Hsub2.
       apply/VSLemmas.equalP. exact: (VSLemmas.subset_antisym Hsub2 Hsub1).
     Qed.
 
@@ -7128,7 +7141,8 @@ Module MakeDSL
       VS.Equal (depvars_rinstr vs i) vs.
     Proof.
       move=> Hsub. move: (depvars_rinstr_lb vs i) => Hsub1.
-      move: (VSLemmas.subset_trans (depvars_rprogram_lb (depvars_rinstr vs i) p) Hsub) => Hsub2.
+      move: (VSLemmas.subset_trans
+               (depvars_rprogram_lb (depvars_rinstr vs i) p) Hsub) => Hsub2.
       apply/VSLemmas.equalP. exact: (VSLemmas.subset_antisym Hsub2 Hsub1).
     Qed.
 
@@ -7146,7 +7160,8 @@ Module MakeDSL
       VS.Equal (depvars_eprogram vs p) vs.
     Proof.
       move=> Hsub. move: (depvars_eprogram_lb vs p) => Hsub1.
-      move: (VSLemmas.subset_trans (depvars_ebexp_lb (depvars_eprogram vs p) e) Hsub) => Hsub2.
+      move: (VSLemmas.subset_trans
+               (depvars_ebexp_lb (depvars_eprogram vs p) e) Hsub) => Hsub2.
       apply/VSLemmas.equalP. exact: (VSLemmas.subset_antisym Hsub2 Hsub1).
     Qed.
 
@@ -7164,7 +7179,8 @@ Module MakeDSL
       VS.Equal (depvars_rprogram vs p) vs.
     Proof.
       move=> Hsub. move: (depvars_rprogram_lb vs p) => Hsub1.
-      move: (VSLemmas.subset_trans (depvars_rbexp_lb (depvars_rprogram vs p) e) Hsub) => Hsub2.
+      move: (VSLemmas.subset_trans
+               (depvars_rbexp_lb (depvars_rprogram vs p) e) Hsub) => Hsub2.
       apply/VSLemmas.equalP. exact: (VSLemmas.subset_antisym Hsub2 Hsub1).
     Qed.
 
@@ -7362,14 +7378,20 @@ Module MakeDSL
       VS.subset (depvars_einstr vs i) vs -> einstr_partition vs i.
     Proof.
       case: i => //=; intros; case_if'; case_match_atom; try mytac.
-      move: H; case_if'. exact: depvars_ebexp_partition.
+      - move: H0; case_if'. exact: depvars_ebexp_partition.
+      - move: H0; case_if'. move=> Hsub. apply: depvars_ebexp_partition.
+        apply: (VSLemmas.subset_trans (depvars_ebexp_ub _ _)).
+        by VSLemmas.dp_subset.
     Qed.
 
     Lemma depvars_rinstr_partition vs i :
       VS.subset (depvars_rinstr vs i) vs -> rinstr_partition vs i.
     Proof.
       case: i => //=; intros; case_if'; case_match_atom; try mytac.
-      move: H; case_if'. exact: depvars_rbexp_partition.
+      - move: H0; case_if'. exact: depvars_rbexp_partition.
+      - move: H0; case_if'. move=> Hsub. apply: depvars_rbexp_partition.
+        apply: (VSLemmas.subset_trans (depvars_rbexp_ub _ _)).
+        by VSLemmas.dp_subset.
     Qed.
 
     Lemma depvars_eprogram_partition vs p :
@@ -7380,7 +7402,8 @@ Module MakeDSL
       move: (depvars_eprogram_ind_sat1 Hsub) => Hi.
       move: (depvars_eprogram_ind_sat2 Hsub) => Hp. rewrite -> Hi in Hp. split.
       - apply: IH. rewrite Hp. exact: VSLemmas.subset_refl.
-      - apply: depvars_einstr_partition. rewrite Hi. exact: VSLemmas.subset_refl.
+      - apply: depvars_einstr_partition. rewrite Hi.
+        exact: VSLemmas.subset_refl.
     Qed.
 
     Lemma depvars_rprogram_partition vs p :
@@ -7391,7 +7414,8 @@ Module MakeDSL
       move: (depvars_rprogram_ind_sat1 Hsub) => Hi.
       move: (depvars_rprogram_ind_sat2 Hsub) => Hp. rewrite -> Hi in Hp. split.
       - apply: IH. rewrite Hp. exact: VSLemmas.subset_refl.
-      - apply: depvars_rinstr_partition. rewrite Hi. exact: VSLemmas.subset_refl.
+      - apply: depvars_rinstr_partition. rewrite Hi.
+        exact: VSLemmas.subset_refl.
     Qed.
 
     Lemma depvars_epre_eprogram_partition1 vs e p :

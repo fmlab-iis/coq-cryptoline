@@ -128,7 +128,7 @@ let verify_espec o s =
   if o.apply_slicing_espec
   then let reps =
          tmap apply_algred
-           (tmap SSA.SSA.slice_espec
+           (tmap (SSA.SSA.slice_espec o)
              (SSA.SSA.split_espec (SSA.SSA.espec_of_spec s)))
        in
        if o.compute_coefficients_one_by_one

@@ -6,7 +6,7 @@
 From Coq Require Import Arith List OrderedType.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun prime.
 From ssrlib Require Import Var Tactics Seqs.
-From Cryptoline Require Import DSL SSA SSA2ZSSA.
+From Cryptoline Require Import Options DSL SSA SSA2ZSSA.
 From BitBlasting Require Import State QFBV Typ TypEnv.
 From nbits Require Import NBits.
 
@@ -3023,10 +3023,14 @@ Section RngredSplitLeftAssoc.
 
 End RngredSplitLeftAssoc.
 
+
 (* Some properties about [tmap slice_rspec (split_rspec s)] *)
+Section SliceRspecProperties.
+
+  Variable o : options.
 
   Lemma slice_rspec_split_rspec_valid s :
-    valid_rspecs (tmap slice_rspec (split_rspec s)) -> valid_rspec s.
+    valid_rspecs (tmap (slice_rspec o) (split_rspec s)) -> valid_rspec s.
   Proof.
     rewrite tmap_map. move=> H. apply/split_rspec_correct. case: s H => [E f p g].
     elim: g => //=.
@@ -3048,16 +3052,16 @@ End RngredSplitLeftAssoc.
 
   Lemma slice_rspec_split_rspec_well_formed s :
     well_formed_rspec s ->
-    (forall t, In t (tmap slice_rspec (split_rspec s)) -> well_formed_rspec t).
+    (forall t, In t (tmap (slice_rspec o) (split_rspec s)) -> well_formed_rspec t).
   Proof.
     move=> Hwf t Hint. move/split_rspec_well_formed_rspec : Hwf => Hwf.
     rewrite tmap_map in Hint. move: (in_map_exists Hint) => [y [Hiny ->]].
-    exact: (well_formed_rspec_slice_rspec (Hwf _ Hiny)).
+    apply: well_formed_rspec_slice_rspec. exact: (Hwf _ Hiny).
   Qed.
 
   Lemma slice_rspec_split_rspec_well_formed_ssa s :
     well_formed_ssa_rspec s ->
-    (forall t, In t (tmap slice_rspec (split_rspec s)) -> well_formed_ssa_rspec t).
+    (forall t, In t (tmap (slice_rspec o) (split_rspec s)) -> well_formed_ssa_rspec t).
   Proof.
     move=> Hwf t Hint. move/split_rspec_well_formed_ssa: Hwf => Hwf.
     rewrite tmap_map in Hint. move: (in_map_exists Hint) => [y [Hiny ->]].
@@ -3065,21 +3069,23 @@ End RngredSplitLeftAssoc.
   Qed.
 
   Lemma slice_rspec_split_rspec_agree s r :
-    In r (tmap slice_rspec (split_rspec s)) ->
+    In r (tmap (slice_rspec o) (split_rspec s)) ->
     MA.agree (vars_bexps (rngred_rspec_split_la r)) (program_succ_typenv (rsprog s) (rsinputs s))
       (program_succ_typenv (rsprog r) (rsinputs r)).
   Proof.
     rewrite tmap_map => Hin. move: (in_map_exists Hin) => [y [Hiny ->]].
     rewrite -(split_rspec_rsprog Hiny) -(split_rspec_rsinputs Hiny). clear Hin Hiny r s.
     case: y => [E f p g] /=.
-    apply: (@MA.subset_set_agree _ _ (depvars_rpre_rprogram_sat f p (vars_rbexp g))).
+    apply: (@MA.subset_set_agree _ _ (depvars_rpre_rprogram_sat o f p (vars_rbexp g))).
     - apply: (SSAVS.Lemmas.subset_trans
                 (vars_rngred_rspec_split_la
-                   (slice_rspec {| rsinputs := E; rspre := f; rsprog := p; rspost := g |}))).
-      exact: (slice_rspec_subset {| rsinputs := E; rspre := f; rsprog := p; rspost := g |}).
+                   (slice_rspec o {| rsinputs := E; rspre := f; rsprog := p; rspost := g |}))).
+      exact: (slice_rspec_subset o {| rsinputs := E; rspre := f; rsprog := p; rspost := g |}).
     - apply: slice_rprogram_succ_typenv.
       exact: depvars_rpre_rprogram_sat_partition2.
   Qed.
+
+End SliceRspecProperties.
 
 
 (** Range reduction version 3:
@@ -3087,10 +3093,12 @@ End RngredSplitLeftAssoc.
 
 Section RngredSlicing.
 
+  Variable o : options.
+
   Import QFBV.
 
   Definition rngred_rspec_slice_split_la (s : rspec) : seq QFBV.bexp :=
-    rngred_rspec_split_las (tmap slice_rspec (SSA.split_rspec s)).
+    rngred_rspec_split_las (tmap (slice_rspec o) (SSA.split_rspec s)).
 
   Definition valid_rngred_rspec_slice_split_la (s : rspec) :=
     let fE := program_succ_typenv (rsprog s) (rsinputs s) in
@@ -5920,6 +5928,8 @@ End AlgsndSplitFixedFinalLeftAssoc.
 
 Section AlgsndSliceSplitFixedFinalLeftAssoc.
 
+  Variable o : options.
+
   (* algsnd_after *)
 
   Definition algsnd_after (E : SSATE.env) (f : rbexp) (p : program) (i : instr) : Prop :=
@@ -5933,7 +5943,7 @@ Section AlgsndSliceSplitFixedFinalLeftAssoc.
 
   Definition make_sndcond fE f p i :=
     let ef := bexp_rbexp f in
-    let vs := depvars_rpre_rprogram (rvs_instr i) f p in
+    let vs := depvars_rpre_rprogram o (rvs_instr i) f p in
     let ep := bexp_program fE (slice_rprogram vs p) in
     let es := bexp_instr_algsnd fE i in
     qfbv_imp (qfbv_conj ef (qfbv_conjs_la ep)) es.
@@ -6284,15 +6294,19 @@ Section RngredAlgsndSlicing.
 
   (* Combine range spec and safety conditions for bit-blasting *)
 
+  Variable o : options.
+
   Definition rngred_algsnd_slice_split_la (s : rspec) : seq QFBV.bexp :=
-    (rngred_rspec_slice_split_la s) ++ (algsnd_slice_la s).
+    (rngred_rspec_slice_split_la o s) ++ (algsnd_slice_la o s).
 
   Lemma valid_rngred_algsnd_slice_split_la_rngred fE s :
-    valid_bexps fE (rngred_algsnd_slice_split_la s) -> valid_bexps fE (rngred_rspec_slice_split_la s).
+    valid_bexps fE (rngred_algsnd_slice_split_la s) ->
+    valid_bexps fE (rngred_rspec_slice_split_la o s).
   Proof. rewrite /rngred_algsnd_slice_split_la. rewrite valid_bexps_cat. tauto. Qed.
 
   Lemma valid_rngred_algsnd_slice_split_la_algsnd fE s :
-    valid_bexps fE (rngred_algsnd_slice_split_la s) -> valid_bexps fE (algsnd_slice_la s).
+    valid_bexps fE (rngred_algsnd_slice_split_la s) ->
+    valid_bexps fE (algsnd_slice_la o s).
   Proof. rewrite /rngred_algsnd_slice_split_la. rewrite valid_bexps_cat. tauto. Qed.
 
   Lemma rngred_algsnd_slice_split_la_valid_rspec s :
@@ -6332,8 +6346,8 @@ Section RngredAlgsndSlicing.
     well_formed_bexps (rngred_algsnd_slice_split_la s) fE.
   Proof.
     move=> fE Hwf. rewrite /rngred_algsnd_slice_split_la. rewrite well_formed_bexps_cat.
-    rewrite (rngred_rspec_slice_split_la_well_formed Hwf) andTb.
-    exact: (algsnd_slice_la_well_formed Hwf).
+    rewrite (rngred_rspec_slice_split_la_well_formed o Hwf) andTb.
+    exact: (algsnd_slice_la_well_formed o Hwf).
   Qed.
 
 End RngredAlgsndSlicing.

@@ -3,6 +3,7 @@ open BinNums
 open Bool
 open Datatypes
 open NBitsDef
+open Options0
 open State
 open Typ
 open Var

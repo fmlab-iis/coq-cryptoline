@@ -336,8 +336,10 @@ Section QFBV2CNF.
      bit-blast QF_BV predicates *)
 
   Definition bb_rngred_algsnd (o : options) (s : rspec) : seq QFBV.bexp :=
-    filter_not_true (simplify_bexps (if apply_slicing_rspec o then rngred_algsnd_slice_split_la s
-                                     else rngred_algsnd_split_la s)).
+    filter_not_true
+      (simplify_bexps
+         (if apply_slicing_rspec o then rngred_algsnd_slice_split_la o s
+          else rngred_algsnd_split_la s)).
 
   Lemma bb_rngred_algsnd_well_formed o s :
     let fE := program_succ_typenv (rsprog s) (rsinputs s) in

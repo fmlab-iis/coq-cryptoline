@@ -46,5 +46,5 @@ let bb_rngred_algsnd o s =
   Obj.magic filter_not_true
     (simplify_bexps
       (if o.apply_slicing_rspec
-       then rngred_algsnd_slice_split_la s
+       then rngred_algsnd_slice_split_la o s
        else rngred_algsnd_split_la s))

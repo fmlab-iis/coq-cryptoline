@@ -6,7 +6,7 @@ From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
 From ssrlib Require Import Var SsrOrder FMaps ZAriths Tactics Lists FSets Seqs Strings.
-From Cryptoline Require Import DSL.
+From Cryptoline Require Import Options DSL.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -21,6 +21,8 @@ Module M2SSA := Map2Map Store.M SSAStore.M.
 Module MdeSSA := Map2Map SSAStore.M Store.M.
 
 Section MakeSSA.
+
+  Variable o : options.
 
   Open Scope N_scope.
 
@@ -3586,19 +3588,19 @@ Section MakeSSA.
   Qed.
 
   Lemma well_formed_ssa_espec_slice_espec s :
-    well_formed_ssa_espec s -> well_formed_ssa_espec (SSA.slice_espec s).
+    well_formed_ssa_espec s -> well_formed_ssa_espec (SSA.slice_espec o s).
   Proof.
     rewrite /well_formed_ssa_espec. move/andP=> [/andP [Hwf Hun] Hssa].
-    rewrite (SSA.well_formed_espec_slice_espec Hwf) /=.
+    rewrite (SSA.well_formed_espec_slice_espec o Hwf) /=.
     rewrite (ssa_unchanged_program_slice_eprogram _ Hun) /=.
     exact: (ssa_single_assignment_slice_eprogram _ Hssa).
   Qed.
 
   Lemma well_formed_ssa_rspec_slice_rspec s :
-    well_formed_ssa_rspec s -> well_formed_ssa_rspec (SSA.slice_rspec s).
+    well_formed_ssa_rspec s -> well_formed_ssa_rspec (SSA.slice_rspec o s).
   Proof.
     rewrite /well_formed_ssa_rspec. move/andP=> [/andP [Hwf Hun] Hssa].
-    rewrite (SSA.well_formed_rspec_slice_rspec Hwf) /=.
+    rewrite (SSA.well_formed_rspec_slice_rspec o Hwf) /=.
     rewrite (ssa_unchanged_program_slice_rprogram _ Hun) /=.
     exact: (ssa_single_assignment_slice_rprogram _ Hssa).
   Qed.

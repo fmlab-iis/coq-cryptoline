@@ -82,7 +82,8 @@ let anon file =
                 vars_cache_in_rewrite_assignments = !vars_cache_in_rewriting;
                 compute_coefficients_one_by_one = !jobs <= 1;
                 apply_slicing_espec = !apply_slicing_espec;
-                apply_slicing_rspec = !apply_slicing_rspec }
+                apply_slicing_rspec = !apply_slicing_rspec;
+                apply_slicing_assume = !apply_slicing_assume }
       in
 	  let res = Extraction.Verify.verify_dsl o coq_spec in
       let t2 = Unix.gettimeofday() in
