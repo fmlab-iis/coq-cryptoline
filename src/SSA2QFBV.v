@@ -5942,11 +5942,12 @@ Section AlgsndSliceSplitFixedFinalLeftAssoc.
   (* Algebraic soundness with slicing *)
 
   Definition make_sndcond fE f p i :=
-    let ef := bexp_rbexp f in
-    let vs := depvars_rpre_rprogram o (rvs_instr i) f p in
-    let ep := bexp_program fE (slice_rprogram vs p) in
     let es := bexp_instr_algsnd fE i in
-    qfbv_imp (qfbv_conj ef (qfbv_conjs_la ep)) es.
+    if es == qfbv_true then qfbv_true
+    else let ef := bexp_rbexp f in
+         let vs := depvars_rpre_rprogram o (rvs_instr i) f p in
+         let ep := bexp_program fE (slice_rprogram vs p) in
+         qfbv_imp (qfbv_conj ef (qfbv_conjs_la ep)) es.
 
   Fixpoint algsnd_slice_la_rec fE (pre : program) (f : rbexp) (p : program) : seq QFBV.bexp :=
     match p with
@@ -6023,17 +6024,22 @@ Section AlgsndSliceSplitFixedFinalLeftAssoc.
     have: bexp_program (program_succ_typenv p E) [::] = [::] by reflexivity.
     move: [::] => pre. move: [::] => pre_es.
     elim: p E pre pre_es  => [| i p IH] E pre pre_es //= Hpre Hun Hdef.
-    rewrite /make_sndcond /=. rewrite !valid_bexps_cons. move=> [Hvi Hvp].
+    rewrite /make_sndcond /=.
+    rewrite !valid_bexps_cons. move=> [Hvi Hvp].
     have Hdefpre: are_defined (lvs_program pre) (program_succ_typenv p (instr_succ_typenv i E)).
     { move: Hdef. apply: are_defined_subset. rewrite lvs_program_cat.
       exact: SSA.VSLemmas.union_subset_1. }
     have Hunpre: env_unchanged_program (program_succ_typenv p (instr_succ_typenv i E)) pre.
     { move: Hun. rewrite env_unchanged_program_cat. move/andP => [Hun _]. exact: Hun. }
     split.
-    - move=> s Hco. move: (Hvi s Hco) => {Hvi} /=. case: (eval_bexp (bexp_rbexp f) s) => //=.
-      case: (eval_bexp (bexp_instr_algsnd (program_succ_typenv p (instr_succ_typenv i E)) i) s);
-        [by rewrite !orbT | rewrite !orbF]. move/negP=> Hvi. apply/negP => Hv.
-      apply: Hvi. rewrite -Hpre in Hv. exact: (slice_rprogram_eval_bexp _ Hdefpre Hunpre Hv).
+    - move=> s Hco. move: (Hvi s Hco) => {Hvi} /=.
+      case Hsndi: (bexp_instr_algsnd (program_succ_typenv p (instr_succ_typenv i E)) i == Btrue).
+      + rewrite (eqP Hsndi). move=> ->. by rewrite orbT.
+      + simpl. case: (eval_bexp (bexp_rbexp f) s) => //=.
+        case: (eval_bexp (bexp_instr_algsnd (program_succ_typenv p (instr_succ_typenv i E)) i) s);
+          [by rewrite !orbT | rewrite !orbF].
+        move/negP=> Hvi. apply/negP => Hv. apply: Hvi. rewrite -Hpre in Hv.
+        exact: (slice_rprogram_eval_bexp _ Hdefpre Hunpre Hv).
     - apply: (IH _ _ _ _ _ _ Hvp).
       + rewrite bexp_program_rcons Hpre. rewrite env_unchanged_program_cat in Hun.
         move/andP: Hun => [Hun _]. rewrite (env_unchanged_program_succ_equal Hdefpre Hun).
@@ -6121,20 +6127,28 @@ Section AlgsndSliceSplitFixedFinalLeftAssoc.
     move: [::] => pre. move: [::] => pre_es.
     elim: p E pre pre_es  => [| i p IH] E pre pre_es //= Hpre Hun Hdef.
     move/andP => [/andP [/andP [Hf Hpre_es] Hi] Hp].
-    rewrite Hf /=. rewrite Hi andbT.
+    rewrite /make_sndcond /=.
+
     have Hdefpre: are_defined (lvs_program pre) (program_succ_typenv p (instr_succ_typenv i E)).
     { move: Hdef. apply: are_defined_subset. rewrite lvs_program_cat.
       exact: SSA.VSLemmas.union_subset_1. }
-    have Hunpre: env_unchanged_program (program_succ_typenv p (instr_succ_typenv i E)) pre.
-    { move: Hun. rewrite env_unchanged_program_cat. move/andP => [Hun _]. exact: Hun. }
-    apply/andP; split.
-    - rewrite -Hpre in Hpre_es. exact: (well_formed_bexp_slice_rprogram _ Hdefpre Hunpre Hpre_es).
-    - apply: (IH _ _ _ _ _ _ Hp).
-      + rewrite bexp_program_rcons Hpre. rewrite env_unchanged_program_cat in Hun.
+    have H: (well_formed_bexps
+               (algsnd_slice_la_rec (program_succ_typenv p (instr_succ_typenv i E)) (rcons pre i) f p)
+               (program_succ_typenv p (instr_succ_typenv i E))).
+    { apply: (IH _ _ _ _ _ _ Hp).
+      - rewrite bexp_program_rcons Hpre. rewrite env_unchanged_program_cat in Hun.
         move/andP: Hun => [Hun _]. rewrite (env_unchanged_program_succ_equal Hdefpre Hun).
         reflexivity.
-      + rewrite cat_rcons. assumption.
-      + rewrite cat_rcons. assumption.
+      - rewrite cat_rcons. assumption.
+      - rewrite cat_rcons. assumption. }
+    case Hsndi: (bexp_instr_algsnd (program_succ_typenv p (instr_succ_typenv i E)) i == Btrue) => /=.
+    - exact: H.
+    - rewrite Hf /=. rewrite Hi andbT.
+      have Hunpre: env_unchanged_program (program_succ_typenv p (instr_succ_typenv i E)) pre.
+      { move: Hun. rewrite env_unchanged_program_cat. move/andP => [Hun _]. exact: Hun. }
+      apply/andP; split.
+      + rewrite -Hpre in Hpre_es. exact: (well_formed_bexp_slice_rprogram _ Hdefpre Hunpre Hpre_es).
+      + assumption.
   Qed.
 
 End AlgsndSliceSplitFixedFinalLeftAssoc.

@@ -825,11 +825,14 @@ let qfbv_spec_algsnd_la s =
     SSA.SSA.instr -> QFBV.QFBV.bexp **)
 
 let make_sndcond o fE f p i =
-  let ef = bexp_rbexp f in
-  let vs = SSA.SSA.depvars_rpre_rprogram o (SSA.SSA.rvs_instr i) f p in
-  let ep = bexp_program fE (SSA.SSA.slice_rprogram vs p) in
   let es = bexp_instr_algsnd fE i in
-  QFBV.QFBV.qfbv_imp (QFBV.QFBV.qfbv_conj ef (QFBV.QFBV.qfbv_conjs_la ep)) es
+  if eq_op QFBV.bexp_eqType (Obj.magic es) (Obj.magic QFBV.QFBV.qfbv_true)
+  then QFBV.QFBV.qfbv_true
+  else let ef = bexp_rbexp f in
+       let vs = SSA.SSA.depvars_rpre_rprogram o (SSA.SSA.rvs_instr i) f p in
+       let ep = bexp_program fE (SSA.SSA.slice_rprogram vs p) in
+       QFBV.QFBV.qfbv_imp
+         (QFBV.QFBV.qfbv_conj ef (QFBV.QFBV.qfbv_conjs_la ep)) es
 
 (** val algsnd_slice_la_rec :
     options -> TypEnv.SSATE.env -> SSA.SSA.program -> SSA.SSA.rbexp ->
