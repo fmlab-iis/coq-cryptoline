@@ -1,6 +1,7 @@
 (library
   (name        parsers)
-  (libraries   ast str)
+  (libraries   ast str typecheck)
+  (public_name coqcryptoline.parsers)
 )
 
 (ocamllex    cryptolineLexer)

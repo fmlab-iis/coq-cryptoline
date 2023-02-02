@@ -17,6 +17,70 @@ Unset Strict Implicit.
 Import Prenex Implicits.
 
 
+Section VarsRspecs.
+
+  Import SSA.
+
+  Fixpoint vars_rspecs (rs : seq rspec) : SSAVS.t :=
+    match rs with
+    | [::] => SSAVS.empty
+    | s::rs => SSAVS.union (vars_rspec s) (vars_rspecs rs)
+    end.
+
+  Lemma vars_rspecs_cons r rs :
+    SSAVS.Equal (vars_rspecs (r::rs)) (SSAVS.union (vars_rspec r) (vars_rspecs rs)).
+  Proof. reflexivity. Qed.
+
+  Lemma vars_rspecs_rcons rs r :
+    SSAVS.Equal (vars_rspecs (rcons rs r)) (SSAVS.union (vars_rspecs rs) (vars_rspec r)).
+  Proof.
+    elim: rs => [| s rs IH] //=.
+    - by SSAVS.Lemmas.dp_Equal.
+    - rewrite IH. by SSAVS.Lemmas.dp_Equal.
+  Qed.
+
+  Lemma vars_rspecs_cat rs1 rs2 :
+    SSAVS.Equal (vars_rspecs (rs1 ++ rs2)) (SSAVS.union (vars_rspecs rs1) (vars_rspecs rs2)).
+  Proof.
+    elim: rs1 rs2 => [| r1 rs1 IH1] rs2 //=.
+    rewrite IH1. by SSAVS.Lemmas.dp_Equal.
+  Qed.
+
+  Lemma vars_rspecs_rev rs :
+    SSAVS.Equal (vars_rspecs (rev rs)) (vars_rspecs rs).
+  Proof.
+    elim: rs => [| r rs IH] //=. rewrite rev_cons vars_rspecs_rcons IH.
+    by SSAVS.Lemmas.dp_Equal.
+  Qed.
+
+  Lemma vars_split_rspec s :
+    SSAVS.subset (vars_rspecs (split_rspec s)) (vars_rspec s).
+  Proof.
+    rewrite /split_rspec /vars_rspec. case: s => E f p g /=.
+    rewrite tmap_map /=. elim: g E f p; intros; rewrite /= /vars_rspec /=.
+    - by SSAVS.Lemmas.dp_subset.
+    - by SSAVS.Lemmas.dp_subset.
+    - by SSAVS.Lemmas.dp_subset.
+    - by SSAVS.Lemmas.dp_subset.
+    - rewrite map_cat. rewrite vars_rspecs_cat. move: (H E f p) (H0 E f p) => Hsub1 Hsub2.
+      apply: SSAVS.Lemmas.subset_union3.
+      + apply: (SSAVS.Lemmas.subset_trans Hsub1). by SSAVS.Lemmas.dp_subset.
+      + apply: (SSAVS.Lemmas.subset_trans Hsub2). by SSAVS.Lemmas.dp_subset.
+    - by SSAVS.Lemmas.dp_subset.
+  Qed.
+
+  Lemma vars_slice_rspecs {o} rs :
+    SSAVS.subset (vars_rspecs (tmap (slice_rspec o) rs))
+                 (vars_rspecs rs).
+  Proof.
+    elim: rs => [| r rs IH] //=. rewrite tmap_map /= -tmap_map.
+    move: (slice_rspec_subset_rspec o r) => Hsub.
+    by SSAVS.Lemmas.dp_subset.
+  Qed.
+
+End VarsRspecs.
+
+
 Section ForceConformDiff.
 
   Definition force_conform_diff (E : SSATE.env) (vs : SSAVS.t) (s : SSAStore.t) :=
@@ -537,8 +601,8 @@ Section Rspec2QFBV.
 
   Definition qfbv_atom a :=
     match a with
-    | SSA.Avar v => QFBV.Evar v
-    | SSA.Aconst ty n => QFBV.Econst n
+    | Avar v => QFBV.Evar v
+    | Aconst ty n => QFBV.Econst n
     end.
 
   Definition bexp_instr (E : SSATE.env) (i : SSA.instr) : QFBV.bexp :=
@@ -2445,7 +2509,7 @@ Section Rspec2QFBV.
   Proof.
     elim: p E s1 s2 => [| hd tl IH] E s1 s3 //=. move=> Hwfssa Hcon Hep.
     move: (Hwfssa) => /andP [/andP [Hwf Huc] Hssa].
-    elim: (eval_program_cons Hep) => s2 [Hehd Hetl].
+    elim: (eval_program_cons_exists Hep) => s2 [Hehd Hetl].
     move: (ssa_unchanged_program_cons1 Huc) => [Huchd Huctl].
     rewrite (IH _ _ _
                (well_formed_ssa_tl Hwfssa)
@@ -2969,11 +3033,22 @@ Section RngredSplitLeftAssoc.
   Definition rngred_rspec_split_las (rs : seq rspec) : seq QFBV.bexp :=
     tflatten (tmap rngred_rspec_split_la rs).
 
+
   Lemma rngred_rspec_split_las_cons r rs :
     rngred_rspec_split_las (r::rs) = rngred_rspec_split_las rs ++ rev (rngred_rspec_split_la r).
   Proof.
     rewrite /rngred_rspec_split_las. rewrite !tmap_map /=. rewrite tflatten_cons.
     reflexivity.
+  Qed.
+
+  Lemma vars_rngred_rspec_split_las rs :
+    SSAVS.subset (QFBV.vars_bexps (rngred_rspec_split_las rs))
+                 (vars_rspecs rs).
+  Proof.
+    elim: rs => [| s rs IH] //=. rewrite rngred_rspec_split_las_cons.
+    rewrite vars_bexps_cat. rewrite vars_bexps_rev.
+    move: (vars_rngred_rspec_split_la s) => Hsub.
+    by SSAVS.Lemmas.dp_subset.
   Qed.
 
   Lemma rngred_rspec_split_las_eval rs s :
@@ -3103,6 +3178,16 @@ Section RngredSlicing.
   Definition valid_rngred_rspec_slice_split_la (s : rspec) :=
     let fE := program_succ_typenv (rsprog s) (rsinputs s) in
     valid_bexps fE (rngred_rspec_slice_split_la s).
+
+  Lemma vars_rngred_rspec_slice_split_la s :
+    SSAVS.subset (QFBV.vars_bexps (rngred_rspec_slice_split_la s))
+                 (SSA.vars_rspec s).
+  Proof.
+    rewrite /rngred_rspec_slice_split_la.
+    apply: (SSAVS.Lemmas.subset_trans (vars_rngred_rspec_split_las (tmap (slice_rspec o) (split_rspec s)))).
+    apply: (SSAVS.Lemmas.subset_trans (vars_slice_rspecs _)).
+    exact: vars_split_rspec.
+  Qed.
 
   Lemma rngred_rspec_split_la_valid_rspecs fE rs :
     (forall r, In r rs -> MA.agree
@@ -3446,6 +3531,46 @@ Section AlgsndInstr.
     | Icast _ _ _
     | Iassume _ => qfbv_true
     end.
+
+
+  Ltac unfold_bexp_atoms :=
+    rewrite /bexp_atom_shl_algsnd /bexp_atom_cshl_algsnd
+            /bexp_atom_addB_algsnd /bexp_atom_uaddB_algsnd /bexp_atom_saddB_algsnd
+            /bexp_atom_adds_algsnd /bexp_atom_saddB_algsnd
+            /bexp_atom_adcB_algsnd /bexp_atom_uadcB_algsnd /bexp_atom_sadcB_algsnd
+            /bexp_atom_adcs_algsnd /bexp_atom_sadcB_algsnd
+            /bexp_atom_subB_algsnd /bexp_atom_usubB_algsnd /bexp_atom_ssubB_algsnd
+            /bexp_atom_subc_algsnd /bexp_atom_ssubB_algsnd
+            /bexp_atom_subb_algsnd /bexp_atom_ssubB_algsnd
+            /bexp_atom_sbcB_algsnd
+            /bexp_atom_sbcs_algsnd
+            /bexp_atom_sbbB_algsnd
+            /bexp_atom_sbbs_algsnd
+            /bexp_atom_mulB_algsnd
+            /bexp_atom_shl_algsnd
+            /bexp_atom_cshl_algsnd
+            /bexp_atom_vpc_algsnd.
+
+  Ltac tac :=
+    repeat
+      match goal with
+      | H : context [?a] |- context [match ?a with | Avar _ => _ | Aconst _ _ => _ end] =>
+          move: H
+      | |- context [match ?a with | Avar _ => _ | Aconst _ _ => _ end] =>
+          case: a; simpl; intros
+      | |- context [if _ then _ else _] =>
+          case_if; simpl; intros
+      | |- context [SSAVS.union _ SSAVS.empty] =>
+          rewrite SSAVS.Lemmas.union_emptyr /=
+      | |- context [QFBV.vars_exp (qfbv_atom _)] =>
+          rewrite vars_exp_atom /=
+      | |- is_true (SSAVS.subset SSAVS.empty _) => exact: SSAVS.Lemmas.subset_empty
+      | |- _ => by SSAVS.Lemmas.dp_subset
+      end.
+
+  Lemma vars_bexp_instr_algsnd E i :
+    SSAVS.subset (QFBV.vars_bexp (bexp_instr_algsnd E i)) (vars_instr i).
+  Proof. (case: i => /=); intros; unfold_bexp_atoms; by tac. Qed.
 
   Lemma eval_bexp_atom_addB_algsnd E a1 a2 s :
     QFBV.eval_bexp (bexp_atom_addB_algsnd E a1 a2) s <->
@@ -5388,7 +5513,7 @@ Section AlgsndSplitFixedFinal.
   (* Construct safety conditions with less prefix information. *)
 
   (* pre_es: encoding of instructions in QFBV *)
-  Fixpoint bexp_program_algsnd_split_fixed_final_rec E (pre_es : seq QFBV.bexp) p :=
+  Fixpoint bexp_program_algsnd_split_fixed_final_rec E (pre_es : seq QFBV.bexp) p : seq (seq bexp * bexp) :=
     match p with
     | [::] => [::]
     | hd::tl =>
@@ -5399,6 +5524,37 @@ Section AlgsndSplitFixedFinal.
 
   Definition bexp_program_algsnd_split_fixed_final E p :=
     bexp_program_algsnd_split_fixed_final_rec E [::] p.
+
+
+  Fixpoint vars_sndcond_pi (es : seq (seq bexp * bexp)) : SSAVS.t :=
+    match es with
+    | [::] => SSAVS.empty
+    | (ps, ic)::tl => SSAVS.union (SSAVS.union (vars_bexps ps) (vars_bexp ic))
+                                  (vars_sndcond_pi tl)
+    end.
+
+  Lemma vars_bexp_program_algsnd_split_fixed_final_rec E pre_es p :
+    SSAVS.subset (vars_sndcond_pi (bexp_program_algsnd_split_fixed_final_rec E pre_es p))
+                 (SSAVS.union (QFBV.vars_bexps pre_es) (vars_program p)).
+  Proof.
+    elim: p E pre_es => [| i p IH] E pre_es //=.
+    apply: SSAVS.Lemmas.subset_union3.
+    - apply: SSAVS.Lemmas.subset_union3.
+      + by SSAVS.Lemmas.dp_subset.
+      + move: (vars_bexp_instr_algsnd E i) => Hsub. by SSAVS.Lemmas.dp_subset.
+    - apply: (SSAVS.Lemmas.subset_trans (IH _ _)). apply: SSAVS.Lemmas.subset_union3.
+      + rewrite vars_bexps_rcons. move: (vars_bexp_instr E i) => Hsub.
+        by SSAVS.Lemmas.dp_subset.
+      + by SSAVS.Lemmas.dp_subset.
+  Qed.
+
+  Lemma vars_bexp_program_algsnd_split_fixed_final E p :
+    SSAVS.subset (vars_sndcond_pi (bexp_program_algsnd_split_fixed_final E p))
+                 (vars_program p).
+  Proof.
+    rewrite -(SSAVS.Lemmas.union_emptyl (vars_program p)).
+    exact: vars_bexp_program_algsnd_split_fixed_final_rec.
+  Qed.
 
   Lemma bexp_program_algsnd_split_fixed_final_rec_full_partial E pre_is pre_es p :
     forall pre_is' pre_es' hd tl safe,
@@ -5783,7 +5939,7 @@ End AlgsndSplitFixedFinal.
 
 Section AlgsndSplitFixedFinalLeftAssoc.
 
-  Fixpoint qfbv_spec_algsnd_la_rec f es :=
+  Fixpoint qfbv_spec_algsnd_la_rec (f : bexp) (es : seq (seq bexp * bexp)) : seq bexp :=
     match es with
     | [::] => [::]
     | (pre_es, safe)::tl =>
@@ -5799,6 +5955,31 @@ Section AlgsndSplitFixedFinalLeftAssoc.
   Definition valid_qfbv_spec_algsnd_la (s : rspec) : Prop :=
     let fE := program_succ_typenv (rsprog s) (rsinputs s) in
     valid_bexps fE (qfbv_spec_algsnd_la s).
+
+
+  Lemma vars_qfbv_spec_algsnd_la_rec f es :
+    SSAVS.subset (QFBV.vars_bexps (qfbv_spec_algsnd_la_rec f es))
+                 (SSAVS.union (QFBV.vars_bexp f) (vars_sndcond_pi es)).
+  Proof.
+    elim: es f => [| e es IH] f //=. case: e => [pre_es safe] /=.
+    repeat apply: SSAVS.Lemmas.subset_union3.
+    - by SSAVS.Lemmas.dp_subset.
+    - rewrite vars_qfbv_conjs_la. by SSAVS.Lemmas.dp_subset.
+    - by SSAVS.Lemmas.dp_subset.
+    - apply: (SSAVS.Lemmas.subset_trans (IH _)). by SSAVS.Lemmas.dp_subset.
+  Qed.
+
+  Lemma vars_qfbv_spec_algsnd_la s :
+    SSAVS.subset (QFBV.vars_bexps (qfbv_spec_algsnd_la s))
+                 (SSAVS.union (vars_rbexp (rspre s)) (vars_program (rsprog s))).
+  Proof.
+    apply: (SSAVS.Lemmas.subset_trans (vars_qfbv_spec_algsnd_la_rec _ _)).
+    case: s => E f p g /=. apply: SSAVS.Lemmas.subset_union3.
+    - rewrite vars_bexp_rbexp. by SSAVS.Lemmas.dp_subset.
+    - apply: (SSAVS.Lemmas.subset_trans
+                (vars_bexp_program_algsnd_split_fixed_final _ _)).
+      by SSAVS.Lemmas.dp_subset.
+  Qed.
 
   Lemma qfbv_spec_algsnd_la_eval s t :
     eval_bexps (qfbv_spec_algsnd_la s) t = eval_bexps (qfbv_spec_algsnd s) t.
@@ -5941,7 +6122,7 @@ Section AlgsndSliceSplitFixedFinalLeftAssoc.
 
   (* Algebraic soundness with slicing *)
 
-  Definition make_sndcond fE f p i :=
+  Definition make_sndcond fE f p i : QFBV.bexp :=
     let es := bexp_instr_algsnd fE i in
     if es == qfbv_true then qfbv_true
     else let ef := bexp_rbexp f in
@@ -5959,6 +6140,40 @@ Section AlgsndSliceSplitFixedFinalLeftAssoc.
   Definition algsnd_slice_la (s : rspec) : seq QFBV.bexp :=
     let fE := program_succ_typenv (rsprog s) (rsinputs s) in
     algsnd_slice_la_rec fE [::] (rspre s) (rsprog s).
+
+
+  Lemma vars_make_sndcond fE f p i :
+    SSAVS.subset (QFBV.vars_bexp (make_sndcond fE f p i))
+                 (SSAVS.union (vars_rbexp f) (SSAVS.union (vars_program p) (vars_instr i))).
+  Proof.
+    rewrite /make_sndcond. case_if; simpl.
+    - exact: SSAVS.Lemmas.subset_empty.
+    - repeat apply: SSAVS.Lemmas.subset_union3.
+      + rewrite vars_bexp_rbexp. by SSAVS.Lemmas.dp_subset.
+      + rewrite vars_qfbv_conjs_la. apply: (SSAVS.Lemmas.subset_trans (vars_bexp_program _ _)).
+        apply: (SSAVS.Lemmas.subset_trans (slice_rprogram_vars_subset _ _)).
+        by SSAVS.Lemmas.dp_subset.
+      + move: (vars_bexp_instr_algsnd fE i) => Hsub. by SSAVS.Lemmas.dp_subset.
+  Qed.
+
+  Lemma vars_algsnd_slice_la_rec fE pre f p :
+    SSAVS.subset (QFBV.vars_bexps (algsnd_slice_la_rec fE pre f p))
+                 (SSAVS.union (vars_program pre) (SSAVS.union (vars_rbexp f) (vars_program p))).
+  Proof.
+    elim: p fE pre f => [| i p IH] fE pre f //=. apply: SSAVS.Lemmas.subset_union3.
+    - apply: (SSAVS.Lemmas.subset_trans (vars_make_sndcond _ _ _ _)).
+      by SSAVS.Lemmas.dp_subset.
+    - apply: (SSAVS.Lemmas.subset_trans (IH fE (rcons pre i) f)).
+      rewrite vars_program_rcons /=. by SSAVS.Lemmas.dp_subset.
+  Qed.
+
+  Lemma vars_algsnd_slice_la s :
+    SSAVS.subset (QFBV.vars_bexps (algsnd_slice_la s))
+                 (SSAVS.union (vars_rbexp (rspre s)) (vars_program (rsprog s))).
+  Proof.
+    rewrite -(SSAVS.Lemmas.union_emptyl (SSAVS.union _ _)).
+    exact: vars_algsnd_slice_la_rec.
+  Qed.
 
   Lemma slice_rbexp_eval_bexp vs r s :
     eval_bexp (bexp_rbexp r) s -> eval_bexp (bexp_rbexp (slice_rbexp vs r)) s.

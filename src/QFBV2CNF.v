@@ -151,6 +151,20 @@ Section QFBV2CNF.
       (cnf \in cnfs) ->
       ~ (CNF.sat cnf).
 
+  Lemma agree_bb_hbexps_cache E1 E2 es :
+    SSA.MA.agree (QFBV.vars_bexps es) E1 E2 ->
+    bb_hbexps_cache E1 (tmap QFBVHash.hash_bexp es) = bb_hbexps_cache E2 (tmap QFBVHash.hash_bexp es).
+  Proof.
+    elim: es => [| e es IH] //=. move=> Hag.
+    rewrite tmap_map /=. rewrite -tmap_map.
+    rewrite (IH (SSA.MA.agree_union_set_r Hag)).
+    dcase (bb_hbexps_cache E2 (tmap QFBVHash.hash_bexp es)) => [[[[mes ces] ges] cnfses] Hes].
+    move: (SSA.MA.agree_union_set_l Hag).
+    rewrite -{1}(QFBVHash.unhash_hash_bexp e) => Hage.
+    rewrite (agree_bit_blast_bexp_hcache_tflatten _ _ _ Hage).
+    reflexivity.
+  Qed.
+
   Lemma bb_hbexps_cache_bit_blast_bexps_hcache_eq E es m1 c1 g1 cnfs m2 c2 g2 cs lr :
     bb_hbexps_cache E es = (m1, c1, g1, cnfs) ->
     bit_blast_hbexps_hcache E es = (m2, c2, g2, cs, lr) ->
@@ -264,6 +278,15 @@ Section QFBV2CNF.
   Definition simplify_bexps (es : seq QFBV.bexp) :=
     tmap QFBV.simplify_bexp2 es.
 
+
+  Lemma vars_simplify_bexps es :
+    SSAVS.subset (QFBV.vars_bexps (simplify_bexps es)) (QFBV.vars_bexps es).
+  Proof.
+    elim: es => [| e es IH] //=. rewrite /simplify_bexps tmap_map /=.
+    rewrite -tmap_map -/(simplify_bexps es). move: (QFBV.vars_simplify_bexp2 e) => H.
+    by SSAVS.Lemmas.dp_subset.
+  Qed.
+
   Lemma simplify_bexps_well_formed E es :
     well_formed_bexps es E -> well_formed_bexps (simplify_bexps es) E.
   Proof.
@@ -304,6 +327,16 @@ Section QFBV2CNF.
     end.
 
   Definition filter_not_true es := tfilter bexp_is_not_true es.
+
+  Lemma vars_filter_not_true es :
+    SSAVS.Equal (QFBV.vars_bexps (filter_not_true es)) (QFBV.vars_bexps es).
+  Proof.
+    elim: es => [| e es IH] //=.
+    rewrite /filter_not_true /=. rewrite tfilter_cons. case_if.
+    - rewrite -/(filter_not_true es). rewrite vars_bexps_rcons.
+      rewrite IH. rewrite SSAVS.Lemmas.P.union_sym. reflexivity.
+    - rewrite IH. by case: e H => //.
+  Qed.
 
   Lemma bexp_is_true_valid E e : bexp_is_not_true e = false -> valid_bexp E e.
   Proof. by case: e => //=. Qed.

@@ -1,12 +1,12 @@
 
 (** SSA transformation. *)
 
-From Coq Require Import List ZArith FSets OrderedType String Decimal DecimalString.
+From Coq Require Import List ZArith FSets OrderedType String Decimal DecimalString Btauto.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
 From ssrlib Require Import Var SsrOrder FMaps ZAriths Tactics Lists FSets Seqs Strings.
-From Cryptoline Require Import Options DSL.
+From Cryptoline Require Import Options DSLRaw DSL.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -77,8 +77,8 @@ Section MakeSSA.
 
   Definition ssa_atom (m : vmap) (a : DSL.atom) : SSA.atom :=
     match a with
-    | DSL.Avar v => SSA.Avar (ssa_var m v)
-    | DSL.Aconst ty n => SSA.Aconst ty n
+    | Avar v => SSA.avar (ssa_var m v)
+    | Aconst ty n => SSA.aconst ty n
     end.
 
   Fixpoint ssa_eexp (m : vmap) (e : DSL.eexp) : SSA.eexp :=
@@ -2770,6 +2770,34 @@ Section MakeSSA.
     move=> x y Heq; rewrite (eqP Heq) // .
   Qed .
 
+  Global Instance add_proper_ssa_vars_unchanged_instr :
+    Proper (SSAVS.Equal ==> eq ==> eq) ssa_vars_unchanged_instr.
+  Proof.
+    move=> vs1 vs2 Heq i1 i2 ?; subst. rewrite /ssa_vars_unchanged_instr.
+    case Hall2: (SSAVS.for_all (ssa_unchanged_instr_var i2) vs2).
+    - move: (SSAVS.for_all_2 (ssa_unchanged_instr_var_compat _) Hall2) => {}Hall2.
+      apply: (SSAVS.for_all_1 (ssa_unchanged_instr_var_compat _)). move=> x Hin1.
+      apply: Hall2. rewrite <- Heq. assumption.
+    - apply/negP=> Hall1. apply/negPf: Hall2.
+      move: (SSAVS.for_all_2 (ssa_unchanged_instr_var_compat _) Hall1) => {}Hall1.
+      apply: (SSAVS.for_all_1 (ssa_unchanged_instr_var_compat _)). move=> x Hin2.
+      apply: Hall1. rewrite -> Heq. assumption.
+  Qed.
+
+  Global Instance add_proper_ssa_vars_unchanged_program :
+    Proper (SSAVS.Equal ==> eq ==> eq) ssa_vars_unchanged_program.
+  Proof.
+    move=> vs1 vs2 Heq i1 i2 ?; subst. rewrite /ssa_vars_unchanged_program.
+    case Hall2: (SSAVS.for_all (ssa_unchanged_program_var i2) vs2).
+    - move: (SSAVS.for_all_2 (ssa_unchanged_program_var_compat _) Hall2) => {}Hall2.
+      apply: (SSAVS.for_all_1 (ssa_unchanged_program_var_compat _)). move=> x Hin1.
+      apply: Hall2. rewrite <- Heq. assumption.
+    - apply/negP=> Hall1. apply/negPf: Hall2.
+      move: (SSAVS.for_all_2 (ssa_unchanged_program_var_compat _) Hall1) => {}Hall1.
+      apply: (SSAVS.for_all_1 (ssa_unchanged_program_var_compat _)). move=> x Hin2.
+      apply: Hall1. rewrite -> Heq. assumption.
+  Qed.
+
   Lemma ssa_unchanged_instr_mem v vs i :
     ssa_vars_unchanged_instr vs i ->
     SSAVS.mem v vs ->
@@ -2852,6 +2880,10 @@ Section MakeSSA.
     exact: (ssa_unchanged_program_mem H Hmem).
   Qed.
 
+  Lemma ssa_unchanged_instr_empty i :
+    ssa_vars_unchanged_instr SSAVS.empty i.
+  Proof. done. Qed.
+
   Lemma ssa_unchanged_program_empty vs :
     ssa_vars_unchanged_program vs [::].
   Proof.
@@ -2917,6 +2949,16 @@ Section MakeSSA.
     - rewrite ssa_unchanged_program_cons IH. rewrite andb_assoc.
       rewrite -ssa_unchanged_program_cons. reflexivity.
   Qed.
+
+  Lemma ssa_unchanged_program_rcons1 vs p i :
+    ssa_vars_unchanged_program vs (rcons p i) ->
+    ssa_vars_unchanged_program vs p.
+  Proof. rewrite ssa_unchanged_program_rcons. by move/andP => [? ?]. Qed.
+
+  Lemma ssa_unchanged_program_rcons2 vs p i :
+    ssa_vars_unchanged_program vs (rcons p i) ->
+    ssa_vars_unchanged_instr vs i.
+  Proof. rewrite ssa_unchanged_program_rcons. by move/andP => [? ?]. Qed.
 
   Lemma ssa_unchanged_program_cat1 vs p1 p2 :
     ssa_vars_unchanged_program vs (p1 ++ p2) ->
@@ -3002,6 +3044,22 @@ Section MakeSSA.
     apply: ssa_unchanged_program_global => x Hmem.
     move: (SSA.VSLemmas.mem_singleton1 Hmem) => Heq.
     rewrite (eqP Heq); assumption.
+  Qed.
+
+  Lemma ssa_unchanged_instr_singleton v i :
+    ssa_vars_unchanged_instr (SSAVS.singleton v) i = ssa_var_unchanged_instr v i.
+  Proof.
+    case H: (ssa_var_unchanged_instr v i).
+    - exact: (ssa_unchanged_instr_singleton2 H).
+    - apply/negP. move=> H1. apply/negPf: H. exact: (ssa_unchanged_instr_singleton1 H1).
+  Qed.
+
+  Lemma ssa_unchanged_program_singleton v p :
+    ssa_vars_unchanged_program (SSAVS.singleton v) p = ssa_var_unchanged_program v p.
+  Proof.
+    case H: (ssa_var_unchanged_program v p).
+    - exact: (ssa_unchanged_program_singleton2 H).
+    - apply/negP. move=> H1. apply/negPf: H. exact: (ssa_unchanged_program_singleton1 H1).
   Qed.
 
   Lemma ssa_unchanged_instr_union1 s1 s2 i :
@@ -3119,6 +3177,31 @@ Section MakeSSA.
     - move=> Hmem. exact: (ssa_unchanged_instr_mem H2 Hmem).
   Qed.
 
+  Lemma ssa_unchanged_instr_Add1 v s1 s2 p :
+    SSAVS.Lemmas.P.Add v s1 s2 ->
+    ssa_vars_unchanged_instr s2 p ->
+    ssa_var_unchanged_instr v p /\ ssa_vars_unchanged_instr s1 p.
+  Proof.
+    move=> Hadd Hun; split.
+    - apply: (ssa_unchanged_instr_mem Hun). apply/SSAVS.Lemmas.memP.
+      apply/(Hadd v). left. reflexivity.
+    - apply: (ssa_unchanged_instr_subset Hun). apply: SSAVS.subset_1.
+      move=> x Hin1. apply/(Hadd x). by right.
+  Qed.
+
+  Lemma ssa_unchanged_instr_Add2 v s1 s2 p :
+    SSAVS.Lemmas.P.Add v s1 s2 ->
+    ssa_var_unchanged_instr v p ->
+    ssa_vars_unchanged_instr s1 p ->
+    ssa_vars_unchanged_instr s2 p.
+  Proof.
+    move=> Hadd H1 H2. apply: ssa_unchanged_instr_global => x Hmem.
+    move/SSA.VSLemmas.memP: Hmem. move/(Hadd x). case=> Hin.
+    - rewrite -(eqP Hin). assumption.
+    - move/SSA.VSLemmas.memP: Hin => Hmem.
+      exact: (ssa_unchanged_instr_mem H2 Hmem).
+  Qed.
+
   Lemma ssa_unchanged_program_add1 v s p :
     ssa_vars_unchanged_program (SSAVS.add v s) p ->
     ssa_unchanged_program_var p v /\ ssa_vars_unchanged_program s p.
@@ -3143,6 +3226,44 @@ Section MakeSSA.
     - move=> Hmem.
       exact: (ssa_unchanged_program_mem H2 Hmem).
   Qed.
+
+  Lemma ssa_unchanged_program_Add1 v s1 s2 p :
+    SSAVS.Lemmas.P.Add v s1 s2 ->
+    ssa_vars_unchanged_program s2 p ->
+    ssa_unchanged_program_var p v /\ ssa_vars_unchanged_program s1 p.
+  Proof.
+    move=> Hadd Hun; split.
+    - apply: (ssa_unchanged_program_mem Hun). apply/SSAVS.Lemmas.memP.
+      apply/(Hadd v). left. reflexivity.
+    - apply: (ssa_unchanged_program_subset Hun). apply: SSAVS.subset_1.
+      move=> x Hin1. apply/(Hadd x). by right.
+  Qed.
+
+  Lemma ssa_unchanged_program_Add2 v s1 s2 p :
+    SSAVS.Lemmas.P.Add v s1 s2 ->
+    ssa_unchanged_program_var p v ->
+    ssa_vars_unchanged_program s1 p ->
+    ssa_vars_unchanged_program s2 p.
+  Proof.
+    move=> Hadd H1 H2. apply: ssa_unchanged_program_global => x Hmem.
+    move/SSA.VSLemmas.memP: Hmem. move/(Hadd x). case=> Hin.
+    - rewrite -(eqP Hin). assumption.
+    - move/SSA.VSLemmas.memP: Hin => Hmem.
+      exact: (ssa_unchanged_program_mem H2 Hmem).
+  Qed.
+
+  Lemma ssa_unchanged_program_add_l v s p :
+    ssa_vars_unchanged_program (SSAVS.add v s) p ->
+    ssa_vars_unchanged_program (SSAVS.singleton v) p.
+  Proof.
+    move=> H. move: (ssa_unchanged_program_add1 H) => [{}H _].
+    apply: ssa_unchanged_program_singleton2. assumption.
+  Qed.
+
+  Lemma ssa_unchanged_program_add_r v s p :
+    ssa_vars_unchanged_program (SSAVS.add v s) p ->
+    ssa_vars_unchanged_program s p.
+  Proof. move=> H. move: (ssa_unchanged_program_add1 H) => [_ {}H]; assumption. Qed.
 
   Lemma ssa_unchanged_instr_disjoint_lvs vs i :
     ssa_vars_unchanged_instr vs i =
@@ -3177,19 +3298,13 @@ Section MakeSSA.
     SSAVS.Equal vs1 vs2 ->
     ssa_vars_unchanged_instr vs1 i ->
     ssa_vars_unchanged_instr vs2 i.
-  Proof.
-    move=> Heq Hun. apply: (ssa_unchanged_instr_subset Hun).
-    rewrite Heq. exact: SSAVS.Lemmas.subset_refl.
-  Qed.
+  Proof. by move=> ->. Qed.
 
   Lemma ssa_unchanged_program_replace vs1 vs2 p :
     SSAVS.Equal vs1 vs2 ->
     ssa_vars_unchanged_program vs1 p ->
     ssa_vars_unchanged_program vs2 p.
-  Proof.
-    move=> Heq Hunch. apply: (ssa_unchanged_program_subset Hunch).
-    rewrite Heq. exact: SSAVS.Lemmas.subset_refl.
-  Qed.
+  Proof. by move=> ->. Qed.
 
 
   Lemma ssa_var_unchanged_eqn_instr v i :
@@ -3957,6 +4072,26 @@ Section MakeSSA.
       + move/negP: H; apply. exact: (proj2 (ssa_single_assignment_cons1 Hcons)).
   Qed.
 
+  Lemma ssa_single_assignment_rcons p i :
+    ssa_single_assignment (rcons p i) =
+      ssa_single_assignment p && ssa_vars_unchanged_instr (SSA.lvs_program p) i.
+  Proof.
+    elim: p i => [| i p IH] j //=.
+    - by rewrite ssa_unchanged_program_empty ssa_unchanged_instr_empty.
+    - rewrite ssa_unchanged_instr_union IH ssa_unchanged_program_rcons.
+      by btauto.
+  Qed.
+
+  Lemma ssa_single_assignment_rcons1 p i :
+    ssa_single_assignment (rcons p i) ->
+    ssa_single_assignment p.
+  Proof. rewrite ssa_single_assignment_rcons. by move/andP => [? ?]. Qed.
+
+  Lemma ssa_single_assignment_rcons2 p i :
+    ssa_single_assignment (rcons p i) ->
+  ssa_vars_unchanged_instr (SSA.lvs_program p) i.
+  Proof. rewrite ssa_single_assignment_rcons. by move/andP => [? ?]. Qed.
+
   Lemma ssa_single_assignment_cat1 p1 p2 :
     ssa_single_assignment (p1 ++ p2) ->
     ssa_single_assignment p1 /\ ssa_single_assignment p2 /\
@@ -4059,6 +4194,505 @@ Section MakeSSA.
         rewrite ssa_unchanged_program_union Hp Hssa_i. done.
   Qed.
 
+
+  Lemma vtyp_unchanged_instr_succ_typenv E i v :
+    ssa_vars_unchanged_instr (SSAVS.singleton v) i ->
+    SSATE.vtyp v (SSA.instr_succ_typenv i E) = SSATE.vtyp v E.
+  Proof.
+    move=> Hun. rewrite SSA.vtyp_instr_succ_typenv_not_mem_lvs; first reflexivity.
+    rewrite ssa_unchanged_instr_singleton in Hun.
+    rewrite ssa_var_unchanged_instr_not_mem in Hun. assumption.
+  Qed.
+
+  Lemma vtyp_unchanged_program_succ_typenv E p v :
+    ssa_vars_unchanged_program (SSAVS.singleton v) p ->
+    SSATE.vtyp v (SSA.program_succ_typenv p E) = SSATE.vtyp v E.
+  Proof.
+    elim: p E => [| i p IH] E //=.
+    move=> Hun. rewrite (IH _ (proj2 (ssa_unchanged_program_cons1 Hun))).
+    exact: (vtyp_unchanged_instr_succ_typenv _ (proj1 (ssa_unchanged_program_cons1 Hun))).
+  Qed.
+
+  Lemma vsize_unchanged_instr_succ_typenv E i v :
+    ssa_vars_unchanged_instr (SSAVS.singleton v) i ->
+    SSATE.vsize v (SSA.instr_succ_typenv i E) = SSATE.vsize v E.
+  Proof.
+    move=> Hun. rewrite /SSATE.vsize. rewrite (vtyp_unchanged_instr_succ_typenv _ Hun).
+    reflexivity.
+  Qed.
+
+  Lemma vsize_unchanged_program_succ_typenv E p v :
+    ssa_vars_unchanged_program (SSAVS.singleton v) p ->
+    SSATE.vsize v (SSA.program_succ_typenv p E) = SSATE.vsize v E.
+  Proof.
+    move=> Hun. rewrite /SSATE.vsize. rewrite (vtyp_unchanged_program_succ_typenv _ Hun).
+    reflexivity.
+  Qed.
+
+  Lemma atyp_unchanged_instr_succ_typenv E i a :
+    ssa_vars_unchanged_instr (SSA.vars_atom a) i ->
+    SSA.atyp a (SSA.instr_succ_typenv i E) = SSA.atyp a E.
+  Proof.
+    case: a => //=. move=> v Hun.
+    rewrite SSA.vtyp_instr_succ_typenv_not_mem_lvs; first reflexivity.
+    rewrite ssa_unchanged_instr_singleton in Hun.
+    rewrite ssa_var_unchanged_instr_not_mem in Hun. assumption.
+  Qed.
+
+  Lemma atyp_unchanged_program_succ_typenv E p a :
+    ssa_vars_unchanged_program (SSA.vars_atom a) p ->
+    SSA.atyp a (SSA.program_succ_typenv p E) = SSA.atyp a E.
+  Proof.
+    elim: p E => [| i p IH] E //=.
+    move=> Hun. rewrite (IH _ (proj2 (ssa_unchanged_program_cons1 Hun))).
+    exact: (atyp_unchanged_instr_succ_typenv _ (proj1 (ssa_unchanged_program_cons1 Hun))).
+  Qed.
+
+  Lemma asize_unchanged_instr_succ_typenv E i a :
+    ssa_vars_unchanged_instr (SSA.vars_atom a) i ->
+    SSA.asize a (SSA.instr_succ_typenv i E) = SSA.asize a E.
+  Proof.
+    rewrite /SSA.asize => Hun. rewrite (atyp_unchanged_instr_succ_typenv _ Hun).
+    reflexivity.
+  Qed.
+
+  Lemma asize_unchanged_program_succ_typenv E p a :
+    ssa_vars_unchanged_program (SSA.vars_atom a) p ->
+    SSA.asize a (SSA.program_succ_typenv p E) = SSA.asize a E.
+  Proof.
+    rewrite /SSA.asize => Hun. rewrite (atyp_unchanged_program_succ_typenv _ Hun).
+    reflexivity.
+  Qed.
+
+  Lemma well_sized_atom_unchanged_instr_succ_typenv E i a :
+    ssa_vars_unchanged_instr (SSA.vars_atom a) i ->
+    SSA.well_sized_atom (SSA.instr_succ_typenv i E) a = SSA.well_sized_atom E a.
+  Proof.
+    rewrite /SSA.well_sized_atom => Hun. rewrite (atyp_unchanged_instr_succ_typenv _ Hun).
+    rewrite (asize_unchanged_instr_succ_typenv _ Hun). reflexivity.
+  Qed.
+
+  Lemma well_sized_atom_unchanged_program_succ_typenv E p a :
+    ssa_vars_unchanged_program (SSA.vars_atom a) p ->
+    SSA.well_sized_atom (SSA.program_succ_typenv p E) a = SSA.well_sized_atom E a.
+  Proof.
+    elim: p E => [| i p IH] E //=. move=> Hun.
+    rewrite (IH _ (proj2 (ssa_unchanged_program_cons1 Hun))).
+    rewrite (well_sized_atom_unchanged_instr_succ_typenv _ (proj1 (ssa_unchanged_program_cons1 Hun))).
+    reflexivity.
+  Qed.
+
+  Lemma well_typed_atom_unchanged_instr_succ_typenv E i a :
+    ssa_vars_unchanged_instr (SSA.vars_atom a) i ->
+    SSA.well_typed_atom (SSA.instr_succ_typenv i E) a = SSA.well_typed_atom E a.
+  Proof.
+    rewrite /SSA.well_typed_atom. move=> Hun.
+    rewrite (well_sized_atom_unchanged_instr_succ_typenv _ Hun) => {Hun}.
+    reflexivity.
+  Qed.
+
+  Lemma well_typed_atom_unchanged_program_succ_typenv E p a :
+    ssa_vars_unchanged_program (SSA.vars_atom a) p ->
+    SSA.well_typed_atom (SSA.program_succ_typenv p E) a = SSA.well_typed_atom E a.
+  Proof.
+    elim: p E => [| i p IH] E //=. move=> Hun.
+    rewrite (IH _ (proj2 (ssa_unchanged_program_cons1 Hun))).
+    rewrite (well_typed_atom_unchanged_instr_succ_typenv _ (proj1 (ssa_unchanged_program_cons1 Hun))).
+    reflexivity.
+  Qed.
+
+  Lemma is_defined_unchanged_instr_succ_typenv E i v :
+    ssa_vars_unchanged_instr (SSAVS.singleton v) i ->
+    SSA.is_defined v (SSA.instr_succ_typenv i E) = SSA.is_defined v E.
+  Proof.
+    (case: i => //=); intros;
+      by repeat match goal with
+                | H : is_true (ssa_vars_unchanged_instr _ _) |- _ =>
+                    rewrite ssa_unchanged_instr_disjoint_lvs /= in H
+                | H : is_true (SSA.VSLemmas.disjoint _ (SSAVS.singleton _)) |- _ =>
+                    rewrite SSA.VSLemmas.disjoint_singleton in H
+                | H : is_true (SSA.VSLemmas.disjoint _ (SSAVS.add _ _)) |- _ =>
+                    let H1 := fresh in
+                    let H2 := fresh in
+                    rewrite SSA.VSLemmas.disjoint_add in H; move/andP: H => [H1 H2]
+                | H : is_true (~~ SSAVS.mem _ (SSAVS.singleton _)) |- _ =>
+                    move: (SSA.VSLemmas.not_mem_singleton1 H) => {H} /negP H
+                | H : is_true (?t != ?v) |-
+                    context [SSA.is_defined ?v (SSATE.add ?t _ _)] =>
+                    rewrite eq_sym in H
+                | H : is_true (?v != ?t) |-
+                    context [SSA.is_defined ?v (SSATE.add ?t _ _)] =>
+                    rewrite (SSA.is_defined_add_neq _ _ H)
+                | |- ?e = ?e => reflexivity
+                end.
+  Qed.
+
+  Lemma is_defined_unchanged_program_succ_typenv E p v :
+    ssa_vars_unchanged_program (SSAVS.singleton v) p ->
+    SSA.is_defined v (SSA.program_succ_typenv p E) = SSA.is_defined v E.
+  Proof.
+    elim: p E => [| i p IH] E //=. move=> Hun.
+    rewrite (IH _ (proj2 (ssa_unchanged_program_cons1 Hun))).
+    rewrite (is_defined_unchanged_instr_succ_typenv _ (proj1 (ssa_unchanged_program_cons1 Hun))).
+    reflexivity.
+  Qed.
+
+  Lemma are_defined_unchanged_instr_succ_typenv E i vs :
+    ssa_vars_unchanged_instr vs i ->
+    SSA.are_defined vs (SSA.instr_succ_typenv i E) = SSA.are_defined vs E.
+  Proof.
+    move: vs. apply: SSAVS.Lemmas.P.set_induction.
+    - move=> vs Hemp Hun. rewrite !(SSA.are_defined_Empty _ Hemp). reflexivity.
+    - move=> s1 s2 IH x Hnotin Hadd Hun.
+      rewrite !(SSA.are_defined_Addl _ Hadd).
+      rewrite (is_defined_unchanged_instr_succ_typenv).
+      + rewrite (IH (proj2 (ssa_unchanged_instr_Add1 Hadd Hun))).
+        reflexivity.
+      + apply: ssa_unchanged_instr_singleton2.
+        exact: (proj1 (ssa_unchanged_instr_Add1 Hadd Hun)).
+  Qed.
+
+  Lemma are_defined_unchanged_program_succ_typenv E p vs :
+    ssa_vars_unchanged_program vs p ->
+    SSA.are_defined vs (SSA.program_succ_typenv p E) = SSA.are_defined vs E.
+  Proof.
+    elim: p E => [| i p IH] E //=. move=> Hun.
+    rewrite (IH _ (proj2 (ssa_unchanged_program_cons1 Hun))).
+    rewrite (are_defined_unchanged_instr_succ_typenv _ (proj1 (ssa_unchanged_program_cons1 Hun))).
+    reflexivity.
+  Qed.
+
+  Lemma size_of_rexp_unchanged_instr_succ_typenv E i e :
+    ssa_vars_unchanged_instr (SSA.vars_rexp e) i ->
+    SSA.size_of_rexp e (SSA.instr_succ_typenv i E) = SSA.size_of_rexp e E.
+  Proof.
+    elim: e => //=. move=> v Hun.
+    exact: (vsize_unchanged_instr_succ_typenv _ Hun).
+  Qed.
+
+  Lemma size_of_rexp_unchanged_program_succ_typenv E p e :
+    ssa_vars_unchanged_program (SSA.vars_rexp e) p ->
+    SSA.size_of_rexp e (SSA.program_succ_typenv p E) = SSA.size_of_rexp e E.
+  Proof.
+    elim: e => //=. move=> v Hun.
+    exact: (vsize_unchanged_program_succ_typenv _ Hun).
+  Qed.
+
+  Ltac wf_unchanged_succ_typenv0 :=
+    repeat match goal with
+           | H : is_true (_ && _) |- _ =>
+               let H1 := fresh in
+               let H2 := fresh in
+               move/andP: H => [H1 H2]
+           | H : is_true ?e |- context [?e] => rewrite H
+           | H : is_true (ssa_vars_unchanged_instr (SSAVS.add _ _) _) |- _ =>
+               let H1 := fresh in
+               let H2 := fresh in
+               move: (ssa_unchanged_instr_add1 H) => {H} [H1 H2]
+           | H : is_true (ssa_vars_unchanged_instr (SSAVS.union _ _) _) |- _ =>
+               let H1 := fresh in
+               let H2 := fresh in
+               move: (ssa_unchanged_instr_union1 H) => {H} [H1 H2]
+           | H : is_true (ssa_vars_unchanged_program (SSAVS.add _ _) _) |- _ =>
+               let H1 := fresh in
+               let H2 := fresh in
+               move: (ssa_unchanged_program_add1 H) => {H} [H1 H2]
+           | H : is_true (ssa_vars_unchanged_program (SSAVS.union _ _) _) |- _ =>
+               let H1 := fresh in
+               let H2 := fresh in
+               move: (ssa_unchanged_program_union1 H) => {H} [H1 H2]
+           (**)
+           | Hun : is_true (ssa_vars_unchanged_instr (SSAVS.singleton ?v) ?i) |-
+               context [SSATE.vtyp ?v (SSA.instr_succ_typenv ?i _)] =>
+               rewrite (vtyp_unchanged_instr_succ_typenv _ Hun)
+           | Hun : is_true (ssa_vars_unchanged_instr (SSAVS.singleton ?v) ?i) |-
+               context [SSATE.vsize ?v (SSA.instr_succ_typenv ?i _)] =>
+               rewrite (vsize_unchanged_instr_succ_typenv _ Hun)
+           | Hun : is_true (ssa_vars_unchanged_instr (SSA.vars_atom ?a) ?i) |-
+               context [SSA.atyp ?a (SSA.instr_succ_typenv ?i _)] =>
+               rewrite (atyp_unchanged_instr_succ_typenv _ Hun)
+           | Hun : is_true (ssa_vars_unchanged_instr (SSA.vars_atom ?a) ?i) |-
+               context [SSA.asize ?a (SSA.instr_succ_typenv ?i _)] =>
+               rewrite (asize_unchanged_instr_succ_typenv _ Hun)
+           | Hun : is_true (ssa_vars_unchanged_instr (SSA.vars_atom ?a) ?i) |-
+               context [SSA.well_sized_atom (SSA.instr_succ_typenv ?i _) ?a] =>
+               rewrite (well_sized_atom_unchanged_instr_succ_typenv _ Hun)
+           | Hun : is_true (ssa_vars_unchanged_instr (SSA.vars_atom ?a) ?i) |-
+               context [SSA.well_typed_atom (SSA.instr_succ_typenv ?i _) ?a] =>
+               rewrite (well_typed_atom_unchanged_instr_succ_typenv _ Hun)
+           | Hun : is_true (ssa_vars_unchanged_instr (SSA.vars_rexp ?e) ?i) |-
+               context [SSA.size_of_rexp ?e (SSA.instr_succ_typenv ?i _)] =>
+               rewrite (size_of_rexp_unchanged_instr_succ_typenv _ Hun)
+           | Hun : is_true (ssa_vars_unchanged_instr (SSAVS.singleton ?v) ?i) |-
+               context [SSA.is_defined ?v (SSA.instr_succ_typenv ?i _)] =>
+               rewrite (is_defined_unchanged_instr_succ_typenv _ Hun)
+           | Hun : is_true (ssa_vars_unchanged_instr ?vs ?i) |-
+               context [SSA.are_defined ?vs (SSA.instr_succ_typenv ?i _)] =>
+               rewrite (are_defined_unchanged_instr_succ_typenv _ Hun)
+           (**)
+           | Hun : is_true (ssa_vars_unchanged_program (SSAVS.singleton ?v) ?i) |-
+               context [SSATE.vtyp ?v (SSA.program_succ_typenv ?i _)] =>
+               rewrite (vtyp_unchanged_program_succ_typenv _ Hun)
+           | Hun : is_true (ssa_vars_unchanged_program (SSAVS.singleton ?v) ?i) |-
+               context [SSATE.vsize ?v (SSA.program_succ_typenv ?i _)] =>
+               rewrite (vsize_unchanged_program_succ_typenv _ Hun)
+           | Hun : is_true (ssa_vars_unchanged_program (SSA.vars_atom ?a) ?i) |-
+               context [SSA.atyp ?a (SSA.program_succ_typenv ?i _)] =>
+               rewrite (atyp_unchanged_program_succ_typenv _ Hun)
+           | Hun : is_true (ssa_vars_unchanged_program (SSA.vars_atom ?a) ?i) |-
+               context [SSA.asize ?a (SSA.program_succ_typenv ?i _)] =>
+               rewrite (asize_unchanged_program_succ_typenv _ Hun)
+           | Hun : is_true (ssa_vars_unchanged_program (SSA.vars_atom ?a) ?i) |-
+               context [SSA.well_sized_atom (SSA.program_succ_typenv ?i _) ?a] =>
+               rewrite (well_sized_atom_unchanged_program_succ_typenv _ Hun)
+           | Hun : is_true (ssa_vars_unchanged_program (SSA.vars_atom ?a) ?i) |-
+               context [SSA.well_typed_atom (SSA.program_succ_typenv ?i _) ?a] =>
+               rewrite (well_typed_atom_unchanged_program_succ_typenv _ Hun)
+           | Hun : is_true (ssa_vars_unchanged_program (SSA.vars_rexp ?e) ?i) |-
+               context [SSA.size_of_rexp ?e (SSA.program_succ_typenv ?i _)] =>
+               rewrite (size_of_rexp_unchanged_program_succ_typenv _ Hun)
+           | Hun : is_true (ssa_vars_unchanged_program (SSAVS.singleton ?v) ?i) |-
+               context [SSA.is_defined ?v (SSA.program_succ_typenv ?i _)] =>
+               rewrite (is_defined_unchanged_program_succ_typenv _ Hun)
+           | Hun : is_true (ssa_vars_unchanged_program ?vs ?i) |-
+               context [SSA.are_defined ?vs (SSA.program_succ_typenv ?i _)] =>
+               rewrite (are_defined_unchanged_program_succ_typenv _ Hun)
+           end.
+
+  Lemma well_typed_eexp_unchanged_instr_succ_typenv E i e :
+    ssa_vars_unchanged_instr (SSA.vars_eexp e) i ->
+    SSA.well_typed_eexp (SSA.instr_succ_typenv i E) e = SSA.well_typed_eexp E e.
+  Proof.
+    elim: e => //=. move=> _ e1 IH1 e2 IH2.
+    rewrite ssa_unchanged_instr_union. move/andP=> [Hun1 Hun2].
+    rewrite (IH1 Hun1) (IH2 Hun2). reflexivity.
+  Qed.
+
+  Lemma well_typed_eexp_unchanged_program_succ_typenv E p e :
+    ssa_vars_unchanged_program (SSA.vars_eexp e) p ->
+    SSA.well_typed_eexp (SSA.program_succ_typenv p E) e = SSA.well_typed_eexp E e.
+  Proof.
+    elim: e => //=. move=> _ e1 IH1 e2 IH2.
+    rewrite ssa_unchanged_program_union. move/andP=> [Hun1 Hun2].
+    rewrite (IH1 Hun1) (IH2 Hun2). reflexivity.
+  Qed.
+
+  Lemma well_typed_eexps_unchanged_instr_succ_typenv E i es :
+    ssa_vars_unchanged_instr (SSA.vars_eexps es) i ->
+    SSA.well_typed_eexps (SSA.instr_succ_typenv i E) es = SSA.well_typed_eexps E es.
+  Proof.
+    elim: es => [| e es IH] //=. rewrite ssa_unchanged_instr_union.
+    move/andP=> [Hune Hunes]. rewrite (well_typed_eexp_unchanged_instr_succ_typenv _ Hune) (IH Hunes).
+    reflexivity.
+  Qed.
+
+  Lemma well_typed_eexps_unchanged_program_succ_typenv E p es :
+    ssa_vars_unchanged_program (SSA.vars_eexps es) p ->
+    SSA.well_typed_eexps (SSA.program_succ_typenv p E) es = SSA.well_typed_eexps E es.
+  Proof.
+    elim: es => [| e es IH] //=. rewrite ssa_unchanged_program_union.
+    move/andP=> [Hune Hunes]. rewrite (well_typed_eexp_unchanged_program_succ_typenv _ Hune) (IH Hunes).
+    reflexivity.
+  Qed.
+
+  Lemma well_typed_rexp_unchanged_instr_succ_typenv E i e :
+    ssa_vars_unchanged_instr (SSA.vars_rexp e) i ->
+    SSA.well_typed_rexp (SSA.instr_succ_typenv i E) e = SSA.well_typed_rexp E e.
+  Proof.
+    elim: e => //=; intros; wf_unchanged_succ_typenv0.
+    - reflexivity.
+    - rewrite (H H0). reflexivity.
+    - rewrite (H H2) (H0 H3). reflexivity.
+    - rewrite (H H0). reflexivity.
+    - rewrite (H H0). reflexivity.
+  Qed.
+
+  Lemma well_typed_rexp_unchanged_program_succ_typenv E p e :
+    ssa_vars_unchanged_program (SSA.vars_rexp e) p ->
+    SSA.well_typed_rexp (SSA.program_succ_typenv p E) e = SSA.well_typed_rexp E e.
+  Proof.
+    elim: e => //=; intros; wf_unchanged_succ_typenv0.
+    - reflexivity.
+    - rewrite (H H0). reflexivity.
+    - rewrite (H H2) (H0 H3). reflexivity.
+    - rewrite (H H0). reflexivity.
+    - rewrite (H H0). reflexivity.
+  Qed.
+
+  Ltac wf_unchanged_succ_typenv1 :=
+    repeat ((progress wf_unchanged_succ_typenv0)
+            || match goal with
+               | Hun : is_true (ssa_vars_unchanged_instr (SSA.vars_eexp ?e) ?i) |-
+                   context [SSA.well_typed_eexp (SSA.instr_succ_typenv ?i _) ?e] =>
+                   rewrite (well_typed_eexp_unchanged_instr_succ_typenv _ Hun)
+               | Hun : is_true (ssa_vars_unchanged_instr (SSA.vars_eexps ?e) ?i) |-
+                   context [SSA.well_typed_eexps (SSA.instr_succ_typenv ?i _) ?e] =>
+                   rewrite (well_typed_eexps_unchanged_instr_succ_typenv _ Hun)
+               | Hun : is_true (ssa_vars_unchanged_instr (SSA.vars_rexp ?e) ?i) |-
+                   context [SSA.well_typed_rexp (SSA.instr_succ_typenv ?i _) ?e] =>
+                   rewrite (well_typed_rexp_unchanged_instr_succ_typenv _ Hun)
+               (**)
+               | Hun : is_true (ssa_vars_unchanged_program (SSA.vars_eexp ?e) ?i) |-
+                   context [SSA.well_typed_eexp (SSA.program_succ_typenv ?i _) ?e] =>
+                   rewrite (well_typed_eexp_unchanged_program_succ_typenv _ Hun)
+               | Hun : is_true (ssa_vars_unchanged_program (SSA.vars_eexps ?e) ?i) |-
+                   context [SSA.well_typed_eexps (SSA.program_succ_typenv ?i _) ?e] =>
+                   rewrite (well_typed_eexps_unchanged_program_succ_typenv _ Hun)
+               | Hun : is_true (ssa_vars_unchanged_program (SSA.vars_rexp ?e) ?i) |-
+                   context [SSA.well_typed_rexp (SSA.program_succ_typenv ?i _) ?e] =>
+                   rewrite (well_typed_rexp_unchanged_program_succ_typenv _ Hun)
+               end
+           ).
+
+  Lemma well_typed_ebexp_unchanged_instr_succ_typenv E i e :
+    ssa_vars_unchanged_instr (SSA.vars_ebexp e) i ->
+    SSA.well_typed_ebexp (SSA.instr_succ_typenv i E) e = SSA.well_typed_ebexp E e.
+  Proof.
+    elim: e => //=; intros; wf_unchanged_succ_typenv1; try reflexivity.
+    rewrite (H H2) (H0 H3). reflexivity.
+  Qed.
+
+  Lemma well_typed_ebexp_unchanged_program_succ_typenv E p e :
+    ssa_vars_unchanged_program (SSA.vars_ebexp e) p ->
+    SSA.well_typed_ebexp (SSA.program_succ_typenv p E) e = SSA.well_typed_ebexp E e.
+  Proof.
+    elim: e => //=; intros; wf_unchanged_succ_typenv1; try reflexivity.
+    rewrite (H H2) (H0 H3). reflexivity.
+  Qed.
+
+  Lemma well_typed_rbexp_unchanged_instr_succ_typenv E i e :
+    ssa_vars_unchanged_instr (SSA.vars_rbexp e) i ->
+    SSA.well_typed_rbexp (SSA.instr_succ_typenv i E) e = SSA.well_typed_rbexp E e.
+  Proof.
+    elim: e => //=; intros; wf_unchanged_succ_typenv1; try reflexivity.
+    all: rewrite (H H2) (H0 H3); reflexivity.
+  Qed.
+
+  Lemma well_typed_rbexp_unchanged_program_succ_typenv E p e :
+    ssa_vars_unchanged_program (SSA.vars_rbexp e) p ->
+    SSA.well_typed_rbexp (SSA.program_succ_typenv p E) e = SSA.well_typed_rbexp E e.
+  Proof.
+    elim: e => //=; intros; wf_unchanged_succ_typenv1; try reflexivity.
+    all: rewrite (H H2) (H0 H3); reflexivity.
+  Qed.
+
+  Lemma well_typed_bexp_unchanged_instr_succ_typenv E i e :
+    ssa_vars_unchanged_instr (SSA.vars_bexp e) i ->
+    SSA.well_typed_bexp (SSA.instr_succ_typenv i E) e = SSA.well_typed_bexp E e.
+  Proof.
+    case: e => [e r]. rewrite /SSA.vars_bexp /=.
+    rewrite ssa_unchanged_instr_union => /andP [Hune Hunr].
+    rewrite /SSA.well_typed_bexp /=.
+    rewrite (well_typed_ebexp_unchanged_instr_succ_typenv _ Hune)
+            (well_typed_rbexp_unchanged_instr_succ_typenv _ Hunr).
+    reflexivity.
+  Qed.
+
+  Lemma well_typed_bexp_unchanged_program_succ_typenv E p e :
+    ssa_vars_unchanged_program (SSA.vars_bexp e) p ->
+    SSA.well_typed_bexp (SSA.program_succ_typenv p E) e = SSA.well_typed_bexp E e.
+  Proof.
+    case: e => [e r]. rewrite /SSA.vars_bexp /=.
+    rewrite ssa_unchanged_program_union => /andP [Hune Hunr].
+    rewrite /SSA.well_typed_bexp /=.
+    rewrite (well_typed_ebexp_unchanged_program_succ_typenv _ Hune)
+            (well_typed_rbexp_unchanged_program_succ_typenv _ Hunr).
+    reflexivity.
+  Qed.
+
+  Ltac wf_unchanged_succ_typenv2 :=
+    repeat ((progress wf_unchanged_succ_typenv0)
+            || (progress wf_unchanged_succ_typenv1)
+            || match goal with
+               | Hun : is_true (ssa_vars_unchanged_instr (SSA.vars_ebexp ?e) ?i) |-
+                   context [SSA.well_typed_ebexp (SSA.instr_succ_typenv ?i _) ?e] =>
+                   rewrite (well_typed_ebexp_unchanged_instr_succ_typenv _ Hun)
+               | Hun : is_true (ssa_vars_unchanged_instr (SSA.vars_rbexp ?e) ?i) |-
+                   context [SSA.well_typed_rbexp (SSA.instr_succ_typenv ?i _) ?e] =>
+                   rewrite (well_typed_rbexp_unchanged_instr_succ_typenv _ Hun)
+               | Hun : is_true (ssa_vars_unchanged_instr (SSA.vars_bexp ?e) ?i) |-
+                   context [SSA.well_typed_bexp (SSA.instr_succ_typenv ?i _) ?e] =>
+                   rewrite (well_typed_bexp_unchanged_instr_succ_typenv _ Hun)
+               (**)
+               | Hun : is_true (ssa_vars_unchanged_program (SSA.vars_ebexp ?e) ?i) |-
+                   context [SSA.well_typed_ebexp (SSA.program_succ_typenv ?i _) ?e] =>
+                   rewrite (well_typed_ebexp_unchanged_program_succ_typenv _ Hun)
+               | Hun : is_true (ssa_vars_unchanged_program (SSA.vars_rbexp ?e) ?i) |-
+                   context [SSA.well_typed_rbexp (SSA.program_succ_typenv ?i _) ?e] =>
+                   rewrite (well_typed_rbexp_unchanged_program_succ_typenv _ Hun)
+               | Hun : is_true (ssa_vars_unchanged_program (SSA.vars_bexp ?e) ?i) |-
+                   context [SSA.well_typed_bexp (SSA.program_succ_typenv ?i _) ?e] =>
+                   rewrite (well_typed_bexp_unchanged_program_succ_typenv _ Hun)
+               end
+           ).
+
+  Lemma well_typed_instr_unchanged_instr_succ_typenv E i j :
+    ssa_vars_unchanged_instr (SSA.rvs_instr j) i ->
+    SSA.well_typed_instr (SSA.instr_succ_typenv i E) j = SSA.well_typed_instr E j.
+  Proof.
+    (case: j => //=); intros; by wf_unchanged_succ_typenv2.
+  Qed.
+
+  Lemma well_typed_instr_unchanged_program_succ_typenv E p j :
+    ssa_vars_unchanged_program (SSA.rvs_instr j) p ->
+    SSA.well_typed_instr (SSA.program_succ_typenv p E) j = SSA.well_typed_instr E j.
+  Proof.
+    (case: j => //=); intros; by wf_unchanged_succ_typenv2.
+  Qed.
+
+  Lemma well_defined_instr_unchanged_instr_succ_typenv E i j :
+    ssa_vars_unchanged_instr (SSA.rvs_instr j) i ->
+    SSA.well_defined_instr (SSA.instr_succ_typenv i E) j = SSA.well_defined_instr E j.
+  Proof.
+    (case: j => //=); intros; by wf_unchanged_succ_typenv2.
+  Qed.
+
+  Lemma well_defined_instr_unchanged_program_succ_typenv E p j :
+    ssa_vars_unchanged_program (SSA.rvs_instr j) p ->
+    SSA.well_defined_instr (SSA.program_succ_typenv p E) j = SSA.well_defined_instr E j.
+  Proof.
+    (case: j => //=); intros; by wf_unchanged_succ_typenv2.
+  Qed.
+
+  Lemma well_formed_instr_unchanged_instr_succ_typenv E i j :
+    ssa_vars_unchanged_instr (SSA.rvs_instr j) i ->
+    SSA.well_formed_instr (SSA.instr_succ_typenv i E) j = SSA.well_formed_instr E j.
+  Proof.
+    rewrite /SSA.well_formed_instr. move=> Hun.
+    rewrite (well_defined_instr_unchanged_instr_succ_typenv _ Hun)
+            (well_typed_instr_unchanged_instr_succ_typenv _ Hun).
+    reflexivity.
+  Qed.
+
+  Lemma well_formed_instr_unchanged_program_succ_typenv E p j :
+    ssa_vars_unchanged_program (SSA.rvs_instr j) p ->
+    SSA.well_formed_instr (SSA.program_succ_typenv p E) j = SSA.well_formed_instr E j.
+  Proof.
+    rewrite /SSA.well_formed_instr. move=> Hun.
+    rewrite (well_defined_instr_unchanged_program_succ_typenv _ Hun)
+            (well_typed_instr_unchanged_program_succ_typenv _ Hun).
+    reflexivity.
+  Qed.
+
+  Lemma well_formed_program_unchanged_instr_succ_typenv E i p :
+    ssa_vars_unchanged_instr (SSA.inputs_program p) i ->
+    SSA.well_formed_program (SSA.instr_succ_typenv i E) p = SSA.well_formed_program E p.
+  Proof.
+    move=> Hun. apply: SSA.agree_well_formed_program.
+    apply: SSA.agree_instr_succ_typenv_l1. rewrite -ssa_unchanged_instr_disjoint_lvs.
+    assumption.
+  Qed.
+
+  Lemma well_formed_program_unchanged_program_succ_typenv E p1 p2 :
+    ssa_vars_unchanged_program (SSA.inputs_program p2) p1 ->
+    SSA.well_formed_program (SSA.program_succ_typenv p1 E) p2 = SSA.well_formed_program E p2.
+  Proof.
+    move=> Hun. apply: SSA.agree_well_formed_program.
+    apply: SSA.agree_program_succ_typenv_l1. rewrite -ssa_unchanged_program_disjoint_lvs.
+    assumption.
+  Qed.
+
+
   Lemma well_formed_ssa_empty E : well_formed_ssa_program E [::].
   Proof.
     apply/andP; split=> //=. exact: ssa_unchanged_program_empty.
@@ -4080,6 +4714,26 @@ Section MakeSSA.
         * exact: (ssa_unchanged_program_tl Huc).
           apply SSA.well_formed_instr_subset_rvs.
           exact: (SSA.well_formed_program_cons1 Hwf).
+  Qed.
+
+  Lemma well_formed_ssa_vars_disjoint_hd E i p :
+    well_formed_ssa_program E (i::p) ->
+    SSAVS.Lemmas.disjoint (SSA.lvs_instr i) (SSA.rvs_instr i).
+  Proof.
+    move=> /andP [/andP [Hwf Hun] Hssa].
+    move: (SSA.well_formed_program_cons1 Hwf) => {}Hwf.
+    move: (SSA.well_formed_instr_subset_rvs Hwf) => {Hwf} Hsub.
+    move: (ssa_unchanged_program_hd Hun). rewrite ssa_unchanged_instr_disjoint_lvs => Hdisj.
+    rewrite SSAVS.Lemmas.disjoint_sym. exact: (SSA.VSLemmas.disjoint_subset_l Hdisj Hsub).
+  Qed.
+
+  Lemma well_formed_ssa_lvs_unchanged_hd E i p :
+    well_formed_ssa_program E (i::p) ->
+    ssa_vars_unchanged_instr (SSA.rvs_instr i) i.
+  Proof.
+    move=> Hwf. move: (well_formed_ssa_vars_disjoint_hd Hwf) => Hdisj.
+    rewrite ssa_unchanged_instr_disjoint_lvs. rewrite SSA.VSLemmas.disjoint_sym.
+    assumption.
   Qed.
 
   Lemma well_formed_ssa_well_formed E p :
@@ -4128,6 +4782,11 @@ Section MakeSSA.
     - move/andP: Hssa => [_ H].
       exact: H.
   Qed.
+
+  Lemma well_formed_ssa_unchanged_env E p :
+    well_formed_ssa_program E p ->
+    ssa_vars_unchanged_program (SSA.vars_env E) p.
+  Proof. move/andP=> [/andP [_ H] _]. assumption. Qed.
 
   Lemma well_formed_ssa_rcons1 E p i :
     well_formed_ssa_program E (rcons p i) ->
@@ -4231,6 +4890,73 @@ Section MakeSSA.
       move: (well_formed_ssa_rcons1 Hwf) => [H1 [H2 H3]]. by rewrite H1 H2 H3.
   Qed.
 
+  Lemma well_formed_ssa_rcons_prefix E p i :
+    well_formed_ssa_program E (rcons p i) ->
+    well_formed_ssa_program E p.
+  Proof. rewrite well_formed_ssa_rcons. by move/andP=> [/andP [? ?] ?]. Qed.
+
+  Lemma well_formed_ssa_rcons_last E p i :
+    well_formed_ssa_program E (rcons p i) ->
+    SSA.well_formed_instr (SSA.program_succ_typenv p E) i.
+  Proof. rewrite well_formed_ssa_rcons. by move/andP=> [/andP [? ?] ?]. Qed.
+
+  Lemma well_formed_ssa_rcons_unchanged E p i :
+    well_formed_ssa_program E (rcons p i) ->
+    ssa_vars_unchanged_instr (SSAVS.union (SSA.vars_env E) (SSA.vars_program p)) i.
+  Proof. rewrite well_formed_ssa_rcons. by move/andP=> [/andP [? ?] ?]. Qed.
+
+  Lemma well_formed_ssa_rcons_env_unchanged_last E p i :
+    well_formed_ssa_program E (rcons p i) ->
+    ssa_vars_unchanged_instr (SSA.vars_env E) i.
+  Proof.
+    move/andP=> [/andP [_ H] _]. rewrite ssa_unchanged_program_rcons in H.
+    by move/andP: H => [? ?].
+  Qed.
+
+  Lemma well_formed_ssa_rcons_vars_prefix_unchanged E p i :
+    well_formed_ssa_program E (rcons p i) ->
+    ssa_vars_unchanged_instr (SSA.vars_program p) i.
+  Proof.
+    move/andP=> [/andP [H1 H2] H3].
+    apply: (ssa_unchanged_instr_subset
+              _ (SSA.well_formed_program_vars_subset (SSA.well_formed_program_rcons1 H1))).
+    rewrite ssa_unchanged_instr_union.
+    rewrite (ssa_unchanged_program_rcons2 H2) /=.
+    exact: (ssa_single_assignment_rcons2 H3).
+  Qed.
+
+  Lemma well_formed_ssa_cat1 E p1 p2 :
+    well_formed_ssa_program E (p1 ++ p2) -> well_formed_ssa_program E p1.
+  Proof.
+    rewrite /well_formed_ssa_program. move/andP=> [/andP [Hwf HunE] Hssa].
+    rewrite (SSA.well_formed_program_cat1 Hwf) /=.
+    rewrite (proj1 (ssa_unchanged_program_cat1 HunE)) /=.
+    exact: (proj1 (ssa_single_assignment_cat1 Hssa)).
+  Qed.
+
+  Lemma well_formed_ssa_cat2 E p1 p2 :
+    well_formed_ssa_program E (p1 ++ p2) ->
+    well_formed_ssa_program (SSA.program_succ_typenv p1 E) p2.
+  Proof.
+    rewrite /well_formed_ssa_program. move/andP=> [/andP [Hwf HunE] Hssa].
+    rewrite (SSA.well_formed_program_cat2 Hwf) /=.
+    rewrite SSA.vars_env_program_succ_typenv ssa_unchanged_program_union.
+    rewrite (proj2 (ssa_unchanged_program_cat1 HunE)) /=.
+    move: (ssa_single_assignment_cat1 Hssa) => [_ [Hssa2 Hun2]].
+    by rewrite Hssa2 Hun2.
+  Qed.
+
+  Lemma well_formed_ssa_submap E p :
+    well_formed_ssa_program E p ->
+    SSATE.Lemmas.submap E (SSA.program_succ_typenv p E).
+  Proof.
+    elim: p E => [| i p IH] E //=.
+    - move=> _. exact: SSATE.Lemmas.submap_refl.
+    - move=> Hwf. apply: (SSATE.Lemmas.submap_trans _ (IH _ (well_formed_ssa_tl Hwf))).
+      apply: ssa_unchanged_instr_succ_typenv_submap.
+      exact: (ssa_unchanged_program_hd (well_formed_ssa_unchanged_env Hwf)).
+  Qed.
+
   Lemma well_formed_instr_rvs_unchanged_instr te i i' :
     SSA.well_formed_instr te i -> ssa_vars_unchanged_instr (SSA.vars_env te) i' ->
     ssa_vars_unchanged_instr (SSA.rvs_instr i) i'.
@@ -4245,6 +4971,17 @@ Section MakeSSA.
   Proof.
     move=> Hwell Hun. apply: (ssa_unchanged_program_subset Hun).
     exact: SSA.well_formed_instr_subset_rvs.
+  Qed.
+
+  Lemma well_formed_ssa_spec_well_formed s :
+    well_formed_ssa_spec s -> SSA.well_formed_spec s.
+  Proof. by move/andP => [/andP [H1 H2] H3]. Qed.
+
+  Lemma well_formed_ssa_spec_pre s :
+    well_formed_ssa_spec s ->
+    SSA.well_formed_bexp (SSA.sinputs s) (SSA.spre s).
+  Proof.
+    move=> Hwf. exact: (SSA.well_formed_spec_pre (well_formed_ssa_spec_well_formed Hwf)).
   Qed.
 
   Corollary well_formed_ssa_spec_program s :
@@ -4269,6 +5006,13 @@ Section MakeSSA.
   Proof.
     move=> /andP [/andP [/andP [/andP [/andP Hpre Hwell] Hprog] Hvs] Hssa].
       by rewrite /well_formed_ssa_program Hwell Hvs Hssa.
+  Qed.
+
+  Lemma well_formed_ssa_spec_post s :
+    well_formed_ssa_spec s ->
+    SSA.well_formed_bexp (SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s)) (SSA.spost s).
+  Proof.
+    move=> Hwf. exact: (SSA.well_formed_spec_post (well_formed_ssa_spec_well_formed Hwf)).
   Qed.
 
   Lemma well_formed_ssa_spec_final_pre s :
@@ -4297,6 +5041,14 @@ Section MakeSSA.
     apply: (SSA.well_formed_rbexp_submap (ssa_unchanged_program_succ_typenv_submap Hun Hssa)).
     exact: Hf.
   Qed.
+
+  Lemma well_formed_ssa_spec_env_unchanged s :
+    well_formed_ssa_spec s -> ssa_vars_unchanged_program (SSA.vars_env (SSA.sinputs s)) (SSA.sprog s).
+  Proof. by move/andP=> [/andP [H1 H2] H3]. Qed.
+
+  Lemma well_formed_ssa_spec_single_assignment s :
+    well_formed_ssa_spec s -> ssa_single_assignment (SSA.sprog s).
+  Proof. by move/andP=> [/andP [H1 H2] H3]. Qed.
 
   Corollary well_formed_ssa_spec_pre_unchanged s :
     well_formed_ssa_spec s ->
@@ -4387,6 +5139,26 @@ Section MakeSSA.
     Proof.
       elim: p1 p2 => [| hd tl IH] p2 //=.
       rewrite -andb_assoc. rewrite -IH. reflexivity.
+    Qed.
+
+    Lemma env_unchanged_program_mem E p i :
+      env_unchanged_program E p ->
+      (i \in p) ->
+      env_unchanged_instr E i.
+    Proof.
+      elim: p => [| j p IH] //=. move/andP=> [Hunj Hunp].
+      rewrite in_cons. case/orP=> Hin.
+      - move/eqP: Hin => ?; subst. assumption.
+      - exact: (IH Hunp Hin).
+    Qed.
+
+    Lemma env_unchanged_program_forall E p :
+      (forall i, (i \in p) -> env_unchanged_instr E i) ->
+      env_unchanged_program E p.
+    Proof.
+      elim: p => [| i p IH] //=. move=> Hall. apply/andP; split.
+      - apply: Hall. exact: mem_head.
+      - apply: IH. move=> j Hinj. apply: Hall. by rewrite in_cons Hinj orbT.
     Qed.
 
     Lemma env_unchanged_instr_equal E1 E2 i :
@@ -4594,6 +5366,76 @@ Section MakeSSA.
           | |- is_true true => exact: is_true_true
           end.
     Qed.
+    Lemma ssa_unchanged_instr_atom_disjoint a i :
+      ssa_vars_unchanged_instr (vars_atom a) i = VSLemmas.disjoint (vars_atom a) (lvs_instr i).
+    Proof.
+      case: a => //=. move=> v. rewrite ssa_unchanged_instr_singleton.
+      rewrite VSLemmas.disjoint_sym VSLemmas.disjoint_singleton.
+      rewrite ssa_var_unchanged_instr_not_mem. reflexivity.
+    Qed.
+
+    Lemma env_unchanged_instr_instr_succ_typenv E i j :
+      env_unchanged_instr E i ->
+      ssa_vars_unchanged_instr (vars_instr i) j ->
+      env_unchanged_instr (instr_succ_typenv j E) i.
+    Proof.
+      (case: i => //=); intros;
+        by repeat match goal with
+                  | H : is_true (ssa_vars_unchanged_instr (SSAVS.singleton _) _) |- _ =>
+                      move: (ssa_unchanged_instr_singleton1 H) => {}H
+                  | H : is_true (ssa_vars_unchanged_instr (SSAVS.add _ _) _) |- _ =>
+                      let H1 := fresh in
+                      let H2 := fresh in
+                      move: (ssa_unchanged_instr_add1 H) => {H} [H1 H2]
+                  | H : is_true (ssa_vars_unchanged_instr (vars_atom _) _) |- _ =>
+                      rewrite ssa_unchanged_instr_atom_disjoint in H
+                  | H : is_true (ssa_vars_unchanged_instr (SSAVS.union _ _) _) |- _ =>
+                      let H1 := fresh in
+                      let H2 := fresh in
+                      move: (ssa_unchanged_instr_union1 H) => {H} [H1 H2]
+                  | H : is_true (ssa_var_unchanged_instr _ _) |- _ =>
+                      rewrite ssa_var_unchanged_instr_not_mem in H
+                  | H : is_true (~~ SSAVS.mem ?x (lvs_instr ?i)) |-
+                      context [SSATE.vtyp ?x (instr_succ_typenv ?i _)] =>
+                      rewrite (vtyp_instr_succ_typenv_not_mem_lvs _ H)
+                  | H : is_true (VSLemmas.disjoint (vars_atom ?a) (lvs_instr ?i)) |-
+                      context [atyp ?a (instr_succ_typenv ?i _)] =>
+                      rewrite (atyp_instr_succ_typenv_disjoint_lvs _ H)
+                  | H : ?e |- ?e => assumption
+                  end.
+    Qed.
+
+    Lemma env_unchanged_instr_program_succ_typenv E i p :
+      env_unchanged_instr E i ->
+      ssa_vars_unchanged_program (vars_instr i) p ->
+      env_unchanged_instr (program_succ_typenv p E) i.
+    Proof.
+      elim: p E => [| j p IH] E //=. move=> Heu Hun.
+      move: (ssa_unchanged_program_cons1 Hun) => {Hun} [Hun1 Hun2].
+      apply: (IH _ _ Hun2). exact: (env_unchanged_instr_instr_succ_typenv Heu Hun1).
+    Qed.
+
+    Lemma env_unchanged_program_instr_succ_typenv E p i :
+      env_unchanged_program E p ->
+      ssa_vars_unchanged_instr (vars_program p) i ->
+      env_unchanged_program (instr_succ_typenv i E) p.
+    Proof.
+      elim: p => [| j p IH] //=. move/andP => [Heu1 Heu2].
+      rewrite ssa_unchanged_instr_union => /andP [Hun1 Hun2].
+      rewrite (env_unchanged_instr_instr_succ_typenv Heu1 Hun1) /=.
+      exact: (IH Heu2 Hun2).
+    Qed.
+
+    Lemma env_unchanged_program_program_succ_typenv E p1 p2 :
+      env_unchanged_program E p1 ->
+      ssa_vars_unchanged_program (vars_program p1) p2 ->
+      env_unchanged_program (program_succ_typenv p2 E) p1.
+    Proof.
+      elim: p1 => [| i p1 IH] //=. move/andP => [Heu1 Heu2].
+      rewrite ssa_unchanged_program_union => /andP [Hun1 Hun2].
+      rewrite (env_unchanged_instr_program_succ_typenv Heu1 Hun1) /=.
+      exact: (IH Heu2 Hun2).
+    Qed.
 
     Lemma env_unchanged_instr_succ_instr E i j :
       env_unchanged_instr E i ->
@@ -4651,6 +5493,13 @@ Section MakeSSA.
       exact: (IH _ Hwf_ssa_p).
     Qed.
 
+    Lemma env_unchanged_program_rev E p :
+      env_unchanged_program E (rev p) = env_unchanged_program E p.
+    Proof.
+      elim: p => [| i p IH] //=. rewrite rev_cons env_unchanged_program_rcons.
+      rewrite IH andb_comm. reflexivity.
+    Qed.
+
     Lemma instr_succ_typenv_diag E i :
       well_defined_instr E i -> ssa_vars_unchanged_instr (vars_env E) i ->
       SSATE.Equal (instr_succ_typenv i (instr_succ_typenv i E))
@@ -4672,6 +5521,353 @@ Section MakeSSA.
     Qed.
 
   End EnvUnchanged.
+
+
+  Section InstrMemProgram.
+
+    Import SSA.
+
+    Lemma well_formed_ssa_mem_well_formed_instr E p i :
+      well_formed_ssa_program E p -> (i \in p) ->
+      well_formed_instr (program_succ_typenv p E) i.
+    Proof.
+      elim: p E => [| j p IH] E //=. move=> Hwfssa Hin. case/orP: Hin => Hin.
+      - move/eqP: Hin => ?; subst. move: (well_formed_ssa_hd Hwfssa) => HwfEj.
+        apply: (well_formed_instr_submap HwfEj).
+        exact: (well_formed_ssa_submap Hwfssa).
+      - exact: (IH _ (well_formed_ssa_tl Hwfssa) Hin).
+    Qed.
+
+    Lemma well_formed_ssa_mem_lvs_defined E p i :
+      well_formed_ssa_program E p -> (i \in p) ->
+      are_defined (lvs_instr i) (program_succ_typenv p E).
+    Proof.
+      elim: p E => [| j p IH] E //=. move=> Hwfssa Hin. case/orP: Hin => Hin.
+      - move/eqP: Hin => ?; subst. apply: are_defined_program_succ_typenv.
+        exact: are_defined_lvs_instr_succ_typenv.
+      - exact: (IH _ (well_formed_ssa_tl Hwfssa) Hin).
+    Qed.
+
+    Lemma well_formed_ssa_mem_typenv_unchanged E p i :
+      well_formed_ssa_program E p ->
+      (i \in p) ->
+      SSATE.Equal (instr_succ_typenv i (program_succ_typenv p E))
+                  (program_succ_typenv p E).
+    Proof.
+      move=> Hwf Hin.
+      apply: (env_unchanged_instr_succ_equal
+                _ (env_unchanged_program_mem (env_unchanged_program_succ Hwf) Hin)).
+      exact: (well_formed_ssa_mem_lvs_defined Hwf Hin).
+    Qed.
+
+    Lemma well_formed_ssa_mem_typenv_unchanged_instrs E p ins :
+      well_formed_ssa_program E p ->
+      (forall i, i \in ins -> i \in p) ->
+      SSATE.Equal (program_succ_typenv ins (program_succ_typenv p E))
+                  (program_succ_typenv p E).
+    Proof.
+      elim: ins E p => [| i ins IH] E p //=. move=> Hwf Hin.
+      rewrite (well_formed_ssa_mem_typenv_unchanged Hwf (Hin _ (mem_head _ _))).
+      apply: (IH _ _ Hwf). move=> j Hinj. apply: Hin.
+      by rewrite in_cons Hinj orbT.
+    Qed.
+
+  End InstrMemProgram.
+
+
+  Section ReEval.
+
+    Import SSA.
+
+    Lemma well_formed_ssa_reeval_hd E i p s1 s2 :
+      well_formed_ssa_program E (i::p) ->
+      eval_program E (i::p) s1 s2 ->
+      eval_instr E i s2 s2.
+    Proof.
+      (case: i => //=); intros;
+       try by repeat match goal with
+             | H : eval_program _ (_::_) ?s1 ?s2 |- _ =>
+                 inversion_clear H
+             | H1 : eval_instr _ _ _ ?s, H2 : eval_instrs _ _ ?s _ |- _ =>
+                 inversion_clear H1 in H2
+             | |- eval_instr _ _ _ _ => eval_instr_intro
+             | Hwf : is_true (well_formed_ssa_program _ (_::_)) |- _ =>
+                 let Hun := fresh "Hun" in
+                 let Hdisj := fresh "Hdisj" in
+                 (move: (well_formed_ssa_vars_unchanged_hd Hwf)
+                          (well_formed_ssa_vars_disjoint_hd Hwf) => /= Hun Hdisj);
+                 (move: (well_formed_ssa_hd Hwf) => {}Hwf)
+             | Hwf : is_true (well_formed_instr ?E ?i) |- _ =>
+                 rewrite /well_formed_instr /= in Hwf
+             | Hdisj : is_true (SSAVS.Lemmas.disjoint _ (SSAVS.union _ _)) |- _ =>
+                 rewrite SSAVS.Lemmas.disjoint_union_r in Hdisj
+             | Hdisj : is_true (SSAVS.Lemmas.disjoint (SSAVS.add _ _) _) |- _ =>
+                 rewrite SSAVS.Lemmas.disjoint_add_l in Hdisj
+             | Hmem : is_true (~~ SSAVS.mem _ _) |- _ =>
+                 rewrite -SSAVS.Lemmas.disjoint_singleton_l in Hmem
+             | Hun : is_true (ssa_vars_unchanged_program (SSAVS.union _ _) _) |- _ =>
+                 rewrite ssa_unchanged_program_union in Hun
+             | H : is_true (_ && _) |- _ =>
+                 let H1 := fresh in
+                 let H2 := fresh in
+                 move/andP: H => [H1 H2]
+             | H : _ /\ _ |- _ =>
+                 let H1 := fresh in
+                 let H2 := fresh in
+                 move: H => [H1 H2]
+             | Hun : is_true (ssa_vars_unchanged_program (SSAVS.add _ _) _) |- _ =>
+                 let Hun1 := fresh "Hun" in
+                 let Hun2 := fresh "Hun" in
+                 move: (ssa_unchanged_program_add1 Hun) => {Hun} [Hun1 Hun2]
+             (* introduce `Store.acc t t1 = SSAStore.acc t s2` *)
+             | Hev : eval_instrs (instr_succ_typenv ?i ?E) ?p ?t1 ?s2,
+                 Hun : is_true (ssa_unchanged_program_var ?p ?t) |- _ =>
+                 let Heva := fresh "Heva" in
+                 (move: (ssa_unchanged_program_eval_singleton (ssa_unchanged_program_singleton2 Hun) Hev)) => {Hun} Heva
+             (* From `Store.acc t t1` to `eval_atom a s1` *)
+             | Hupd : SSAStore.Upd ?t _ ?s1 ?t1,
+                 Heva : SSAStore.acc ?t ?t1 = _ |- _ =>
+                 rewrite (SSAStore.acc_Upd_eq (eqxx _) Hupd) in Heva
+             | Hupd : SSAStore.Upd2 ?t0 _ ?t _ ?s1 ?t2,
+                 Hne : is_true (?t != ?t0),
+                   Heva : SSAStore.acc ?t0 ?t2 = _,
+                     Heva0 : SSAStore.acc ?t ?t2 = _ |- _ =>
+                 rewrite (SSAStore.acc_Upd2_eq2 (eqxx t) Hupd) in Heva0;
+                 rewrite eq_sym in Hne;
+                 rewrite (SSAStore.acc_Upd2_eq1 (eqxx t0) Hne Hupd) in Heva
+             (* From `eval_atom a s1` to `eval_atom a t1`  *)
+             | Hupd : SSAStore.Upd ?t _ ?s1 ?t1,
+                 Hdisj : is_true (SSAVS.Lemmas.disjoint (SSAVS.singleton ?t) (vars_atom ?a)),
+                   Heva : context [eval_atom ?a ?s1] |- _ =>
+                 rewrite -(Upd_disjoint_eval_atom Hupd Hdisj) in Heva
+             | Hupd : SSAStore.Upd2 ?t0 _ ?t _ ?s1 ?t1,
+                 Hdisj1 : is_true (SSAVS.Lemmas.disjoint (SSAVS.singleton ?t0) (vars_atom ?a)),
+                   Hdisj2 : is_true (SSAVS.Lemmas.disjoint (SSAVS.singleton ?t) (vars_atom ?a)),
+                     Heva : context [eval_atom ?a ?s1] |- _ =>
+                 rewrite -(Upd2_disjoint_eval_atom Hupd Hdisj1 Hdisj2) in Heva
+             (* From `eval_atom a t1` to `eval_atom a s2` *)
+             | Hev : eval_instrs (instr_succ_typenv _ ?E) ?p ?t1 ?s2,
+                 Hun : is_true (ssa_vars_unchanged_program (vars_atom ?a) ?p),
+                   Heva : context [eval_atom ?a ?t1] |- _ =>
+                 rewrite (ssa_unchanged_program_eval_atom Hun Hev) in Heva
+             | H : ?e = _ |- context [?e] =>
+                 rewrite H
+             | |- SSAStore.Upd ?t (SSAStore.acc ?t ?s2) ?s2 ?s2 =>
+                 exact: SSAStore.Upd_acc_idem
+             | |- SSAStore.Upd2 ?t0 (SSAStore.acc ?t0 ?s2) ?t (SSAStore.acc ?t ?s2) ?s2 ?s2 =>
+                 exact: SSAStore.Upd2_acc_idem
+             | |- SSAStore.Equal ?s ?s => reflexivity
+              end.
+      - (* Inondet *)
+        inversion_clear H0. inversion_clear H1 in H2. apply: (EInondet _ H0).
+        move: (H3 t). rewrite (SSAStore.acc_upd_eq (eqxx _)). move=> <-.
+        move: (well_formed_ssa_vars_unchanged_hd H) => /= Hun.
+        rewrite (ssa_unchanged_program_eval_singleton Hun H2).
+        exact: SSAStore.Upd_acc_idem.
+      - (* Iassume *)
+        inversion_clear H0. inversion_clear H1 in H2.
+        apply: EIassume; first reflexivity. rewrite H0 in H3.
+        exact: (ssa_unchanged_program_eval_bexp1 (well_formed_ssa_vars_unchanged_hd H) H2 H3).
+    Qed.
+
+    (*
+      Note: the following does not hold when [i = Inondet].
+      [well_formed_ssa_program E (i::p) ->
+         eval_program E (i::p) s1 s2 ->
+           eval_instr E i s2 s3 ->
+             state_equal s2 s3]
+     *)
+
+    Lemma well_formed_ssa_reeval_hd_equal E i p s1 s2 s3 :
+      ~~ (is_nondet i) ->
+      well_formed_ssa_program E (i::p) ->
+      eval_program E (i::p) s1 s2 ->
+      eval_instr E i s2 s3 ->
+      SSAStore.Equal s2 s3.
+    Proof.
+      move=> Hn Hwfip Hevip Hevi.
+      move: (eval_program_cons_exists Hevip) => {Hevip} [s4 [Hevi' Hevp]].
+      (case: i Hn Hwfip Hevi Hevi' Hevp); intros; try discriminate; clear Hn;
+        by repeat
+             match goal with
+             | H : ?e |- ?e => assumption
+             | H : eval_instr _ _ _ _ |- _ => inversion_clear H; simpl in *
+             | H : SSAStore.Upd ?t _ ?s2 ?s1 |- SSAStore.Equal ?s2 ?s1 =>
+                 apply: (@SSAStore.Upd_acc_equal t s2)
+             | H : SSAStore.Upd2 ?t0 _ ?t _ ?s2 ?s1 |- SSAStore.Equal ?s2 ?s1 =>
+                 apply: (@SSAStore.Upd2_acc_equal t0 t s2)
+             | Hwf : is_true (well_formed_ssa_program _ (_::_)) |- _ =>
+                 let Hun := fresh "Hun" in
+                 let Hdisj := fresh "Hdisj" in
+                 (move: (well_formed_ssa_vars_unchanged_hd Hwf)
+                          (well_formed_ssa_vars_disjoint_hd Hwf) => /= Hun Hdisj);
+                 (move: (well_formed_ssa_hd Hwf) => {}Hwf)
+             | Hwf : is_true (well_formed_instr ?E ?i) |- _ =>
+                 rewrite /well_formed_instr /= in Hwf
+             | Hdisj : is_true (SSAVS.Lemmas.disjoint _ (SSAVS.union _ _)) |- _ =>
+                 rewrite SSAVS.Lemmas.disjoint_union_r in Hdisj
+             | Hdisj : is_true (SSAVS.Lemmas.disjoint (SSAVS.add _ _) _) |- _ =>
+                 rewrite SSAVS.Lemmas.disjoint_add_l in Hdisj
+             | Hmem : is_true (~~ SSAVS.mem _ _) |- _ =>
+                 rewrite -SSAVS.Lemmas.disjoint_singleton_l in Hmem
+             | Hun : is_true (ssa_vars_unchanged_program (SSAVS.union _ _) _) |- _ =>
+                 rewrite ssa_unchanged_program_union in Hun
+             | H : is_true (_ && _) |- _ =>
+                 let H1 := fresh in
+                 let H2 := fresh in
+                 move/andP: H => [H1 H2]
+             | H : _ /\ _ |- _ =>
+                 let H1 := fresh in
+                 let H2 := fresh in
+                 move: H => [H1 H2]
+             | Hun : is_true (ssa_vars_unchanged_program (SSAVS.add _ _) _) |- _ =>
+                 let Hun1 := fresh "Hun" in
+                 let Hun2 := fresh "Hun" in
+                 move: (ssa_unchanged_program_add1 Hun) => {Hun} [Hun1 Hun2]
+             (* Contradiction case *)
+             | Hupd : SSAStore.Upd ?t _ ?s3 ?s4,
+                 Hevp : eval_program _ ?p ?s4 ?s2,
+                   Hdisj : is_true (SSAVS.Lemmas.disjoint (SSAVS.singleton ?t) (vars_atom ?a)),
+                     Hun : is_true (ssa_vars_unchanged_program (vars_atom ?a) ?p),
+                       Heva : context [eval_atom ?a ?s3] |- _ =>
+                 rewrite -(Upd_disjoint_eval_atom Hupd Hdisj) in Heva; clear Hdisj;
+                 rewrite (ssa_unchanged_program_eval_atom Hun Hevp) in Heva
+             | Heva : is_true (?e), Hevna : is_true (~~ ?e) |- _ =>
+                 rewrite Heva in Hevna; discriminate
+             (* Another contradiction case *)
+             | H1 : is_true (is_unsigned ?t),
+                 H2 : is_true (is_signed ?t) |- _ =>
+                 rewrite -not_unsigned_is_signed H1 in H2; discriminate
+             (* From `SSAStore.acc t s2` to `SSAStore.acc t s3`  *)
+             | Hun : is_true (ssa_unchanged_program_var ?p ?t),
+                 Hevp : eval_program _ ?p ?s4 ?s2 |-
+                 context [SSAStore.acc ?t ?s2] =>
+                 rewrite -(acc_unchanged_program Hun Hevp)
+             (* From `SSAStore.acc t s4` to `eval_atom _ s3`*)
+             | H : SSAStore.Upd ?t _ ?s3 ?s4 |-
+                 context [SSAStore.acc ?t ?s4] =>
+                 rewrite (SSAStore.acc_Upd_eq (eqxx _) H)
+             | Hupd : SSAStore.Upd2 ?t0 _ ?t _ ?s1 ?t2,
+                 Hne : is_true (?t != ?t0) |-
+                 context [SSAStore.acc ?t ?t2] =>
+                 rewrite (SSAStore.acc_Upd2_eq2 (eqxx t) Hupd);
+                 rewrite eq_sym in Hne;
+                 rewrite (SSAStore.acc_Upd2_eq1 (eqxx t0) Hne Hupd)
+             (* From `eval_atom a s1` to `eval_atom a t1`  *)
+             | Hupd : SSAStore.Upd ?t _ ?s1 ?t1,
+                 Hdisj : is_true (SSAVS.Lemmas.disjoint (SSAVS.singleton ?t) (vars_atom ?a))
+               |- context [eval_atom ?a ?s1] =>
+                 rewrite -(Upd_disjoint_eval_atom Hupd Hdisj); clear Hdisj
+             | Hupd : SSAStore.Upd2 ?t0 _ ?t _ ?s1 ?t1,
+                 Hdisj1 : is_true (SSAVS.Lemmas.disjoint (SSAVS.singleton ?t0) (vars_atom ?a)),
+                   Hdisj2 : is_true (SSAVS.Lemmas.disjoint (SSAVS.singleton ?t) (vars_atom ?a)) |-
+                 context [eval_atom ?a ?s1] =>
+                 rewrite -(Upd2_disjoint_eval_atom Hupd Hdisj1 Hdisj2); clear Hdisj1 Hdisj2
+             (* From `eval_atom a t1` to `eval_atom a s2` *)
+             | Hev : eval_program _ ?p ?t1 ?s2,
+                 Hun : is_true (ssa_vars_unchanged_program (vars_atom ?a) ?p)
+               |- context [eval_atom ?a ?t1] =>
+                 rewrite (ssa_unchanged_program_eval_atom Hun Hev)
+             end.
+    Qed.
+
+    Lemma well_formed_ssa_reeval_hd_succ_typenv E i p s1 s2 :
+      well_formed_ssa_program E (i::p) ->
+      eval_program E (i::p) s1 s2 ->
+      eval_instr (program_succ_typenv (i::p) E) i s2 s2.
+    Proof.
+      move=> Hwf Hev. move: (Hwf) => /andP [/andP [Hwfip HunEip] Hssaip].
+      move: (ssa_unchanged_program_succ_typenv_submap HunEip Hssaip) => Hsubm.
+      move: (well_formed_instr_well_defined (well_formed_program_cons1 Hwfip)) => Hwdi.
+      apply/(submap_eval_instr _ _ Hsubm Hwdi). exact: (well_formed_ssa_reeval_hd Hwf Hev).
+    Qed.
+
+    Lemma well_formed_ssa_reeval_hd_succ_typenv_equal E i p s1 s2 s3 :
+      ~~ (is_nondet i) ->
+      well_formed_ssa_program E (i::p) ->
+      eval_program E (i::p) s1 s2 ->
+      eval_instr (program_succ_typenv (i::p) E) i s2 s3 ->
+      SSAStore.Equal s2 s3.
+    Proof.
+      move=> Hn Hwfip Hevip Hevi. apply: (well_formed_ssa_reeval_hd_equal Hn Hwfip Hevip).
+      move: Hwfip => /andP [/andP [Hwfip HunEip] Hssaip].
+      move: (ssa_unchanged_program_succ_typenv_submap HunEip Hssaip) => Hsubm.
+      move: (well_formed_instr_well_defined (well_formed_program_cons1 Hwfip)) => Hwdi.
+      apply/(submap_eval_instr _ _ Hsubm Hwdi). assumption.
+    Qed.
+
+    Lemma well_formed_ssa_reeval_instr E p i s1 s2 :
+      well_formed_ssa_program E p ->
+      eval_program E p s1 s2 ->
+      (i \in p) ->
+      eval_instr (program_succ_typenv p E) i s2 s2.
+    Proof.
+      elim: p E i s1 s2 => [| i p IH] E j s1 s2 //=.
+      move=> Hwf Hev Hin. rewrite in_cons in Hin. case/orP: Hin => Hin.
+      - move/eqP: Hin => ?; subst. exact: (well_formed_ssa_reeval_hd_succ_typenv Hwf Hev).
+      - inversion_clear Hev. exact: (IH _ _ _ _ (well_formed_ssa_tl Hwf) H0 Hin).
+    Qed.
+
+    Lemma well_formed_ssa_reeval_instr_equal E p i s1 s2 s3 :
+      well_formed_ssa_program E p ->
+      eval_program E p s1 s2 ->
+      (i \in p) ->
+      ~~ is_nondet i ->
+      eval_instr (program_succ_typenv p E) i s2 s3 ->
+      SSAStore.Equal s2 s3.
+    Proof.
+      elim: p E i s1 s2 => [| i p IH] E j s1 s2 //=.
+      move=> Hwfip Hevip Hin Hn. rewrite in_cons in Hin. case/orP: Hin => Hin.
+      - move/eqP: Hin => ?; subst. exact: (well_formed_ssa_reeval_hd_succ_typenv_equal Hn Hwfip Hevip).
+      - inversion_clear Hevip. exact: (IH _ _ _ _ (well_formed_ssa_tl Hwfip) H0 Hin Hn).
+    Qed.
+
+    Lemma well_formed_ssa_reeval_instrs E p ins s1 s2 :
+      well_formed_ssa_program E p ->
+      eval_program E p s1 s2 ->
+      (forall i, i \in ins -> i \in p) ->
+      eval_program (program_succ_typenv p E) ins s2 s2.
+    Proof.
+      elim: ins => [| i ins IH] //=.
+      - move=> Hwf Hev Hall. apply: Enil. reflexivity.
+      - move=> Hwf Hev Hall. move: (Hall i (mem_head _ _)) => Hin.
+        move: (well_formed_ssa_reeval_instr Hwf Hev Hin) => Hevi. apply: (Econs Hevi).
+        rewrite (well_formed_ssa_mem_typenv_unchanged Hwf Hin).
+        apply: (IH Hwf Hev). move=> j Hinj. apply: Hall. by rewrite in_cons Hinj orbT.
+    Qed.
+
+    Lemma well_formed_ssa_reeval_instrs_equal E p ins s1 s2 s3 :
+      well_formed_ssa_program E p ->
+      eval_program E p s1 s2 ->
+      (forall i, i \in ins -> i \in p /\ ~~ is_nondet i) ->
+      eval_program (program_succ_typenv p E) ins s2 s3 ->
+      SSAStore.Equal s2 s3.
+    Proof.
+      elim: ins => [| i ins IH] //=.
+      - move=> Hwf Hev Hall Hevins. inversion_clear Hevins. assumption.
+      - move=> Hwf Hev Hall Hevins. move: (Hall i (mem_head _ _)) => [Hin Hn].
+        inversion_clear Hevins.
+        move: (well_formed_ssa_reeval_instr_equal Hwf Hev Hin Hn H) => Hevi.
+        rewrite -Hevi in H H0.
+        rewrite (well_formed_ssa_mem_typenv_unchanged Hwf Hin) in H0.
+        apply: (IH Hwf Hev _ H0). move=> j Hinj. apply: Hall. by rewrite in_cons Hinj orbT.
+    Qed.
+
+    Lemma well_formed_ssa_reeval_program E p s1 s2 :
+      well_formed_ssa_program E p ->
+      eval_program E p s1 s2 ->
+      eval_program (program_succ_typenv p E) p s2 s2.
+    Proof.
+      elim: p E s1 s2 => [| i p IH] E s1 s2 //=.
+      - move=> _. inversion_clear 1. apply: Enil. reflexivity.
+      - move=> Hwf Heip. move: (eval_program_cons_exists Heip) => [s3 [Hei Hep]].
+        apply: (Econs (well_formed_ssa_reeval_instr Hwf Heip (mem_head _ _))).
+        simpl. rewrite (well_formed_ssa_mem_typenv_unchanged Hwf (mem_head _ _)).
+        exact: (IH _ _ _ (well_formed_ssa_tl Hwf) Hep).
+    Qed.
+
+  End ReEval.
+
 
   Ltac le_ssa_var_unchanged_instr :=
     match goal with

@@ -19,6 +19,10 @@ val ext_solve_imp :
   coq_Z coq_PExpr list -> coq_Z coq_PExpr -> coq_Z coq_PExpr list -> coq_Z
   coq_PExpr list * coq_Z coq_PExpr list
 
+val polys_of_arep :
+  options -> arep -> (coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z
+  coq_PExpr list
+
 val verify_arep : options -> arep -> bool
 
 val verify_areps : options -> arep list -> bool

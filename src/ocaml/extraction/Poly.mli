@@ -3,6 +3,7 @@ open BinNums
 open BinPos
 open BinaryString
 open Bool
+open DSLRaw
 open Datatypes
 open FSets
 open Field_theory
@@ -39,10 +40,10 @@ type arep = { apremises : azbexp list; aconseq : azbexp }
 
 val is_arep_trivial : arep -> bool
 
-val zexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp -> DSL.eexp
+val zexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp -> eexp
 
 val zexps_subst :
-  SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp list -> DSL.eexp list
+  SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp list -> eexp list
 
 val azbexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> azbexp -> azbexp
 
@@ -109,10 +110,10 @@ val zpexpr_of_var :
   positive -> positive SSAVM.t -> ssavar -> (positive * positive
   SSAVM.t) * coq_Z coq_PExpr
 
-val zpexpr_of_eunop : DSL.eunop -> coq_Z coq_PExpr -> coq_Z coq_PExpr
+val zpexpr_of_eunop : eunop -> coq_Z coq_PExpr -> coq_Z coq_PExpr
 
 val zpexpr_of_ebinop :
-  DSL.ebinop -> coq_Z coq_PExpr -> coq_Z coq_PExpr -> coq_Z coq_PExpr
+  ebinop -> coq_Z coq_PExpr -> coq_Z coq_PExpr -> coq_Z coq_PExpr
 
 val zpexpr_of_zexp :
   positive -> positive SSAVM.t -> SSA.SSA.eexp -> (positive * positive

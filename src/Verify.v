@@ -1,7 +1,7 @@
 
 (** Verification procedures *)
 
-From Coq Require Import List ZArith.
+From Coq Require Import List ZArith Btauto.
 From mathcomp Require Import ssreflect ssrbool ssrnat eqtype seq ssrfun.
 From ssrlib Require Import Var Types SsrOrder Seqs Tactics.
 From Cryptoline Require Import Options DSL SSA ZSSA SSA2QFBV SSA2ZSSA QFBV2CNF Poly.
@@ -76,14 +76,21 @@ Section Verification.
   Parameter ext_solve_imp :
     seq (PExpr Z) -> PExpr Z -> seq (PExpr Z) -> seq (PExpr Z) * seq (PExpr Z).
 
+  Definition polys_of_arep (o : options) (ps : arep) : seq (PExpr Z) * PExpr Z * seq (PExpr Z) :=
+    let '(_, _, ps, ms, q) := imp_of_arep ps in
+    let '(ps', q') :=
+      if rewrite_assignments_imp o then
+        if vars_cache_in_rewrite_assignments o then simplify_generator_vars_cache ps q
+        else simplify_generator ps q
+      else (ps, q) in
+    (ps', q', ms).
+
   (** Verify an atomic root entailment problem by reducing the problem to an
       ideal membership problem, solving the ideal membership problem by an
       external computer algebra system, and validating the answer from the
       computer algebra system. *)
   Definition verify_arep (o : options) (ps : arep) : bool :=
-    let '(_, _, ps, ms, q) := imp_of_arep ps in
-    let '(ps', q') := if rewrite_assignments_imp o then simplify_generator ps q
-                      else (ps, q) in
+    let '(ps', q', ms) := polys_of_arep o ps in
     let (cps, cms) := ext_solve_imp ps' q' ms in
     validate_imp_answer ps' ms q' cps cms.
 
@@ -98,11 +105,14 @@ Section Verification.
     else verify_areps o (areps_of_rep zs).
 
   (** Sequentail version *)
-  Fixpoint verify_reps_seq (o : options) (zss : seq ZSSA.rep) : bool :=
-    match zss with
-    | [::] => true
-    | hd::tl => (verify_rep o hd) && (verify_reps_seq o tl)
-    end.
+  Definition verify_reps_seq (o : options) (zss : seq ZSSA.rep) : bool :=
+    all (verify_rep o) zss.
+
+  Lemma verify_areps_rev o pss :
+    verify_areps o (rev pss) = verify_areps o pss.
+  Proof.
+    rewrite /verify_areps. rewrite all_rev. reflexivity.
+  Qed.
 
   Lemma verify_reps_seq_in o zs zss :
     In zs zss -> verify_reps_seq o zss -> verify_rep o zs.
@@ -115,11 +125,16 @@ Section Verification.
 
   Lemma verify_arep_sound o ps : verify_arep o ps -> valid_arep ps.
   Proof.
-    rewrite /verify_arep. dcase (imp_of_arep ps) => [[[[[g t] zps] zms] zq] Hzp].
+    rewrite /verify_arep. rewrite /polys_of_arep.
+    dcase (imp_of_arep ps) => [[[[[g t] zps] zms] zq] Hzp].
     case: (rewrite_assignments_imp o).
-    - dcase (simplify_generator zps zq) => [[zps' zq'] Hsimp].
-      dcase (ext_solve_imp zps' zq' zms) => [[cs c] Hco]. move=> Hch.
-      exact: (validated_simplified_imp_valid_arep Hzp Hsimp Hch).
+    - case: (vars_cache_in_rewrite_assignments o).
+      + dcase (simplify_generator_vars_cache zps zq) => [[zps' zq'] Hsimp].
+        dcase (ext_solve_imp zps' zq' zms) => [[cs c] Hco]. move=> Hch.
+        exact: (validated_simplified_imp_vars_cache_valid_arep Hzp Hsimp Hch).
+      + dcase (simplify_generator zps zq) => [[zps' zq'] Hsimp].
+        dcase (ext_solve_imp zps' zq' zms) => [[cs c] Hco]. move=> Hch.
+        exact: (validated_simplified_imp_valid_arep Hzp Hsimp Hch).
     - dcase (ext_solve_imp zps zq zms) => [[cs c] Hco]. move=> Hch.
       exact: (validated_imp_valid_arep Hzp Hch).
   Qed.
@@ -143,6 +158,15 @@ Section Verification.
       exact: (verify_areps_in Hv Hin).
   Qed.
 
+  Lemma verify_reps_seq_sound o (zss : seq ZSSA.rep) :
+    verify_reps_seq o zss -> ZSSA.valid_reps zss.
+  Proof.
+    elim: zss => [| zs zss IH] //=. move/andP=> [Hzs Hzss].
+    rewrite ZSSA.valid_reps_cons. split.
+    - exact: (verify_rep_sound Hzs).
+    - exact: (IH Hzss).
+  Qed.
+
 
   (* Solve a sequence of ideal membership problems by external computer
      algebra systems. An ideal membership problem is given as a tuple
@@ -152,22 +176,33 @@ Section Verification.
   Parameter ext_solve_imp_list :
     seq (seq (PExpr Z) * PExpr Z * seq (PExpr Z)) -> seq (seq (PExpr Z) * seq (PExpr Z)).
 
+  Axiom ext_solve_imp_list_nil :
+    ext_solve_imp_list [::] = [::].
+
   Axiom ext_solve_imp_list_cons :
     forall ps q ms tl,
       ext_solve_imp_list ((ps, q, ms)::tl) =
       (ext_solve_imp ps q ms)::(ext_solve_imp_list tl).
 
+  Lemma size_ext_solve_imp_list ins :
+    size (ext_solve_imp_list ins) = size ins.
+  Proof.
+    elim: ins => [| i ins IH] /=.
+    - rewrite ext_solve_imp_list_nil. reflexivity.
+    - case: i => [[ps q] ms]. rewrite ext_solve_imp_list_cons /=.
+      rewrite IH. reflexivity.
+  Qed.
+
   Definition polys_of_areps (o : options) (pss : seq arep) :
     seq (seq (PExpr Z) * PExpr Z * seq (PExpr Z)) :=
-    let f ps :=
-      let '(_, _, ps, ms, q) := imp_of_arep ps in
-      let '(ps', q') :=
-        if rewrite_assignments_imp o then
-          if vars_cache_in_rewrite_assignments o then simplify_generator_vars_cache ps q
-          else simplify_generator ps q
-        else (ps, q) in
-        (ps', q', ms) in
-    tmap f pss.
+    tmap (polys_of_arep o) pss.
+
+  Lemma polys_of_areps_cons o p ps :
+    polys_of_areps o (p::ps) = (polys_of_arep o p)::(polys_of_areps o ps).
+  Proof.
+    rewrite /polys_of_areps. rewrite !tmap_map /=. reflexivity.
+  Qed.
+
 
   Fixpoint validate_imp_answer_list polys coefs : bool :=
     match polys, coefs with
@@ -185,13 +220,71 @@ Section Verification.
     then validate_imp_answer_list poly_list coef_list
     else false.
 
+  Lemma polys_of_areps_nil o : polys_of_areps o [::] = [::].
+  Proof. reflexivity. Qed.
+
+  Lemma verify_areps_list_nil o : verify_areps_list o [::].
+  Proof.
+    rewrite /verify_areps_list /=. rewrite polys_of_areps_nil.
+    rewrite ext_solve_imp_list_nil. by rewrite eqxx.
+  Qed.
+
+  Lemma verify_areps_list_cons o p ps :
+    verify_areps_list o (p::ps) = verify_arep o p && verify_areps_list o ps.
+  Proof.
+    rewrite /verify_areps_list /verify_arep. rewrite !size_ext_solve_imp_list.
+    rewrite !eqxx. rewrite polys_of_areps_cons.
+    dcase (polys_of_arep o p) => [[[ps' q'] ms] Hpp].
+    rewrite ext_solve_imp_list_cons /=.
+    dcase (ext_solve_imp ps' q' ms) => [[cps cms] Hs].
+    by case: (validate_imp_answer ps' ms q' cps cms).
+  Qed.
+
+  Lemma verify_areps_list_singleton o p :
+    verify_areps_list o [:: p] = verify_arep o p.
+  Proof.
+    rewrite verify_areps_list_cons verify_areps_list_nil andbT. reflexivity.
+  Qed.
+
+  Lemma verify_areps_list_rcons o ps p :
+    verify_areps_list o (rcons ps p) = verify_areps_list o ps && verify_arep o p.
+  Proof.
+    elim: ps => [| q ps IH] /=.
+    - rewrite verify_areps_list_cons verify_areps_list_nil andbT /=. reflexivity.
+    - rewrite !verify_areps_list_cons IH. by btauto.
+  Qed.
+
+  Lemma verify_areps_list_rev o ps :
+    verify_areps_list o (rev ps) = verify_areps_list o ps.
+  Proof.
+    elim: ps => [| p ps IH] //=. rewrite verify_areps_list_cons.
+    rewrite rev_cons. rewrite verify_areps_list_rcons IH.
+    by rewrite andbC.
+  Qed.
+
+  Lemma verify_areps_list_cat o ps1 ps2 :
+    verify_areps_list o (ps1 ++ ps2) = verify_areps_list o ps1 && verify_areps_list o ps2.
+  Proof.
+    elim: ps1 ps2 => [| p1 ps1 IH1] ps2 /=.
+    - rewrite verify_areps_list_nil. reflexivity.
+    - rewrite !verify_areps_list_cons. rewrite IH1. rewrite andbA. reflexivity.
+  Qed.
+
+  Lemma verify_areps_list_verify_areps o ps :
+    verify_areps_list o ps = verify_areps o ps.
+  Proof.
+    elim: ps => [| p ps IH] /=.
+    - rewrite verify_areps_list_nil. reflexivity.
+    - rewrite verify_areps_list_cons IH. reflexivity.
+  Qed.
+
   Lemma verify_areps_list_in o psp psps :
     verify_areps_list o psps -> psp \in psps -> valid_arep psp.
   Proof.
     elim: psps => [| hd tl IH] //=. rewrite /verify_areps_list.
     case Hs: (size (polys_of_areps o (hd :: tl)) ==
                 size (ext_solve_imp_list (polys_of_areps o (hd :: tl)))) => //=.
-    move: Hs. rewrite /polys_of_areps !tmap_map /= -!tmap_map -/(polys_of_areps o tl).
+    move: Hs. rewrite /polys_of_areps /polys_of_arep !tmap_map /= -!tmap_map -/(polys_of_areps o tl).
     case: (rewrite_assignments_imp o).
     - dcase (imp_of_arep hd) => [[[[[g t] ps] m] q] Hhd] /=.
       case: (vars_cache_in_rewrite_assignments o).
@@ -225,6 +318,38 @@ Section Verification.
     if rewrite_assignments_arep o
     then verify_areps_list o (tflatten (tmap (areps_of_rep_simplified o) zss))
     else verify_areps_list o (tflatten (tmap areps_of_rep zss)).
+
+  Lemma verify_reps_paral_nil o : verify_reps_paral o [::].
+  Proof.
+    rewrite /verify_reps_paral. rewrite verify_areps_list_nil.
+    by case_if.
+  Qed.
+
+  Lemma verify_reps_paral_cons o z zs :
+    verify_reps_paral o (z::zs) = verify_rep o z && verify_reps_paral o zs.
+  Proof.
+    rewrite /verify_reps_paral. case Hrw: (rewrite_assignments_arep o).
+    - rewrite tflatten_flatten tmap_map /=. rewrite rev_cat.
+      rewrite verify_areps_list_cat. rewrite -tflatten_flatten -tmap_map.
+      rewrite (andbC (verify_rep _ _)).
+      case: (verify_areps_list o (tflatten (tmap (areps_of_rep_simplified o) zs))) => //=.
+      rewrite /verify_rep. rewrite Hrw. rewrite verify_areps_list_rev.
+      exact: verify_areps_list_verify_areps.
+    - rewrite tflatten_flatten tmap_map /=. rewrite rev_cat.
+      rewrite verify_areps_list_cat. rewrite -tflatten_flatten -tmap_map.
+      rewrite (andbC (verify_rep _ _)).
+      case: (verify_areps_list o (tflatten (tmap areps_of_rep zs))) => //=.
+      rewrite /verify_rep. rewrite Hrw. rewrite verify_areps_list_rev.
+      exact: verify_areps_list_verify_areps.
+  Qed.
+
+  Lemma verify_reps_paral_seqs o zss :
+    verify_reps_paral o zss = verify_reps_seq o zss.
+  Proof.
+    elim: zss => [| zs zss IH] //=.
+    - rewrite verify_reps_paral_nil. reflexivity.
+    - rewrite verify_reps_paral_cons IH. reflexivity.
+  Qed.
 
 
   Lemma verify_reps_paral_sound o (zss : seq ZSSA.rep) :

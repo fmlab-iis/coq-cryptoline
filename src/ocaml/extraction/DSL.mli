@@ -1,6 +1,7 @@
 open BinInt
 open BinNums
 open Bool
+open DSLRaw
 open Datatypes
 open FMaps
 open FSets
@@ -13,226 +14,11 @@ open String0
 open Strings
 open Typ
 open Var
-open ZAriths
 open Eqtype
 open Seq
 open Ssrnat
 
 type __ = Obj.t
-
-type eunop =
-| Eneg
-
-type ebinop =
-| Eadd
-| Esub
-| Emul
-
-type runop =
-| Rnegb
-| Rnotb
-
-type rbinop =
-| Radd
-| Rsub
-| Rmul
-| Rumod
-| Rsrem
-| Rsmod
-| Randb
-| Rorb
-| Rxorb
-
-type rcmpop =
-| Rult
-| Rule
-| Rugt
-| Ruge
-| Rslt
-| Rsle
-| Rsgt
-| Rsge
-
-val eunop_eqn : eunop -> eunop -> bool
-
-val eunop_eqP : eunop -> eunop -> reflect
-
-val eunop_eqMixin : eunop Equality.mixin_of
-
-val eunop_eqType : Equality.coq_type
-
-val ebinop_eqn : ebinop -> ebinop -> bool
-
-val ebinop_eqP : ebinop -> ebinop -> reflect
-
-val ebinop_eqMixin : ebinop Equality.mixin_of
-
-val ebinop_eqType : Equality.coq_type
-
-val runop_eqn : runop -> runop -> bool
-
-val runop_eqP : runop -> runop -> reflect
-
-val runop_eqMixin : runop Equality.mixin_of
-
-val runop_eqType : Equality.coq_type
-
-val rbinop_eqn : rbinop -> rbinop -> bool
-
-val rbinop_eqP : rbinop -> rbinop -> reflect
-
-val rbinop_eqMixin : rbinop Equality.mixin_of
-
-val rbinop_eqType : Equality.coq_type
-
-val rcmpop_eqn : rcmpop -> rcmpop -> bool
-
-val rcmpop_eqP : rcmpop -> rcmpop -> reflect
-
-val rcmpop_eqMixin : rcmpop Equality.mixin_of
-
-val rcmpop_eqType : Equality.coq_type
-
-val string_of_eunop : eunop -> char list
-
-val string_of_ebinop : ebinop -> char list
-
-val string_of_runop : runop -> char list
-
-val string_of_rbinop : rbinop -> char list
-
-val string_of_rcmpop : rcmpop -> char list
-
-module Coq__1 : sig
- type eexp =
- | Evar of Equality.sort
- | Econst of coq_Z
- | Eunop of eunop * eexp
- | Ebinop of ebinop * eexp * eexp
- | Epow of eexp * coq_N
-end
-include module type of struct include Coq__1 end
-
-val econst : Equality.coq_type -> coq_Z -> eexp
-
-val eadd : Equality.coq_type -> eexp -> eexp -> eexp
-
-val emul : Equality.coq_type -> eexp -> eexp -> eexp
-
-val eadds : Equality.coq_type -> eexp list -> eexp
-
-val emuls : Equality.coq_type -> eexp list -> eexp
-
-val z2expn : coq_Z -> coq_Z
-
-val e2expn : Equality.coq_type -> coq_Z -> eexp
-
-val emul2p : Equality.coq_type -> eexp -> coq_Z -> eexp
-
-val eexp_eqn : Equality.coq_type -> eexp -> eexp -> bool
-
-val eexp_eqP : Equality.coq_type -> eexp -> eexp -> reflect
-
-val eexp_eqMixin : Equality.coq_type -> eexp Equality.mixin_of
-
-val eexp_eqType : Equality.coq_type -> Equality.coq_type
-
-val limbsi : Equality.coq_type -> int -> coq_Z -> eexp list -> eexp
-
-module Coq__2 : sig
- type rexp =
- | Rvar of Equality.sort
- | Rconst of int * bits
- | Runop of int * runop * rexp
- | Rbinop of int * rbinop * rexp * rexp
- | Ruext of int * rexp * int
- | Rsext of int * rexp * int
-end
-include module type of struct include Coq__2 end
-
-val rbits : Equality.coq_type -> bool list -> rexp
-
-val radd : Equality.coq_type -> int -> rexp -> rexp -> rexp
-
-val rmul : Equality.coq_type -> int -> rexp -> rexp -> rexp
-
-val radds : Equality.coq_type -> int -> rexp list -> rexp
-
-val rmuls : Equality.coq_type -> int -> rexp list -> rexp
-
-val rexp_eqn : Equality.coq_type -> rexp -> rexp -> bool
-
-val rexp_eqP : Equality.coq_type -> rexp -> rexp -> reflect
-
-val rexp_eqMixin : Equality.coq_type -> rexp Equality.mixin_of
-
-val rexp_eqType : Equality.coq_type -> Equality.coq_type
-
-module Coq__3 : sig
- type ebexp =
- | Etrue
- | Eeq of eexp * eexp
- | Eeqmod of eexp * eexp * eexp list
- | Eand of ebexp * ebexp
-end
-include module type of struct include Coq__3 end
-
-val eand : Equality.coq_type -> ebexp -> ebexp -> ebexp
-
-val eands : Equality.coq_type -> ebexp list -> ebexp
-
-val split_eand : Equality.coq_type -> ebexp -> ebexp list
-
-val ebexp_eqn : Equality.coq_type -> ebexp -> ebexp -> bool
-
-val ebexp_eqP : Equality.coq_type -> ebexp -> ebexp -> reflect
-
-val ebexp_eqMixin : Equality.coq_type -> ebexp Equality.mixin_of
-
-val ebexp_eqType : Equality.coq_type -> Equality.coq_type
-
-module Coq__4 : sig
- type rbexp =
- | Rtrue
- | Req of int * rexp * rexp
- | Rcmp of int * rcmpop * rexp * rexp
- | Rneg of rbexp
- | Rand of rbexp * rbexp
- | Ror of rbexp * rbexp
-end
-include module type of struct include Coq__4 end
-
-val rand : Equality.coq_type -> rbexp -> rbexp -> rbexp
-
-val ror : Equality.coq_type -> rbexp -> rbexp -> rbexp
-
-val rands : Equality.coq_type -> rbexp list -> rbexp
-
-val rors : Equality.coq_type -> rbexp list -> rbexp
-
-val split_rand : Equality.coq_type -> rbexp -> rbexp list
-
-val rbexp_eqn : Equality.coq_type -> rbexp -> rbexp -> bool
-
-val rbexp_eqP : Equality.coq_type -> rbexp -> rbexp -> reflect
-
-val string_of_eexp :
-  Equality.coq_type -> (Equality.sort -> char list) -> eexp -> char list
-
-val string_of_eexps :
-  Equality.coq_type -> (Equality.sort -> char list) -> char list -> eexp list
-  -> char list
-
-val string_of_ebexp :
-  Equality.coq_type -> (Equality.sort -> char list) -> ebexp -> char list
-
-val string_of_rexp :
-  Equality.coq_type -> (Equality.sort -> char list) -> rexp -> char list
-
-val is_rbexp_or : Equality.coq_type -> rbexp -> bool
-
-val string_of_rbexp :
-  Equality.coq_type -> (Equality.sort -> char list) -> rbexp -> char list
 
 module MakeDSL :
  functor (V:SsrOrder.SsrOrder) ->
@@ -1236,7 +1022,7 @@ module MakeDSL :
     val eequalP : typ TE.t -> typ TE.t -> reflect
    end
 
-  type eexp = Coq__1.eexp
+  type eexp = DSLRaw.eexp
 
   val evar : V.t -> eexp
 
@@ -1256,7 +1042,7 @@ module MakeDSL :
 
   val esq : eexp -> eexp
 
-  val epow : eexp -> coq_N -> Coq__1.eexp
+  val epow : eexp -> coq_N -> DSLRaw.eexp
 
   val eadds : eexp list -> eexp
 
@@ -1264,9 +1050,9 @@ module MakeDSL :
 
   val z2expn : coq_Z -> coq_Z
 
-  val e2expn : coq_Z -> Coq__1.eexp
+  val e2expn : coq_Z -> DSLRaw.eexp
 
-  val emul2p : Coq__1.eexp -> coq_Z -> Coq__1.eexp
+  val emul2p : DSLRaw.eexp -> coq_Z -> DSLRaw.eexp
 
   val vars_eexp : eexp -> VS.t
 
@@ -1278,13 +1064,13 @@ module MakeDSL :
 
   val eexp_eqType : Equality.coq_type
 
-  val eexp_eqn : Coq__1.eexp -> Coq__1.eexp -> bool
+  val eexp_eqn : DSLRaw.eexp -> DSLRaw.eexp -> bool
 
   val limbsi : int -> coq_Z -> eexp list -> eexp
 
   val limbs : coq_Z -> eexp list -> eexp
 
-  type rexp = Coq__2.rexp
+  type rexp = DSLRaw.rexp
 
   val size_of_rexp : rexp -> TE.env -> int
 
@@ -1338,9 +1124,9 @@ module MakeDSL :
 
   val rexp_eqType : Equality.coq_type
 
-  val rexp_eqn : Coq__2.rexp -> Coq__2.rexp -> bool
+  val rexp_eqn : DSLRaw.rexp -> DSLRaw.rexp -> bool
 
-  type ebexp = Coq__3.ebexp
+  type ebexp = DSLRaw.ebexp
 
   val etrue : ebexp
 
@@ -1362,9 +1148,9 @@ module MakeDSL :
 
   val ebexp_eqType : Equality.coq_type
 
-  val ebexp_eqn : Coq__3.ebexp -> Coq__3.ebexp -> bool
+  val ebexp_eqn : DSLRaw.ebexp -> DSLRaw.ebexp -> bool
 
-  type rbexp = Coq__4.rbexp
+  type rbexp = DSLRaw.rbexp
 
   val rtrue : rbexp
 
@@ -1410,7 +1196,7 @@ module MakeDSL :
 
   val rbexp_eqType : Equality.coq_type
 
-  val rbexp_eqn : Coq__4.rbexp -> Coq__4.rbexp -> bool
+  val rbexp_eqn : DSLRaw.rbexp -> DSLRaw.rbexp -> bool
 
   type bexp = ebexp * rbexp
 
@@ -1428,25 +1214,15 @@ module MakeDSL :
 
   val vars_bexp : bexp -> VS.t
 
-  type atom =
-  | Avar of V.t
-  | Aconst of typ * bits
+  val avar : Equality.sort -> atom
 
-  val atom_rect : (V.t -> 'a1) -> (typ -> bits -> 'a1) -> atom -> 'a1
+  val aconst : typ -> bits -> atom
 
-  val atom_rec : (V.t -> 'a1) -> (typ -> bits -> 'a1) -> atom -> 'a1
+  type atom = DSLRaw.atom
 
   val atyp : atom -> TE.env -> typ
 
   val asize : atom -> TE.env -> int
-
-  val atom_eqn : atom -> atom -> bool
-
-  val atom_eqP : atom -> atom -> reflect
-
-  val atom_eqMixin : atom Equality.mixin_of
-
-  val atom_eqType : Equality.coq_type
 
   type instr =
   | Imov of V.t * atom
@@ -1597,19 +1373,17 @@ module MakeDSL :
 
   val string_of_rcmpop : rcmpop -> char list
 
-  val string_of_eexp : Coq__1.eexp -> char list
+  val string_of_eexp : DSLRaw.eexp -> char list
 
-  val string_of_eexps : char list -> Coq__1.eexp list -> char list
+  val string_of_eexps : char list -> DSLRaw.eexp list -> char list
 
-  val string_of_ebexp : Coq__3.ebexp -> char list
+  val string_of_ebexp : DSLRaw.ebexp -> char list
 
-  val string_of_rexp : Coq__2.rexp -> char list
+  val string_of_rexp : DSLRaw.rexp -> char list
 
-  val string_of_rbexp : Coq__4.rbexp -> char list
+  val string_of_rbexp : DSLRaw.rbexp -> char list
 
   val string_of_bexp : bexp -> char list
-
-  val string_of_typ : typ -> char list
 
   val string_of_var_with_typ : (V.t * typ) -> char list
 
@@ -2343,6 +2117,12 @@ module MakeDSL :
 
   val defsubP : VS.t -> TE.env -> reflect
 
+  val inputs_program_rec : VS.t -> program -> VS.t
+
+  val inputs_program : program -> VS.t
+
+  val is_nondet : instr -> bool
+
   val is_assume : instr -> bool
 
   val force_conform_vars : TE.env -> V.t list -> S.t -> S.t
@@ -2597,6 +2377,622 @@ module MakeDSL :
 
   module MA :
    sig
+    module MA :
+     sig
+      module VSLemmas :
+       sig
+        module F :
+         sig
+          val eqb : Equality.sort -> Equality.sort -> bool
+         end
+
+        module OP :
+         sig
+          module ME :
+           sig
+            module TO :
+             sig
+              type t = Equality.sort
+             end
+
+            module IsTO :
+             sig
+             end
+
+            module OrderTac :
+             sig
+             end
+
+            val eq_dec : Equality.sort -> Equality.sort -> bool
+
+            val lt_dec : Equality.sort -> Equality.sort -> bool
+
+            val eqb : Equality.sort -> Equality.sort -> bool
+           end
+
+          module P :
+           sig
+            module Dec :
+             sig
+              module F :
+               sig
+                val eqb : Equality.sort -> Equality.sort -> bool
+               end
+
+              module FSetLogicalFacts :
+               sig
+               end
+
+              module FSetDecideAuxiliary :
+               sig
+               end
+
+              module FSetDecideTestCases :
+               sig
+               end
+             end
+
+            module FM :
+             sig
+              val eqb : Equality.sort -> Equality.sort -> bool
+             end
+
+            val coq_In_dec : VS.elt -> VS.t -> bool
+
+            val of_list : VS.elt list -> VS.t
+
+            val to_list : VS.t -> VS.elt list
+
+            val fold_rec :
+              (VS.elt -> 'a1 -> 'a1) -> 'a1 -> VS.t -> (VS.t -> __ -> 'a2) ->
+              (VS.elt -> 'a1 -> VS.t -> VS.t -> __ -> __ -> __ -> 'a2 -> 'a2)
+              -> 'a2
+
+            val fold_rec_bis :
+              (VS.elt -> 'a1 -> 'a1) -> 'a1 -> VS.t -> (VS.t -> VS.t -> 'a1
+              -> __ -> 'a2 -> 'a2) -> 'a2 -> (VS.elt -> 'a1 -> VS.t -> __ ->
+              __ -> 'a2 -> 'a2) -> 'a2
+
+            val fold_rec_nodep :
+              (VS.elt -> 'a1 -> 'a1) -> 'a1 -> VS.t -> 'a2 -> (VS.elt -> 'a1
+              -> __ -> 'a2 -> 'a2) -> 'a2
+
+            val fold_rec_weak :
+              (VS.elt -> 'a1 -> 'a1) -> 'a1 -> (VS.t -> VS.t -> 'a1 -> __ ->
+              'a2 -> 'a2) -> 'a2 -> (VS.elt -> 'a1 -> VS.t -> __ -> 'a2 ->
+              'a2) -> VS.t -> 'a2
+
+            val fold_rel :
+              (VS.elt -> 'a1 -> 'a1) -> (VS.elt -> 'a2 -> 'a2) -> 'a1 -> 'a2
+              -> VS.t -> 'a3 -> (VS.elt -> 'a1 -> 'a2 -> __ -> 'a3 -> 'a3) ->
+              'a3
+
+            val set_induction :
+              (VS.t -> __ -> 'a1) -> (VS.t -> VS.t -> 'a1 -> VS.elt -> __ ->
+              __ -> 'a1) -> VS.t -> 'a1
+
+            val set_induction_bis :
+              (VS.t -> VS.t -> __ -> 'a1 -> 'a1) -> 'a1 -> (VS.elt -> VS.t ->
+              __ -> 'a1 -> 'a1) -> VS.t -> 'a1
+
+            val cardinal_inv_2 : VS.t -> int -> VS.elt
+
+            val cardinal_inv_2b : VS.t -> VS.elt
+           end
+
+          val gtb : Equality.sort -> Equality.sort -> bool
+
+          val leb : Equality.sort -> Equality.sort -> bool
+
+          val elements_lt : Equality.sort -> VS.t -> Equality.sort list
+
+          val elements_ge : Equality.sort -> VS.t -> Equality.sort list
+
+          val set_induction_max :
+            (VS.t -> __ -> 'a1) -> (VS.t -> VS.t -> 'a1 -> Equality.sort ->
+            __ -> __ -> 'a1) -> VS.t -> 'a1
+
+          val set_induction_min :
+            (VS.t -> __ -> 'a1) -> (VS.t -> VS.t -> 'a1 -> Equality.sort ->
+            __ -> __ -> 'a1) -> VS.t -> 'a1
+         end
+
+        val eqb : Equality.sort -> Equality.sort -> bool
+
+        module ME :
+         sig
+          module TO :
+           sig
+            type t = Equality.sort
+           end
+
+          module IsTO :
+           sig
+           end
+
+          module OrderTac :
+           sig
+           end
+
+          val eq_dec : Equality.sort -> Equality.sort -> bool
+
+          val lt_dec : Equality.sort -> Equality.sort -> bool
+
+          val eqb : Equality.sort -> Equality.sort -> bool
+         end
+
+        module P :
+         sig
+          module Dec :
+           sig
+            module F :
+             sig
+              val eqb : Equality.sort -> Equality.sort -> bool
+             end
+
+            module FSetLogicalFacts :
+             sig
+             end
+
+            module FSetDecideAuxiliary :
+             sig
+             end
+
+            module FSetDecideTestCases :
+             sig
+             end
+           end
+
+          module FM :
+           sig
+            val eqb : Equality.sort -> Equality.sort -> bool
+           end
+
+          val coq_In_dec : VS.elt -> VS.t -> bool
+
+          val of_list : VS.elt list -> VS.t
+
+          val to_list : VS.t -> VS.elt list
+
+          val fold_rec :
+            (VS.elt -> 'a1 -> 'a1) -> 'a1 -> VS.t -> (VS.t -> __ -> 'a2) ->
+            (VS.elt -> 'a1 -> VS.t -> VS.t -> __ -> __ -> __ -> 'a2 -> 'a2)
+            -> 'a2
+
+          val fold_rec_bis :
+            (VS.elt -> 'a1 -> 'a1) -> 'a1 -> VS.t -> (VS.t -> VS.t -> 'a1 ->
+            __ -> 'a2 -> 'a2) -> 'a2 -> (VS.elt -> 'a1 -> VS.t -> __ -> __ ->
+            'a2 -> 'a2) -> 'a2
+
+          val fold_rec_nodep :
+            (VS.elt -> 'a1 -> 'a1) -> 'a1 -> VS.t -> 'a2 -> (VS.elt -> 'a1 ->
+            __ -> 'a2 -> 'a2) -> 'a2
+
+          val fold_rec_weak :
+            (VS.elt -> 'a1 -> 'a1) -> 'a1 -> (VS.t -> VS.t -> 'a1 -> __ ->
+            'a2 -> 'a2) -> 'a2 -> (VS.elt -> 'a1 -> VS.t -> __ -> 'a2 -> 'a2)
+            -> VS.t -> 'a2
+
+          val fold_rel :
+            (VS.elt -> 'a1 -> 'a1) -> (VS.elt -> 'a2 -> 'a2) -> 'a1 -> 'a2 ->
+            VS.t -> 'a3 -> (VS.elt -> 'a1 -> 'a2 -> __ -> 'a3 -> 'a3) -> 'a3
+
+          val set_induction :
+            (VS.t -> __ -> 'a1) -> (VS.t -> VS.t -> 'a1 -> VS.elt -> __ -> __
+            -> 'a1) -> VS.t -> 'a1
+
+          val set_induction_bis :
+            (VS.t -> VS.t -> __ -> 'a1 -> 'a1) -> 'a1 -> (VS.elt -> VS.t ->
+            __ -> 'a1 -> 'a1) -> VS.t -> 'a1
+
+          val cardinal_inv_2 : VS.t -> int -> VS.elt
+
+          val cardinal_inv_2b : VS.t -> VS.elt
+         end
+
+        val gtb : Equality.sort -> Equality.sort -> bool
+
+        val leb : Equality.sort -> Equality.sort -> bool
+
+        val elements_lt : Equality.sort -> VS.t -> Equality.sort list
+
+        val elements_ge : Equality.sort -> VS.t -> Equality.sort list
+
+        val set_induction_max :
+          (VS.t -> __ -> 'a1) -> (VS.t -> VS.t -> 'a1 -> Equality.sort -> __
+          -> __ -> 'a1) -> VS.t -> 'a1
+
+        val set_induction_min :
+          (VS.t -> __ -> 'a1) -> (VS.t -> VS.t -> 'a1 -> Equality.sort -> __
+          -> __ -> 'a1) -> VS.t -> 'a1
+
+        val memP : VS.elt -> VS.t -> reflect
+
+        val equalP : VS.t -> VS.t -> reflect
+
+        val subsetP : VS.t -> VS.t -> reflect
+
+        val emptyP : VS.t -> reflect
+
+        val disjoint : VS.t -> VS.t -> bool
+
+        val proper_subset : VS.t -> VS.t -> bool
+       end
+
+      module VMLemmas :
+       sig
+        module F :
+         sig
+          val eqb : Equality.sort -> Equality.sort -> bool
+
+          val coq_In_dec : 'a1 TE.t -> TE.key -> bool
+         end
+
+        module OP :
+         sig
+          module ME :
+           sig
+            module TO :
+             sig
+              type t = Equality.sort
+             end
+
+            module IsTO :
+             sig
+             end
+
+            module OrderTac :
+             sig
+             end
+
+            val eq_dec : Equality.sort -> Equality.sort -> bool
+
+            val lt_dec : Equality.sort -> Equality.sort -> bool
+
+            val eqb : Equality.sort -> Equality.sort -> bool
+           end
+
+          module O :
+           sig
+            module MO :
+             sig
+              module TO :
+               sig
+                type t = Equality.sort
+               end
+
+              module IsTO :
+               sig
+               end
+
+              module OrderTac :
+               sig
+               end
+
+              val eq_dec : Equality.sort -> Equality.sort -> bool
+
+              val lt_dec : Equality.sort -> Equality.sort -> bool
+
+              val eqb : Equality.sort -> Equality.sort -> bool
+             end
+           end
+
+          module P :
+           sig
+            module F :
+             sig
+              val eqb : Equality.sort -> Equality.sort -> bool
+
+              val coq_In_dec : 'a1 TE.t -> TE.key -> bool
+             end
+
+            val uncurry : ('a1 -> 'a2 -> 'a3) -> ('a1 * 'a2) -> 'a3
+
+            val of_list : (TE.key * 'a1) list -> 'a1 TE.t
+
+            val to_list : 'a1 TE.t -> (TE.key * 'a1) list
+
+            val fold_rec :
+              (TE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1 TE.t -> ('a1 TE.t
+              -> __ -> 'a3) -> (TE.key -> 'a1 -> 'a2 -> 'a1 TE.t -> 'a1 TE.t
+              -> __ -> __ -> __ -> 'a3 -> 'a3) -> 'a3
+
+            val fold_rec_bis :
+              (TE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1 TE.t -> ('a1 TE.t
+              -> 'a1 TE.t -> 'a2 -> __ -> 'a3 -> 'a3) -> 'a3 -> (TE.key ->
+              'a1 -> 'a2 -> 'a1 TE.t -> __ -> __ -> 'a3 -> 'a3) -> 'a3
+
+            val fold_rec_nodep :
+              (TE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1 TE.t -> 'a3 ->
+              (TE.key -> 'a1 -> 'a2 -> __ -> 'a3 -> 'a3) -> 'a3
+
+            val fold_rec_weak :
+              (TE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> ('a1 TE.t -> 'a1 TE.t
+              -> 'a2 -> __ -> 'a3 -> 'a3) -> 'a3 -> (TE.key -> 'a1 -> 'a2 ->
+              'a1 TE.t -> __ -> 'a3 -> 'a3) -> 'a1 TE.t -> 'a3
+
+            val fold_rel :
+              (TE.key -> 'a1 -> 'a2 -> 'a2) -> (TE.key -> 'a1 -> 'a3 -> 'a3)
+              -> 'a2 -> 'a3 -> 'a1 TE.t -> 'a4 -> (TE.key -> 'a1 -> 'a2 ->
+              'a3 -> __ -> 'a4 -> 'a4) -> 'a4
+
+            val map_induction :
+              ('a1 TE.t -> __ -> 'a2) -> ('a1 TE.t -> 'a1 TE.t -> 'a2 ->
+              TE.key -> 'a1 -> __ -> __ -> 'a2) -> 'a1 TE.t -> 'a2
+
+            val map_induction_bis :
+              ('a1 TE.t -> 'a1 TE.t -> __ -> 'a2 -> 'a2) -> 'a2 -> (TE.key ->
+              'a1 -> 'a1 TE.t -> __ -> 'a2 -> 'a2) -> 'a1 TE.t -> 'a2
+
+            val cardinal_inv_2 : 'a1 TE.t -> int -> (TE.key * 'a1)
+
+            val cardinal_inv_2b : 'a1 TE.t -> (TE.key * 'a1)
+
+            val filter : (TE.key -> 'a1 -> bool) -> 'a1 TE.t -> 'a1 TE.t
+
+            val for_all : (TE.key -> 'a1 -> bool) -> 'a1 TE.t -> bool
+
+            val exists_ : (TE.key -> 'a1 -> bool) -> 'a1 TE.t -> bool
+
+            val partition :
+              (TE.key -> 'a1 -> bool) -> 'a1 TE.t -> 'a1 TE.t * 'a1 TE.t
+
+            val update : 'a1 TE.t -> 'a1 TE.t -> 'a1 TE.t
+
+            val restrict : 'a1 TE.t -> 'a1 TE.t -> 'a1 TE.t
+
+            val diff : 'a1 TE.t -> 'a1 TE.t -> 'a1 TE.t
+
+            val coq_Partition_In :
+              'a1 TE.t -> 'a1 TE.t -> 'a1 TE.t -> TE.key -> bool
+
+            val update_dec : 'a1 TE.t -> 'a1 TE.t -> TE.key -> 'a1 -> bool
+
+            val filter_dom : (TE.key -> bool) -> 'a1 TE.t -> 'a1 TE.t
+
+            val filter_range : ('a1 -> bool) -> 'a1 TE.t -> 'a1 TE.t
+
+            val for_all_dom : (TE.key -> bool) -> 'a1 TE.t -> bool
+
+            val for_all_range : ('a1 -> bool) -> 'a1 TE.t -> bool
+
+            val exists_dom : (TE.key -> bool) -> 'a1 TE.t -> bool
+
+            val exists_range : ('a1 -> bool) -> 'a1 TE.t -> bool
+
+            val partition_dom :
+              (TE.key -> bool) -> 'a1 TE.t -> 'a1 TE.t * 'a1 TE.t
+
+            val partition_range :
+              ('a1 -> bool) -> 'a1 TE.t -> 'a1 TE.t * 'a1 TE.t
+           end
+
+          val gtb : (TE.key * 'a1) -> (TE.key * 'a1) -> bool
+
+          val leb : (TE.key * 'a1) -> (TE.key * 'a1) -> bool
+
+          val elements_lt : (TE.key * 'a1) -> 'a1 TE.t -> (TE.key * 'a1) list
+
+          val elements_ge : (TE.key * 'a1) -> 'a1 TE.t -> (TE.key * 'a1) list
+
+          val max_elt_aux : (TE.key * 'a1) list -> (TE.key * 'a1) option
+
+          val max_elt : 'a1 TE.t -> (TE.key * 'a1) option
+
+          val min_elt : 'a1 TE.t -> (TE.key * 'a1) option
+
+          val map_induction_max :
+            ('a1 TE.t -> __ -> 'a2) -> ('a1 TE.t -> 'a1 TE.t -> 'a2 ->
+            Equality.sort -> 'a1 -> __ -> __ -> 'a2) -> 'a1 TE.t -> 'a2
+
+          val map_induction_min :
+            ('a1 TE.t -> __ -> 'a2) -> ('a1 TE.t -> 'a1 TE.t -> 'a2 ->
+            Equality.sort -> 'a1 -> __ -> __ -> 'a2) -> 'a1 TE.t -> 'a2
+         end
+
+        val eqb : Equality.sort -> Equality.sort -> bool
+
+        val coq_In_dec : 'a1 TE.t -> TE.key -> bool
+
+        module ME :
+         sig
+          module TO :
+           sig
+            type t = Equality.sort
+           end
+
+          module IsTO :
+           sig
+           end
+
+          module OrderTac :
+           sig
+           end
+
+          val eq_dec : Equality.sort -> Equality.sort -> bool
+
+          val lt_dec : Equality.sort -> Equality.sort -> bool
+
+          val eqb : Equality.sort -> Equality.sort -> bool
+         end
+
+        module O :
+         sig
+          module MO :
+           sig
+            module TO :
+             sig
+              type t = Equality.sort
+             end
+
+            module IsTO :
+             sig
+             end
+
+            module OrderTac :
+             sig
+             end
+
+            val eq_dec : Equality.sort -> Equality.sort -> bool
+
+            val lt_dec : Equality.sort -> Equality.sort -> bool
+
+            val eqb : Equality.sort -> Equality.sort -> bool
+           end
+         end
+
+        module P :
+         sig
+          module F :
+           sig
+            val eqb : Equality.sort -> Equality.sort -> bool
+
+            val coq_In_dec : 'a1 TE.t -> TE.key -> bool
+           end
+
+          val uncurry : ('a1 -> 'a2 -> 'a3) -> ('a1 * 'a2) -> 'a3
+
+          val of_list : (TE.key * 'a1) list -> 'a1 TE.t
+
+          val to_list : 'a1 TE.t -> (TE.key * 'a1) list
+
+          val fold_rec :
+            (TE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1 TE.t -> ('a1 TE.t ->
+            __ -> 'a3) -> (TE.key -> 'a1 -> 'a2 -> 'a1 TE.t -> 'a1 TE.t -> __
+            -> __ -> __ -> 'a3 -> 'a3) -> 'a3
+
+          val fold_rec_bis :
+            (TE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1 TE.t -> ('a1 TE.t ->
+            'a1 TE.t -> 'a2 -> __ -> 'a3 -> 'a3) -> 'a3 -> (TE.key -> 'a1 ->
+            'a2 -> 'a1 TE.t -> __ -> __ -> 'a3 -> 'a3) -> 'a3
+
+          val fold_rec_nodep :
+            (TE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1 TE.t -> 'a3 ->
+            (TE.key -> 'a1 -> 'a2 -> __ -> 'a3 -> 'a3) -> 'a3
+
+          val fold_rec_weak :
+            (TE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> ('a1 TE.t -> 'a1 TE.t ->
+            'a2 -> __ -> 'a3 -> 'a3) -> 'a3 -> (TE.key -> 'a1 -> 'a2 -> 'a1
+            TE.t -> __ -> 'a3 -> 'a3) -> 'a1 TE.t -> 'a3
+
+          val fold_rel :
+            (TE.key -> 'a1 -> 'a2 -> 'a2) -> (TE.key -> 'a1 -> 'a3 -> 'a3) ->
+            'a2 -> 'a3 -> 'a1 TE.t -> 'a4 -> (TE.key -> 'a1 -> 'a2 -> 'a3 ->
+            __ -> 'a4 -> 'a4) -> 'a4
+
+          val map_induction :
+            ('a1 TE.t -> __ -> 'a2) -> ('a1 TE.t -> 'a1 TE.t -> 'a2 -> TE.key
+            -> 'a1 -> __ -> __ -> 'a2) -> 'a1 TE.t -> 'a2
+
+          val map_induction_bis :
+            ('a1 TE.t -> 'a1 TE.t -> __ -> 'a2 -> 'a2) -> 'a2 -> (TE.key ->
+            'a1 -> 'a1 TE.t -> __ -> 'a2 -> 'a2) -> 'a1 TE.t -> 'a2
+
+          val cardinal_inv_2 : 'a1 TE.t -> int -> (TE.key * 'a1)
+
+          val cardinal_inv_2b : 'a1 TE.t -> (TE.key * 'a1)
+
+          val filter : (TE.key -> 'a1 -> bool) -> 'a1 TE.t -> 'a1 TE.t
+
+          val for_all : (TE.key -> 'a1 -> bool) -> 'a1 TE.t -> bool
+
+          val exists_ : (TE.key -> 'a1 -> bool) -> 'a1 TE.t -> bool
+
+          val partition :
+            (TE.key -> 'a1 -> bool) -> 'a1 TE.t -> 'a1 TE.t * 'a1 TE.t
+
+          val update : 'a1 TE.t -> 'a1 TE.t -> 'a1 TE.t
+
+          val restrict : 'a1 TE.t -> 'a1 TE.t -> 'a1 TE.t
+
+          val diff : 'a1 TE.t -> 'a1 TE.t -> 'a1 TE.t
+
+          val coq_Partition_In :
+            'a1 TE.t -> 'a1 TE.t -> 'a1 TE.t -> TE.key -> bool
+
+          val update_dec : 'a1 TE.t -> 'a1 TE.t -> TE.key -> 'a1 -> bool
+
+          val filter_dom : (TE.key -> bool) -> 'a1 TE.t -> 'a1 TE.t
+
+          val filter_range : ('a1 -> bool) -> 'a1 TE.t -> 'a1 TE.t
+
+          val for_all_dom : (TE.key -> bool) -> 'a1 TE.t -> bool
+
+          val for_all_range : ('a1 -> bool) -> 'a1 TE.t -> bool
+
+          val exists_dom : (TE.key -> bool) -> 'a1 TE.t -> bool
+
+          val exists_range : ('a1 -> bool) -> 'a1 TE.t -> bool
+
+          val partition_dom :
+            (TE.key -> bool) -> 'a1 TE.t -> 'a1 TE.t * 'a1 TE.t
+
+          val partition_range :
+            ('a1 -> bool) -> 'a1 TE.t -> 'a1 TE.t * 'a1 TE.t
+         end
+
+        val gtb : (TE.key * 'a1) -> (TE.key * 'a1) -> bool
+
+        val leb : (TE.key * 'a1) -> (TE.key * 'a1) -> bool
+
+        val elements_lt : (TE.key * 'a1) -> 'a1 TE.t -> (TE.key * 'a1) list
+
+        val elements_ge : (TE.key * 'a1) -> 'a1 TE.t -> (TE.key * 'a1) list
+
+        val max_elt_aux : (TE.key * 'a1) list -> (TE.key * 'a1) option
+
+        val max_elt : 'a1 TE.t -> (TE.key * 'a1) option
+
+        val min_elt : 'a1 TE.t -> (TE.key * 'a1) option
+
+        val map_induction_max :
+          ('a1 TE.t -> __ -> 'a2) -> ('a1 TE.t -> 'a1 TE.t -> 'a2 ->
+          Equality.sort -> 'a1 -> __ -> __ -> 'a2) -> 'a1 TE.t -> 'a2
+
+        val map_induction_min :
+          ('a1 TE.t -> __ -> 'a2) -> ('a1 TE.t -> 'a1 TE.t -> 'a2 ->
+          Equality.sort -> 'a1 -> __ -> __ -> 'a2) -> 'a1 TE.t -> 'a2
+
+        val memP : TE.key -> 'a1 TE.t -> reflect
+
+        val split : ('a1 * 'a2) TE.t -> 'a1 TE.t * 'a2 TE.t
+
+        module EFacts :
+         sig
+          module TO :
+           sig
+            type t = Equality.sort
+           end
+
+          module IsTO :
+           sig
+           end
+
+          module OrderTac :
+           sig
+           end
+
+          val eq_dec : Equality.sort -> Equality.sort -> bool
+
+          val lt_dec : Equality.sort -> Equality.sort -> bool
+
+          val eqb : Equality.sort -> Equality.sort -> bool
+         end
+
+        val max_opt : TE.key -> TE.key option -> TE.key
+
+        val max_key_elements : (TE.key * 'a1) list -> TE.key option
+
+        val max_key : 'a1 TE.t -> TE.key option
+
+        val min_opt : TE.key -> TE.key option -> TE.key
+
+        val min_key_elements : (TE.key * 'a1) list -> TE.key option
+
+        val min_key : 'a1 TE.t -> TE.key option
+       end
+     end
+
     module VSLemmas :
      sig
       module F :
@@ -3213,7 +3609,7 @@ module MakeDSL :
 
   val depvars_rexp : VS.t -> rexp -> VS.t
 
-  val depvars_rbexp : VS.t -> Coq__4.rbexp -> VS.t
+  val depvars_rbexp : VS.t -> DSLRaw.rbexp -> VS.t
 
   val depvars_einstr : options -> VS.t -> instr -> VS.t
 
@@ -3226,7 +3622,7 @@ module MakeDSL :
   val depvars_epre_eprogram : options -> VS.t -> ebexp -> instr list -> VS.t
 
   val depvars_rpre_rprogram :
-    options -> VS.t -> Coq__4.rbexp -> instr list -> VS.t
+    options -> VS.t -> DSLRaw.rbexp -> instr list -> VS.t
 
   val evsize : ebexp -> program -> VS.t -> int
 
@@ -3302,9 +3698,9 @@ module MakeDSL :
     options -> rbexp -> program -> VS.t -> VS.t ->
     coq_R_depvars_rpre_rprogram_sat
 
-  val slice_ebexp : VS.t -> Coq__3.ebexp -> Coq__3.ebexp
+  val slice_ebexp : VS.t -> DSLRaw.ebexp -> DSLRaw.ebexp
 
-  val slice_rbexp : VS.t -> Coq__4.rbexp -> Coq__4.rbexp
+  val slice_rbexp : VS.t -> DSLRaw.rbexp -> DSLRaw.rbexp
 
   val slice_einstr : VS.t -> instr -> instr option
 
@@ -3970,7 +4366,7 @@ module DSL :
     val eequalP : typ TypEnv.TE.t -> typ TypEnv.TE.t -> reflect
    end
 
-  type eexp = Coq__1.eexp
+  type eexp = DSLRaw.eexp
 
   val evar : VarOrder.t -> eexp
 
@@ -3990,7 +4386,7 @@ module DSL :
 
   val esq : eexp -> eexp
 
-  val epow : eexp -> coq_N -> Coq__1.eexp
+  val epow : eexp -> coq_N -> DSLRaw.eexp
 
   val eadds : eexp list -> eexp
 
@@ -3998,9 +4394,9 @@ module DSL :
 
   val z2expn : coq_Z -> coq_Z
 
-  val e2expn : coq_Z -> Coq__1.eexp
+  val e2expn : coq_Z -> DSLRaw.eexp
 
-  val emul2p : Coq__1.eexp -> coq_Z -> Coq__1.eexp
+  val emul2p : DSLRaw.eexp -> coq_Z -> DSLRaw.eexp
 
   val vars_eexp : eexp -> VS.t
 
@@ -4012,13 +4408,13 @@ module DSL :
 
   val eexp_eqType : Equality.coq_type
 
-  val eexp_eqn : Coq__1.eexp -> Coq__1.eexp -> bool
+  val eexp_eqn : DSLRaw.eexp -> DSLRaw.eexp -> bool
 
   val limbsi : int -> coq_Z -> eexp list -> eexp
 
   val limbs : coq_Z -> eexp list -> eexp
 
-  type rexp = Coq__2.rexp
+  type rexp = DSLRaw.rexp
 
   val size_of_rexp : rexp -> TypEnv.TE.env -> int
 
@@ -4072,9 +4468,9 @@ module DSL :
 
   val rexp_eqType : Equality.coq_type
 
-  val rexp_eqn : Coq__2.rexp -> Coq__2.rexp -> bool
+  val rexp_eqn : DSLRaw.rexp -> DSLRaw.rexp -> bool
 
-  type ebexp = Coq__3.ebexp
+  type ebexp = DSLRaw.ebexp
 
   val etrue : ebexp
 
@@ -4096,9 +4492,9 @@ module DSL :
 
   val ebexp_eqType : Equality.coq_type
 
-  val ebexp_eqn : Coq__3.ebexp -> Coq__3.ebexp -> bool
+  val ebexp_eqn : DSLRaw.ebexp -> DSLRaw.ebexp -> bool
 
-  type rbexp = Coq__4.rbexp
+  type rbexp = DSLRaw.rbexp
 
   val rtrue : rbexp
 
@@ -4144,7 +4540,7 @@ module DSL :
 
   val rbexp_eqType : Equality.coq_type
 
-  val rbexp_eqn : Coq__4.rbexp -> Coq__4.rbexp -> bool
+  val rbexp_eqn : DSLRaw.rbexp -> DSLRaw.rbexp -> bool
 
   type bexp = ebexp * rbexp
 
@@ -4162,25 +4558,15 @@ module DSL :
 
   val vars_bexp : bexp -> VS.t
 
-  type atom =
-  | Avar of VarOrder.t
-  | Aconst of typ * bits
+  val avar : Equality.sort -> atom
 
-  val atom_rect : (VarOrder.t -> 'a1) -> (typ -> bits -> 'a1) -> atom -> 'a1
+  val aconst : typ -> bits -> atom
 
-  val atom_rec : (VarOrder.t -> 'a1) -> (typ -> bits -> 'a1) -> atom -> 'a1
+  type atom = DSLRaw.atom
 
   val atyp : atom -> TypEnv.TE.env -> typ
 
   val asize : atom -> TypEnv.TE.env -> int
-
-  val atom_eqn : atom -> atom -> bool
-
-  val atom_eqP : atom -> atom -> reflect
-
-  val atom_eqMixin : atom Equality.mixin_of
-
-  val atom_eqType : Equality.coq_type
 
   type instr =
   | Imov of VarOrder.t * atom
@@ -4338,19 +4724,17 @@ module DSL :
 
   val string_of_rcmpop : rcmpop -> char list
 
-  val string_of_eexp : Coq__1.eexp -> char list
+  val string_of_eexp : DSLRaw.eexp -> char list
 
-  val string_of_eexps : char list -> Coq__1.eexp list -> char list
+  val string_of_eexps : char list -> DSLRaw.eexp list -> char list
 
-  val string_of_ebexp : Coq__3.ebexp -> char list
+  val string_of_ebexp : DSLRaw.ebexp -> char list
 
-  val string_of_rexp : Coq__2.rexp -> char list
+  val string_of_rexp : DSLRaw.rexp -> char list
 
-  val string_of_rbexp : Coq__4.rbexp -> char list
+  val string_of_rbexp : DSLRaw.rbexp -> char list
 
   val string_of_bexp : bexp -> char list
-
-  val string_of_typ : typ -> char list
 
   val string_of_var_with_typ : (VarOrder.t * typ) -> char list
 
@@ -5129,6 +5513,12 @@ module DSL :
 
   val defsubP : VS.t -> TypEnv.TE.env -> reflect
 
+  val inputs_program_rec : VS.t -> program -> VS.t
+
+  val inputs_program : program -> VS.t
+
+  val is_nondet : instr -> bool
+
   val is_assume : instr -> bool
 
   val force_conform_vars :
@@ -5385,6 +5775,677 @@ module DSL :
 
   module MA :
    sig
+    module MA :
+     sig
+      module VSLemmas :
+       sig
+        module F :
+         sig
+          val eqb : Equality.sort -> Equality.sort -> bool
+         end
+
+        module OP :
+         sig
+          module ME :
+           sig
+            module TO :
+             sig
+              type t = Equality.sort
+             end
+
+            module IsTO :
+             sig
+             end
+
+            module OrderTac :
+             sig
+             end
+
+            val eq_dec : Equality.sort -> Equality.sort -> bool
+
+            val lt_dec : Equality.sort -> Equality.sort -> bool
+
+            val eqb : Equality.sort -> Equality.sort -> bool
+           end
+
+          module P :
+           sig
+            module Dec :
+             sig
+              module F :
+               sig
+                val eqb : Equality.sort -> Equality.sort -> bool
+               end
+
+              module FSetLogicalFacts :
+               sig
+               end
+
+              module FSetDecideAuxiliary :
+               sig
+               end
+
+              module FSetDecideTestCases :
+               sig
+               end
+             end
+
+            module FM :
+             sig
+              val eqb : Equality.sort -> Equality.sort -> bool
+             end
+
+            val coq_In_dec : VS.elt -> VS.t -> bool
+
+            val of_list : VS.elt list -> VS.t
+
+            val to_list : VS.t -> VS.elt list
+
+            val fold_rec :
+              (VS.elt -> 'a1 -> 'a1) -> 'a1 -> VS.t -> (VS.t -> __ -> 'a2) ->
+              (VS.elt -> 'a1 -> VS.t -> VS.t -> __ -> __ -> __ -> 'a2 -> 'a2)
+              -> 'a2
+
+            val fold_rec_bis :
+              (VS.elt -> 'a1 -> 'a1) -> 'a1 -> VS.t -> (VS.t -> VS.t -> 'a1
+              -> __ -> 'a2 -> 'a2) -> 'a2 -> (VS.elt -> 'a1 -> VS.t -> __ ->
+              __ -> 'a2 -> 'a2) -> 'a2
+
+            val fold_rec_nodep :
+              (VS.elt -> 'a1 -> 'a1) -> 'a1 -> VS.t -> 'a2 -> (VS.elt -> 'a1
+              -> __ -> 'a2 -> 'a2) -> 'a2
+
+            val fold_rec_weak :
+              (VS.elt -> 'a1 -> 'a1) -> 'a1 -> (VS.t -> VS.t -> 'a1 -> __ ->
+              'a2 -> 'a2) -> 'a2 -> (VS.elt -> 'a1 -> VS.t -> __ -> 'a2 ->
+              'a2) -> VS.t -> 'a2
+
+            val fold_rel :
+              (VS.elt -> 'a1 -> 'a1) -> (VS.elt -> 'a2 -> 'a2) -> 'a1 -> 'a2
+              -> VS.t -> 'a3 -> (VS.elt -> 'a1 -> 'a2 -> __ -> 'a3 -> 'a3) ->
+              'a3
+
+            val set_induction :
+              (VS.t -> __ -> 'a1) -> (VS.t -> VS.t -> 'a1 -> VS.elt -> __ ->
+              __ -> 'a1) -> VS.t -> 'a1
+
+            val set_induction_bis :
+              (VS.t -> VS.t -> __ -> 'a1 -> 'a1) -> 'a1 -> (VS.elt -> VS.t ->
+              __ -> 'a1 -> 'a1) -> VS.t -> 'a1
+
+            val cardinal_inv_2 : VS.t -> int -> VS.elt
+
+            val cardinal_inv_2b : VS.t -> VS.elt
+           end
+
+          val gtb : Equality.sort -> Equality.sort -> bool
+
+          val leb : Equality.sort -> Equality.sort -> bool
+
+          val elements_lt : Equality.sort -> VS.t -> Equality.sort list
+
+          val elements_ge : Equality.sort -> VS.t -> Equality.sort list
+
+          val set_induction_max :
+            (VS.t -> __ -> 'a1) -> (VS.t -> VS.t -> 'a1 -> Equality.sort ->
+            __ -> __ -> 'a1) -> VS.t -> 'a1
+
+          val set_induction_min :
+            (VS.t -> __ -> 'a1) -> (VS.t -> VS.t -> 'a1 -> Equality.sort ->
+            __ -> __ -> 'a1) -> VS.t -> 'a1
+         end
+
+        val eqb : Equality.sort -> Equality.sort -> bool
+
+        module ME :
+         sig
+          module TO :
+           sig
+            type t = Equality.sort
+           end
+
+          module IsTO :
+           sig
+           end
+
+          module OrderTac :
+           sig
+           end
+
+          val eq_dec : Equality.sort -> Equality.sort -> bool
+
+          val lt_dec : Equality.sort -> Equality.sort -> bool
+
+          val eqb : Equality.sort -> Equality.sort -> bool
+         end
+
+        module P :
+         sig
+          module Dec :
+           sig
+            module F :
+             sig
+              val eqb : Equality.sort -> Equality.sort -> bool
+             end
+
+            module FSetLogicalFacts :
+             sig
+             end
+
+            module FSetDecideAuxiliary :
+             sig
+             end
+
+            module FSetDecideTestCases :
+             sig
+             end
+           end
+
+          module FM :
+           sig
+            val eqb : Equality.sort -> Equality.sort -> bool
+           end
+
+          val coq_In_dec : VS.elt -> VS.t -> bool
+
+          val of_list : VS.elt list -> VS.t
+
+          val to_list : VS.t -> VS.elt list
+
+          val fold_rec :
+            (VS.elt -> 'a1 -> 'a1) -> 'a1 -> VS.t -> (VS.t -> __ -> 'a2) ->
+            (VS.elt -> 'a1 -> VS.t -> VS.t -> __ -> __ -> __ -> 'a2 -> 'a2)
+            -> 'a2
+
+          val fold_rec_bis :
+            (VS.elt -> 'a1 -> 'a1) -> 'a1 -> VS.t -> (VS.t -> VS.t -> 'a1 ->
+            __ -> 'a2 -> 'a2) -> 'a2 -> (VS.elt -> 'a1 -> VS.t -> __ -> __ ->
+            'a2 -> 'a2) -> 'a2
+
+          val fold_rec_nodep :
+            (VS.elt -> 'a1 -> 'a1) -> 'a1 -> VS.t -> 'a2 -> (VS.elt -> 'a1 ->
+            __ -> 'a2 -> 'a2) -> 'a2
+
+          val fold_rec_weak :
+            (VS.elt -> 'a1 -> 'a1) -> 'a1 -> (VS.t -> VS.t -> 'a1 -> __ ->
+            'a2 -> 'a2) -> 'a2 -> (VS.elt -> 'a1 -> VS.t -> __ -> 'a2 -> 'a2)
+            -> VS.t -> 'a2
+
+          val fold_rel :
+            (VS.elt -> 'a1 -> 'a1) -> (VS.elt -> 'a2 -> 'a2) -> 'a1 -> 'a2 ->
+            VS.t -> 'a3 -> (VS.elt -> 'a1 -> 'a2 -> __ -> 'a3 -> 'a3) -> 'a3
+
+          val set_induction :
+            (VS.t -> __ -> 'a1) -> (VS.t -> VS.t -> 'a1 -> VS.elt -> __ -> __
+            -> 'a1) -> VS.t -> 'a1
+
+          val set_induction_bis :
+            (VS.t -> VS.t -> __ -> 'a1 -> 'a1) -> 'a1 -> (VS.elt -> VS.t ->
+            __ -> 'a1 -> 'a1) -> VS.t -> 'a1
+
+          val cardinal_inv_2 : VS.t -> int -> VS.elt
+
+          val cardinal_inv_2b : VS.t -> VS.elt
+         end
+
+        val gtb : Equality.sort -> Equality.sort -> bool
+
+        val leb : Equality.sort -> Equality.sort -> bool
+
+        val elements_lt : Equality.sort -> VS.t -> Equality.sort list
+
+        val elements_ge : Equality.sort -> VS.t -> Equality.sort list
+
+        val set_induction_max :
+          (VS.t -> __ -> 'a1) -> (VS.t -> VS.t -> 'a1 -> Equality.sort -> __
+          -> __ -> 'a1) -> VS.t -> 'a1
+
+        val set_induction_min :
+          (VS.t -> __ -> 'a1) -> (VS.t -> VS.t -> 'a1 -> Equality.sort -> __
+          -> __ -> 'a1) -> VS.t -> 'a1
+
+        val memP : VS.elt -> VS.t -> reflect
+
+        val equalP : VS.t -> VS.t -> reflect
+
+        val subsetP : VS.t -> VS.t -> reflect
+
+        val emptyP : VS.t -> reflect
+
+        val disjoint : VS.t -> VS.t -> bool
+
+        val proper_subset : VS.t -> VS.t -> bool
+       end
+
+      module VMLemmas :
+       sig
+        module F :
+         sig
+          val eqb : Equality.sort -> Equality.sort -> bool
+
+          val coq_In_dec : 'a1 TypEnv.TE.t -> TypEnv.TE.key -> bool
+         end
+
+        module OP :
+         sig
+          module ME :
+           sig
+            module TO :
+             sig
+              type t = Equality.sort
+             end
+
+            module IsTO :
+             sig
+             end
+
+            module OrderTac :
+             sig
+             end
+
+            val eq_dec : Equality.sort -> Equality.sort -> bool
+
+            val lt_dec : Equality.sort -> Equality.sort -> bool
+
+            val eqb : Equality.sort -> Equality.sort -> bool
+           end
+
+          module O :
+           sig
+            module MO :
+             sig
+              module TO :
+               sig
+                type t = Equality.sort
+               end
+
+              module IsTO :
+               sig
+               end
+
+              module OrderTac :
+               sig
+               end
+
+              val eq_dec : Equality.sort -> Equality.sort -> bool
+
+              val lt_dec : Equality.sort -> Equality.sort -> bool
+
+              val eqb : Equality.sort -> Equality.sort -> bool
+             end
+           end
+
+          module P :
+           sig
+            module F :
+             sig
+              val eqb : Equality.sort -> Equality.sort -> bool
+
+              val coq_In_dec : 'a1 TypEnv.TE.t -> TypEnv.TE.key -> bool
+             end
+
+            val uncurry : ('a1 -> 'a2 -> 'a3) -> ('a1 * 'a2) -> 'a3
+
+            val of_list : (TypEnv.TE.key * 'a1) list -> 'a1 TypEnv.TE.t
+
+            val to_list : 'a1 TypEnv.TE.t -> (TypEnv.TE.key * 'a1) list
+
+            val fold_rec :
+              (TypEnv.TE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1 TypEnv.TE.t
+              -> ('a1 TypEnv.TE.t -> __ -> 'a3) -> (TypEnv.TE.key -> 'a1 ->
+              'a2 -> 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t -> __ -> __ -> __ ->
+              'a3 -> 'a3) -> 'a3
+
+            val fold_rec_bis :
+              (TypEnv.TE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1 TypEnv.TE.t
+              -> ('a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t -> 'a2 -> __ -> 'a3 ->
+              'a3) -> 'a3 -> (TypEnv.TE.key -> 'a1 -> 'a2 -> 'a1 TypEnv.TE.t
+              -> __ -> __ -> 'a3 -> 'a3) -> 'a3
+
+            val fold_rec_nodep :
+              (TypEnv.TE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1 TypEnv.TE.t
+              -> 'a3 -> (TypEnv.TE.key -> 'a1 -> 'a2 -> __ -> 'a3 -> 'a3) ->
+              'a3
+
+            val fold_rec_weak :
+              (TypEnv.TE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> ('a1 TypEnv.TE.t
+              -> 'a1 TypEnv.TE.t -> 'a2 -> __ -> 'a3 -> 'a3) -> 'a3 ->
+              (TypEnv.TE.key -> 'a1 -> 'a2 -> 'a1 TypEnv.TE.t -> __ -> 'a3 ->
+              'a3) -> 'a1 TypEnv.TE.t -> 'a3
+
+            val fold_rel :
+              (TypEnv.TE.key -> 'a1 -> 'a2 -> 'a2) -> (TypEnv.TE.key -> 'a1
+              -> 'a3 -> 'a3) -> 'a2 -> 'a3 -> 'a1 TypEnv.TE.t -> 'a4 ->
+              (TypEnv.TE.key -> 'a1 -> 'a2 -> 'a3 -> __ -> 'a4 -> 'a4) -> 'a4
+
+            val map_induction :
+              ('a1 TypEnv.TE.t -> __ -> 'a2) -> ('a1 TypEnv.TE.t -> 'a1
+              TypEnv.TE.t -> 'a2 -> TypEnv.TE.key -> 'a1 -> __ -> __ -> 'a2)
+              -> 'a1 TypEnv.TE.t -> 'a2
+
+            val map_induction_bis :
+              ('a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t -> __ -> 'a2 -> 'a2) -> 'a2
+              -> (TypEnv.TE.key -> 'a1 -> 'a1 TypEnv.TE.t -> __ -> 'a2 ->
+              'a2) -> 'a1 TypEnv.TE.t -> 'a2
+
+            val cardinal_inv_2 :
+              'a1 TypEnv.TE.t -> int -> (TypEnv.TE.key * 'a1)
+
+            val cardinal_inv_2b : 'a1 TypEnv.TE.t -> (TypEnv.TE.key * 'a1)
+
+            val filter :
+              (TypEnv.TE.key -> 'a1 -> bool) -> 'a1 TypEnv.TE.t -> 'a1
+              TypEnv.TE.t
+
+            val for_all :
+              (TypEnv.TE.key -> 'a1 -> bool) -> 'a1 TypEnv.TE.t -> bool
+
+            val exists_ :
+              (TypEnv.TE.key -> 'a1 -> bool) -> 'a1 TypEnv.TE.t -> bool
+
+            val partition :
+              (TypEnv.TE.key -> 'a1 -> bool) -> 'a1 TypEnv.TE.t -> 'a1
+              TypEnv.TE.t * 'a1 TypEnv.TE.t
+
+            val update : 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t
+
+            val restrict :
+              'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t
+
+            val diff : 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t
+
+            val coq_Partition_In :
+              'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t ->
+              TypEnv.TE.key -> bool
+
+            val update_dec :
+              'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t -> TypEnv.TE.key -> 'a1 ->
+              bool
+
+            val filter_dom :
+              (TypEnv.TE.key -> bool) -> 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t
+
+            val filter_range :
+              ('a1 -> bool) -> 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t
+
+            val for_all_dom :
+              (TypEnv.TE.key -> bool) -> 'a1 TypEnv.TE.t -> bool
+
+            val for_all_range : ('a1 -> bool) -> 'a1 TypEnv.TE.t -> bool
+
+            val exists_dom :
+              (TypEnv.TE.key -> bool) -> 'a1 TypEnv.TE.t -> bool
+
+            val exists_range : ('a1 -> bool) -> 'a1 TypEnv.TE.t -> bool
+
+            val partition_dom :
+              (TypEnv.TE.key -> bool) -> 'a1 TypEnv.TE.t -> 'a1
+              TypEnv.TE.t * 'a1 TypEnv.TE.t
+
+            val partition_range :
+              ('a1 -> bool) -> 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t * 'a1
+              TypEnv.TE.t
+           end
+
+          val gtb : (TypEnv.TE.key * 'a1) -> (TypEnv.TE.key * 'a1) -> bool
+
+          val leb : (TypEnv.TE.key * 'a1) -> (TypEnv.TE.key * 'a1) -> bool
+
+          val elements_lt :
+            (TypEnv.TE.key * 'a1) -> 'a1 TypEnv.TE.t -> (TypEnv.TE.key * 'a1)
+            list
+
+          val elements_ge :
+            (TypEnv.TE.key * 'a1) -> 'a1 TypEnv.TE.t -> (TypEnv.TE.key * 'a1)
+            list
+
+          val max_elt_aux :
+            (TypEnv.TE.key * 'a1) list -> (TypEnv.TE.key * 'a1) option
+
+          val max_elt : 'a1 TypEnv.TE.t -> (TypEnv.TE.key * 'a1) option
+
+          val min_elt : 'a1 TypEnv.TE.t -> (TypEnv.TE.key * 'a1) option
+
+          val map_induction_max :
+            ('a1 TypEnv.TE.t -> __ -> 'a2) -> ('a1 TypEnv.TE.t -> 'a1
+            TypEnv.TE.t -> 'a2 -> Equality.sort -> 'a1 -> __ -> __ -> 'a2) ->
+            'a1 TypEnv.TE.t -> 'a2
+
+          val map_induction_min :
+            ('a1 TypEnv.TE.t -> __ -> 'a2) -> ('a1 TypEnv.TE.t -> 'a1
+            TypEnv.TE.t -> 'a2 -> Equality.sort -> 'a1 -> __ -> __ -> 'a2) ->
+            'a1 TypEnv.TE.t -> 'a2
+         end
+
+        val eqb : Equality.sort -> Equality.sort -> bool
+
+        val coq_In_dec : 'a1 TypEnv.TE.t -> TypEnv.TE.key -> bool
+
+        module ME :
+         sig
+          module TO :
+           sig
+            type t = Equality.sort
+           end
+
+          module IsTO :
+           sig
+           end
+
+          module OrderTac :
+           sig
+           end
+
+          val eq_dec : Equality.sort -> Equality.sort -> bool
+
+          val lt_dec : Equality.sort -> Equality.sort -> bool
+
+          val eqb : Equality.sort -> Equality.sort -> bool
+         end
+
+        module O :
+         sig
+          module MO :
+           sig
+            module TO :
+             sig
+              type t = Equality.sort
+             end
+
+            module IsTO :
+             sig
+             end
+
+            module OrderTac :
+             sig
+             end
+
+            val eq_dec : Equality.sort -> Equality.sort -> bool
+
+            val lt_dec : Equality.sort -> Equality.sort -> bool
+
+            val eqb : Equality.sort -> Equality.sort -> bool
+           end
+         end
+
+        module P :
+         sig
+          module F :
+           sig
+            val eqb : Equality.sort -> Equality.sort -> bool
+
+            val coq_In_dec : 'a1 TypEnv.TE.t -> TypEnv.TE.key -> bool
+           end
+
+          val uncurry : ('a1 -> 'a2 -> 'a3) -> ('a1 * 'a2) -> 'a3
+
+          val of_list : (TypEnv.TE.key * 'a1) list -> 'a1 TypEnv.TE.t
+
+          val to_list : 'a1 TypEnv.TE.t -> (TypEnv.TE.key * 'a1) list
+
+          val fold_rec :
+            (TypEnv.TE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1 TypEnv.TE.t ->
+            ('a1 TypEnv.TE.t -> __ -> 'a3) -> (TypEnv.TE.key -> 'a1 -> 'a2 ->
+            'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t -> __ -> __ -> __ -> 'a3 ->
+            'a3) -> 'a3
+
+          val fold_rec_bis :
+            (TypEnv.TE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1 TypEnv.TE.t ->
+            ('a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t -> 'a2 -> __ -> 'a3 -> 'a3)
+            -> 'a3 -> (TypEnv.TE.key -> 'a1 -> 'a2 -> 'a1 TypEnv.TE.t -> __
+            -> __ -> 'a3 -> 'a3) -> 'a3
+
+          val fold_rec_nodep :
+            (TypEnv.TE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1 TypEnv.TE.t ->
+            'a3 -> (TypEnv.TE.key -> 'a1 -> 'a2 -> __ -> 'a3 -> 'a3) -> 'a3
+
+          val fold_rec_weak :
+            (TypEnv.TE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> ('a1 TypEnv.TE.t
+            -> 'a1 TypEnv.TE.t -> 'a2 -> __ -> 'a3 -> 'a3) -> 'a3 ->
+            (TypEnv.TE.key -> 'a1 -> 'a2 -> 'a1 TypEnv.TE.t -> __ -> 'a3 ->
+            'a3) -> 'a1 TypEnv.TE.t -> 'a3
+
+          val fold_rel :
+            (TypEnv.TE.key -> 'a1 -> 'a2 -> 'a2) -> (TypEnv.TE.key -> 'a1 ->
+            'a3 -> 'a3) -> 'a2 -> 'a3 -> 'a1 TypEnv.TE.t -> 'a4 ->
+            (TypEnv.TE.key -> 'a1 -> 'a2 -> 'a3 -> __ -> 'a4 -> 'a4) -> 'a4
+
+          val map_induction :
+            ('a1 TypEnv.TE.t -> __ -> 'a2) -> ('a1 TypEnv.TE.t -> 'a1
+            TypEnv.TE.t -> 'a2 -> TypEnv.TE.key -> 'a1 -> __ -> __ -> 'a2) ->
+            'a1 TypEnv.TE.t -> 'a2
+
+          val map_induction_bis :
+            ('a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t -> __ -> 'a2 -> 'a2) -> 'a2
+            -> (TypEnv.TE.key -> 'a1 -> 'a1 TypEnv.TE.t -> __ -> 'a2 -> 'a2)
+            -> 'a1 TypEnv.TE.t -> 'a2
+
+          val cardinal_inv_2 : 'a1 TypEnv.TE.t -> int -> (TypEnv.TE.key * 'a1)
+
+          val cardinal_inv_2b : 'a1 TypEnv.TE.t -> (TypEnv.TE.key * 'a1)
+
+          val filter :
+            (TypEnv.TE.key -> 'a1 -> bool) -> 'a1 TypEnv.TE.t -> 'a1
+            TypEnv.TE.t
+
+          val for_all :
+            (TypEnv.TE.key -> 'a1 -> bool) -> 'a1 TypEnv.TE.t -> bool
+
+          val exists_ :
+            (TypEnv.TE.key -> 'a1 -> bool) -> 'a1 TypEnv.TE.t -> bool
+
+          val partition :
+            (TypEnv.TE.key -> 'a1 -> bool) -> 'a1 TypEnv.TE.t -> 'a1
+            TypEnv.TE.t * 'a1 TypEnv.TE.t
+
+          val update : 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t
+
+          val restrict : 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t
+
+          val diff : 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t
+
+          val coq_Partition_In :
+            'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t ->
+            TypEnv.TE.key -> bool
+
+          val update_dec :
+            'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t -> TypEnv.TE.key -> 'a1 -> bool
+
+          val filter_dom :
+            (TypEnv.TE.key -> bool) -> 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t
+
+          val filter_range :
+            ('a1 -> bool) -> 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t
+
+          val for_all_dom : (TypEnv.TE.key -> bool) -> 'a1 TypEnv.TE.t -> bool
+
+          val for_all_range : ('a1 -> bool) -> 'a1 TypEnv.TE.t -> bool
+
+          val exists_dom : (TypEnv.TE.key -> bool) -> 'a1 TypEnv.TE.t -> bool
+
+          val exists_range : ('a1 -> bool) -> 'a1 TypEnv.TE.t -> bool
+
+          val partition_dom :
+            (TypEnv.TE.key -> bool) -> 'a1 TypEnv.TE.t -> 'a1
+            TypEnv.TE.t * 'a1 TypEnv.TE.t
+
+          val partition_range :
+            ('a1 -> bool) -> 'a1 TypEnv.TE.t -> 'a1 TypEnv.TE.t * 'a1
+            TypEnv.TE.t
+         end
+
+        val gtb : (TypEnv.TE.key * 'a1) -> (TypEnv.TE.key * 'a1) -> bool
+
+        val leb : (TypEnv.TE.key * 'a1) -> (TypEnv.TE.key * 'a1) -> bool
+
+        val elements_lt :
+          (TypEnv.TE.key * 'a1) -> 'a1 TypEnv.TE.t -> (TypEnv.TE.key * 'a1)
+          list
+
+        val elements_ge :
+          (TypEnv.TE.key * 'a1) -> 'a1 TypEnv.TE.t -> (TypEnv.TE.key * 'a1)
+          list
+
+        val max_elt_aux :
+          (TypEnv.TE.key * 'a1) list -> (TypEnv.TE.key * 'a1) option
+
+        val max_elt : 'a1 TypEnv.TE.t -> (TypEnv.TE.key * 'a1) option
+
+        val min_elt : 'a1 TypEnv.TE.t -> (TypEnv.TE.key * 'a1) option
+
+        val map_induction_max :
+          ('a1 TypEnv.TE.t -> __ -> 'a2) -> ('a1 TypEnv.TE.t -> 'a1
+          TypEnv.TE.t -> 'a2 -> Equality.sort -> 'a1 -> __ -> __ -> 'a2) ->
+          'a1 TypEnv.TE.t -> 'a2
+
+        val map_induction_min :
+          ('a1 TypEnv.TE.t -> __ -> 'a2) -> ('a1 TypEnv.TE.t -> 'a1
+          TypEnv.TE.t -> 'a2 -> Equality.sort -> 'a1 -> __ -> __ -> 'a2) ->
+          'a1 TypEnv.TE.t -> 'a2
+
+        val memP : TypEnv.TE.key -> 'a1 TypEnv.TE.t -> reflect
+
+        val split :
+          ('a1 * 'a2) TypEnv.TE.t -> 'a1 TypEnv.TE.t * 'a2 TypEnv.TE.t
+
+        module EFacts :
+         sig
+          module TO :
+           sig
+            type t = Equality.sort
+           end
+
+          module IsTO :
+           sig
+           end
+
+          module OrderTac :
+           sig
+           end
+
+          val eq_dec : Equality.sort -> Equality.sort -> bool
+
+          val lt_dec : Equality.sort -> Equality.sort -> bool
+
+          val eqb : Equality.sort -> Equality.sort -> bool
+         end
+
+        val max_opt : TypEnv.TE.key -> TypEnv.TE.key option -> TypEnv.TE.key
+
+        val max_key_elements :
+          (TypEnv.TE.key * 'a1) list -> TypEnv.TE.key option
+
+        val max_key : 'a1 TypEnv.TE.t -> TypEnv.TE.key option
+
+        val min_opt : TypEnv.TE.key -> TypEnv.TE.key option -> TypEnv.TE.key
+
+        val min_key_elements :
+          (TypEnv.TE.key * 'a1) list -> TypEnv.TE.key option
+
+        val min_key : 'a1 TypEnv.TE.t -> TypEnv.TE.key option
+       end
+     end
+
     module VSLemmas :
      sig
       module F :
@@ -6046,7 +7107,7 @@ module DSL :
 
   val depvars_rexp : VS.t -> rexp -> VS.t
 
-  val depvars_rbexp : VS.t -> Coq__4.rbexp -> VS.t
+  val depvars_rbexp : VS.t -> DSLRaw.rbexp -> VS.t
 
   val depvars_einstr : options -> VS.t -> instr -> VS.t
 
@@ -6059,7 +7120,7 @@ module DSL :
   val depvars_epre_eprogram : options -> VS.t -> ebexp -> instr list -> VS.t
 
   val depvars_rpre_rprogram :
-    options -> VS.t -> Coq__4.rbexp -> instr list -> VS.t
+    options -> VS.t -> DSLRaw.rbexp -> instr list -> VS.t
 
   val evsize : ebexp -> program -> VS.t -> int
 
@@ -6135,9 +7196,9 @@ module DSL :
     options -> rbexp -> program -> VS.t -> VS.t ->
     coq_R_depvars_rpre_rprogram_sat
 
-  val slice_ebexp : VS.t -> Coq__3.ebexp -> Coq__3.ebexp
+  val slice_ebexp : VS.t -> DSLRaw.ebexp -> DSLRaw.ebexp
 
-  val slice_rbexp : VS.t -> Coq__4.rbexp -> Coq__4.rbexp
+  val slice_rbexp : VS.t -> DSLRaw.rbexp -> DSLRaw.rbexp
 
   val slice_einstr : VS.t -> instr -> instr option
 

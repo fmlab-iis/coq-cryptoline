@@ -106,23 +106,23 @@ let string_of_coq_var v = let (n, m) = Obj.magic v in
 
 let string_of_coq_const n = Z.to_string (z_of_coq_z n)
 
-let string_of_coq_eunop (op : DSL.eunop) =
+let string_of_coq_eunop (op : DSLRaw.eunop) =
   match op with
-  | DSL.Eneg -> "-"
+  | DSLRaw.Eneg -> "-"
 
-let string_of_coq_ebinop (op : DSL.ebinop) =
+let string_of_coq_ebinop (op : DSLRaw.ebinop) =
   match op with
-  | DSL.Eadd -> "+"
-  | DSL.Esub -> "-"
-  | DSL.Emul -> "*"
+  | DSLRaw.Eadd -> "+"
+  | DSLRaw.Esub -> "-"
+  | DSLRaw.Emul -> "*"
 
 let rec string_of_coq_eexp (e : SSA.SSA.eexp) =
   match e with
-  | DSL.Evar v -> string_of_coq_var v
-  | DSL.Econst n ->string_of_coq_const n
-  | DSL.Eunop (op, e) -> Printf.sprintf "%s %s" (string_of_coq_eunop op) (string_of_coq_eexp' e)
-  | DSL.Ebinop (op, e1, e2) -> Printf.sprintf "%s %s %s" (string_of_coq_eexp' e1) (string_of_coq_ebinop op) (string_of_coq_eexp' e2)
-  | DSL.Epow (e, n) -> Printf.sprintf "%s ^ %s" (string_of_coq_eexp' e) (Z.to_string (z_of_coq_n n))
+  | DSLRaw.Evar v -> string_of_coq_var v
+  | DSLRaw.Econst n ->string_of_coq_const n
+  | DSLRaw.Eunop (op, e) -> Printf.sprintf "%s %s" (string_of_coq_eunop op) (string_of_coq_eexp' e)
+  | DSLRaw.Ebinop (op, e1, e2) -> Printf.sprintf "%s %s %s" (string_of_coq_eexp' e1) (string_of_coq_ebinop op) (string_of_coq_eexp' e2)
+  | DSLRaw.Epow (e, n) -> Printf.sprintf "%s ^ %s" (string_of_coq_eexp' e) (Z.to_string (z_of_coq_n n))
 and string_of_coq_eexp' e =
   if is_coq_eexp_atomic e then Printf.sprintf ("%s") (string_of_coq_eexp e)
   else Printf.sprintf ("(%s)") (string_of_coq_eexp e)
@@ -236,7 +236,7 @@ let run_sat_solver ?log:(logfile=(!logfile)) ifile ofile errfile dratfile =
     let _ = trace_file ~log:logfile ofile in
     let _ = trace_file ~log:logfile errfile in
     () in
-  res = Unix.WEXITED 0
+  res = (Unix.WEXITED 0)
 
 let run_sat_certifier ifile dratfile =
   let res =
@@ -381,7 +381,7 @@ let run_sat_solver_lwt header ifile ofile errfile dratfile =
   in
   let%lwt res = Options.WithLwt.unix cmd in
   let t2 = Unix.gettimeofday() in
-  let%lwt _ = Options.WithLwt.lock_log () in
+  let%lwt _ = Options.WithLwt.log_lock () in
   let%lwt _ = Lwt_list.iter_s (fun h ->
                   let%lwt _ = Options.WithLwt.trace h in
                   Lwt.return_unit) header in
@@ -391,7 +391,7 @@ let run_sat_solver_lwt header ifile ofile errfile dratfile =
   let%lwt _ = Options.WithLwt.trace_file ofile in
   let%lwt _ = Options.WithLwt.trace_file errfile in
   let%lwt _ = Options.WithLwt.trace "" in
-  let%lwt _ = Lwt.return (Options.WithLwt.unlock_log ()) in
+  let%lwt _ = Lwt.return (Options.WithLwt.log_unlock ()) in
   Lwt.return (res = Unix.WEXITED 0)
 
 let run_sat_certifier_lwt ifile dratfile =
@@ -797,7 +797,7 @@ let coq_term_of_string str =
     raise (ParseError (msg ^ " " ^ "Failed to parse term: " ^ str ^ "."))
 
 let run_singular ifile ofile =
-  let _ = unix (!singular_path ^ " -q " ^ !Options.Std.algebra_args ^ " " ^ ifile ^ " 1> " ^ ofile ^ " 2>&1") in
+  let _ = unix (!singular_path ^ " -q " ^ !Options.Std.algebra_solver_args ^ " " ^ ifile ^ " 1> " ^ ofile ^ " 2>&1") in
   let _ =
     trace "OUTPUT FROM SINGULAR:";
     trace_file ofile;
@@ -976,9 +976,9 @@ let write_header_to_log header =
 let run_singular_lwt header ifile ofile =
   let t1 = Unix.gettimeofday() in
   let%lwt _ =
-    Options.WithLwt.unix (!singular_path ^ " -q " ^ !Options.Std.algebra_args ^ " \"" ^ ifile ^ "\" 1> \"" ^ ofile ^ "\" 2>&1") in
+    Options.WithLwt.unix (!singular_path ^ " -q " ^ !Options.Std.algebra_solver_args ^ " \"" ^ ifile ^ "\" 1> \"" ^ ofile ^ "\" 2>&1") in
   let t2 = Unix.gettimeofday() in
-  let%lwt _ = Options.WithLwt.lock_log () in
+  let%lwt _ = Options.WithLwt.log_lock () in
   let%lwt _ = write_header_to_log header in
   let%lwt _ = Options.WithLwt.trace "INPUT TO SINGULAR:" in
   let%lwt _ = Options.WithLwt.trace_file ifile in
@@ -987,7 +987,7 @@ let run_singular_lwt header ifile ofile =
   let%lwt _ = Options.WithLwt.trace "OUTPUT FROM SINGULAR:" in
   let%lwt _ = Options.WithLwt.trace_file ofile in
   let%lwt _ = Options.WithLwt.trace "" in
-  let _ = Options.WithLwt.unlock_log () in
+  let _ = Options.WithLwt.log_unlock () in
   Lwt.return_unit
 
 let coq_compute_coefficients_by_div_lwt header (vars, p, g) =

@@ -1,9 +1,11 @@
 open Bool
 open Datatypes
 open FMaps
+open FSets
 open List0
 open Typ
 open Var
+open Eqtype
 open Ssreflect
 
 type __ = Obj.t
@@ -627,3 +629,15 @@ module MakeTypEnv =
 module TE = MakeTypEnv(VarOrder)(VM)
 
 module SSATE = MakeTypEnv(SSAVarOrder)(SSAVM)
+
+module TypEnvAgree =
+ functor (V:SsrOrder.SsrOrder) ->
+ functor (TE__4:TypEnv with module SE = V) ->
+ functor (VS:SsrFSet with module SE = V) ->
+ struct
+  module MA = MapAgree(V)(TE__4)(VS)
+
+  module VSLemmas = MA.VSLemmas
+
+  module VMLemmas = MA.VMLemmas
+ end

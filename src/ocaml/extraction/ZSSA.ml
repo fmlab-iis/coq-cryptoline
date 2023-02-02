@@ -1,12 +1,13 @@
+open DSLRaw
 
 module ZSSA =
  struct
-  (** val string_of_zexp : DSL.eexp -> char list **)
+  (** val string_of_zexp : eexp -> char list **)
 
   let string_of_zexp =
     SSA.SSA.string_of_eexp
 
-  (** val string_of_zexps : char list -> DSL.eexp list -> char list **)
+  (** val string_of_zexps : char list -> eexp list -> char list **)
 
   let string_of_zexps =
     SSA.SSA.string_of_eexps

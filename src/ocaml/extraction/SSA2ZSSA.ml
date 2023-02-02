@@ -1,6 +1,7 @@
 open BinInt
 open BinNat
 open BinNums
+open DSLRaw
 open Options0
 open Typ
 open Var
@@ -23,8 +24,8 @@ let new_svar vs =
 (** val algred_atom : SSA.SSA.atom -> SSA.SSA.eexp **)
 
 let algred_atom = function
-| SSA.SSA.Avar v -> SSA.SSA.evar v
-| SSA.SSA.Aconst (ty, bs) -> SSA.SSA.econst (SSA.SSA.bv2z ty bs)
+| Avar v -> SSA.SSA.evar v
+| Aconst (ty, bs) -> SSA.SSA.econst (SSA.SSA.bv2z ty bs)
 
 (** val algred_assign : ssavar -> SSA.SSA.eexp -> SSA.SSA.ebexp **)
 
@@ -58,7 +59,7 @@ let carry_constr o c =
 
 (** val algred_cast :
     VarOrder.t -> coq_N -> SSAVarOrder.t -> typ -> SSA.SSA.atom -> typ ->
-    coq_N * DSL.ebexp list **)
+    coq_N * ebexp list **)
 
 let algred_cast avn g v vtyp a atyp0 =
   match vtyp with
@@ -66,7 +67,7 @@ let algred_cast avn g v vtyp a atyp0 =
     (match atyp0 with
      | Tuint wa ->
        if leq wa wv
-       then (g, ((DSL.Eeq ((SSA.SSA.evar v), (algred_atom a))) :: []))
+       then (g, ((Eeq ((SSA.SSA.evar v), (algred_atom a))) :: []))
        else let discarded = (avn, g) in
             let g' = N.succ g in
             (g',
@@ -86,24 +87,24 @@ let algred_cast avn g v vtyp a atyp0 =
     (match atyp0 with
      | Tuint wa ->
        if leq (Pervasives.succ wa) wv
-       then (g, ((DSL.Eeq ((SSA.SSA.evar v), (algred_atom a))) :: []))
+       then (g, ((Eeq ((SSA.SSA.evar v), (algred_atom a))) :: []))
        else let discarded = (avn, g) in
             let g' = N.succ g in
             (g',
             ((algred_split (Obj.magic discarded) v (algred_atom a) wv) :: []))
      | Tsint wa ->
        if leq wa wv
-       then (g, ((DSL.Eeq ((SSA.SSA.evar v), (algred_atom a))) :: []))
+       then (g, ((Eeq ((SSA.SSA.evar v), (algred_atom a))) :: []))
        else let discarded = (avn, g) in
             let g' = N.succ g in
             (g',
             ((algred_split (Obj.magic discarded) v (algred_atom a) wv) :: [])))
 
 (** val algred_vpc :
-    VarOrder.t -> coq_N -> ssavar -> SSA.SSA.atom -> coq_N * DSL.ebexp list **)
+    VarOrder.t -> coq_N -> ssavar -> SSA.SSA.atom -> coq_N * ebexp list **)
 
 let algred_vpc _ g v a =
-  (g, ((DSL.Eeq ((SSA.SSA.evar v), (algred_atom a))) :: []))
+  (g, ((Eeq ((SSA.SSA.evar v), (algred_atom a))) :: []))
 
 (** val algred_instr :
     options -> TypEnv.SSATE.env -> VarOrder.t -> coq_N -> SSA.SSA.instr ->

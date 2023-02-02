@@ -1,6 +1,7 @@
 open BinNat
 open BinNums
 open Bool
+open DSLRaw
 open Datatypes
 open NBitsDef
 open Options0
@@ -59,17 +60,17 @@ let svar x =
 (** val ssa_atom : vmap -> DSL.DSL.atom -> SSA.atom **)
 
 let ssa_atom m = function
-| DSL.DSL.Avar v -> SSA.Avar (ssa_var m (Obj.magic v))
-| DSL.DSL.Aconst (ty, n) -> SSA.Aconst (ty, n)
+| Avar v -> SSA.avar (ssa_var m (Obj.magic v))
+| Aconst (ty, n) -> SSA.aconst ty n
 
 (** val ssa_eexp : vmap -> DSL.DSL.eexp -> SSA.eexp **)
 
 let rec ssa_eexp m = function
-| DSL.Evar v -> SSA.evar (ssa_var m (Obj.magic v))
-| DSL.Econst c -> SSA.econst c
-| DSL.Eunop (op, e0) -> SSA.eunary op (ssa_eexp m e0)
-| DSL.Ebinop (op, e1, e2) -> SSA.ebinary op (ssa_eexp m e1) (ssa_eexp m e2)
-| DSL.Epow (e0, n) -> SSA.epow (ssa_eexp m e0) n
+| Evar v -> SSA.evar (ssa_var m (Obj.magic v))
+| Econst c -> SSA.econst c
+| Eunop (op, e0) -> SSA.eunary op (ssa_eexp m e0)
+| Ebinop (op, e1, e2) -> SSA.ebinary op (ssa_eexp m e1) (ssa_eexp m e2)
+| Epow (e0, n) -> SSA.epow (ssa_eexp m e0) n
 
 (** val ssa_eexps : vmap -> DSL.DSL.eexp list -> SSA.eexp list **)
 
@@ -79,32 +80,31 @@ let ssa_eexps m es =
 (** val ssa_rexp : vmap -> DSL.DSL.rexp -> SSA.rexp **)
 
 let rec ssa_rexp m = function
-| DSL.Rvar v -> SSA.rvar (ssa_var m (Obj.magic v))
-| DSL.Rconst (w, n) -> SSA.rconst w n
-| DSL.Runop (w, op, e0) -> SSA.runary w op (ssa_rexp m e0)
-| DSL.Rbinop (w, op, e1, e2) ->
-  SSA.rbinary w op (ssa_rexp m e1) (ssa_rexp m e2)
-| DSL.Ruext (w, e0, i) -> SSA.ruext w (ssa_rexp m e0) i
-| DSL.Rsext (w, e0, i) -> SSA.rsext w (ssa_rexp m e0) i
+| Rvar v -> SSA.rvar (ssa_var m (Obj.magic v))
+| Rconst (w, n) -> SSA.rconst w n
+| Runop (w, op, e0) -> SSA.runary w op (ssa_rexp m e0)
+| Rbinop (w, op, e1, e2) -> SSA.rbinary w op (ssa_rexp m e1) (ssa_rexp m e2)
+| Ruext (w, e0, i) -> SSA.ruext w (ssa_rexp m e0) i
+| Rsext (w, e0, i) -> SSA.rsext w (ssa_rexp m e0) i
 
 (** val ssa_ebexp : vmap -> DSL.DSL.ebexp -> SSA.ebexp **)
 
 let rec ssa_ebexp m = function
-| DSL.Etrue -> SSA.etrue
-| DSL.Eeq (e1, e2) -> SSA.eeq (ssa_eexp m e1) (ssa_eexp m e2)
-| DSL.Eeqmod (e1, e2, ms) ->
+| Etrue -> SSA.etrue
+| Eeq (e1, e2) -> SSA.eeq (ssa_eexp m e1) (ssa_eexp m e2)
+| Eeqmod (e1, e2, ms) ->
   SSA.eeqmod (ssa_eexp m e1) (ssa_eexp m e2) (ssa_eexps m ms)
-| DSL.Eand (e1, e2) -> SSA.eand (ssa_ebexp m e1) (ssa_ebexp m e2)
+| Eand (e1, e2) -> SSA.eand (ssa_ebexp m e1) (ssa_ebexp m e2)
 
 (** val ssa_rbexp : vmap -> DSL.DSL.rbexp -> SSA.rbexp **)
 
 let rec ssa_rbexp m = function
-| DSL.Rtrue -> SSA.rtrue
-| DSL.Req (w, e1, e2) -> SSA.req w (ssa_rexp m e1) (ssa_rexp m e2)
-| DSL.Rcmp (w, op, e1, e2) -> SSA.rcmp w op (ssa_rexp m e1) (ssa_rexp m e2)
-| DSL.Rneg e0 -> SSA.rneg (ssa_rbexp m e0)
-| DSL.Rand (e1, e2) -> SSA.rand (ssa_rbexp m e1) (ssa_rbexp m e2)
-| DSL.Ror (e1, e2) -> SSA.ror (ssa_rbexp m e1) (ssa_rbexp m e2)
+| Rtrue -> SSA.rtrue
+| Req (w, e1, e2) -> SSA.req w (ssa_rexp m e1) (ssa_rexp m e2)
+| Rcmp (w, op, e1, e2) -> SSA.rcmp w op (ssa_rexp m e1) (ssa_rexp m e2)
+| Rneg e0 -> SSA.rneg (ssa_rbexp m e0)
+| Rand (e1, e2) -> SSA.rand (ssa_rbexp m e1) (ssa_rbexp m e2)
+| Ror (e1, e2) -> SSA.ror (ssa_rbexp m e1) (ssa_rbexp m e2)
 
 (** val ssa_bexp : vmap -> DSL.DSL.bexp -> SSA.ebexp * SSA.rbexp **)
 

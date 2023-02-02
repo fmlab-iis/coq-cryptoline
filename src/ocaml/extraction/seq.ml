@@ -62,6 +62,18 @@ let rec belast x = function
 | [] -> []
 | x' :: s' -> x :: (belast x' s')
 
+(** val filter : 'a1 pred -> 'a1 list -> 'a1 list **)
+
+let rec filter a = function
+| [] -> []
+| x :: s' -> if a x then x :: (filter a s') else filter a s'
+
+(** val has : 'a1 pred -> 'a1 list -> bool **)
+
+let rec has a = function
+| [] -> false
+| x :: s' -> (||) (a x) (has a s')
+
 (** val all : 'a1 pred -> 'a1 list -> bool **)
 
 let rec all a = function

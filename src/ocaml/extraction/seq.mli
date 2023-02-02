@@ -24,6 +24,10 @@ val last : 'a1 -> 'a1 list -> 'a1
 
 val belast : 'a1 -> 'a1 list -> 'a1 list
 
+val filter : 'a1 pred -> 'a1 list -> 'a1 list
+
+val has : 'a1 pred -> 'a1 list -> bool
+
 val all : 'a1 pred -> 'a1 list -> bool
 
 val drop : int -> 'a1 list -> 'a1 list

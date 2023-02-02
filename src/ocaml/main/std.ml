@@ -2,7 +2,6 @@
 open Arg
 open Options.Std
 open Ast.Cryptoline
-open Parsers.Std
 open Extraction.Options0
 
 type action = Verify | Parse | PrintSSA
@@ -15,61 +14,22 @@ let args = [
     ("-disable_vars_cache_in_rewriting", Clear vars_cache_in_rewriting, "\n\t     Disable variables cache in rewriting\n");
     ("-jobs", Int (fun j -> jobs := j),
      "N    Set number of jobs (default = 4)\n");
-    ("-p", Unit (fun () -> action := Parse), "\t     Print the parsed specification\n");
-    ("-v", Set verbose, "\t     Display verbose messages\n")
-  ]@Common.args
-let args = List.sort Pervasives.compare args
+    ("-p", Unit (fun () -> action := Parse), "\t     Print the parsed specification\n")
+  ]@Common.args_parsing@Common.args_io@Common.args_verifier@Common.args_coqcryptoline
+let args = List.sort (fun (argname1, _, _) (argname2, _, _) -> Stdlib.compare argname1 argname2) args
 
 let usage = "Usage: coqcryptoline.exe OPTIONS FILE\n"
 
-let parse_spec file =
-  let t1 = Unix.gettimeofday() in
-  let _ = vprint ("Parsing Cryptoline file:\t\t") in
-  try
-    let spec = spec_from_file file in
-    let t2 = Unix.gettimeofday() in
-    let _ = vprintln ("[OK]\t\t" ^ string_of_running_time t1 t2) in
-    spec
-  with ex ->
-    let t2 = Unix.gettimeofday() in
-    let _ = vprintln ("[FAILED]\t" ^ string_of_running_time t1 t2) in
-    raise ex
-
-let parse_program file =
-  let t1 = Unix.gettimeofday() in
-  let _ = vprint ("Parsing Cryptoline file: ") in
-  try
-    let p = program_from_file file in
-    let t2 = Unix.gettimeofday() in
-    let _ = vprintln ("[OK]\t\t" ^ string_of_running_time t1 t2) in
-    p
-  with ex ->
-    let t2 = Unix.gettimeofday() in
-    let _ = vprintln ("[FAILED]\t" ^ string_of_running_time t1 t2) in
-    raise ex
-
-let check_well_formedness vs s =
-  let t1 = Unix.gettimeofday() in
-  let _ = vprint ("Checking well-formedness:\t\t") in
-  let ropt = illformed_spec_reason vs s in
-  let wf = ropt = None in
-  let t2 = Unix.gettimeofday() in
-  let _ = vprintln ((if wf then "[OK]\t" else "[FAILED]") ^ "\t" ^ string_of_running_time t1 t2) in
-  let _ =
-    match ropt with
-    | Some (IllPrecondition e, r) -> vprintln("Ill-formed precondition: " ^ string_of_bexp e ^ ".\nReason: " ^ r)
-    | Some (IllInstruction i, r) -> vprintln("Ill-formed instruction: " ^ string_of_instr i ^ ".\nReason: " ^ r)
-    | Some (IllPostcondition e, r) -> vprintln("Ill-formed postcondition: " ^ string_of_bexp e ^ ".\nReason: " ^ r)
-    | _ -> () in
-  wf
+let parse_and_check file =
+  let (vs, s) = Common.parse_and_check file in
+  let vs = VS.of_list vs in
+  let coq_spec = Translator.Visitor.visit_spec vs s in
+  if Extraction.DSLFull.DSLFull.well_formed_spec coq_spec then (vs, s, coq_spec)
+  else failwith ("The program is not well-formed.")
 
 let anon file =
+  let _ = print_endline ("Input: " ^ file) in
   let string_of_inputs vs = String.concat ", " (List.map (fun v -> string_of_typ v.vtyp ^ " " ^ string_of_var v) (VS.elements vs)) in
-  let parse_and_check file =
-    let (vs, s) = parse_spec file in
-    let coq_spec = Translator.Visitor.visit_spec vs s in
-     if Extraction.DSL.DSL.well_formed_spec coq_spec then (vs, s, coq_spec)
-     else failwith ("The program is not well-formed.") in
   let t1 = Unix.gettimeofday() in
   let _ = Random.self_init() in
   match !action with
@@ -85,7 +45,7 @@ let anon file =
                 apply_slicing_rspec = !apply_slicing_rspec;
                 apply_slicing_assume = !apply_slicing_assume }
       in
-	  let res = Extraction.Verify.verify_dsl o coq_spec in
+	  let res = Extraction.VerifyFull.verify_fulldsl o coq_spec in
       let t2 = Unix.gettimeofday() in
       let _ = print_endline ("Verification result:\t\t\t"
                              ^ (if res then "[OK]\t" else "[FAILED]") ^ "\t"

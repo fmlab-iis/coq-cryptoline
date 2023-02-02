@@ -13,82 +13,74 @@
               "const"                      , CONST;
               "assign"                     , MOV;
               "mov"                        , MOV;
+              "broadcast"                  , BROADCAST;
               "add"                        , ADD;
               "adds"                       , ADDS;
-              "addr"                       , ADDR;
               "adc"                        , ADC;
               "adcs"                       , ADCS;
-              "adcr"                       , ADCR;
               "sub"                        , SUB;
               "subs"                       , SUBC;
               "subc"                       , SUBC;
               "subb"                       , SUBB;
-              "subr"                       , SUBR;
               "sbc"                        , SBC;
               "sbcs"                       , SBCS;
-              "sbcr"                       , SBCR;
               "sbb"                        , SBB;
               "sbbs"                       , SBBS;
-              "sbbr"                       , SBBR;
               "mul"                        , MUL;
               "muls"                       , MULS;
-              "mulr"                       , MULR;
               "mull"                       , MULL;
               "mulj"                       , MULJ;
-              "spl"                        , SPLIT;
+              "spl"                        , SPL;
               "split"                      , SPLIT;
               "uadd"                       , UADD;
               "uadds"                      , UADDS;
-              "uaddr"                      , UADDR;
               "uadc"                       , UADC;
               "uadcs"                      , UADCS;
-              "uadcr"                      , UADCR;
               "usub"                       , USUB;
               "usubs"                      , USUBC;
               "usubc"                      , USUBC;
               "usubb"                      , USUBB;
-              "usubr"                      , USUBR;
               "usbc"                       , USBC;
               "usbcs"                      , USBCS;
-              "usbcr"                      , USBCR;
               "usbb"                       , USBB;
               "usbbs"                      , USBBS;
-              "usbbr"                      , USBBR;
               "umul"                       , UMUL;
               "umuls"                      , UMULS;
-              "umulr"                      , UMULR;
               "umull"                      , UMULL;
               "umulj"                      , UMULJ;
-              "uspl"                       , USPLIT;
+              "uspl"                       , USPL;
               "usplit"                     , USPLIT;
               "sadd"                       , SADD;
               "sadds"                      , SADDS;
-              "saddr"                      , SADDR;
               "sadc"                       , SADC;
               "sadcs"                      , SADCS;
-              "sadcr"                      , SADCR;
               "ssub"                       , SSUB;
               "ssubs"                      , SSUBC;
               "ssubc"                      , SSUBC;
               "ssubb"                      , SSUBB;
-              "ssubr"                      , SSUBR;
               "ssbc"                       , SSBC;
               "ssbcs"                      , SSBCS;
-              "ssbcr"                      , SSBCR;
               "ssbb"                       , SSBB;
               "ssbbs"                      , SSBBS;
-              "ssbbr"                      , SSBBR;
               "smul"                       , SMUL;
               "smuls"                      , SMULS;
-              "smulr"                      , SMULR;
               "smull"                      , SMULL;
               "smulj"                      , SMULJ;
-              "sspl"                       , SSPLIT;
+              "sspl"                       , SSPL;
               "ssplit"                     , SSPLIT;
               "shl"                        , SHL;
               "lsl"                        , SHL;
+              "shls"                       , SHLS;
+              "shr"                        , SHR;
+              "shrs"                       , SHRS;
+              "sar"                        , SAR;
+              "sars"                       , SARS;
               "cshl"                       , CSHL;
               "clsl"                       , CSHL;
+              "cshr"                       , CSHR;
+              "cshrs"                      , CSHRS;
+              "rol"                        , ROL;
+              "ror"                        , ROR;
               "set"                        , SET;
               "clear"                      , CLEAR;
               "nondet"                     , NONDET;
@@ -101,6 +93,8 @@
               "vpc"                        , VPC;
               "join"                       , JOIN;
               "assert"                     , ASSERT;
+              "eassert"                    , EASSERT;
+              "rassert"                    , RASSERT;
               "assume"                     , ASSUME;
               "cut"                        , CUT;
               "ecut"                       , ECUT;
@@ -113,6 +107,7 @@
               "sq"                         , SQ;
               "ext"                        , UEXT;
               "uext"                       , UEXT;
+              "zext"                       , UEXT;
               "sext"                       , SEXT;
               "mod"                        , MOD;
               "umod"                       , UMOD;
@@ -127,10 +122,17 @@
               "sle"                        , SLE;
               "sgt"                        , SGT;
               "sge"                        , SGE;
+              "shr"                        , SHR;
+              "lsr"                        , SHR;
+              "sar"                        , SAR;
+              "asr"                        , SAR;
               (********** Predicates **********)
               "true"                       , TRUE;
               "eq"                         , EQ;
               "eqmod"                      , EQMOD;
+              "equmod"                     , EQUMOD;
+              "eqsmod"                     , EQSMOD;
+              "eqsrem"                     , EQSREM;
               (********** Others **********)
               "proc"                       , PROC;
               "call"                       , CALL;
@@ -143,14 +145,23 @@
               "cuts"                       , CUTS;
               "assumes"                    , ASSUMES;
               "ghosts"                     , GHOSTS;
-              "precondition"               , PRECONDITION
+              "precondition"               , PRECONDITION;
+              "algebra"                    , ALGEBRA;
+              "range"                      , RANGE;
+              "qfbv"                       , QFBV;
+              "qf_bv"                      , QFBV;
+              "solver"                     , SOLVER;
+              "smt"                        , SMT
             ]
 }
 
 let letter = ['a'-'z' 'A'-'Z' '_']
 let number = ['0'-'9']
+let bin = ['0' '1']
 let hex = ['0'-'9' 'a'-'f' 'A'-'F']
 let identity = letter (letter | number)*
+let identity_vec = '%' identity
+let path = '/'? ((['a'-'z' 'A'-'Z' '_'] ['0'-'9' 'a'-'z' 'A'-'Z' '_' '/']*))+ | (['"'][^ '"']+['"'])
 let comment_line = ("//"([^ '\n' ]+))|('#'([^ '\n' ]+))
 
 rule c_block_comment = parse
@@ -214,6 +225,9 @@ token = parse
   | ">s"                           { upd_cnum lexbuf; SGTOP }
   | "<="                           { upd_cnum lexbuf; ULEOP }
   | ">="                           { upd_cnum lexbuf; UGEOP }
+  | "<<"                           { upd_cnum lexbuf; SHLOP }
+  | ">>a"                          { upd_cnum lexbuf; SAROP }
+  | ">>"                           { upd_cnum lexbuf; SHROP }
   | "<"                            { upd_cnum lexbuf; ULTOP }
   | ">"                            { upd_cnum lexbuf; UGTOP }
   | '='                            { upd_cnum lexbuf; EQOP }
@@ -229,6 +243,10 @@ token = parse
   | "int" ((number+) as w)         { upd_cnum lexbuf; SINT (int_of_string w) }
   | "bit"                          { upd_cnum lexbuf; BIT }
   (* Numbers *)
+  | "0b" ((bin+) as bin)           {
+                                     let _ = upd_cnum lexbuf in
+                                     NUM (Z.of_string_base 2 bin)
+                                   }
   | "0x" ((hex+) as hex)           {
                                      let _ = upd_cnum lexbuf in
                                      NUM (Z.of_string_base 16 hex)
@@ -240,4 +258,7 @@ token = parse
                                      with Not_found ->
                                        ID id
                                    }
+  | identity_vec as id             { upd_cnum lexbuf; VEC_ID id }
+  | path as p                      { (* Need `Hashtbl.find keywords p` if not all keywords are recognized as identities. *)
+                                     upd_cnum lexbuf; PATH p }
   | eof                            { EOF }

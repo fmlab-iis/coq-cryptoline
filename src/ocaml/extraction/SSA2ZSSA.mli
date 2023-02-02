@@ -1,6 +1,7 @@
 open BinInt
 open BinNat
 open BinNums
+open DSLRaw
 open Options0
 open Typ
 open Var
@@ -27,10 +28,10 @@ val carry_constr : options -> ssavar -> SSA.SSA.ebexp list
 
 val algred_cast :
   VarOrder.t -> coq_N -> SSAVarOrder.t -> typ -> SSA.SSA.atom -> typ ->
-  coq_N * DSL.ebexp list
+  coq_N * ebexp list
 
 val algred_vpc :
-  VarOrder.t -> coq_N -> ssavar -> SSA.SSA.atom -> coq_N * DSL.ebexp list
+  VarOrder.t -> coq_N -> ssavar -> SSA.SSA.atom -> coq_N * ebexp list
 
 val algred_instr :
   options -> TypEnv.SSATE.env -> VarOrder.t -> coq_N -> SSA.SSA.instr ->

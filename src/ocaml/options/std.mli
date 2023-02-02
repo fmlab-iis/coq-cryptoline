@@ -1,30 +1,258 @@
 
-type sat_solver = Cryptominisat | Cadical | Glucose | Kissat
+(** This module provides options of CryptoLine. *)
 
-type algebra_system =
-  | Singular
-  | Sage
-  | Magma
-  | Mathematica
-  | Macaulay2
+open Utils
+
+exception UnknownAlgebraSolver of string
+(** Raised if an unknown algebra solver is specified *)
+
+(** {1 General Options} *)
+
+val debug : bool ref
+(** [true] to log debug messages *)
+
+val apply_slicing : bool ref
+(** [true] to apply slicing in verifying specifications *)
+
+val verify_program_safety : bool ref
+(** [true] to verify program safety *)
+
+val verify_epost : bool ref
+(** [true] to verify algebraic postconditions *)
+
+val verify_rpost : bool ref
+(** [true] to verify range postconditions *)
+
+val verify_eassertion : bool ref
+(** [true] to verify algebraic assertions *)
+
+val verify_rassertion : bool ref
+(** [true] to verify range assertions *)
+
+val verify_ecuts : (int Utils.Hashset.t) option ref
+(** Limit the algebraic cut conditions to be verified in the specified algebraic cuts *)
+
+val verify_rcuts : (int Hashset.t) option ref
+(** Limit the range cut conditions to be verified in the specified range cuts *)
+
+val verify_eacuts : (int Hashset.t) option ref
+(** Limit the algebraic assertions to be verified in the specified algebraic cuts *)
+
+val verify_racuts : (int Hashset.t) option ref
+(** Limit the range assertions to be verified in the specified range cuts *)
+
+val verify_scuts : (int Hashset.t) option ref
+(** Limit the safety conditions to be verified in the specified range cuts *)
+
+val verify_eassert_ids : (int Hashset.t) option ref
+(** Skip algebraic assertions not in the specified IDs *)
+
+val verify_rassert_ids : (int Hashset.t) option ref
+(** Skip range assertions not in the specified IDs *)
+
+val verify_safety_ids : (int Hashset.t) option ref
+(** Skip safety conditions not in the specified IDs *)
+
+val mem_hashset_opt : ('a Hashset.t) option -> 'a -> bool
+(** [mem_hashset_opt so a] is true if [so] is [None] and [Hashset.mem s a] if [so] is [Some s]. *)
+
+val incremental_safety : bool ref
+(** [true] to verify safety incrementally, i.e. one instruction by one instruction *)
+
+val incremental_safety_timeout : int ref
+(** The timeout in incremental safety verification. The range solver may time
+    out when verifying the safety condition of an instruction. In this case, the
+    range solver will verify the safety condition again with an increased
+    timeout. *)
+
+val jobs : int ref
+(** number of concurrent jobs to be used *)
+
+val use_cli : bool ref
+(** [true] to use fork and the command-line interface of CryptoLine instead of Lwt *)
+
+val cli_path : string ref
+(** the path to the command-line interface of CryptoLine *)
+
+val rename_local : bool ref
+(** [true] to rename local variables when inlining a call to a procedure *)
+
+val auto_cast : bool ref
+(** [true] to automatically cast variables with {!ast.Cryptoline.Icast} when necessary *)
+
+val auto_cast_preserve_value : bool ref
+(** [true] to automatically cast variables with {!ast.Cryptoline.Ivpc} when necessary *)
+
+val cryptoline_filename_extension : string
+(** the filename extension of a CryptoLine program *)
+
+
+(** {1 Algebra-Specific Options} *)
+
+type algebra_solver =
+  | Singular                 (** {{:https://www.singular.uni-kl.de}Singular} *)
+  | Sage                     (** {{:https://www.sagemath.org}Sage} *)
+  | Magma                    (** {{:http://magma.maths.usyd.edu.au/magma/}Magma} *)
+  | Mathematica              (** {{:https://www.wolfram.com/mathematica/}Mathematica} *)
+  | Macaulay2                (** {{:http://www2.macaulay2.com/Macaulay2/}Macaulay2} *)
+  | Maple                    (** {{:https://www.maplesoft.com}Maple} *)
+  | SMTSolver of string      (** [SMTSolver s] is the SMT solver [s] that supports UFNIA. *) (* *)
+(** supported algebra solvers *)
 
 type variable_order =
   | LexOrder
   | AppearingOrder
   | RevLexOrder
   | RevAppearingOrder
+(** variable order in computing Groebner basis *)
 
-val debug : bool ref
+val default_algebra_solver : algebra_solver
+(** the default algebra solver *)
 
-val default_solver : sat_solver
-val default_algebra : algebra_system
+val algebra_solver : algebra_solver ref
+(** the algebra solver to be used *)
 
-val wordsize : int ref
+val algebra_solver_args : string ref
+(** additional arguments passed to the algebra solver *)
+
+val string_of_algebra_solver : algebra_solver -> string
+(** string representation of an algebra solver *)
+
+val parse_algebra_solver : string -> algebra_solver
+(** Parse a string as an algebra solver. Raise [UnknownSolverException] if the
+    string is not a solver. *)
+
+val singular_path : string ref
+(** the path to Singular *)
+
+val sage_path : string ref
+(** the path to Sage *)
+
+val magma_path : string ref
+(** the path to magma *)
+
+val mathematica_path : string ref
+(** the path to mathematica *)
+
+val macaulay2_path : string ref
+(** the path to macaulay2 *)
+
+val maple_path : string ref
+(** the path to maple *)
+
+val apply_rewriting : bool ref
+(** [true] to apply rewriting (which replaces variables with expressions) in verifying algebraic specifications *)
+
+val two_phase_rewriting : bool ref
+(** [true] to apply two-phase rewriting in verifying algebraic specifications *)
+
+(* val polys_rewrite_replace_eexp : bool ref *)  (* REMOVED FOR COQCRYPTOLINE *)
+(** [true] to apply expression rewriting (which replaces expressions with expressions) in verifying algebraic specifications *)
+
+val carry_constraint : bool ref
+(** [true] to add constraints for carries in verifying algebraic specifications *)
+
+val variable_ordering : variable_order ref
+(** the variable order to be used in the computation of Groebner basis *)
+
+val string_of_variable_ordering : variable_order -> string
+(** the string representation of variable orders *)
+
+val parse_variable_ordering : string -> variable_order
+(** parse a variable order from its string representation *)
+
+val track_split : bool ref
+(** [true] to track splits of atoms *)
+
+val expand_poly : bool ref
+(** [true] to expand polynomials before sending them to computer algebra systems *)
+
+(** {1 Range-Specific Options} *)
+
+val default_range_solver : string
+(** the default range solver *)
+
+val range_solver : string ref
+(** the path to the range solver *)
+
+val range_solver_args : string ref
+(** the arguments passed to the range solver *)
+
+val use_btor : bool ref
+(** [true] to use BTOR format instead of SMTLIB format *)
+
+val use_binary_repr : bool ref
+(** [true] to use binary representation in SMTLIB outputs and hexadecimal representation otherwise *)
+
+val native_smtlib_expn_operator : string option ref
+(** the native exponential operator supported by the chosen SMT solver *)
+
+
+(** {1 Logging} *)
+
+val verbose : bool ref
+(** [true] to print verbose messages *)
+
+val logfile : string ref
+(** the file to write log messages to *)
+
+val unix : string -> Unix.process_status  (* MODIFIED FOR COQCRYPTOLINE *)
+(** run an Unix command *)
+
+val trace : ?log:string -> string -> unit
+(** write a message and an ending newline to the log file *)
+
+val trace_file : ?log:string -> string -> unit
+(** write a file to the log file *)
+
+val fail : string -> 'a
+(** write a message to the log file and then fail with the message *)
+
+val string_of_running_time : float -> float -> string
+(** [string_of_running_time st ed] returns the string representation of the running time from the starting time [st] to the stop time [ed]. *)
+
+val vprint : string -> unit
+(** [vprint s] prints the string [s] if {!verbose} is [true] *)
+
+val vprintln : string -> unit
+(** [vprint s] prints the string [s] with an ending newline if {!verbose} is [true] *)
+
+val keep_temp_files : bool ref
+(** [true] to keep temporary files *)
+
+val tmpdir : string option ref
+(** the directory where the temporary files are stored *)
+
+val tmpfile : string -> string -> string
+(** [tmpfile prefix suffix] suggests a filename with prefix [prefix] and suffix [suffix]. *)
+
+val cleanup : string list -> unit
+(** [cleanup [f1; ...; fn]] removes temporary files [f1], ..., and [fn]. *)
+
+
+(** {1 Equivalence checking} *)
+
+val abc_path : string ref
+(** The path to ABC *)
 
 val boolector_path : string ref
-val z3_path : string ref
-val mathsat_path : string ref
-val stp_path : string ref
+(** The path to Boolector *)
+
+
+
+
+(* ADDED FOR COQCRYPTOLINE *)
+
+type sat_solver = Cryptominisat | Cadical | Glucose | Kissat
+
+val default_sat_solver : sat_solver
+
+val apply_rewriting_arep : bool ref
+val apply_rewriting_imp : bool ref
+val polys_rewrite_replace_eexp : bool ref
+val apply_slicing_espec : bool ref
+val apply_slicing_rspec : bool ref
+val apply_slicing_assume : bool ref
 
 val minisat_path : string ref
 val cryptominisat_path : string ref
@@ -36,72 +264,6 @@ val sat_solver : sat_solver ref
 val sat_args : string ref
 val string_of_sat_solver : sat_solver -> string
 
-val use_btor : bool ref
-
-val singular_path : string ref
-val sage_path : string ref
-val magma_path : string ref
-val mathematica_path : string ref
-val macaulay2_path : string ref
-
-val algebra_system : algebra_system ref
-val algebra_args : string ref
-val string_of_algebra_system : algebra_system -> string
-
-val apply_rewriting_arep : bool ref
-val apply_rewriting_imp : bool ref
-val polys_rewrite_replace_eexp : bool ref
-val apply_slicing_espec : bool ref
-val apply_slicing_rspec : bool ref
-val apply_slicing_assume : bool ref
-
-val variable_ordering : variable_order ref
-val string_of_variable_ordering : variable_order -> string
-val parse_variable_ordering : string -> variable_order
-
-val verify_program_safety : bool ref
-val verify_epost : bool ref
-val verify_rpost : bool ref
-val verify_eassertion : bool ref
-val verify_rassertion : bool ref
-val verify_ecuts : (int list) option ref
-val verify_rcuts : (int list) option ref
-val incremental_safety : bool ref
-val incremental_safety_timeout : int ref
-
-val carry_constraint : bool ref
-
-val verbose : bool ref
-
-val unix : string -> Unix.process_status
-
-val logfile : string ref
-
-val trace : ?log:string -> string -> unit
-val trace_file : ?log:string -> string -> unit
-
-val fail : string -> 'a
-
-val string_of_running_time : float -> float -> string
-
-val vprint : string -> unit
-val vprintln : string -> unit
-
-val jobs : int ref
-
-val use_cli : bool ref
-val cli_path : string ref
-
-(* Rename local variables when inlining a call to a procedure. *)
-val rename_local : bool ref
-
-val use_vector_parser : bool ref
-
-val auto_cast : bool ref
-val auto_cast_preserve_value : bool ref
-val typing_file : (string option) ref
-val use_binary_repr : bool ref
-
 type unsat_certifier = Drat | Lrat | Grat
 val string_of_unsat_certifier : unsat_certifier -> string
 val default_unsat_certifier : unsat_certifier
@@ -110,8 +272,5 @@ val drat_trim_path : string ref
 val gratgen_path : string ref
 val gratchk_path : string ref
 val lrat_checker_path : string ref
-
-val tmpdir : (string option) ref
-val tmpfile : string -> string -> string
 
 val disable_range : bool ref

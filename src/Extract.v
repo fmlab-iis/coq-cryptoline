@@ -8,7 +8,7 @@ From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun prime.
 From ssrlib Require Import Var Tactics Seqs.
 From BitBlasting Require Import State QFBV TypEnv.
 From BBCache Require Import Cache.
-From Cryptoline Require Import DSL SSA SSA2QFBV SSA2ZSSA Verify.
+From Cryptoline Require Import DSL SSA SSA2QFBV SSA2ZSSA Verify VerifyFull.
 From nbits Require Import NBits.
 
 Extraction Language OCaml.
@@ -35,5 +35,6 @@ Separate Extraction
          CNF.dimacs_cnf_with_header CNF.max_var_of_cnf CNF.num_clauses
          Poly.zpexpr_is_zero SSA.slice_espec SSA.slice_rspec
          SSA.split_espec SSA.split_rspec
-         DSL.well_formed_spec Verify.verify_dsl.
+         DSL.well_formed_spec Verify.verify_dsl
+         VerifyFull.verify_fulldsl.
 Cd "../../..".

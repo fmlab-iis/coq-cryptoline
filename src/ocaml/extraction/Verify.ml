@@ -31,15 +31,25 @@ let verify_rspec_algsnd o s =
 
 let ext_solve_imp = External.ext_solve_imp_impl
 
-(** val verify_arep : options -> arep -> bool **)
+(** val polys_of_arep :
+    options -> arep -> (coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z
+    coq_PExpr list **)
 
-let verify_arep o ps =
+let polys_of_arep o ps =
   let (p, q) = imp_of_arep ps in
   let (p0, ms) = p in
   let (_, ps0) = p0 in
-  let (ps', q') =
-    if o.rewrite_assignments_imp then simplify_generator ps0 q else (ps0, q)
-  in
+  ((if o.rewrite_assignments_imp
+    then if o.vars_cache_in_rewrite_assignments
+         then simplify_generator_vars_cache ps0 q
+         else simplify_generator ps0 q
+    else (ps0, q)), ms)
+
+(** val verify_arep : options -> arep -> bool **)
+
+let verify_arep o ps =
+  let (p, ms) = polys_of_arep o ps in
+  let (ps', q') = p in
   let (cps, cms) = ext_solve_imp ps' q' ms in
   validate_imp_answer ps' ms q' cps cms
 
@@ -57,9 +67,8 @@ let verify_rep o zs =
 
 (** val verify_reps_seq : options -> ZSSA.ZSSA.rep list -> bool **)
 
-let rec verify_reps_seq o = function
-| [] -> true
-| hd :: tl -> (&&) (verify_rep o hd) (verify_reps_seq o tl)
+let verify_reps_seq o zss =
+  all (verify_rep o) zss
 
 (** val ext_solve_imp_list :
     ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr list) list ->
@@ -72,17 +81,7 @@ let ext_solve_imp_list = External.ext_solve_imp_list_impl
     coq_PExpr list) list **)
 
 let polys_of_areps o pss =
-  let f = fun ps ->
-    let (p, q) = imp_of_arep ps in
-    let (p0, ms) = p in
-    let (_, ps0) = p0 in
-    ((if o.rewrite_assignments_imp
-      then if o.vars_cache_in_rewrite_assignments
-           then simplify_generator_vars_cache ps0 q
-           else simplify_generator ps0 q
-      else (ps0, q)), ms)
-  in
-  tmap f pss
+  tmap (polys_of_arep o) pss
 
 (** val validate_imp_answer_list :
     ((coq_Z coq_PExpr list * coq_Z coq_PExpr) * coq_Z coq_PExpr list) list ->

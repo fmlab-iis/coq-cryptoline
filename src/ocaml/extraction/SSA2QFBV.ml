@@ -1,3 +1,4 @@
+open DSLRaw
 open NBitsDef
 open NBitsOp
 open Options0
@@ -13,50 +14,50 @@ type bexp_spec = { binputs : TypEnv.SSATE.env; bpre : QFBV.QFBV.bexp;
 (** val exp_rexp : SSA.SSA.rexp -> QFBV.QFBV.exp **)
 
 let rec exp_rexp = function
-| DSL.Rvar v -> QFBV.QFBV.qfbv_var v
-| DSL.Rconst (_, n) -> QFBV.QFBV.Econst n
-| DSL.Runop (_, op, e0) ->
+| Rvar v -> QFBV.QFBV.qfbv_var v
+| Rconst (_, n) -> QFBV.QFBV.Econst n
+| Runop (_, op, e0) ->
   (match op with
-   | DSL.Rnegb -> QFBV.QFBV.qfbv_neg (exp_rexp e0)
-   | DSL.Rnotb -> QFBV.QFBV.qfbv_not (exp_rexp e0))
-| DSL.Rbinop (_, op, e1, e2) ->
+   | Rnegb -> QFBV.QFBV.qfbv_neg (exp_rexp e0)
+   | Rnotb -> QFBV.QFBV.qfbv_not (exp_rexp e0))
+| Rbinop (_, op, e1, e2) ->
   (match op with
-   | DSL.Radd -> QFBV.QFBV.qfbv_add (exp_rexp e1) (exp_rexp e2)
-   | DSL.Rsub -> QFBV.QFBV.qfbv_sub (exp_rexp e1) (exp_rexp e2)
-   | DSL.Rmul -> QFBV.QFBV.qfbv_mul (exp_rexp e1) (exp_rexp e2)
-   | DSL.Rumod -> QFBV.QFBV.qfbv_mod (exp_rexp e1) (exp_rexp e2)
-   | DSL.Rsrem -> QFBV.QFBV.qfbv_srem (exp_rexp e1) (exp_rexp e2)
-   | DSL.Rsmod -> QFBV.QFBV.qfbv_smod (exp_rexp e1) (exp_rexp e2)
-   | DSL.Randb -> QFBV.QFBV.qfbv_and (exp_rexp e1) (exp_rexp e2)
-   | DSL.Rorb -> QFBV.QFBV.qfbv_or (exp_rexp e1) (exp_rexp e2)
-   | DSL.Rxorb -> QFBV.QFBV.qfbv_xor (exp_rexp e1) (exp_rexp e2))
-| DSL.Ruext (_, e0, n) -> QFBV.QFBV.qfbv_zext n (exp_rexp e0)
-| DSL.Rsext (_, e0, n) -> QFBV.QFBV.qfbv_sext n (exp_rexp e0)
+   | Radd -> QFBV.QFBV.qfbv_add (exp_rexp e1) (exp_rexp e2)
+   | Rsub -> QFBV.QFBV.qfbv_sub (exp_rexp e1) (exp_rexp e2)
+   | Rmul -> QFBV.QFBV.qfbv_mul (exp_rexp e1) (exp_rexp e2)
+   | Rumod -> QFBV.QFBV.qfbv_mod (exp_rexp e1) (exp_rexp e2)
+   | Rsrem -> QFBV.QFBV.qfbv_srem (exp_rexp e1) (exp_rexp e2)
+   | Rsmod -> QFBV.QFBV.qfbv_smod (exp_rexp e1) (exp_rexp e2)
+   | Randb -> QFBV.QFBV.qfbv_and (exp_rexp e1) (exp_rexp e2)
+   | Rorb -> QFBV.QFBV.qfbv_or (exp_rexp e1) (exp_rexp e2)
+   | Rxorb -> QFBV.QFBV.qfbv_xor (exp_rexp e1) (exp_rexp e2))
+| Ruext (_, e0, n) -> QFBV.QFBV.qfbv_zext n (exp_rexp e0)
+| Rsext (_, e0, n) -> QFBV.QFBV.qfbv_sext n (exp_rexp e0)
 
 (** val bexp_rbexp : SSA.SSA.rbexp -> QFBV.QFBV.bexp **)
 
 let rec bexp_rbexp = function
-| DSL.Rtrue -> QFBV.QFBV.qfbv_true
-| DSL.Req (_, e1, e2) -> QFBV.QFBV.qfbv_eq (exp_rexp e1) (exp_rexp e2)
-| DSL.Rcmp (_, op, e1, e2) ->
+| Rtrue -> QFBV.QFBV.qfbv_true
+| Req (_, e1, e2) -> QFBV.QFBV.qfbv_eq (exp_rexp e1) (exp_rexp e2)
+| Rcmp (_, op, e1, e2) ->
   (match op with
-   | DSL.Rult -> QFBV.QFBV.qfbv_ult (exp_rexp e1) (exp_rexp e2)
-   | DSL.Rule -> QFBV.QFBV.qfbv_ule (exp_rexp e1) (exp_rexp e2)
-   | DSL.Rugt -> QFBV.QFBV.qfbv_ugt (exp_rexp e1) (exp_rexp e2)
-   | DSL.Ruge -> QFBV.QFBV.qfbv_uge (exp_rexp e1) (exp_rexp e2)
-   | DSL.Rslt -> QFBV.QFBV.qfbv_slt (exp_rexp e1) (exp_rexp e2)
-   | DSL.Rsle -> QFBV.QFBV.qfbv_sle (exp_rexp e1) (exp_rexp e2)
-   | DSL.Rsgt -> QFBV.QFBV.qfbv_sgt (exp_rexp e1) (exp_rexp e2)
-   | DSL.Rsge -> QFBV.QFBV.qfbv_sge (exp_rexp e1) (exp_rexp e2))
-| DSL.Rneg e0 -> QFBV.QFBV.qfbv_lneg (bexp_rbexp e0)
-| DSL.Rand (e1, e2) -> QFBV.QFBV.qfbv_conj (bexp_rbexp e1) (bexp_rbexp e2)
-| DSL.Ror (e1, e2) -> QFBV.QFBV.qfbv_disj (bexp_rbexp e1) (bexp_rbexp e2)
+   | Rult -> QFBV.QFBV.qfbv_ult (exp_rexp e1) (exp_rexp e2)
+   | Rule -> QFBV.QFBV.qfbv_ule (exp_rexp e1) (exp_rexp e2)
+   | Rugt -> QFBV.QFBV.qfbv_ugt (exp_rexp e1) (exp_rexp e2)
+   | Ruge -> QFBV.QFBV.qfbv_uge (exp_rexp e1) (exp_rexp e2)
+   | Rslt -> QFBV.QFBV.qfbv_slt (exp_rexp e1) (exp_rexp e2)
+   | Rsle -> QFBV.QFBV.qfbv_sle (exp_rexp e1) (exp_rexp e2)
+   | Rsgt -> QFBV.QFBV.qfbv_sgt (exp_rexp e1) (exp_rexp e2)
+   | Rsge -> QFBV.QFBV.qfbv_sge (exp_rexp e1) (exp_rexp e2))
+| Rneg e0 -> QFBV.QFBV.qfbv_lneg (bexp_rbexp e0)
+| Rand (e1, e2) -> QFBV.QFBV.qfbv_conj (bexp_rbexp e1) (bexp_rbexp e2)
+| Ror (e1, e2) -> QFBV.QFBV.qfbv_disj (bexp_rbexp e1) (bexp_rbexp e2)
 
-(** val qfbv_atom : SSA.SSA.atom -> QFBV.QFBV.exp **)
+(** val qfbv_atom : atom -> QFBV.QFBV.exp **)
 
 let qfbv_atom = function
-| SSA.SSA.Avar v -> QFBV.QFBV.Evar v
-| SSA.SSA.Aconst (_, n) -> QFBV.QFBV.Econst n
+| Avar v -> QFBV.QFBV.Evar v
+| Aconst (_, n) -> QFBV.QFBV.Econst n
 
 (** val bexp_instr : TypEnv.SSATE.env -> SSA.SSA.instr -> QFBV.QFBV.bexp **)
 
@@ -365,38 +366,36 @@ let rngred_rspec_slice_split_la o s =
   rngred_rspec_split_las
     (tmap (SSA.SSA.slice_rspec o) (SSA.SSA.split_rspec s))
 
-(** val bexp_atom_uaddB_algsnd :
-    SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
+(** val bexp_atom_uaddB_algsnd : atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_uaddB_algsnd a1 a2 =
   match a1 with
-  | SSA.SSA.Avar _ ->
+  | Avar _ ->
     QFBV.QFBV.qfbv_lneg (QFBV.QFBV.qfbv_uaddo (qfbv_atom a1) (qfbv_atom a2))
-  | SSA.SSA.Aconst (_, bs1) ->
+  | Aconst (_, bs1) ->
     (match a2 with
-     | SSA.SSA.Avar _ ->
+     | Avar _ ->
        QFBV.QFBV.qfbv_lneg
          (QFBV.QFBV.qfbv_uaddo (qfbv_atom a1) (qfbv_atom a2))
-     | SSA.SSA.Aconst (_, bs2) ->
+     | Aconst (_, bs2) ->
        if coq_Uaddo bs1 bs2 then QFBV.QFBV.qfbv_false else QFBV.QFBV.qfbv_true)
 
-(** val bexp_atom_saddB_algsnd :
-    SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
+(** val bexp_atom_saddB_algsnd : atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_saddB_algsnd a1 a2 =
   match a1 with
-  | SSA.SSA.Avar _ ->
+  | Avar _ ->
     QFBV.QFBV.qfbv_lneg (QFBV.QFBV.qfbv_saddo (qfbv_atom a1) (qfbv_atom a2))
-  | SSA.SSA.Aconst (_, bs1) ->
+  | Aconst (_, bs1) ->
     (match a2 with
-     | SSA.SSA.Avar _ ->
+     | Avar _ ->
        QFBV.QFBV.qfbv_lneg
          (QFBV.QFBV.qfbv_saddo (qfbv_atom a1) (qfbv_atom a2))
-     | SSA.SSA.Aconst (_, bs2) ->
+     | Aconst (_, bs2) ->
        if coq_Saddo bs1 bs2 then QFBV.QFBV.qfbv_false else QFBV.QFBV.qfbv_true)
 
 (** val bexp_atom_addB_algsnd :
-    TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
+    TypEnv.SSATE.env -> SSA.SSA.atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_addB_algsnd e a1 a2 =
   if is_unsigned (SSA.SSA.atyp a1 e)
@@ -404,7 +403,7 @@ let bexp_atom_addB_algsnd e a1 a2 =
   else bexp_atom_saddB_algsnd a1 a2
 
 (** val bexp_atom_adds_algsnd :
-    TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
+    TypEnv.SSATE.env -> SSA.SSA.atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_adds_algsnd e a1 a2 =
   if is_unsigned (SSA.SSA.atyp a1 e)
@@ -412,11 +411,11 @@ let bexp_atom_adds_algsnd e a1 a2 =
   else bexp_atom_saddB_algsnd a1 a2
 
 (** val bexp_atom_uadcB_algsnd :
-    int -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
+    int -> atom -> atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_uadcB_algsnd a_size a1 a2 ac =
   match a1 with
-  | SSA.SSA.Avar _ ->
+  | Avar _ ->
     QFBV.QFBV.qfbv_conj
       (QFBV.QFBV.qfbv_lneg
         (QFBV.QFBV.qfbv_uaddo (qfbv_atom a1) (qfbv_atom a2)))
@@ -425,9 +424,9 @@ let bexp_atom_uadcB_algsnd a_size a1 a2 ac =
           (QFBV.QFBV.qfbv_add (qfbv_atom a1) (qfbv_atom a2))
           (QFBV.QFBV.qfbv_zext (subn a_size (Pervasives.succ 0))
             (qfbv_atom ac))))
-  | SSA.SSA.Aconst (_, bs1) ->
+  | Aconst (_, bs1) ->
     (match a2 with
-     | SSA.SSA.Avar _ ->
+     | Avar _ ->
        QFBV.QFBV.qfbv_conj
          (QFBV.QFBV.qfbv_lneg
            (QFBV.QFBV.qfbv_uaddo (qfbv_atom a1) (qfbv_atom a2)))
@@ -436,9 +435,9 @@ let bexp_atom_uadcB_algsnd a_size a1 a2 ac =
              (QFBV.QFBV.qfbv_add (qfbv_atom a1) (qfbv_atom a2))
              (QFBV.QFBV.qfbv_zext (subn a_size (Pervasives.succ 0))
                (qfbv_atom ac))))
-     | SSA.SSA.Aconst (_, bs2) ->
+     | Aconst (_, bs2) ->
        (match ac with
-        | SSA.SSA.Avar _ ->
+        | Avar _ ->
           if coq_Uaddo bs1 bs2
           then QFBV.QFBV.qfbv_false
           else if coq_Uaddo (addB bs1 bs2)
@@ -448,7 +447,7 @@ let bexp_atom_uadcB_algsnd a_size a1 a2 ac =
                         (QFBV.QFBV.qfbv_zext
                           (subn a_size (Pervasives.succ 0)) (qfbv_atom ac)))
                else QFBV.QFBV.qfbv_true
-        | SSA.SSA.Aconst (_, c) ->
+        | Aconst (_, c) ->
           if (||) (coq_Uaddo bs1 bs2)
                (coq_Uaddo (addB bs1 bs2)
                  (zext (subn a_size (Pervasives.succ 0)) c))
@@ -456,11 +455,11 @@ let bexp_atom_uadcB_algsnd a_size a1 a2 ac =
           else QFBV.QFBV.qfbv_true))
 
 (** val bexp_atom_sadcB_algsnd :
-    int -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
+    int -> atom -> atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_sadcB_algsnd a_size a1 a2 ac =
   match a1 with
-  | SSA.SSA.Avar _ ->
+  | Avar _ ->
     QFBV.QFBV.qfbv_conj
       (QFBV.QFBV.qfbv_lneg
         (QFBV.QFBV.qfbv_saddo (qfbv_atom a1) (qfbv_atom a2)))
@@ -469,9 +468,9 @@ let bexp_atom_sadcB_algsnd a_size a1 a2 ac =
           (QFBV.QFBV.qfbv_add (qfbv_atom a1) (qfbv_atom a2))
           (QFBV.QFBV.qfbv_zext (subn a_size (Pervasives.succ 0))
             (qfbv_atom ac))))
-  | SSA.SSA.Aconst (_, bs1) ->
+  | Aconst (_, bs1) ->
     (match a2 with
-     | SSA.SSA.Avar _ ->
+     | Avar _ ->
        QFBV.QFBV.qfbv_conj
          (QFBV.QFBV.qfbv_lneg
            (QFBV.QFBV.qfbv_saddo (qfbv_atom a1) (qfbv_atom a2)))
@@ -480,9 +479,9 @@ let bexp_atom_sadcB_algsnd a_size a1 a2 ac =
              (QFBV.QFBV.qfbv_add (qfbv_atom a1) (qfbv_atom a2))
              (QFBV.QFBV.qfbv_zext (subn a_size (Pervasives.succ 0))
                (qfbv_atom ac))))
-     | SSA.SSA.Aconst (_, bs2) ->
+     | Aconst (_, bs2) ->
        (match ac with
-        | SSA.SSA.Avar _ ->
+        | Avar _ ->
           if coq_Saddo bs1 bs2
           then QFBV.QFBV.qfbv_false
           else if coq_Saddo (addB bs1 bs2)
@@ -492,7 +491,7 @@ let bexp_atom_sadcB_algsnd a_size a1 a2 ac =
                         (QFBV.QFBV.qfbv_zext
                           (subn a_size (Pervasives.succ 0)) (qfbv_atom ac)))
                else QFBV.QFBV.qfbv_true
-        | SSA.SSA.Aconst (_, c) ->
+        | Aconst (_, c) ->
           if (||) (coq_Saddo bs1 bs2)
                (coq_Saddo (addB bs1 bs2)
                  (zext (subn a_size (Pervasives.succ 0)) c))
@@ -500,8 +499,7 @@ let bexp_atom_sadcB_algsnd a_size a1 a2 ac =
           else QFBV.QFBV.qfbv_true))
 
 (** val bexp_atom_adcB_algsnd :
-    TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom ->
-    QFBV.QFBV.bexp **)
+    TypEnv.SSATE.env -> SSA.SSA.atom -> atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_adcB_algsnd e a1 a2 ac =
   let a_typ = SSA.SSA.atyp a1 e in
@@ -511,8 +509,7 @@ let bexp_atom_adcB_algsnd e a1 a2 ac =
   else bexp_atom_sadcB_algsnd a_size a1 a2 ac
 
 (** val bexp_atom_adcs_algsnd :
-    TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom ->
-    QFBV.QFBV.bexp **)
+    TypEnv.SSATE.env -> SSA.SSA.atom -> atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_adcs_algsnd e a1 a2 ac =
   let a_typ = SSA.SSA.atyp a1 e in
@@ -521,40 +518,38 @@ let bexp_atom_adcs_algsnd e a1 a2 ac =
   then QFBV.QFBV.Btrue
   else bexp_atom_sadcB_algsnd a_size a1 a2 ac
 
-(** val bexp_atom_usubB_algsnd :
-    SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
+(** val bexp_atom_usubB_algsnd : atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_usubB_algsnd a1 a2 =
   match a1 with
-  | SSA.SSA.Avar _ ->
+  | Avar _ ->
     QFBV.QFBV.qfbv_lneg (QFBV.QFBV.qfbv_usubo (qfbv_atom a1) (qfbv_atom a2))
-  | SSA.SSA.Aconst (_, bs1) ->
+  | Aconst (_, bs1) ->
     (match a2 with
-     | SSA.SSA.Avar _ ->
+     | Avar _ ->
        QFBV.QFBV.qfbv_lneg
          (QFBV.QFBV.qfbv_usubo (qfbv_atom a1) (qfbv_atom a2))
-     | SSA.SSA.Aconst (_, bs2) ->
+     | Aconst (_, bs2) ->
        if borrow_subB bs1 bs2
        then QFBV.QFBV.qfbv_false
        else QFBV.QFBV.qfbv_true)
 
-(** val bexp_atom_ssubB_algsnd :
-    SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
+(** val bexp_atom_ssubB_algsnd : atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_ssubB_algsnd a1 a2 =
   match a1 with
-  | SSA.SSA.Avar _ ->
+  | Avar _ ->
     QFBV.QFBV.qfbv_lneg (QFBV.QFBV.qfbv_ssubo (qfbv_atom a1) (qfbv_atom a2))
-  | SSA.SSA.Aconst (_, bs1) ->
+  | Aconst (_, bs1) ->
     (match a2 with
-     | SSA.SSA.Avar _ ->
+     | Avar _ ->
        QFBV.QFBV.qfbv_lneg
          (QFBV.QFBV.qfbv_ssubo (qfbv_atom a1) (qfbv_atom a2))
-     | SSA.SSA.Aconst (_, bs2) ->
+     | Aconst (_, bs2) ->
        if coq_Ssubo bs1 bs2 then QFBV.QFBV.qfbv_false else QFBV.QFBV.qfbv_true)
 
 (** val bexp_atom_subB_algsnd :
-    TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
+    TypEnv.SSATE.env -> SSA.SSA.atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_subB_algsnd e a1 a2 =
   if is_unsigned (SSA.SSA.atyp a1 e)
@@ -562,7 +557,7 @@ let bexp_atom_subB_algsnd e a1 a2 =
   else bexp_atom_ssubB_algsnd a1 a2
 
 (** val bexp_atom_subc_algsnd :
-    TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
+    TypEnv.SSATE.env -> SSA.SSA.atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_subc_algsnd e a1 a2 =
   if is_unsigned (SSA.SSA.atyp a1 e)
@@ -570,7 +565,7 @@ let bexp_atom_subc_algsnd e a1 a2 =
   else bexp_atom_ssubB_algsnd a1 a2
 
 (** val bexp_atom_subb_algsnd :
-    TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
+    TypEnv.SSATE.env -> SSA.SSA.atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_subb_algsnd e a1 a2 =
   if is_unsigned (SSA.SSA.atyp a1 e)
@@ -578,7 +573,7 @@ let bexp_atom_subb_algsnd e a1 a2 =
   else bexp_atom_ssubB_algsnd a1 a2
 
 (** val bexp_atom_usbbB_algsnd :
-    int -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
+    int -> atom -> atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_usbbB_algsnd a_size a1 a2 ab =
   QFBV.QFBV.qfbv_conj
@@ -589,7 +584,7 @@ let bexp_atom_usbbB_algsnd a_size a1 a2 ab =
         (QFBV.QFBV.qfbv_zext (subn a_size (Pervasives.succ 0)) (qfbv_atom ab))))
 
 (** val bexp_atom_ssbbB_algsnd :
-    int -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
+    int -> atom -> atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_ssbbB_algsnd a_size a1 a2 ab =
   QFBV.QFBV.qfbv_conj
@@ -600,8 +595,7 @@ let bexp_atom_ssbbB_algsnd a_size a1 a2 ab =
         (QFBV.QFBV.qfbv_zext (subn a_size (Pervasives.succ 0)) (qfbv_atom ab))))
 
 (** val bexp_atom_sbbB_algsnd :
-    TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom ->
-    QFBV.QFBV.bexp **)
+    TypEnv.SSATE.env -> SSA.SSA.atom -> atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_sbbB_algsnd e a1 a2 ab =
   let a_typ = SSA.SSA.atyp a1 e in
@@ -611,8 +605,7 @@ let bexp_atom_sbbB_algsnd e a1 a2 ab =
   else bexp_atom_ssbbB_algsnd a_size a1 a2 ab
 
 (** val bexp_atom_sbbs_algsnd :
-    TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom ->
-    QFBV.QFBV.bexp **)
+    TypEnv.SSATE.env -> SSA.SSA.atom -> atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_sbbs_algsnd e a1 a2 ab =
   let a_typ = SSA.SSA.atyp a1 e in
@@ -622,7 +615,7 @@ let bexp_atom_sbbs_algsnd e a1 a2 ab =
   else bexp_atom_ssbbB_algsnd a_size a1 a2 ab
 
 (** val bexp_atom_usbcB_algsnd :
-    int -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
+    int -> atom -> atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_usbcB_algsnd a_size a1 a2 ac =
   QFBV.QFBV.qfbv_conj
@@ -635,7 +628,7 @@ let bexp_atom_usbcB_algsnd a_size a1 a2 ac =
             (qfbv_atom ac)))))
 
 (** val bexp_atom_ssbcB_algsnd :
-    int -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
+    int -> atom -> atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_ssbcB_algsnd a_size a1 a2 ac =
   QFBV.QFBV.qfbv_conj
@@ -648,8 +641,7 @@ let bexp_atom_ssbcB_algsnd a_size a1 a2 ac =
             (qfbv_atom ac)))))
 
 (** val bexp_atom_sbcB_algsnd :
-    TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom ->
-    QFBV.QFBV.bexp **)
+    TypEnv.SSATE.env -> SSA.SSA.atom -> atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_sbcB_algsnd e a1 a2 ac =
   let a_typ = SSA.SSA.atyp a1 e in
@@ -659,8 +651,7 @@ let bexp_atom_sbcB_algsnd e a1 a2 ac =
   else bexp_atom_ssbcB_algsnd a_size a1 a2 ac
 
 (** val bexp_atom_sbcs_algsnd :
-    TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> SSA.SSA.atom ->
-    QFBV.QFBV.bexp **)
+    TypEnv.SSATE.env -> SSA.SSA.atom -> atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_sbcs_algsnd e a1 a2 ac =
   let a_typ = SSA.SSA.atyp a1 e in
@@ -670,7 +661,7 @@ let bexp_atom_sbcs_algsnd e a1 a2 ac =
   else bexp_atom_ssbcB_algsnd a_size a1 a2 ac
 
 (** val bexp_atom_mulB_algsnd :
-    TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> QFBV.QFBV.bexp **)
+    TypEnv.SSATE.env -> SSA.SSA.atom -> atom -> QFBV.QFBV.bexp **)
 
 let bexp_atom_mulB_algsnd e a1 a2 =
   if is_unsigned (SSA.SSA.atyp a1 e)
@@ -696,7 +687,7 @@ let bexp_atom_shl_algsnd e a n =
              (QFBV.QFBV.qfbv_zero (addn n (Pervasives.succ 0)))))
 
 (** val bexp_atom_cshl_algsnd :
-    TypEnv.SSATE.env -> SSA.SSA.atom -> SSA.SSA.atom -> int -> QFBV.QFBV.bexp **)
+    TypEnv.SSATE.env -> SSA.SSA.atom -> atom -> int -> QFBV.QFBV.bexp **)
 
 let bexp_atom_cshl_algsnd e a1 a2 n =
   if is_unsigned (SSA.SSA.atyp a1 e)
@@ -806,8 +797,8 @@ let bexp_program_algsnd_split_fixed_final e p =
 
 let rec qfbv_spec_algsnd_la_rec f = function
 | [] -> []
-| y :: tl ->
-  let (pre_es, safe) = y in
+| p :: tl ->
+  let (pre_es, safe) = p in
   (QFBV.QFBV.qfbv_imp
     (QFBV.QFBV.qfbv_conj f (QFBV.QFBV.qfbv_conjs_la pre_es)) safe) :: 
   (qfbv_spec_algsnd_la_rec f tl)

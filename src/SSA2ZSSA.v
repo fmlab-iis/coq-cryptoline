@@ -3,7 +3,7 @@
     Convert an algebraic specification in SSA to a root entailment problem
     together with an algebraic soundness condition. *)
 
-From Coq Require Import List ZArith.
+From Coq Require Import Classes.Morphisms List ZArith.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From ssrlib Require Import Var Types SsrOrder Nats ZAriths Store Tactics FMaps Seqs.
 From BitBlasting Require Import State Typ TypEnv.
@@ -285,6 +285,122 @@ Section AlgebraicSoundnessConditions.
               eval_rbexp (rspre sp) s ->
               ssa_program_algsnd_at (rsinputs sp) (rsprog sp) s.
 
+  Global Instance add_proper_ssa_instr_algsnd_at_env :
+    Proper (SSATE.Equal ==> eq ==> eq ==> eq) ssa_instr_algsnd_at.
+  Proof.
+    move=> E1 E2 Heq i1 i2 ? s1 s2 ?; subst.
+    (case: i2 => //=); intros;
+    rewrite /shlBn_algsnd /cshlBn_algsnd
+            /addB_algsnd /adds_algsnd /adcB_algsnd /adcs_algsnd
+            /subB_algsnd /subc_algsnd /subb_algsnd
+            /sbcB_algsnd /sbcs_algsnd /sbbB_algsnd /sbbs_algsnd
+            /mulB_algsnd /vpc_algsnd
+            /ucshlBn_algsnd /scshlBn_algsnd
+            /ushlBn_algsnd /sshlBn_algsnd
+            /uaddB_algsnd /saddB_algsnd
+            /uadcB_algsnd /sadcB_algsnd
+            /usubB_algsnd /ssubB_algsnd
+            /usbcB_algsnd /ssbcB_algsnd
+            /usbbB_algsnd /ssbbB_algsnd
+            /umulB_algsnd /smulB_algsnd;
+    by (repeat rewrite -> (add_proper_atyp (Logic.eq_refl _) Heq); reflexivity).
+  Qed.
+
+  Global Instance add_proper_ssa_instr_algsnd_at_store :
+    Proper (eq ==> eq ==> SSAStore.Equal ==> eq) ssa_instr_algsnd_at.
+  Proof.
+    move=> E1 E2 ? i1 i2 ? s1 s2 Heq; subst.
+    (case: i2 => //=); intros;
+    rewrite /shlBn_algsnd /cshlBn_algsnd
+            /addB_algsnd /adds_algsnd /adcB_algsnd /adcs_algsnd
+            /subB_algsnd /subc_algsnd /subb_algsnd
+            /sbcB_algsnd /sbcs_algsnd /sbbB_algsnd /sbbs_algsnd
+            /mulB_algsnd /vpc_algsnd
+            /ucshlBn_algsnd /scshlBn_algsnd
+            /ushlBn_algsnd /sshlBn_algsnd
+            /uaddB_algsnd /saddB_algsnd
+            /uadcB_algsnd /sadcB_algsnd
+            /usubB_algsnd /ssubB_algsnd
+            /usbcB_algsnd /ssbcB_algsnd
+            /usbbB_algsnd /ssbbB_algsnd
+            /umulB_algsnd /smulB_algsnd;
+      by (repeat rewrite -> (add_proper_eval_atom (Logic.eq_refl _) Heq); reflexivity).
+  Qed.
+
+  Global Instance add_proper_ssa_program_algsnd_at_env :
+    Proper (SSATE.Equal ==> eq ==> eq ==> iff) ssa_program_algsnd_at.
+  Proof.
+    move=> E1 E2 Heq p1 p2 ? s1 s2 ?; subst. elim: p2 E1 E2 s2 Heq => [| i p IH] E1 E2 s Heq //=.
+    - split; move=> _; exact: ssa_program_algsnd_at_nil.
+    - split; inversion_clear 1.
+      + rewrite Heq in H0. apply: (ssa_program_algsnd_at_cons H0).
+        move=> t Hevi. apply/(IH (instr_succ_typenv i E1)).
+        * rewrite Heq. reflexivity.
+        * apply: H1. rewrite Heq. exact: Hevi.
+      + rewrite -Heq in H0. apply: (ssa_program_algsnd_at_cons H0).
+        move=> t Hevi. apply/(IH (instr_succ_typenv i E2)).
+        * rewrite Heq. reflexivity.
+        * apply: H1. rewrite -Heq. exact: Hevi.
+  Qed.
+
+  Global Instance add_proper_ssa_program_algsnd_at_store :
+    Proper (eq ==> eq ==> SSAStore.Equal ==> iff) ssa_program_algsnd_at.
+  Proof.
+    move=> E1 E2 ? p1 p2 ? s1 s2 Heq; subst. elim: p2 E2 s1 s2 Heq => [| i p IH] E s1 s2 Heq //=.
+    - split; move=> _; exact: ssa_program_algsnd_at_nil.
+    - split; inversion_clear 1.
+      + rewrite Heq in H0. apply: (ssa_program_algsnd_at_cons H0).
+        move=> t Hevi. rewrite -Heq in Hevi. exact: (H1 _ Hevi).
+      + rewrite -Heq in H0. apply: (ssa_program_algsnd_at_cons H0).
+        move=> t Hevi. rewrite Heq in Hevi. exact: (H1 _ Hevi).
+  Qed.
+
+  Lemma ssa_program_algsnd_at_rcons E p i s :
+    ssa_program_algsnd_at E (rcons p i) s <->
+      (ssa_program_algsnd_at E p s /\
+         forall t, eval_program E p s t -> ssa_instr_algsnd_at (program_succ_typenv p E) i t).
+  Proof.
+    elim: p E i s => [| j p IH] E i s //=.
+    - split => H.
+      + inversion_clear H. split.
+        * exact: ssa_program_algsnd_at_nil.
+        * move=> t Hev. inversion_clear Hev. rewrite -H. assumption.
+      + move: H => [Has Hsucc]. move: (Hsucc _ (Enil _ (SSAStore.Equal_refl s))) => Hasi.
+        apply: (ssa_program_algsnd_at_cons Hasi). move=> t Hevi. exact: ssa_program_algsnd_at_nil.
+    - split => H.
+      + inversion_clear H. split.
+        * apply: (ssa_program_algsnd_at_cons H0). move=> t Hevj. move: (H1 _ Hevj) => Haspi.
+          move: (proj1 (IH _ _ _) Haspi) => [Hasp Hsucc]. exact: Hasp.
+        * move=> t Hevjp. inversion_clear Hevjp. move: (H1 _ H) => Haspi.
+          move: (proj1 (IH _ _ _) Haspi) => [Hasp Hsucc]. exact: (Hsucc _ H2).
+      + move: H => [Has Hsucc]. inversion_clear Has. apply: (ssa_program_algsnd_at_cons H).
+        move=> t Hevj. apply/IH. split.
+        * exact: (H0 _ Hevj).
+        * move=> u Hevp. apply: Hsucc. apply: (Econs Hevj). assumption.
+  Qed.
+
+  Lemma ssa_program_algsnd_at_cat E p1 p2 s :
+    ssa_program_algsnd_at E (p1 ++ p2) s <->
+      (ssa_program_algsnd_at E p1 s /\
+         forall t, eval_program E p1 s t -> ssa_program_algsnd_at (program_succ_typenv p1 E) p2 t).
+  Proof.
+    elim: p1 p2 E s => [| i1 p1 IH1] p2 E s //=.
+    - split => H.
+      + split; first exact: ssa_program_algsnd_at_nil. move=> t Hev. inversion_clear Hev.
+        rewrite -H0. assumption.
+      + move: H => [_ H]. apply: H. apply: Enil. reflexivity.
+    - split => H.
+      + inversion_clear H. split.
+        * apply: (ssa_program_algsnd_at_cons H0). move=> t Hevi1. move: (H1 _ Hevi1) => Has12.
+          exact: (proj1 (proj1 (IH1 _ _ _) Has12)).
+        * move=> t Hevip. inversion_clear Hevip. move: (H1 _ H) => Has12.
+          apply: (proj2 (proj1 (IH1 _ _ _) Has12)). assumption.
+      + move: H => [Hasip Hsucc]. inversion_clear Hasip.
+        apply: (ssa_program_algsnd_at_cons H). move=> t Hevi.
+        apply/IH1. split.
+        * exact: (H0 _ Hevi).
+        * move=> u Hevp. apply: Hsucc. apply: (Econs Hevi). assumption.
+  Qed.
 
   Lemma ssa_instr_algsnd_at_eqn E i s :
     ssa_instr_algsnd_at E i s -> ssa_instr_algsnd_at E (eqn_instr i) s.
@@ -1955,9 +2071,9 @@ Section SplitSpec.
 
   Lemma algred_Ishl t bs n :
     size bs = sizeof_typ t -> shlBn_algsnd t bs n ->
-    bv2z t (bs <<# n)%bits = (bv2z t bs * Cryptoline.DSL.z2expn (Z.of_nat n))%Z.
+    bv2z t (bs <<# n)%bits = (bv2z t bs * z2expn (Z.of_nat n))%Z.
   Proof.
-    rewrite /shlBn_algsnd /ushlBn_algsnd /sshlBn_algsnd /Cryptoline.DSL.z2expn.
+    rewrite /shlBn_algsnd /ushlBn_algsnd /sshlBn_algsnd /z2expn.
     case: t => /=.
     - move=> _ _.  exact: bv2z_shl_unsigned.
     - move=> _ _. exact: bv2z_shl_signed.
@@ -1970,11 +2086,11 @@ Section SplitSpec.
     cshlBn_algsnd th bsh bsl n ->
     (bv2z tl (low (size bsl) ((bsl ++ bsh) <<# n) >># n)%bits +
      bv2z th (high (size bsh) ((bsl ++ bsh) <<# n)%bits) *
-     Cryptoline.DSL.z2expn (Z.of_nat (size bsl - n)))%Z =
-    (bv2z th bsh * Cryptoline.DSL.z2expn (Z.of_nat (size bsl)) + bv2z tl bsl)%Z.
+       z2expn (Z.of_nat (size bsl - n)))%Z =
+      (bv2z th bsh * z2expn (Z.of_nat (size bsl)) + bv2z tl bsl)%Z.
   Proof.
     rewrite /compatible /cshlBn_algsnd /ucshlBn_algsnd /scshlBn_algsnd /ushlBn_algsnd
-            /sshlBn_algsnd /Cryptoline.DSL.z2expn. case: th; case: tl => //=.
+            /sshlBn_algsnd /z2expn. case: th; case: tl => //=.
     - move=> ? ? _ /eqP -> Hs H1 H2. rewrite -H2 in H1. exact: bv2z_cshl_unsigned'.
     - move=> ? ? _ /eqP -> Hs H1 H2. rewrite -H2 in H1. exact: bv2z_cshl_signed'.
   Qed.
@@ -2006,7 +2122,7 @@ Section SplitSpec.
     compatible (Tuint n) (Tuint m) -> size bs = m ->
     bv2z (Tuint n) (~~# bs)%bits = (z2expn (Z.of_nat n) - Z.one - bv2z (Tuint m) bs)%Z.
   Proof.
-    rewrite /compatible /z2expn /Cryptoline.DSL.z2expn /=. move=> /eqP <- <-.
+    rewrite /compatible /z2expn /=. move=> /eqP <- <-.
     exact: bv2z_not_unsigned.
   Qed.
 
@@ -2031,10 +2147,10 @@ Section SplitSpec.
     size bs1 = n -> size bs2 = n ->
     (bv2z (Tuint n) (bs1 +# bs2)%bits +
      bv2z Tbit (1) -bits of bool (carry_addB bs1 bs2)%bits *
-                    Cryptoline.DSL.z2expn (Z.of_nat n))%Z =
+                      z2expn (Z.of_nat n))%Z =
     (bv2z (Tuint n) bs1 + bv2z (Tuint n) bs2)%Z.
   Proof.
-    rewrite /Cryptoline.DSL.z2expn /=. move=> H1 H2. rewrite -H1.
+    rewrite /z2expn /=. move=> H1 H2. rewrite -H1.
     rewrite -H2 in H1. rewrite Z.add_0_r. exact: bv2z_adds_unsigned.
   Qed.
 
@@ -2074,10 +2190,10 @@ Section SplitSpec.
     (bv2z (Tuint n) (adcB (to_bool bsc) bs1 bs2).2 +
      bv2z Tbit (1)-bits of bool
                         ((adcB (to_bool bsc) bs1 bs2).1)%bits *
-                   Cryptoline.DSL.z2expn (Z.of_nat n))%Z =
+                     z2expn (Z.of_nat n))%Z =
   (bv2z (Tuint n) bs1 + bv2z (Tuint n) bs2 + bv2z Tbit bsc)%Z.
   Proof.
-    rewrite /Cryptoline.DSL.z2expn /=. rewrite Z.add_0_r.
+    rewrite /z2expn /=. rewrite Z.add_0_r.
     move=> H1 H2 Hc. rewrite -H1. rewrite -H2 in H1.
     exact: bv2z_adcs_unsigned.
   Qed.
@@ -2108,10 +2224,10 @@ Section SplitSpec.
     (bv2z (Tuint n) bs1 - bv2z (Tuint n) bs2 +
      (1 - bv2z Tbit
                (1) -bits of bool ((adcB true bs1 (~~# bs2)).1)%bits) *
-     Cryptoline.DSL.z2expn (Z.of_nat n))%Z =
-    bv2z (Tuint n) (adcB true bs1 (~~# bs2)%bits).2.
+       z2expn (Z.of_nat n))%Z =
+      bv2z (Tuint n) (adcB true bs1 (~~# bs2)%bits).2.
   Proof.
-    rewrite /Cryptoline.DSL.z2expn /=. rewrite Z.add_0_r. move=> H1 H2.
+    rewrite /z2expn /=. rewrite Z.add_0_r. move=> H1 H2.
     rewrite -H1. rewrite -H2 in H1. exact: bv2z_subc_unsigned.
   Qed.
 
@@ -2129,10 +2245,10 @@ Section SplitSpec.
     size bs1 = n -> size bs2 = n ->
     (bv2z (Tuint n) bs1 - bv2z (Tuint n) bs2 +
      bv2z Tbit (1) -bits of bool (borrow_subB bs1 bs2)%bits *
-                    Cryptoline.DSL.z2expn (Z.of_nat n))%Z =
-    bv2z (Tuint n) (bs1 -# bs2)%bits.
+                      z2expn (Z.of_nat n))%Z =
+      bv2z (Tuint n) (bs1 -# bs2)%bits.
   Proof.
-    rewrite /Cryptoline.DSL.z2expn /=. move=> H1 H2. rewrite -H1 Z.add_0_r.
+    rewrite /z2expn /=. move=> H1 H2. rewrite -H1 Z.add_0_r.
     rewrite -H2 in H1. exact: bv2z_subb_unsigned.
   Qed.
 
@@ -2172,10 +2288,10 @@ Section SplitSpec.
     (bv2z (Tuint n) bs1 - bv2z (Tuint n) bs2 - (1 - bv2z Tbit bsc) +
      (1 - bv2z Tbit (1)-bits of bool
                              ((adcB (to_bool bsc) bs1 (~~# bs2)).1)%bits) *
-     Cryptoline.DSL.z2expn (Z.of_nat n))%Z =
-    bv2z (Tuint n) (adcB (to_bool bsc) bs1 (~~# bs2)%bits).2.
+       z2expn (Z.of_nat n))%Z =
+      bv2z (Tuint n) (adcB (to_bool bsc) bs1 (~~# bs2)%bits).2.
   Proof.
-    rewrite /Cryptoline.DSL.z2expn /=. rewrite Z.add_0_r. move=> H1 H2 Hc.
+    rewrite /z2expn /=. rewrite Z.add_0_r. move=> H1 H2 Hc.
     rewrite -H1. rewrite -H2 in H1. exact: bv2z_sbcs_unsigned.
   Qed.
 
@@ -2216,10 +2332,10 @@ Section SplitSpec.
     size bs1 = n -> size bs2 = n -> size bsc = 1 ->
     (bv2z (Tuint n) (sbbB (to_bool bsc) bs1 bs2).2 +
      - bv2z Tbit (1)-bits of bool ((sbbB (to_bool bsc) bs1 bs2).1)%bits *
-                     Cryptoline.DSL.z2expn (Z.of_nat n))%Z =
-    (bv2z (Tuint n) bs1 - bv2z (Tuint n) bs2 - bv2z Tbit bsc)%Z.
+                       z2expn (Z.of_nat n))%Z =
+      (bv2z (Tuint n) bs1 - bv2z (Tuint n) bs2 - bv2z Tbit bsc)%Z.
   Proof.
-    rewrite /Cryptoline.DSL.z2expn /=. move=> H1 H2 Hc. rewrite Z.add_0_r.
+    rewrite /z2expn /=. move=> H1 H2 Hc. rewrite Z.add_0_r.
     rewrite -H1. rewrite -H2 in H1. exact: bv2z_sbbs_unsigned.
   Qed.
 
@@ -2252,10 +2368,10 @@ Section SplitSpec.
     (bv2z (unsigned_typ t)
           (low (size bs2) (zext (size bs1) bs1 *# zext (size bs1) bs2)%bits) +
      bv2z t (high (size bs1) (zext (size bs1) bs1 *# zext (size bs1) bs2)%bits) *
-     Cryptoline.DSL.z2expn (Z.of_nat (size bs2)))%Z =
-    (bv2z t bs1 * bv2z t bs2)%Z.
+       z2expn (Z.of_nat (size bs2)))%Z =
+      (bv2z t bs1 * bv2z t bs2)%Z.
   Proof.
-    rewrite /Cryptoline.DSL.z2expn /=. case: t => //=.
+    rewrite /z2expn /=. case: t => //=.
     move=> n _ H1 H2. rewrite -H2 in H1. exact: bv2z_mull_unsigned.
   Qed.
 
@@ -2267,10 +2383,10 @@ Section SplitSpec.
     (bv2z (unsigned_typ t)
           (low (size bs2) (sext (size bs1) bs1 *# sext (size bs1) bs2)%bits) +
      bv2z t (high (size bs1) (sext (size bs1) bs1 *# sext (size bs1) bs2)%bits) *
-     Cryptoline.DSL.z2expn (Z.of_nat (size bs2)))%Z =
-    (bv2z t bs1 * bv2z t bs2)%Z.
+       z2expn (Z.of_nat (size bs2)))%Z =
+      (bv2z t bs1 * bv2z t bs2)%Z.
   Proof.
-    rewrite /Cryptoline.DSL.z2expn /=. case: t => //=.
+    rewrite /z2expn /=. case: t => //=.
     move=> n _ Hs H1 H2. rewrite -H2 in H1. exact: bv2z_mull_signed.
   Qed.
 
@@ -2298,18 +2414,18 @@ Section SplitSpec.
   Lemma algred_Isplit_unsigned t bs n :
     is_unsigned t -> size bs = sizeof_typ t ->
     (bv2z (unsigned_typ t) (bs <<# (size bs - n) >># (size bs - n))%bits +
-     bv2z t (bs >># n)%bits * Cryptoline.DSL.z2expn (Z.of_nat n))%Z = bv2z t bs.
+       bv2z t (bs >># n)%bits * z2expn (Z.of_nat n))%Z = bv2z t bs.
   Proof.
-    rewrite /Cryptoline.DSL.z2expn /=. case: t => //=.
+    rewrite /z2expn /=. case: t => //=.
     move=> _ _ _. exact: bv2z_split_unsigned.
   Qed.
 
   Lemma algred_Isplit_signed t bs n :
     is_signed t -> size bs = sizeof_typ t -> n <= size bs ->
     (bv2z (unsigned_typ t) (bs <<# (size bs - n) >># (size bs - n))%bits +
-     bv2z t (sarB n bs) * Cryptoline.DSL.z2expn (Z.of_nat n))%Z = bv2z t bs.
+     bv2z t (sarB n bs) * z2expn (Z.of_nat n))%Z = bv2z t bs.
   Proof.
-    rewrite /Cryptoline.DSL.z2expn /=. case: t => //=.
+    rewrite /z2expn /=. case: t => //=.
     move=> _ _ _ Hn. exact: bv2z_split_signed.
   Qed.
 
@@ -2330,9 +2446,9 @@ Section SplitSpec.
     (wa <= wt) = false -> size bs = wa ->
     Z.div_eucl (to_Zpos bs) (z2expn (Z.of_nat wt)) = (q, r) ->
     (bv2z (Tuint wt) (tcast bs (Tuint wa) (Tuint wt)) +
-     q * Cryptoline.DSL.z2expn (Z.of_nat wt))%Z = bv2z (Tuint wa) bs.
+     q * z2expn (Z.of_nat wt))%Z = bv2z (Tuint wa) bs.
   Proof.
-    rewrite /tcast /ucastB /z2expn /Cryptoline.DSL.z2expn /=. move=> H1 H2.
+    rewrite /tcast /ucastB /z2expn /=. move=> H1 H2.
     rewrite -H2 in H1. rewrite leq_eqVlt in H1. case H: (wt == size bs).
     - rewrite eq_sym H orTb in H1. discriminate.
     - rewrite eq_sym H orFb in H1. move/idP/negP: H1.
@@ -2344,10 +2460,10 @@ Section SplitSpec.
   Lemma algred_Icast_usu wt wa bs q r :
     (wa <= wt) = true -> size bs = wa ->
     Z.div_eucl (to_Z bs) (z2expn (Z.of_nat wt)) = (q, r) ->
-    (bv2z (Tsint wa) bs + (-q) * Cryptoline.DSL.z2expn (Z.of_nat wt))%Z =
+    (bv2z (Tsint wa) bs + (-q) * z2expn (Z.of_nat wt))%Z =
     bv2z (Tuint wt) (tcast bs (Tsint wa) (Tuint wt)).
   Proof.
-    rewrite /tcast /scastB /z2expn /Cryptoline.DSL.z2expn /=. move=> H1 H2.
+    rewrite /tcast /scastB /z2expn /=. move=> H1 H2.
     rewrite -H2 in H1. case H: (wt == size bs).
     - rewrite (eqP H). exact: bv2z_cast_usu_eq.
     - rewrite leq_eqVlt eq_sym H orFb in H1. move/ltn_geF: (H1).
@@ -2359,9 +2475,9 @@ Section SplitSpec.
     (wa <= wt) = false -> size bs = wa ->
     Z.div_eucl (to_Z bs) (z2expn (Z.of_nat wt)) = (q, r) ->
     (bv2z (Tuint wt) (tcast bs (Tsint wa) (Tuint wt)) +
-     q * Cryptoline.DSL.z2expn (Z.of_nat wt))%Z = bv2z (Tsint wa) bs.
+     q * z2expn (Z.of_nat wt))%Z = bv2z (Tsint wa) bs.
   Proof.
-    rewrite /z2expn /Cryptoline.DSL.z2expn /tcast /scastB /=. move=> H1 H2.
+    rewrite /z2expn /tcast /scastB /=. move=> H1 H2.
     rewrite -H2 in H1. rewrite leq_eqVlt in H1. case H: (wt == size bs).
     - rewrite eq_sym H orTb in H1. discriminate.
     - rewrite eq_sym H orFb in H1. move/idP/negP: H1.
@@ -2388,9 +2504,9 @@ Section SplitSpec.
     Z.div_eucl (to_Zpos bs) (z2expn (Z.of_nat wt)) = (q, r) ->
     Z.div_eucl r (z2expn (Z.of_nat wt - 1)) = (q', r') ->
     (bv2z (Tsint wt) (tcast bs (Tuint wa) (Tsint wt)) +
-     (q + q') * Cryptoline.DSL.z2expn (Z.of_nat wt))%Z = bv2z (Tuint wa) bs.
+     (q + q') * z2expn (Z.of_nat wt))%Z = bv2z (Tuint wa) bs.
   Proof.
-    rewrite /tcast /ucastB /z2expn /Cryptoline.DSL.z2expn /=.
+    rewrite /tcast /ucastB /z2expn /=.
     move=> H1 H2; rewrite -H2 in H1. case H: (wt == size bs).
     - rewrite (eqP H). exact: bv2z_cast_dus_eq.
     - move/idP/negP: H1. rewrite -leqNgt leq_eqVlt H orFb. move=> H1; rewrite H1.
@@ -2415,9 +2531,9 @@ Section SplitSpec.
     Z.div_eucl (to_Z bs) (z2expn (Z.of_nat wt)) = (q, r) ->
     Z.div_eucl r (z2expn (Z.of_nat wt - 1)) = (q', r') ->
     (bv2z (Tsint wt) (tcast bs (Tsint wa) (Tsint wt)) +
-     (q + q') * Cryptoline.DSL.z2expn (Z.of_nat wt))%Z = bv2z (Tsint wa) bs.
+     (q + q') * z2expn (Z.of_nat wt))%Z = bv2z (Tsint wa) bs.
   Proof.
-    rewrite /tcast /scastB /z2expn /Cryptoline.DSL.z2expn /=.
+    rewrite /tcast /scastB /z2expn /=.
     move=> H1 H2; rewrite -H2 in H1. case H: (wt == size bs).
     - rewrite leq_eqVlt eq_sym H orTb in H1. discriminate.
     - rewrite leq_eqVlt eq_sym H orFb in H1. move/idP/negP: H1.
@@ -2478,10 +2594,10 @@ Section SplitSpec.
   Lemma algred_Ijoin th tl bsh bsl :
     (0 < size bsh) -> is_unsigned tl -> compatible th tl ->
     size bsh = sizeof_typ th -> size bsl = sizeof_typ tl ->
-    (bv2z tl bsl + bv2z th bsh * Cryptoline.DSL.z2expn (Z.of_nat (size bsl)))%Z =
+    (bv2z tl bsl + bv2z th bsh * z2expn (Z.of_nat (size bsl)))%Z =
     bv2z (double_typ th) (bsl ++ bsh).
   Proof.
-    rewrite /compatible /Cryptoline.DSL.z2expn /=. case: th; case: tl => //=.
+    rewrite /compatible /z2expn /=. case: th; case: tl => //=.
     - move=> n m _ _ /eqP -> <- H. rewrite to_Zpos_cat. reflexivity.
     - move=> n m Hlt _ /eqP Heq Hh Hl. subst. rewrite (to_Z_cat _ Hlt). reflexivity.
   Qed.

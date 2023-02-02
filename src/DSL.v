@@ -1,712 +1,17 @@
 
 (** Typed CryptoLine. *)
 
-From Coq Require Import List Ascii ZArith OrderedType String.
+From Coq Require Import List Ascii ZArith OrderedType String Recdef.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
 From ssrlib Require Import Var SsrOrder ZAriths Store FSets FMaps Tactics Seqs Nats Strings.
 From Cryptoline Require Import Options.
+From Cryptoline Require Export DSLRaw.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
-
-Declare Scope dsl.
-Delimit Scope dsl with dsl.
-
-
-Section Operators.
-
-  Inductive eunop : Set :=
-  | Eneg.
-
-  Inductive ebinop : Set :=
-  | Eadd
-  | Esub
-  | Emul.
-
-  Inductive runop : Set :=
-  | Rnegb
-  | Rnotb.
-
-  Inductive rbinop : Set :=
-  | Radd
-  | Rsub
-  | Rmul
-  | Rumod
-  | Rsrem (* 2's complement signed remainder (sign follows dividend) *)
-  | Rsmod (* 2's complement signed remainder (sign follows divisor) *)
-  | Randb
-  | Rorb
-  | Rxorb.
-
-  Inductive rcmpop : Set :=
-  | Rult
-  | Rule
-  | Rugt
-  | Ruge
-  | Rslt
-  | Rsle
-  | Rsgt
-  | Rsge.
-
-  Definition eunop_eqn (o1 o2 : eunop) : bool :=
-    match o1, o2 with
-    | Eneg, Eneg => true
-    end.
-
-  Lemma eunop_eqn_refl o : eunop_eqn o o.
-  Proof. case: o => //=; move=> *; rewrite !eqxx; done. Qed.
-
-  Lemma eunop_eqn_eq o1 o2 : eunop_eqn o1 o2 <-> o1 = o2.
-  Proof. by split; case: o1; case: o2 => //=. Qed.
-
-  Lemma eunop_eqP (o1 o2 : eunop) : reflect (o1 = o2) (eunop_eqn o1 o2).
-  Proof.
-    case H: (eunop_eqn o1 o2).
-    - apply: ReflectT. apply/eunop_eqn_eq. assumption.
-    - apply: ReflectF. move=> Heq. move/negP: H. apply. apply/eunop_eqn_eq.
-      assumption.
-  Qed.
-
-  Definition eunop_eqMixin := EqMixin eunop_eqP.
-  Canonical eunop_eqType := Eval hnf in EqType eunop eunop_eqMixin.
-
-  Definition ebinop_eqn (o1 o2 : ebinop) : bool :=
-    match o1, o2 with
-    | Eadd, Eadd
-    | Esub, Esub
-    | Emul, Emul => true
-    | _, _ => false
-    end.
-
-  Lemma ebinop_eqn_refl o : ebinop_eqn o o.
-  Proof. case: o => //=; move=> *; rewrite !eqxx; done. Qed.
-
-  Lemma ebinop_eqn_eq o1 o2 : ebinop_eqn o1 o2 <-> o1 = o2.
-  Proof. by split; case: o1; case: o2 => //=. Qed.
-
-  Lemma ebinop_eqP (o1 o2 : ebinop) : reflect (o1 = o2) (ebinop_eqn o1 o2).
-  Proof.
-    case H: (ebinop_eqn o1 o2).
-    - apply: ReflectT. apply/ebinop_eqn_eq. assumption.
-    - apply: ReflectF. move=> Heq. move/negP: H. apply. apply/ebinop_eqn_eq.
-      assumption.
-  Qed.
-
-  Definition ebinop_eqMixin := EqMixin ebinop_eqP.
-  Canonical ebinop_eqType := Eval hnf in EqType ebinop ebinop_eqMixin.
-
-  Definition runop_eqn (o1 o2 : runop) : bool :=
-    match o1, o2 with
-    | Rnegb, Rnegb
-    | Rnotb, Rnotb => true
-    | _, _ => false
-    end.
-
-  Lemma runop_eqn_refl o : runop_eqn o o.
-  Proof. case: o => //=; move=> *; rewrite !eqxx; done. Qed.
-
-  Lemma runop_eqn_eq o1 o2 : runop_eqn o1 o2 <-> o1 = o2.
-  Proof. by split; case: o1; case: o2 => //=. Qed.
-
-  Lemma runop_eqP (o1 o2 : runop) : reflect (o1 = o2) (runop_eqn o1 o2).
-  Proof.
-    case H: (runop_eqn o1 o2).
-    - apply: ReflectT. apply/runop_eqn_eq. assumption.
-    - apply: ReflectF. move=> Heq. move/negP: H. apply. apply/runop_eqn_eq.
-      assumption.
-  Qed.
-
-  Definition runop_eqMixin := EqMixin runop_eqP.
-  Canonical runop_eqType := Eval hnf in EqType runop runop_eqMixin.
-
-  Definition rbinop_eqn (o1 o2 : rbinop) : bool :=
-    match o1, o2 with
-    | Radd, Radd
-    | Rsub, Rsub
-    | Rmul, Rmul
-    | Rumod, Rumod
-    | Rsrem, Rsrem
-    | Rsmod, Rsmod
-    | Randb, Randb
-    | Rorb, Rorb
-    | Rxorb, Rxorb => true
-    | _, _ => false
-    end.
-
-  Lemma rbinop_eqn_refl o : rbinop_eqn o o.
-  Proof. case: o => //=; move=> *; rewrite !eqxx; done. Qed.
-
-  Lemma rbinop_eqn_eq o1 o2 : rbinop_eqn o1 o2 <-> o1 = o2.
-  Proof. by split; case: o1; case: o2 => //=. Qed.
-
-  Lemma rbinop_eqP (o1 o2 : rbinop) : reflect (o1 = o2) (rbinop_eqn o1 o2).
-  Proof.
-    case H: (rbinop_eqn o1 o2).
-    - apply: ReflectT. apply/rbinop_eqn_eq. assumption.
-    - apply: ReflectF. move=> Heq. move/negP: H. apply. apply/rbinop_eqn_eq.
-      assumption.
-  Qed.
-
-  Definition rbinop_eqMixin := EqMixin rbinop_eqP.
-  Canonical rbinop_eqType := Eval hnf in EqType rbinop rbinop_eqMixin.
-
-  Definition rcmpop_eqn (o1 o2 : rcmpop) : bool :=
-    match o1, o2 with
-    | Rult, Rult
-    | Rule, Rule
-    | Rugt, Rugt
-    | Ruge, Ruge
-    | Rslt, Rslt
-    | Rsle, Rsle
-    | Rsgt, Rsgt
-    | Rsge, Rsge => true
-    | _, _ => false
-    end.
-
-  Lemma rcmpop_eqn_refl o : rcmpop_eqn o o.
-  Proof. case: o => //=; move=> *; rewrite !eqxx; done. Qed.
-
-  Lemma rcmpop_eqn_eq o1 o2 : rcmpop_eqn o1 o2 <-> o1 = o2.
-  Proof. by split; case: o1; case: o2 => //=. Qed.
-
-  Lemma rcmpop_eqP (o1 o2 : rcmpop) : reflect (o1 = o2) (rcmpop_eqn o1 o2).
-  Proof.
-    case H: (rcmpop_eqn o1 o2).
-    - apply: ReflectT. apply/rcmpop_eqn_eq. assumption.
-    - apply: ReflectF. move=> Heq. move/negP: H. apply. apply/rcmpop_eqn_eq.
-      assumption.
-  Qed.
-
-  Definition rcmpop_eqMixin := EqMixin rcmpop_eqP.
-  Canonical rcmpop_eqType := Eval hnf in EqType rcmpop rcmpop_eqMixin.
-
-  Definition string_of_eunop op :=
-    match op with
-    | Eneg => "-"%string
-    end.
-
-  Definition string_of_ebinop op :=
-    match op with
-    | Eadd => "+"%string
-    | Esub => "-"%string
-    | Emul => "*"%string
-    end.
-
-  Definition string_of_runop op :=
-    match op with
-    | Rnegb => "-"%string
-    | Rnotb => "!"%string
-    end.
-
-  Definition string_of_rbinop op :=
-    match op with
-    | Radd => "+"%string
-    | Rsub => "-"%string
-    | Rmul => "*"%string
-    | Rumod => "umod"%string
-    | Rsrem => "srem"%string
-    | Rsmod => "smod"%string
-    | Randb => "&"%string
-    | Rorb => "|"%string
-    | Rxorb => "xor"%string
-    end.
-
-  Definition string_of_rcmpop op :=
-    match op with
-    | Rult => "<u"%string
-    | Rule => "<=u"%string
-    | Rugt => ">u"%string
-    | Ruge => ">=u"%string
-    | Rslt => "<s"%string
-    | Rsle => "<=s"%string
-    | Rsgt => ">s"%string
-    | Rsge => ">=s"%string
-    end.
-
-End Operators.
-
-
-
-Section DSLRaw.
-
-  Variable var : eqType.
-
-  Inductive eexp : Type :=
-  | Evar : var -> eexp
-  | Econst : Z -> eexp
-  | Eunop : eunop -> eexp -> eexp
-  | Ebinop : ebinop -> eexp -> eexp -> eexp
-  | Epow : eexp -> N -> eexp.
-
-  Definition evar v := Evar v.
-  Definition econst n := Econst n.
-  Definition eunary op e := Eunop op e.
-  Definition ebinary op e1 e2 := Ebinop op e1 e2.
-  Definition eneg e := Eunop Eneg e.
-  Definition eadd e1 e2 := Ebinop Eadd e1 e2.
-  Definition esub e1 e2 := Ebinop Esub e1 e2.
-  Definition emul e1 e2 := Ebinop Emul e1 e2.
-  Definition esq e := Ebinop Emul e e.
-  Definition epow e n := Epow e n.
-
-  Definition eadds (es : seq eexp) : eexp :=
-    match es with
-    | [::] => econst Z.zero
-    | e::[::] => e
-    | e::es => foldl (fun res e => eadd res e) e es
-    end.
-
-  Definition emuls (es : seq eexp) : eexp :=
-    match es with
-    | [::] => econst Z.one
-    | e::[::] => e
-    | e::es => foldl (fun res e => emul res e) e es
-    end.
-
-  Definition z2expn n := Z.pow 2%Z n.
-
-  Definition e2expn n := econst (z2expn n).
-
-  Definition emul2p x n := emul x (e2expn n).
-
-  Fixpoint eexp_eqn (e1 e2 : eexp) : bool :=
-    match e1, e2 with
-    | Evar v1, Evar v2 => v1 == v2
-    | Econst n1, Econst n2 => n1 == n2
-    | Eunop op1 e1, Eunop op2 e2 => (op1 == op2) && eexp_eqn e1 e2
-    | Ebinop op1 e1 e2, Ebinop op2 e3 e4 =>
-        (op1 == op2) && eexp_eqn e1 e3 && eexp_eqn e2 e4
-    | Epow e1 n1, Epow e2 n2 =>
-        (eexp_eqn e1 e2) && (n1 == n2)
-    | _, _ => false
-    end.
-
-  Lemma eexp_eqn_eq (e1 e2 : eexp) : eexp_eqn e1 e2 -> e1 = e2.
-  Proof.
-    elim: e1 e2 => [v1 | n1 | op1 e1 IH1 | op1 e1 IH1 e2 IH2 | e1 IH1 n1] [] //=.
-    - by move=> ? /eqP ->.
-    - by move=> ? /eqP ->.
-    - by move=> ? ? /andP [/eqP -> H]; rewrite (IH1 _ H).
-    - by move=> ? ? ? /andP [/andP [/eqP -> H1] H2]; rewrite (IH1 _ H1) (IH2 _ H2).
-    - by move=> ? ? /andP [H1 /eqP ->]; rewrite (IH1 _ H1).
-  Qed.
-
-  Lemma eexp_eqn_refl (e : eexp) : eexp_eqn e e.
-  Proof.
-    elim: e => //=.
-    - by move=> ? ? ->; rewrite eqxx.
-    - by move=> ? ? -> ? ->; rewrite eqxx.
-    - by move=> ? -> ?; rewrite eqxx.
-  Qed.
-
-  Lemma eexp_eqn_sym {e1 e2 : eexp} : eexp_eqn e1 e2 -> eexp_eqn e2 e1.
-  Proof. move=> H; rewrite (eexp_eqn_eq H); exact: eexp_eqn_refl. Qed.
-
-  Lemma eexp_eqn_trans {e1 e2 e3 : eexp} :
-    eexp_eqn e1 e2 -> eexp_eqn e2 e3 -> eexp_eqn e1 e3.
-  Proof.
-    move=> H1 H2. rewrite (eexp_eqn_eq H1) (eexp_eqn_eq H2). exact: eexp_eqn_refl.
-  Qed.
-
-  Lemma eexp_eqP (e1 e2 : eexp) : reflect (e1 = e2) (eexp_eqn e1 e2).
-  Proof.
-    case H: (eexp_eqn e1 e2).
-    - apply: ReflectT. exact: (eexp_eqn_eq H).
-    - apply: ReflectF => Heq. move/negP: H; apply. rewrite Heq. exact: eexp_eqn_refl.
-  Qed.
-
-  Definition eexp_eqMixin := EqMixin eexp_eqP.
-  Canonical eexp_eqType := Eval hnf in EqType eexp eexp_eqMixin.
-
-  (* Limbs *)
-
-  Fixpoint limbsi (i : nat) (r : Z) (es : seq eexp) :=
-    match es with
-    | [::] => econst Z.zero
-    | e::[::] => e
-    | e::es => eadd (emul e (e2expn (Z.of_nat i * r))) (limbsi (i + 1) r es)
-    end.
-
-  Definition limbs (r : Z) (es : seq eexp) := limbsi 0 r es.
-
-  (* Range Expressions *)
-
-  (* The first nat is the size of the subexpression *)
-  Inductive rexp : Type :=
-  | Rvar : var -> rexp
-  | Rconst : nat -> bits -> rexp
-  | Runop : nat -> runop -> rexp -> rexp
-  | Rbinop : nat -> rbinop -> rexp -> rexp -> rexp
-  | Ruext : nat -> rexp -> nat -> rexp
-  | Rsext : nat -> rexp -> nat -> rexp.
-
-  Definition rvar v := Rvar v.
-  Definition rconst w n := Rconst w n.
-  Definition rbits n := Rconst (size n) n.
-  Definition runary w op e := Runop w op e.
-  Definition rbinary w op e1 e2 := Rbinop w op e1 e2.
-  Definition rnegb w e := Runop w Rnegb e.
-  Definition rnotb w e := Runop w Rnotb e.
-  Definition radd w e1 e2 := Rbinop w Radd e1 e2.
-  Definition rsub w e1 e2 := Rbinop w Rsub e1 e2.
-  Definition rmul w e1 e2 := Rbinop w Rmul e1 e2.
-  Definition rumod w e1 e2 := Rbinop w Rumod e1 e2.
-  Definition rsrem w e1 e2 := Rbinop w Rsrem e1 e2.
-  Definition rsmod w e1 e2 := Rbinop w Rsmod e1 e2.
-  Definition randb w e1 e2 := Rbinop w Randb e1 e2.
-  Definition rorb w e1 e2 := Rbinop w Rorb e1 e2.
-  Definition rxorb w e1 e2 := Rbinop w Rxorb e1 e2.
-  Definition rsq w e := Rbinop w Rmul e e.
-
-  Definition radds w es :=
-    match es with
-    | [::] => rbits (from_nat w 0)
-    | e::[::] => e
-    | e::es => foldl (fun res e => radd w res e) e es
-    end.
-
-  Definition rmuls w es :=
-    match es with
-    | [::] => rbits (from_nat w 1)
-    | e::[::] => e
-    | e::es => foldl (fun res e => rmul w res e) e es
-    end.
-
-  Fixpoint rexp_eqn (e1 e2 : rexp) : bool :=
-    match e1, e2 with
-    | Rvar v1, Rvar v2 => v1 == v2
-    | Rconst w1 n1, Rconst w2 n2 => (w1 == w2) && (n1 == n2)
-    | Runop w1 op1 e1, Runop w2 op2 e2 =>
-      (w1 == w2) && (op1 == op2) && rexp_eqn e1 e2
-    | Rbinop w1 op1 e1 e2, Rbinop w2 op2 e3 e4 =>
-      (w1 == w2) && (op1 == op2) && rexp_eqn e1 e3 && rexp_eqn e2 e4
-    | Ruext w1 e1 n1, Ruext w2 e2 n2
-    | Rsext w1 e1 n1, Rsext w2 e2 n2 =>
-      (w1 == w2) && (rexp_eqn e1 e2) && (n1 == n2)
-    | _, _ => false
-    end.
-
-  Lemma rexp_eqn_eq (e1 e2 : rexp) : rexp_eqn e1 e2 -> e1 = e2.
-  Proof.
-    elim: e1 e2 => [v1 | w1 n1 | ow1 p1 e1 IH1 | w1 op1 e1 IH1 e2 IH2
-                     | w1 e1 IH1 n1 | w1 e1 IH1 n1] [] //=.
-    - by move=> ? /eqP ->.
-    - by move=> ? ? /andP [/eqP -> /eqP ->].
-    - by move=> ? ? ? /andP [/andP [/eqP -> /eqP ->] H]; rewrite (IH1 _ H).
-    - by move=> ? ? ? ? /andP [/andP [/andP [/eqP -> /eqP ->] H1] H2];
-                  rewrite (IH1 _ H1) (IH2 _ H2).
-    - by move=> ? ? ? /andP [/andP [/eqP -> H] /eqP ->]; rewrite (IH1 _ H).
-    - by move=> ? ? ? /andP [/andP [/eqP -> H] /eqP ->]; rewrite (IH1 _ H).
-  Qed.
-
-  Lemma rexp_eqn_refl (e : rexp) : rexp_eqn e e.
-  Proof.
-    elim: e => //=.
-    - by move=> ? ?; rewrite !eqxx.
-    - by move=> ? ? ? ->; rewrite !eqxx.
-    - by move=> ? ? ? -> ? ->; rewrite !eqxx.
-    - by move=> ? ? -> ?; rewrite !eqxx.
-    - by move=> ? ? -> ?; rewrite !eqxx.
-  Qed.
-
-  Lemma rexp_eqn_sym {e1 e2 : rexp} : rexp_eqn e1 e2 -> rexp_eqn e2 e1.
-  Proof. move=> H; rewrite (rexp_eqn_eq H); exact: rexp_eqn_refl. Qed.
-
-  Lemma rexp_eqn_trans {e1 e2 e3 : rexp} :
-    rexp_eqn e1 e2 -> rexp_eqn e2 e3 -> rexp_eqn e1 e3.
-  Proof.
-    move=> H1 H2. rewrite (rexp_eqn_eq H1) (rexp_eqn_eq H2). exact: rexp_eqn_refl.
-  Qed.
-
-  Lemma rexp_eqP (e1 e2 : rexp) : reflect (e1 = e2) (rexp_eqn e1 e2).
-  Proof.
-    case H: (rexp_eqn e1 e2).
-    - apply: ReflectT. exact: (rexp_eqn_eq H).
-    - apply: ReflectF => Heq. move/negP: H; apply. rewrite Heq. exact: rexp_eqn_refl.
-  Qed.
-
-  Definition rexp_eqMixin := EqMixin rexp_eqP.
-  Canonical rexp_eqType := Eval hnf in EqType rexp rexp_eqMixin.
-
-  (* Algebraic Predicates *)
-
-  Inductive ebexp : Type :=
-  | Etrue
-  | Eeq : eexp -> eexp -> ebexp
-  | Eeqmod : eexp -> eexp -> seq eexp -> ebexp
-  | Eand : ebexp -> ebexp -> ebexp.
-
-  Definition etrue := Etrue.
-  Definition eeq e1 e2 := Eeq e1 e2.
-  Definition eeqmod e1 e2 ms := Eeqmod e1 e2 ms.
-  Definition eand b1 b2 := Eand b1 b2.
-
-  Definition eands es := foldr (fun res e => eand res e) Etrue es.
-
-  Fixpoint split_eand (e : ebexp) : seq ebexp :=
-    match e with
-    | Eand e1 e2 => (split_eand e1) ++ (split_eand e2)
-    | _ => [:: e]
-    end.
-
-  Fixpoint ebexp_eqn (e1 e2 : ebexp) : bool :=
-    match e1, e2 with
-    | Etrue, Etrue => true
-    | Eeq e1 e2, Eeq e3 e4 => (e1 == e3) && (e2 == e4)
-    | Eeqmod e1 e2 ms1, Eeqmod e3 e4 ms2 => (e1 == e3) && (e2 == e4) && (ms1 == ms2)
-    | Eand e1 e2, Eand e3 e4 => ebexp_eqn e1 e3 && ebexp_eqn e2 e4
-    | _, _ => false
-    end.
-
-  Lemma ebexp_eqn_eq (e1 e2 : ebexp) : ebexp_eqn e1 e2 -> e1 = e2.
-  Proof.
-    elim: e1 e2 => [| e1 e2 | e1 e2 m | e1 IH1 e2 IH2] [] //=.
-    - by move=> ? ? /andP [/eqP -> /eqP ->].
-    - by move=> ? ? ? /andP [/andP [/eqP -> /eqP ->] /eqP ->].
-    - by move=> ? ? /andP [H1 H2]; rewrite (IH1 _ H1) (IH2 _ H2).
-  Qed.
-
-  Lemma ebexp_eqn_refl (e : ebexp) : ebexp_eqn e e.
-  Proof.
-    elim: e => //=; try by (move=> *; rewrite !eqxx). by move=> e1 -> e2 ->.
-  Qed.
-
-  Lemma ebexp_eqn_sym {e1 e2 : ebexp} : ebexp_eqn e1 e2 -> ebexp_eqn e2 e1.
-  Proof. move=> H; rewrite (ebexp_eqn_eq H); exact: ebexp_eqn_refl. Qed.
-
-  Lemma ebexp_eqn_trans {e1 e2 e3 : ebexp} :
-    ebexp_eqn e1 e2 -> ebexp_eqn e2 e3 -> ebexp_eqn e1 e3.
-  Proof.
-    move=> H1 H2. rewrite (ebexp_eqn_eq H1) (ebexp_eqn_eq H2). exact: ebexp_eqn_refl.
-  Qed.
-
-  Lemma ebexp_eqP (e1 e2 : ebexp) : reflect (e1 = e2) (ebexp_eqn e1 e2).
-  Proof.
-    case H: (ebexp_eqn e1 e2).
-    - apply: ReflectT. exact: (ebexp_eqn_eq H).
-    - apply: ReflectF => Heq. move/negP: H; apply. rewrite Heq.
-      exact: ebexp_eqn_refl.
-  Qed.
-
-  Definition ebexp_eqMixin := EqMixin ebexp_eqP.
-  Canonical ebexp_eqType := Eval hnf in EqType ebexp ebexp_eqMixin.
-
-
-  (* Range Predicates *)
-
-  Inductive rbexp : Type :=
-  | Rtrue
-  | Req : nat -> rexp -> rexp -> rbexp
-  | Rcmp : nat -> rcmpop -> rexp -> rexp -> rbexp
-  | Rneg : rbexp -> rbexp
-  | Rand : rbexp -> rbexp -> rbexp
-  | Ror : rbexp -> rbexp -> rbexp.
-
-  Definition rtrue := Rtrue.
-  Definition rfalse := Rneg Rtrue.
-  Definition req w e1 e2 := Req w e1 e2.
-  Definition rcmp w op e1 e2 := Rcmp w op e1 e2.
-  Definition rult w e1 e2 := Rcmp w Rult e1 e2.
-  Definition rule w e1 e2 := Rcmp w Rule e1 e2.
-  Definition rugt w e1 e2 := Rcmp w Rugt e1 e2.
-  Definition ruge w e1 e2 := Rcmp w Ruge e1 e2.
-  Definition rslt w e1 e2 := Rcmp w Rslt e1 e2.
-  Definition rsle w e1 e2 := Rcmp w Rsle e1 e2.
-  Definition rsgt w e1 e2 := Rcmp w Rsgt e1 e2.
-  Definition rsge w e1 e2 := Rcmp w Rsge e1 e2.
-  Definition reqmod w e1 e2 m :=
-    req w (rsrem w (rsub w e1 e2) m) (rbits (from_nat w 0)).
-
-  Definition rneg e :=
-    match e with
-    | Rneg e' => e'
-    | _ => Rneg e
-    end.
-
-  Definition rand e1 e2 :=
-    match e1, e2 with
-    | Rtrue, e
-    | e, Rtrue => e
-    | Rneg Rtrue, _
-    | _, Rneg Rtrue => Rneg Rtrue
-    | _, _ => Rand e1 e2
-    end.
-
-  Definition ror e1 e2 :=
-    match e1, e2 with
-    | Rtrue, _
-    | _, Rtrue => Rtrue
-    | Rneg Rtrue, e
-    | e, Rneg Rtrue => e
-    | _, _ => Ror e1 e2
-    end.
-
-  Definition rands es := foldl (fun res e => rand res e) Rtrue es.
-  Definition rors es := foldl (fun res e => ror res e) (Rneg Rtrue) es.
-
-  Fixpoint split_rand (e : rbexp) : seq rbexp :=
-    match e with
-    | Rand e1 e2 => (split_rand e1) ++ (split_rand e2)
-    | _ => [:: e]
-    end.
-
-  Fixpoint rbexp_eqn (e1 e2 : rbexp) : bool :=
-    match e1, e2 with
-    | Rtrue, Rtrue => true
-    | Req n1 e1 e2, Req n2 e3 e4 => (n1 == n2) && (e1 == e3) && (e2 == e4)
-    | Rcmp n1 op1 e1 e2, Rcmp n2 op2 e3 e4 =>
-      (n1 == n2) && (op1 == op2) && (e1 == e3) && (e2 == e4)
-    | Rneg e1, Rneg e2 => rbexp_eqn e1 e2
-    | Rand e1 e2, Rand e3 e4
-    | Ror e1 e2, Ror e3 e4 => rbexp_eqn e1 e3 && rbexp_eqn e2 e4
-    | _, _ => false
-    end.
-
-  Lemma rbexp_eqn_eq (e1 e2 : rbexp) : rbexp_eqn e1 e2 -> e1 = e2.
-  Proof.
-    elim: e1 e2 =>
-    [| n1 e1 e2 | n1 op1 e1 e2 | e1 IH1 | e1 IH1 e2 IH2 | e1 IH1 e2 IH2] [] //=.
-    - by move=> ? ? ? /andP [/andP [/eqP -> /eqP ->] /eqP ->].
-    - by move=> ? ? ? ? /andP [/andP [/andP [/eqP -> /eqP ->] /eqP ->] /eqP ->].
-    - by move=> ? H; rewrite (IH1 _ H).
-    - by move=> ? ? /andP [H1 H2]; rewrite (IH1 _ H1) (IH2 _ H2).
-    - by move=> ? ? /andP [H1 H2]; rewrite (IH1 _ H1) (IH2 _ H2).
-  Qed.
-
-  Lemma rbexp_eqn_refl (e : rbexp) : rbexp_eqn e e.
-  Proof.
-    elim: e => //=; try by (move=> *; rewrite !eqxx).
-    - by move=> e1 -> e2 ->.
-    - by move=> e1 -> e2 ->.
-  Qed.
-
-  Lemma rbexp_eqn_sym {e1 e2 : rbexp} : rbexp_eqn e1 e2 -> rbexp_eqn e2 e1.
-  Proof. move=> H; rewrite (rbexp_eqn_eq H); exact: rbexp_eqn_refl. Qed.
-
-  Lemma rbexp_eqn_trans {e1 e2 e3 : rbexp} :
-    rbexp_eqn e1 e2 -> rbexp_eqn e2 e3 -> rbexp_eqn e1 e3.
-  Proof.
-    move=> H1 H2. rewrite (rbexp_eqn_eq H1) (rbexp_eqn_eq H2). exact: rbexp_eqn_refl.
-  Qed.
-
-  Lemma rbexp_eqP (e1 e2 : rbexp) : reflect (e1 = e2) (rbexp_eqn e1 e2).
-  Proof.
-    case H: (rbexp_eqn e1 e2).
-    - apply: ReflectT. exact: (rbexp_eqn_eq H).
-    - apply: ReflectF => Heq. move/negP: H; apply. rewrite Heq.
-      exact: rbexp_eqn_refl.
-  Qed.
-
-  Definition rbexp_eqMixin := EqMixin rbexp_eqP.
-  Canonical rbexp_eqType := Eval hnf in EqType rbexp rbexp_eqMixin.
-
-
-  (* String outputs *)
-
-  Variable string_of_var : var -> string.
-
-  Definition is_eexp_atomic (e : eexp) : bool :=
-    match e with
-    | Evar _ | Econst _ => true
-    | _ => false
-    end.
-
-  Fixpoint string_of_eexp (e : eexp) : string :=
-    match e with
-    | Evar v => string_of_var v
-    | Econst n => string_of_Z n
-    | Eunop op e =>
-        (string_of_eunop op ++ " " ++ string_of_eexp' e)%string
-    | Ebinop op e1 e2 =>
-        (string_of_eexp' e1 ++ " " ++ string_of_ebinop op ++ " " ++ string_of_eexp' e2)%string
-    | Epow e n => (string_of_eexp' e ++ " ^ " ++ string_of_N n)%string
-    end
-  with
-  string_of_eexp' (e : eexp) : string :=
-    match e with
-    | Evar v => string_of_var v
-    | Econst n => string_of_Z n
-    | Eunop op e =>
-        ("(" ++ string_of_eunop op ++ " " ++ string_of_eexp e ++ ")")%string
-    | Ebinop op e1 e2 =>
-        ("(" ++ string_of_eexp e1 ++ " " ++ string_of_ebinop op ++ " "
-             ++ string_of_eexp e2 ++ ")")%string
-    | Epow e n => ("(" ++ string_of_eexp e ++ " ^ " ++ string_of_N n ++ ")")%string
-    end
-    .
-
-    Fixpoint string_of_eexps glue (es : list eexp) : string :=
-      match es with
-      | [::] => ""%string
-      | hd::tl => (string_of_eexp hd ++ glue ++ string_of_eexps glue tl)%string
-      end.
-
-    Fixpoint string_of_ebexp (e : ebexp) : string :=
-      match e with
-      | Etrue => "true"
-      | Eeq e1 e2 => (string_of_eexp e1 ++ " = " ++ string_of_eexp e2)%string
-      | Eeqmod e1 e2 ms =>
-          (string_of_eexp e1 ++ " = " ++ string_of_eexp e2
-                          ++ "(mod [" ++ string_of_eexps ", " ms ++ "])")%string
-      | Eand e1 e2 => (string_of_ebexp e1 ++ " /\ " ++ string_of_ebexp e2)%string
-      end.
-
-    Definition is_rexp_atomic (e : rexp) : bool :=
-      match e with
-      | Rvar _ | Rconst _ _ => true
-      | _ => false
-      end.
-
-    Fixpoint string_of_rexp (e : rexp) : string :=
-      match e with
-      | Rvar v => string_of_var v
-      | Rconst w bs => to_hex bs ++ "@" ++ string_of_nat w
-      | Runop w op e => (string_of_runop op ++ " " ++ string_of_rexp' e)%string
-      | Rbinop w op e1 e2 =>
-          (string_of_rexp' e1 ++ " " ++ string_of_rbinop op
-                           ++ " " ++ string_of_rexp' e2)%string
-      | Ruext w e i => ("uext " ++ string_of_rexp' e ++ " " ++ string_of_nat i)%string
-      | Rsext w e i => ("sext " ++ string_of_rexp' e ++ " " ++ string_of_nat i)%string
-      end
-    with
-    string_of_rexp' (e : rexp) : string :=
-      match e with
-      | Rvar v => string_of_var v
-      | Rconst w bs => to_hex bs
-      | Runop w op e => ("(" ++ string_of_runop op ++ " " ++ string_of_rexp e ++ ")")%string
-      | Rbinop w op e1 e2 =>
-          ("(" ++ string_of_rexp e1 ++ " " ++ string_of_rbinop op
-               ++ " " ++ string_of_rexp' e2 ++ ")")%string
-      | Ruext w e i => ("(uext " ++ string_of_rexp e ++ " " ++ string_of_nat i ++ ")")%string
-      | Rsext w e i => ("(sext " ++ string_of_rexp e ++ " " ++ string_of_nat i ++ ")")%string
-      end.
-
-    Definition is_rbexp_or (e : rbexp) : bool :=
-      match e with
-      | Ror _ _ => true
-      | _ => false
-      end.
-
-    Fixpoint string_of_rbexp (e : rbexp) : string :=
-      match e with
-      | Rtrue => "true"
-      | Req w e1 e2 => (string_of_rexp e1 ++ " = " ++ string_of_rexp e2)%string
-      | Rcmp w op e1 e2 =>
-          (string_of_rexp e1 ++ " " ++ string_of_rcmpop op ++ " " ++ string_of_rexp e2)%string
-      | Rneg e => ("~ " ++ string_of_rbexp e)%string
-      | Rand e1 e2 =>
-          (if is_rbexp_or e1 then "(" ++ string_of_rbexp e1 ++ ")"
-           else string_of_rbexp e1)%string
-                                   ++ " /\ "
-                                   ++ (if is_rbexp_or e2 then "(" ++ string_of_rbexp e2 ++ ")"
-                                       else string_of_rbexp e2)%string
-      | Ror e1 e2 => (string_of_rbexp e1 ++ " \/ " ++ string_of_rbexp e2)%string
-      end.
-
-End DSLRaw.
 
 
 Module MakeDSL
@@ -947,13 +252,14 @@ Module MakeDSL
   Definition rng_bexp (e : bexp) : rbexp := e.2.
 
   Definition band (e1 e2 : bexp) : bexp :=
-    match e1, e2 with
-    | (Etrue, Rtrue), (ee, re)
-    | (ee, re), (Etrue, Rtrue)
-    | (Etrue, re), (ee, Rtrue)
-    | (ee, Rtrue), (Etrue, re) => (ee, re)
-    | (ee1, re1), (ee2, re2) => (eand ee1 ee2, rand re1 re2)
-    end.
+    let '(e1, r1) := e1 in
+    let '(e2, r2) := e2 in
+    (if e1 == etrue then e2
+     else if e2 == etrue then e1
+          else eand e1 e2,
+      if r1 == rtrue then r2
+      else if r2 == rtrue then r1
+           else rand r1 r2).
 
   Definition bands es := foldl (fun res e => band res e) btrue es.
   Definition bands2 es rs := (eands es, rands rs).
@@ -973,12 +279,15 @@ Module MakeDSL
     apply: VSLemmas.subset_union2. exact: VSLemmas.subset_refl.
   Qed.
 
+  Lemma bands_singleton e : bands [:: e] = e.
+  Proof. by case: e => //=. Qed.
+
 
   (* Atoms *)
 
-  Inductive atom : Type :=
-  | Avar : var -> atom
-  | Aconst : typ -> bits -> atom.
+  Definition avar := @Avar V.T.
+  Definition aconst := @Aconst V.T.
+  Definition atom := @atom V.T.
 
   Definition atyp (a : atom) (te : TE.env) : typ :=
     match a with
@@ -987,33 +296,6 @@ Module MakeDSL
     end.
 
   Definition asize (a : atom) (te : TE.env) : nat := sizeof_typ (atyp a te).
-
-  Definition atom_eqn (a1 a2 : atom) : bool :=
-    match a1, a2 with
-    | Avar v1, Avar v2 => v1 == v2
-    | Aconst ty1 n1, Aconst ty2 n2 => (ty1 == ty2) && (n1 == n2)
-    | _, _ => false
-    end.
-
-  Lemma atom_eqn_eq a1 a2 : atom_eqn a1 a2 <-> a1 = a2.
-  Proof.
-    split; case: a1; case: a2 => //=.
-    - move=> ? ? /eqP ->. reflexivity.
-    - move=> ? ? ? ? /andP [/eqP -> /eqP] ->. reflexivity.
-    - move=> ? ? [] ->. exact: eqxx.
-    - move=> ? ? ? ? [] -> ->. by rewrite !eqxx.
-  Qed.
-
-  Lemma atom_eqP (a1 a2 : atom) : reflect (a1 = a2) (atom_eqn a1 a2).
-  Proof.
-    case H: (atom_eqn a1 a2).
-    - apply: ReflectT. apply/atom_eqn_eq. assumption.
-    - apply: ReflectF. move=> Heq. move/negP: H. apply. apply/atom_eqn_eq.
-      assumption.
-  Qed.
-
-  Definition atom_eqMixin := EqMixin atom_eqP.
-  Canonical atom_eqType := Eval hnf in EqType atom atom_eqMixin.
 
   Global Instance add_proper_atyp : Proper (eq ==> TE.Equal ==> eq) atyp.
   Proof.
@@ -1301,6 +583,7 @@ Module MakeDSL
     | hd::tl => VS.union (rvs_instr hd) (rvs_program tl)
     end.
 
+
   Lemma vars_instr_split i :
     VS.Equal (vars_instr i) (VS.union (lvs_instr i) (rvs_instr i)).
   Proof. case: i => /=; move=> *; by VSLemmas.dp_Equal. Qed.
@@ -1332,6 +615,30 @@ Module MakeDSL
                                (VS.union (lvs_program tl) (rvs_program tl))) by
           VSLemmas.dp_Equal.
       move=> ->. rewrite -IH. rewrite -vars_instr_split. reflexivity.
+  Qed.
+
+  Lemma instr_mem_lvs i p :
+    i \in p -> VS.subset (lvs_instr i) (lvs_program p).
+  Proof.
+    elim: p => [| j p IH] //=. rewrite in_cons. case/orP.
+    - move/eqP=> ?; subst. by VSLemmas.dp_subset.
+    - move=> Hin. move: (IH Hin) => ?. by VSLemmas.dp_subset.
+  Qed.
+
+  Lemma instr_mem_rvs i p :
+    i \in p -> VS.subset (rvs_instr i) (rvs_program p).
+  Proof.
+    elim: p => [| j p IH] //=. rewrite in_cons. case/orP.
+    - move/eqP=> ?; subst. by VSLemmas.dp_subset.
+    - move=> Hin. move: (IH Hin) => ?. by VSLemmas.dp_subset.
+  Qed.
+
+  Lemma instr_mem_vars i p :
+    i \in p -> VS.subset (vars_instr i) (vars_program p).
+  Proof.
+    elim: p => [| j p IH] //=. rewrite in_cons. case/orP.
+    - move/eqP=> ?; subst. by VSLemmas.dp_subset.
+    - move=> Hin. move: (IH Hin) => ?. by VSLemmas.dp_subset.
   Qed.
 
   Lemma mem_vars_program1 v p :
@@ -1378,6 +685,20 @@ Module MakeDSL
     rewrite -cats1 lvs_program_cat /=. rewrite VSLemmas.union_emptyr. reflexivity.
   Qed.
 
+  Lemma vars_program_rev p :
+    VS.Equal (vars_program (rev p)) (vars_program p).
+  Proof.
+    elim: p => [| i p IH] //=. rewrite rev_cons vars_program_rcons IH VSLemmas.P.union_sym.
+    reflexivity.
+  Qed.
+
+  Lemma lvs_program_rev p :
+    VS.Equal (lvs_program (rev p)) (lvs_program p).
+  Proof.
+    elim: p => [| i p IH] //=. rewrite rev_cons lvs_program_rcons IH VSLemmas.P.union_sym.
+    reflexivity.
+  Qed.
+
 
   (* Remove algebraic assumptions or range assumptions from programs *)
 
@@ -1409,6 +730,12 @@ Module MakeDSL
     rng_program (rcons p i) = rcons (rng_program p) (rng_instr i).
   Proof.
     elim: p => [| hd tl IH] //=. rewrite IH. reflexivity.
+  Qed.
+
+  Lemma rng_program_cat p1 p2 :
+    rng_program (p1 ++ p2) = (rng_program p1) ++ (rng_program p2).
+  Proof.
+    elim: p1 => [| i1 p1 IH1] //=. rewrite IH1. reflexivity.
   Qed.
 
   Lemma vars_eqn_bexp e : VS.subset (vars_ebexp (eqn_bexp e)) (vars_bexp e).
@@ -1532,12 +859,6 @@ Module MakeDSL
     Definition string_of_rbexp := @string_of_rbexp V.T VP.to_string.
     Definition string_of_bexp e :=
       string_of_ebexp (eqn_bexp e) ++ " && " ++ string_of_rbexp (rng_bexp e).
-
-    Definition string_of_typ (t : typ) : string :=
-      match t with
-      | Tuint n => "uint" ++ string_of_nat n
-      | Tsint n => "sint" ++ string_of_nat n
-      end.
 
     Definition string_of_var_with_typ (vt : var * typ) : string :=
       VP.to_string (fst vt) ++ "@" ++ string_of_typ (snd vt).
@@ -2485,6 +1806,59 @@ Module MakeDSL
       + rewrite eval_ebexp_eands_cat; tauto.
   Qed.
 
+  Lemma eval_bexp_band E s e1 e2 :
+    eval_bexp (band e1 e2) E s <-> eval_bexp e1 E s /\ eval_bexp e2 E s.
+  Proof.
+    rewrite /band. case: e1 => [e1 r1]; case: e2 => [e2 r2] //=.
+    by case_if; repeat match goal with
+                       | H : (_ == _) = true |- _ => move/eqP: H => ?; subst
+                       | |- _ <-> _ => split; move=> ?
+                       | |- _ /\ _ => split
+                       | |- eval_bexp _ _ _ => rewrite /eval_bexp /=
+                       | H : eval_bexp _ _ _ |- _ => rewrite /eval_bexp /= in H
+                       | H : _ /\ _ |- _ => case: H => ? ?
+                       | H : is_true (_ && _) |- _ => move/andP: H => [? ?]
+                       | |- is_true (_ && _) => apply/andP; split
+                       | |- True => done
+                       | |- is_true true => exact: is_true_true
+                       | H : ?e |- ?e => assumption
+                       end.
+  Qed.
+
+  Lemma eval_bexp_bands_nil E s : eval_bexp (bands [::]) E s.
+  Proof. by rewrite /eval_bexp /=. Qed.
+
+  Lemma eval_bexp_bands_cons E s e es :
+    eval_bexp (bands (e::es)) E s <-> eval_bexp e E s /\ eval_bexp (bands es) E s.
+  Proof.
+    move: es e. apply: last_ind => [| es e IH] f //=.
+    - rewrite bands_singleton /bands /=. move: (eval_bexp_bands_nil E s). tauto.
+    - rewrite /bands. rewrite -rcons_cons. rewrite !foldl_rcons.
+      rewrite -/(bands (f::es)) -/(bands es). split => H.
+      + move/eval_bexp_band : H => [Hfes He]. move/IH: Hfes => [Hf Hes].
+        split; [assumption |]. apply/eval_bexp_band. tauto.
+      + move: H => [Hf /eval_bexp_band [Hes He]]. apply/eval_bexp_band.
+        split; [| assumption]. apply/IH. tauto.
+  Qed.
+
+  Lemma eval_bexp_bands_rcons E s es e :
+    eval_bexp (bands (rcons es e)) E s <-> eval_bexp (bands es) E s /\ eval_bexp e E s.
+  Proof.
+    rewrite /bands foldl_rcons. rewrite -/(bands es). split; [move=> H | move=> [H1 H2]].
+    - move/eval_bexp_band : H. tauto.
+    - apply/eval_bexp_band. tauto.
+  Qed.
+
+  Lemma eval_bexp_bands_cat E s es1 es2 :
+    eval_bexp (bands (es1 ++ es2)) E s <-> eval_bexp (bands es1) E s /\ eval_bexp (bands es2) E s.
+  Proof.
+    elim: es1 es2 => [| e1 es1 IH] es2 //=.
+    - move: (eval_bexp_bands_nil E s). tauto.
+    - split => [/eval_bexp_bands_cons [H1 /IH [H2 H3]] | [/eval_bexp_bands_cons [H1 H2] H3]].
+      + split; [apply/eval_bexp_bands_cons |]; tauto.
+      + apply/eval_bexp_bands_cons. split; [| apply/IH]; tauto.
+  Qed.
+
   Lemma eqn_program_succ_typenv p te :
     program_succ_typenv (eqn_program p) te = program_succ_typenv p te.
   Proof.
@@ -2497,13 +1871,23 @@ Module MakeDSL
     elim: p te => [| hd tl IH te] //=. rewrite rng_instr_succ_typenv. exact: (IH _).
   Qed.
 
+  Lemma espec_of_spec_succ_typenv s :
+    program_succ_typenv (esprog (espec_of_spec s)) (esinputs (espec_of_spec s)) =
+      program_succ_typenv (sprog s) (sinputs s).
+  Proof. reflexivity. Qed.
+
+  Lemma rspec_of_spec_succ_typenv s :
+    program_succ_typenv (rsprog (rspec_of_spec s)) (rsinputs (rspec_of_spec s)) =
+      program_succ_typenv (sprog s) (sinputs s).
+  Proof. exact: rng_program_succ_typenv. Qed.
+
   Lemma eval_program_singleton i te1 s1 s2:
     eval_program te1 ([:: i]) s1 s2 -> eval_instr te1 i s1 s2.
   Proof.
     move=> H. inversion_clear H. inversion_clear H1. rewrite <- H. assumption.
   Qed.
 
-  Lemma eval_program_cons E hd tl s1 s3 :
+  Lemma eval_program_cons_exists E hd tl s1 s3 :
     eval_program E (hd :: tl) s1 s3 ->
     exists s2, eval_instr E hd s1 s2 /\
                eval_program (instr_succ_typenv hd E) tl s2 s3.
@@ -2513,7 +1897,7 @@ Module MakeDSL
     exists t => //.
   Qed.
 
-  Lemma eval_program_rcons E p i s1 s3 :
+  Lemma eval_program_rcons_exists E p i s1 s3 :
     eval_program E (rcons p i) s1 s3 ->
     exists s2, eval_program E p s1 s2 /\
                eval_instr (program_succ_typenv p E) i s2 s3.
@@ -2521,24 +1905,46 @@ Module MakeDSL
     elim: p E s1 s3 => [| hd tl IH] E s1 s3 Hev /=.
     - inversion_clear Hev. move: H. inversion_clear H0. move=> Hev.
       exists s1. rewrite <- H. split; [exact: (Enil _ (S.Equal_refl s1)) | exact: Hev].
-    - move: (eval_program_cons Hev) => [s2 [Hev_hd Hev_tli]].
+    - move: (eval_program_cons_exists Hev) => [s2 [Hev_hd Hev_tli]].
       move: (IH _ _ _ Hev_tli) => [s4 [Hev_tl Hev_i]].
       exists s4. split.
       + exact: (Econs Hev_hd Hev_tl).
       + exact: Hev_i.
   Qed.
 
-  Lemma eval_program_cat E p1 p2 s1 s3 :
+  Lemma eval_program_rcons E p i s1 s2 s3 :
+    eval_program E p s1 s2 ->
+    eval_instr (program_succ_typenv p E) i s2 s3 ->
+    eval_program E (rcons p i) s1 s3.
+  Proof.
+    elim: p E i s1 s2 s3 => [| i p IH1] E j s1 s2 s3 //=.
+    - inversion_clear 1. rewrite H0. move=> H. apply: (Econs H). apply: Enil. reflexivity.
+    - move=> Hev1 Hev2. inversion_clear Hev1. apply: (Econs H).
+      apply: (IH1 _ _ _ _ _ H0). assumption.
+  Qed.
+
+  Lemma eval_program_cat_exists E p1 p2 s1 s3 :
     eval_program E (p1 ++ p2) s1 s3 ->
     exists s2, eval_program E p1 s1 s2 /\
                eval_program (program_succ_typenv p1 E) p2 s2 s3.
   Proof.
     elim: p1 p2 E s1 s3 => [| i1 p1 IH] p2 E s1 s3 Hev /=.
     - rewrite cat0s in Hev. exists s1. split; [exact: (Enil _ (S.Equal_refl s1)) | exact: Hev].
-    - rewrite cat_cons in Hev. move: (eval_program_cons Hev) => [s4 [Hev_i1 Hev_cat]].
+    - rewrite cat_cons in Hev. move: (eval_program_cons_exists Hev) => [s4 [Hev_i1 Hev_cat]].
       move: (IH _ _ _ _ Hev_cat) => [s5 [Hev_p1 Hev_p2]]. exists s5. split.
       + exact: (Econs Hev_i1 Hev_p1).
       + exact: Hev_p2.
+  Qed.
+
+  Lemma eval_program_cat E p1 p2 s1 s2 s3 :
+    eval_program E p1 s1 s2 ->
+    eval_program (program_succ_typenv p1 E) p2 s2 s3 ->
+    eval_program E (p1 ++ p2) s1 s3.
+  Proof.
+    elim: p1 E p2 s1 s2 s3 => [| i1 p1 IH1] E p2 s1 s2 s3 //=.
+    - inversion_clear 1. rewrite -> H0. by apply.
+    - move=> Hev1 Hev2. inversion_clear Hev1. apply: (Econs H).
+      apply: (IH1 _ _ _ _ _ H0). assumption.
   Qed.
 
   Lemma eval_eqn_instr i te s1 s2 :
@@ -3476,6 +2882,12 @@ Module MakeDSL
     split; apply/andP; split; assumption.
   Qed.
 
+  Lemma well_formed_instr_assume E e :
+    well_formed_instr E (Iassume e) = well_formed_bexp E e.
+  Proof.
+    rewrite /well_formed_instr /well_formed_bexp /=. reflexivity.
+  Qed.
+
 
   Lemma well_formed_program_cat te p1 p2 :
     well_formed_program te (p1 ++ p2) =
@@ -4158,6 +3570,20 @@ Module MakeDSL
     - rewrite IH. rewrite vars_env_instr_succ_typenv. by VSLemmas.dp_Equal.
   Qed.
 
+  Lemma well_formed_program_subset_rvs E p :
+    well_formed_program E p ->
+    VS.subset (rvs_program p) (VS.union (vars_env E) (lvs_program p)).
+  Proof.
+    elim: p E => [| i p IH] E /=.
+    - move=> _. exact: VSLemmas.subset_empty.
+    - move/andP=> [Hwfi Hwfp]. move: (IH _ Hwfp) => Hsubp.
+      rewrite vars_env_instr_succ_typenv in Hsubp.
+      move: (well_formed_instr_subset_rvs Hwfi) => Hsubi.
+      apply: VSLemmas.subset_union3.
+      + by VSLemmas.dp_subset.
+      + rewrite -VSLemmas.P.union_assoc. assumption.
+  Qed.
+
   Lemma mem_instr_succ_typenv x i E :
     TE.mem x E -> TE.mem x (instr_succ_typenv i E).
   Proof.
@@ -4212,6 +3638,55 @@ Module MakeDSL
   Proof.
     move/defsubP=> H. apply/defsubP. rewrite vars_env_program_succ_typenv.
     apply: VSLemmas.subset_union1. assumption.
+  Qed.
+
+  Lemma well_formed_eexp_vars_subset E e :
+    well_formed_eexp E e -> VS.subset (vars_eexp e) (vars_env E).
+  Proof.
+    rewrite /well_formed_eexp. move/andP=> [H _]. rewrite are_defined_subset_env in H.
+    assumption.
+  Qed.
+
+  Lemma well_formed_ebexp_vars_subset E e :
+    well_formed_ebexp E e -> VS.subset (vars_ebexp e) (vars_env E).
+  Proof.
+    rewrite /well_formed_ebexp. move/andP=> [H _]. rewrite are_defined_subset_env in H.
+    assumption.
+  Qed.
+
+  Lemma well_formed_rexp_vars_subset E e :
+    well_formed_rexp E e -> VS.subset (vars_rexp e) (vars_env E).
+  Proof.
+    rewrite /well_formed_rexp. move/andP=> [H _]. rewrite are_defined_subset_env in H.
+    assumption.
+  Qed.
+
+  Lemma well_formed_rbexp_vars_subset E e :
+    well_formed_rbexp E e -> VS.subset (vars_rbexp e) (vars_env E).
+  Proof.
+    rewrite /well_formed_rbexp. move/andP=> [H _]. rewrite are_defined_subset_env in H.
+    assumption.
+  Qed.
+
+  Lemma well_formed_bexp_vars_subset E e :
+    well_formed_bexp E e -> VS.subset (vars_bexp e) (vars_env E).
+  Proof.
+    rewrite /well_formed_bexp. move/andP=> [H _]. rewrite are_defined_subset_env in H.
+    assumption.
+  Qed.
+
+  Lemma well_formed_program_vars_subset E p :
+    well_formed_program E p ->
+    VS.subset (vars_program p) (VS.union (vars_env E) (lvs_program p)).
+  Proof.
+    elim: p E => [| i p IH] E //=.
+    - move=> _. exact: VSLemmas.subset_empty.
+    - move/andP=> [Hwfi Hwfp]. move: (IH _ Hwfp) => Hsub.
+      rewrite vars_env_instr_succ_typenv in Hsub.
+      move: (well_formed_instr_subset_rvs Hwfi) => Hrvs.
+      rewrite vars_instr_split.
+      rewrite VSLemmas.P.union_assoc in Hsub.
+      by VSLemmas.dp_subset.
   Qed.
 
 
@@ -4326,6 +3801,45 @@ Module MakeDSL
     move/andP => [/andP [Hwf_f Hwf_p] Hwf_g]. rewrite /well_formed_rspec.
     rewrite (well_formed_rng_bexp Hwf_f) (well_formed_rng_program Hwf_p) /=.
     by rewrite rng_program_succ_typenv (well_formed_rng_bexp Hwf_g).
+  Qed.
+
+  Lemma well_formed_spec_pre s :
+    well_formed_spec s -> well_formed_bexp (sinputs s) (spre s).
+  Proof. by move/andP=> [/andP [H1 H2] H3]. Qed.
+
+  Lemma well_formed_spec_prog s :
+    well_formed_spec s -> well_formed_program (sinputs s) (sprog s).
+  Proof. by move/andP=> [/andP [H1 H2] H3]. Qed.
+
+  Lemma well_formed_spec_post s :
+    well_formed_spec s -> well_formed_bexp (program_succ_typenv (sprog s) (sinputs s)) (spost s).
+  Proof. by move/andP=> [/andP [H1 H2] H3]. Qed.
+
+  Lemma well_defined_instr_instr_succ_typenv E i j :
+    well_defined_instr E i ->
+    well_defined_instr (instr_succ_typenv j E) i.
+  Proof.
+    (case: i => //=); intros;
+      by repeat
+           match goal with
+           | H : is_true (are_defined ?vs ?E) |-
+               is_true (are_defined ?vs (instr_succ_typenv _ ?E)) =>
+               exact: (are_defined_instr_succ_typenv _ H)
+           | H : is_true (_ && _) |- _ =>
+               let H1 := fresh in
+               let H2 := fresh in
+               move/andP: H => [H1 H2]
+           | |- is_true (_ && _) => apply/andP; split
+           | H : ?e |- ?e => assumption
+           end.
+  Qed.
+
+  Lemma well_defined_instr_program_succ_typenv E i p :
+    well_defined_instr E i ->
+    well_defined_instr (program_succ_typenv p E) i.
+  Proof.
+    elim: p E => [| j p IH] E Hdefi //=. apply: IH.
+    exact: (well_defined_instr_instr_succ_typenv _ Hdefi).
   Qed.
 
 
@@ -4478,8 +3992,259 @@ Module MakeDSL
           assumption.
   Qed.
 
+  Lemma vtyp_instr_succ_typenv_not_mem_lvs E x i :
+    ~~ VS.mem x (lvs_instr i) ->
+    TE.vtyp x (instr_succ_typenv i E) = TE.vtyp x E.
+  Proof.
+    (case: i => //=); intros;
+      by repeat match goal with
+                | H : is_true (~~ VS.mem _ (VS.singleton _)) |- _ =>
+                    move: (VSLemmas.not_mem_singleton1 H) => /= {}H
+                | H : is_true (~~ VS.mem _ (VS.add _ _)) |- _ =>
+                    let H1 := fresh in
+                    let H2 := fresh in
+                    move: (VSLemmas.not_mem_add1 H) => {H} [H1 H2]
+                | H : ~ VS.SE.eq _ _ |- _ =>
+                    move/negP: H => H
+                | H : is_true (?x != ?t) |- context [TE.vtyp ?x (TE.add ?t _ _)] =>
+                    rewrite (TE.vtyp_add_neq H)
+                | |- ?e = ?e => reflexivity
+                end.
+  Qed.
+
+  Lemma atyp_instr_succ_typenv_disjoint_lvs E a i :
+    VSLemmas.disjoint (vars_atom a) (lvs_instr i) ->
+    atyp a (instr_succ_typenv i E) = atyp a E.
+  Proof.
+    case: a => //=. move=> x. rewrite VSLemmas.disjoint_sym VSLemmas.disjoint_singleton.
+    exact: vtyp_instr_succ_typenv_not_mem_lvs.
+  Qed.
+
+  Lemma vtyp_program_succ_typenv_not_mem_lvs E x p :
+    ~~ VS.mem x (lvs_program p) ->
+    TE.vtyp x (program_succ_typenv p E) = TE.vtyp x E.
+  Proof.
+    elim: p E => [| i p IH] E //= H. move: (VSLemmas.not_mem_union1 H) => {H} [H1 H2].
+    rewrite (IH _ H2). exact: (vtyp_instr_succ_typenv_not_mem_lvs _ H1).
+  Qed.
+
+  Lemma atyp_program_succ_typenv_disjoint_lvs E a p :
+    VSLemmas.disjoint (vars_atom a) (lvs_program p) ->
+    atyp a (program_succ_typenv p E) = atyp a E.
+  Proof.
+    elim: p E => [| i p IH] E //= H. rewrite VSLemmas.disjoint_union in H.
+    move/andP: H => [H1 H2]. rewrite (IH _ H2).
+    exact: (atyp_instr_succ_typenv_disjoint_lvs _ H1).
+  Qed.
+
+  Lemma instr_succ_typenv_add_comm E v t i :
+    ~~ VS.mem v (vars_instr i) ->
+    TE.Equal (TE.add v t (instr_succ_typenv i E)) (instr_succ_typenv i (TE.add v t E)).
+  Proof.
+    (case: i => //=); intros;
+      by repeat match goal with
+                | |- TE.Equal ?e ?e => reflexivity
+                | H : is_true (~~ VS.mem _ (VS.add _ _)) |- _ =>
+                    let H1 := fresh in
+                    let H2 := fresh in
+                    move: (VSLemmas.not_mem_add1 H) => {H} [H1 H2]
+                | H : is_true (~~ VS.mem _ (VS.union _ _)) |- _ =>
+                    let H1 := fresh in
+                    let H2 := fresh in
+                    move: (VSLemmas.not_mem_union1 H) => {H} [H1 H2]
+                | H : is_true (~~ VS.mem _ (VS.singleton _)) |- _ =>
+                    move: (VSLemmas.not_mem_singleton1 H) => {}H
+                | H : is_true (~~ VS.mem ?x (vars_atom ?a)) |-
+                    context [atyp ?a (TE.add ?x ?t ?E)] =>
+                    rewrite (atyp_add_not_mem _ _ H)
+                | |- TE.Equal (TE.add _ _ (TE.add ?y ?ty _))
+                              (TE.add ?y ?ty (TE.add _ _ _)) =>
+                    rewrite TELemmas.add_comm
+                | |- TE.Equal (TE.add ?x ?v _) (TE.add ?x ?v _) =>
+                    apply: TELemmas.add2_equal; first reflexivity
+                | H : ~ VS.SE.eq ?x ?y |- ~ TE.SE.eq ?x ?y =>
+                    assumption
+                | H : (~ VS.SE.eq ?x ?y) |- (~ TE.SE.eq ?y ?x) =>
+                    let Heq := fresh in
+                    (intro Heq); (apply H); (apply: VS.SE.eq_sym); assumption
+             end.
+  Qed.
+
+  Lemma instr_succ_typenv_disjoint_comm E i j :
+    VSLemmas.disjoint (vars_instr i) (vars_instr j) ->
+    TE.Equal (instr_succ_typenv i (instr_succ_typenv j E))
+             (instr_succ_typenv j (instr_succ_typenv i E)).
+  Proof.
+    case: i => //=; intros;
+    repeat match goal with
+           | |- TE.Equal ?e ?e => reflexivity
+           | H : is_true (VSLemmas.disjoint (VS.add _ _) _) |- _ =>
+               let H1 := fresh in
+               let H2 := fresh in
+               rewrite VSLemmas.disjoint_add_l in H;
+               move/andP: H => [H1 H2]
+           | H : is_true (VSLemmas.disjoint (VS.union _ _) _) |- _ =>
+               let H1 := fresh in
+               let H2 := fresh in
+               rewrite VSLemmas.disjoint_union_l in H;
+               move/andP: H => [H1 H2]
+           | H : is_true (VSLemmas.disjoint (VS.singleton _) _) |- _ =>
+               rewrite VSLemmas.disjoint_singleton_l in H
+           | H : is_true (VSLemmas.disjoint (vars_atom ?a) (vars_instr ?i)) |-
+               context [atyp ?a (instr_succ_typenv ?i ?E)] =>
+               rewrite (atyp_instr_succ_typenv_disjoint_lvs _ )
+           | H : is_true (~~ VS.mem ?v (vars_instr ?i)) |-
+               context [TE.add ?v ?t (instr_succ_typenv ?i ?E)] =>
+               rewrite (instr_succ_typenv_add_comm _ _ H)
+           | H : is_true (VSLemmas.disjoint (vars_atom ?a) (vars_instr ?j)) |-
+               is_true (VSLemmas.disjoint (vars_atom ?a) (lvs_instr ?j)) =>
+               exact: (VSLemmas.disjoint_subset_r H (lvs_instr_subset _))
+           end.
+  Qed.
+
+  Lemma well_defined_instr_not_mem_add E i x v :
+    well_defined_instr E i ->
+    ~~ VS.mem x (vars_instr i) ->
+    well_defined_instr (TE.add x v E) i.
+  Proof.
+    (case: i => //=); intros;
+      by repeat match goal with
+                | H : is_true (are_defined ?vs ?E) |- is_true (are_defined ?vs (TE.add _ _ ?E)) =>
+                    apply: are_defined_addr
+                | H : is_true (_ && _) |- _ =>
+                    let H1 := fresh in
+                    let H2 := fresh in
+                    move/andP: H => [H1 H2]
+                | |- is_true (_ && _) =>
+                    apply/andP; split
+                | H : ?e |- ?e => assumption
+                end.
+  Qed.
+
+  Lemma Upd_disjoint_eval_atom x v s1 s2 a :
+    S.Upd x v s1 s2 -> VSLemmas.disjoint (VS.singleton x) (vars_atom a) ->
+    eval_atom a s2 = eval_atom a s1.
+  Proof.
+    case: a => [y | t bs] /= Hupd Hdisj.
+    - rewrite VSLemmas.disjoint_singleton in Hdisj. move: (VSLemmas.not_mem_singleton1 Hdisj).
+      move/negP => Hne. rewrite (S.acc_Upd_neq Hne Hupd). reflexivity.
+    - reflexivity.
+  Qed.
+
+  Lemma Upd2_disjoint_eval_atom x1 v1 x2 v2 s1 s2 a :
+    S.Upd2 x1 v1 x2 v2 s1 s2 ->
+    VSLemmas.disjoint (VS.singleton x1) (vars_atom a) ->
+    VSLemmas.disjoint (VS.singleton x2) (vars_atom a) ->
+    eval_atom a s2 = eval_atom a s1.
+  Proof.
+    case: a => [y | t bs] /= Hupd Hdisj1 Hdisj2.
+    - rewrite !VSLemmas.disjoint_singleton in Hdisj1 Hdisj2.
+      move: (VSLemmas.not_mem_singleton1 Hdisj1); move/negP => {Hdisj1} Hne1.
+      move: (VSLemmas.not_mem_singleton1 Hdisj2); move/negP => {Hdisj2} Hne2.
+      rewrite (S.acc_Upd2_neq Hne1 Hne2 Hupd). reflexivity.
+    - reflexivity.
+  Qed.
+
+
+  (* Infer input variables *)
+
+  Fixpoint inputs_program_rec (defined : VS.t) (p : program) : VS.t :=
+    match p with
+    | [::] => VS.empty
+    | i::p => VS.union (VS.diff (rvs_instr i) defined)
+                       (inputs_program_rec (VS.union (lvs_instr i) defined) p)
+    end.
+
+  Definition inputs_program (p : program) : VS.t :=
+    inputs_program_rec VS.empty p.
+
+
+  Global Instance add_proper_inputs_program_rec :
+    Proper (VS.Equal ==> eq ==> VS.Equal) inputs_program_rec.
+  Proof.
+    move=> d1 d2 Heq p1 p2 ?; subst. elim: p2 d1 d2 Heq => [| i p IH] d1 d2 Heq //=.
+    have Heq': VS.Equal (VS.union (lvs_instr i) d1) (VS.union (lvs_instr i) d2) by rewrite Heq; reflexivity.
+    rewrite (IH _ _ Heq') Heq. reflexivity.
+  Qed.
+
+  Lemma inputs_program_cons i p :
+    VS.Equal (inputs_program (i::p))
+             (VS.union (rvs_instr i)
+                       (inputs_program_rec (lvs_instr i) p)).
+  Proof.
+    rewrite /inputs_program /=. rewrite VSLemmas.diff_empty_r.
+    rewrite VSLemmas.union_emptyr. reflexivity.
+  Qed.
+
+  Lemma inputs_program_rec_rcons defined p i :
+    VS.Equal (inputs_program_rec defined (rcons p i))
+             (VS.union (inputs_program_rec defined p)
+                       (VS.diff (rvs_instr i) (VS.union (lvs_program p) defined))).
+  Proof.
+    elim: p defined => [| j p IH] defined //=.
+    - rewrite !VSLemmas.union_emptyl !VSLemmas.union_emptyr. reflexivity.
+    - rewrite IH. set ins := (inputs_program_rec (VS.union (lvs_instr j) defined) p).
+      set s1 := VS.diff (rvs_instr j) defined.
+      rewrite VSLemmas.P.union_assoc.
+      rewrite (VSLemmas.P.union_sym (lvs_instr j) (lvs_program p)).
+      rewrite VSLemmas.P.union_assoc. reflexivity.
+  Qed.
+
+  Lemma input_program_rcons p i :
+    VS.Equal (inputs_program (rcons p i))
+             (VS.union (inputs_program p) (VS.diff (rvs_instr i) (lvs_program p))).
+  Proof.
+    rewrite -(VSLemmas.union_emptyr (lvs_program p)). exact: inputs_program_rec_rcons.
+  Qed.
+
+  Lemma inputs_program_rec_cat defined p1 p2 :
+    VS.Equal (inputs_program_rec defined (p1 ++ p2))
+             (VS.union (inputs_program_rec defined p1)
+                       (inputs_program_rec (VS.union (lvs_program p1) defined) p2)).
+  Proof.
+    elim: p1 p2 defined => [| i1 p1 IH1] p2 defined //=.
+    - rewrite !VSLemmas.union_emptyl. reflexivity.
+    - rewrite IH1. set s1 := (inputs_program_rec (VS.union (lvs_instr i1) defined) p1).
+      rewrite (VSLemmas.P.union_sym (lvs_instr i1) (lvs_program p1)).
+      rewrite !VSLemmas.P.union_assoc. reflexivity.
+  Qed.
+
+  Lemma inputs_program_cat p1 p2 :
+    VS.Equal (inputs_program (p1 ++ p2))
+             (VS.union (inputs_program p1)
+                       (inputs_program_rec (lvs_program p1) p2)).
+  Proof.
+    rewrite -(VSLemmas.union_emptyr (lvs_program p1)).
+    exact: inputs_program_rec_cat.
+  Qed.
+
+  Lemma inputs_program_rec_subset defined p :
+    VS.subset (inputs_program_rec defined p) (VS.diff (rvs_program p) defined).
+  Proof.
+    elim: p defined => [| i p IH] defined //=.
+    - exact: VSLemmas.subset_empty.
+    - move: (IH (VS.union (lvs_instr i) defined)) => {IH}.
+      set s1 := (inputs_program_rec (VS.union (lvs_instr i) defined) p).
+      move=> Hsub. apply: VSLemmas.subset_union3.
+      + apply: VSLemmas.subset_diff_same. by VSLemmas.dp_subset.
+      + apply: (VSLemmas.subset_trans Hsub). apply: VSLemmas.subset_diff; by VSLemmas.dp_subset.
+  Qed.
+
+  Lemma inputs_program_subset p :
+    VS.subset (inputs_program p) (rvs_program p).
+  Proof.
+    rewrite -(VSLemmas.diff_empty_r (rvs_program p)).
+    exact: inputs_program_rec_subset.
+  Qed.
+
 
   (* Non-blocking *)
+
+  Definition is_nondet (i : instr) : bool :=
+    match i with
+    | Inondet _ _ => true
+    | _ => false
+    end.
 
   Definition is_assume (i : instr) : bool :=
     match i with
@@ -6162,30 +5927,13 @@ Module MakeDSL
 
   (* Agree *)
 
-  Module MA := MapAgree V TE VS.
+  Module MA := TypEnvAgree V TE VS.
 
   Section Agree.
 
-    Lemma agree_vtyp v E1 E2 :
-      MA.agree (VS.singleton v) E1 E2 -> TE.vtyp v E1 = TE.vtyp v E2.
-    Proof.
-      move=> H; move: (H v (VSLemmas.mem_singleton2 (eq_refl v))) => Hfind.
-      case Hf: (TE.find v E2).
-      - rewrite Hf in Hfind. rewrite (TE.find_some_vtyp Hf) (TE.find_some_vtyp Hfind).
-        reflexivity.
-      - rewrite Hf in Hfind. rewrite (TE.find_none_vtyp Hf) (TE.find_none_vtyp Hfind).
-        reflexivity.
-    Qed.
-
-    Lemma agree_vsize v E1 E2 :
-      MA.agree (VS.singleton v) E1 E2 -> TE.vsize v E1 = TE.vsize v E2.
-    Proof.
-      move=> Hag. rewrite !TE.vtyp_vsize. rewrite (agree_vtyp Hag). reflexivity.
-    Qed.
-
     Lemma agree_atyp a E1 E2 :
       MA.agree (vars_atom a) E1 E2 -> atyp a E1 = atyp a E2.
-    Proof. case: a => //=. move=> v Ha. exact: (agree_vtyp Ha). Qed.
+    Proof. case: a => //=. move=> v Ha. exact: (MA.agree_vtyp_singleton Ha). Qed.
 
     Lemma agree_asize a E1 E2 :
       MA.agree (vars_atom a) E1 E2 -> asize a E1 = asize a E2.
@@ -6213,7 +5961,7 @@ Module MakeDSL
       MA.agree (vars_eexp e) E1 E2 -> eval_eexp e E1 s = eval_eexp e E2 s.
     Proof.
       elim: e => //=.
-      - move=> v Ha. rewrite /acc2z. rewrite (agree_vtyp Ha). reflexivity.
+      - move=> v Ha. rewrite /acc2z. rewrite (MA.agree_vtyp_singleton Ha). reflexivity.
       - move=> op e IH Ha. rewrite (IH Ha). reflexivity.
       - move=> op e1 IH1 e2 IH2 Ha. MA.simpl_agree.
         rewrite (IH1 H) (IH2 H0). reflexivity.
@@ -6253,6 +6001,25 @@ Module MakeDSL
       MA.agree vs (instr_succ_typenv i E1) (instr_succ_typenv i E2).
     Proof.
       case: i => //=; intros; dec_atom_typ; by MA.dp_agree.
+    Qed.
+
+    Lemma agree_lvs_instr_succ_typenv i E1 E2 :
+      MA.agree (rvs_instr i) E1 E2 ->
+      MA.agree (lvs_instr i) (instr_succ_typenv i E1) (instr_succ_typenv i E2).
+    Proof.
+      (case: i => //=); intros; dec_atom_typ; MA.dp_agree;
+        by repeat match goal with
+                  | |- context [TE.find ?x (TE.add ?x ?t ?E)] =>
+                      rewrite (TELemmas.find_add_eq (eqxx x))
+                  | H : (?x == ?y) = true |- context [TE.find ?x (TE.add ?y ?t ?E)] =>
+                      rewrite (TELemmas.find_add_eq H)
+                  | H : ~ (is_true (?x == ?y)) |- context [TE.find ?x (TE.add ?y ?t ?E)] =>
+                      rewrite (TELemmas.find_add_neq H)
+                  | |- context [TE.find ?x (TE.add ?y ?t ?E)] =>
+                      let H := fresh in
+                      dcase (x == y); case; move=> H; [| move/negP: H => H]
+                  | |- ?e = ?e => reflexivity
+                  end.
     Qed.
 
     Lemma agree_instr_succ_typenv i vs E1 E2 :
@@ -6373,13 +6140,13 @@ Module MakeDSL
 
     Lemma agree_size_of_rexp E1 E2 e :
       MA.agree (vars_rexp e) E1 E2 -> size_of_rexp e E1 = size_of_rexp e E2.
-    Proof. case: e => //=. move=> x Hag. exact: (agree_vsize Hag). Qed.
+    Proof. case: e => //=. move=> x Hag. exact: (MA.agree_vsize_singleton Hag). Qed.
 
     Lemma agree_well_typed_rexp E1 E2 e :
       MA.agree (vars_rexp e) E1 E2 -> well_typed_rexp E1 e = well_typed_rexp E2 e.
     Proof.
       elim: e => //=.
-      - move=> x Hag. rewrite (agree_vsize Hag). reflexivity.
+      - move=> x Hag. rewrite (MA.agree_vsize_singleton Hag). reflexivity.
       - move=> n _ e IH Hag. rewrite (IH Hag) (agree_size_of_rexp Hag). reflexivity.
       - move=> n _ e1 IH1 e2 IH2 /MA.agree_union_set [Hag1 Hag2].
         rewrite (IH1 Hag1) (IH2 Hag2) (agree_size_of_rexp Hag1) (agree_size_of_rexp Hag2).
@@ -6459,7 +6226,7 @@ Module MakeDSL
       MA.agree (vars_atom a) E1 E2 -> well_typed_atom E1 a = well_typed_atom E2 a.
     Proof.
       case: a => //=. rewrite /well_typed_atom /well_sized_atom => v Hag.
-      rewrite /atyp /asize /=. rewrite (agree_vtyp Hag). reflexivity.
+      rewrite /atyp /asize /=. rewrite (MA.agree_vtyp_singleton Hag). reflexivity.
     Qed.
 
     Ltac agree_rewrite_well_formed :=
@@ -6499,19 +6266,129 @@ Module MakeDSL
         end.
 
     Lemma agree_well_formed_instr E1 E2 i :
-      MA.agree (vars_instr i) E1 E2 -> well_formed_instr E1 i = well_formed_instr E2 i.
+      MA.agree (rvs_instr i) E1 E2 -> well_formed_instr E1 i = well_formed_instr E2 i.
     Proof.
       case: i => //=; rewrite /well_formed_instr /=; intros; MA.simpl_agree;
                    by (agree_rewrite_well_formed; reflexivity).
     Qed.
 
     Lemma agree_well_formed_program E1 E2 p :
+      MA.agree (inputs_program p) E1 E2 -> well_formed_program E1 p = well_formed_program E2 p.
+    Proof.
+      rewrite /inputs_program. move: (MA.agree_empty_set E1 E2).
+      move: VS.empty. elim: p E1 E2 => [| i p IH] E1 E2 defined //= Hagd Hag.
+      move/MA.agree_union_set: Hag => [Hag1 Hag2].
+      (* *)
+      move: (MA.agree_union_sets Hag1 Hagd) => {Hag1} H.
+      move: (MA.subset_set_agree (VSLemmas.subset_union_diff3 _ _) H) => {H} Hagi.
+      rewrite (agree_well_formed_instr Hagi).
+      (* *)
+      move: (agree_rvs_instr_succ_typenv Hagd Hagi) => {Hagd} Hagd_succ.
+      move: (agree_lvs_instr_succ_typenv Hagi) => Haglvs_succ.
+      move: (MA.agree_union_sets Haglvs_succ Hagd_succ) => {Hagd_succ Haglvs_succ} Haglvsd_succ.
+      (* *)
+      rewrite (IH (instr_succ_typenv i E1) (instr_succ_typenv i E2) (VS.union (lvs_instr i) defined)
+                  Haglvsd_succ (agree_rvs_instr_succ_typenv Hag2 Hagi)).
+      reflexivity.
+    Qed.
+
+    (* A less precise version *)
+    Lemma agree_vars_well_formed_instr E1 E2 i :
+      MA.agree (vars_instr i) E1 E2 -> well_formed_instr E1 i = well_formed_instr E2 i.
+    Proof.
+      case: i => //=; rewrite /well_formed_instr /=; intros; MA.simpl_agree;
+                   by (agree_rewrite_well_formed; reflexivity).
+    Qed.
+
+    (* A less precise version *)
+    Lemma agree_vars_well_formed_program' E1 E2 p :
       MA.agree (vars_program p) E1 E2 -> well_formed_program E1 p = well_formed_program E2 p.
     Proof.
       elim: p E1 E2 => [| i p IH] E1 E2 //=. move/MA.agree_union_set => [Hagi Hagp].
-      rewrite (agree_well_formed_instr Hagi).
+      rewrite (agree_well_formed_instr (MA.subset_set_agree (rvs_instr_subset i) Hagi)).
       rewrite (IH (instr_succ_typenv i E1)  (instr_succ_typenv i E2)); first reflexivity.
       exact: (agree_instr_succ_typenv Hagp Hagi).
+    Qed.
+
+    Lemma agree_instr_succ_typenv_l E1 E2 vs i :
+      VSLemmas.disjoint vs (lvs_instr i) ->
+      MA.agree vs E1 E2 ->
+      MA.agree vs (instr_succ_typenv i E1) E2.
+    Proof.
+      (case: i => //=); intros;
+      by repeat match goal with
+                | H : ?e |- ?e => assumption
+                | |- MA.agree _ ?E ?E => reflexivity
+                | H : is_true (VSLemmas.disjoint _ (VS.singleton _)) |- _ =>
+                    rewrite VSLemmas.disjoint_singleton_r in H
+                | H : is_true (VSLemmas.disjoint _ (VS.add _ _)) |- _ =>
+                    let H1 := fresh in
+                    let H2 := fresh in
+                    rewrite VSLemmas.disjoint_add_r in H;
+                    move/andP: H => [H1 H2]
+                | |- MA.agree _ (TE.add _ _ _) _ =>
+                    apply: MA.not_mem_add_map_l
+                end.
+    Qed.
+
+    Lemma agree_instr_succ_typenv_l1 E vs i :
+      VSLemmas.disjoint vs (lvs_instr i) ->
+      MA.agree vs (instr_succ_typenv i E) E.
+    Proof.
+      move=> Hdisj. exact: (agree_instr_succ_typenv_l Hdisj (MA.agree_refl _)).
+    Qed.
+
+    Lemma agree_instr_succ_typenv_r E1 E2 vs i :
+      VSLemmas.disjoint vs (lvs_instr i) ->
+      MA.agree vs E1 E2 ->
+      MA.agree vs E1 (instr_succ_typenv i E2).
+    Proof.
+      move=> Hdisj /MA.agree_sym Hag. apply: MA.agree_sym.
+      exact: agree_instr_succ_typenv_l.
+    Qed.
+
+    Lemma agree_instr_succ_typenv_r1 E vs i :
+      VSLemmas.disjoint vs (lvs_instr i) ->
+      MA.agree vs E (instr_succ_typenv i E).
+    Proof.
+      move=> H. apply: MA.agree_sym. exact: agree_instr_succ_typenv_l1.
+    Qed.
+
+    Lemma agree_program_succ_typenv_l E1 E2 vs p :
+      VSLemmas.disjoint vs (lvs_program p) ->
+      MA.agree vs E1 E2 ->
+      MA.agree vs (program_succ_typenv p E1) E2.
+    Proof.
+      elim: p E1 E2 => [| i p IH] E1 E2 //=.
+      rewrite VSLemmas.disjoint_union_r. move/andP=> [Hi Hp] Hag.
+      apply: (MA.agree_trans _ (agree_instr_succ_typenv_l Hi Hag)).
+      exact: (IH _ _ Hp (MA.agree_refl _)).
+    Qed.
+
+    Lemma agree_program_succ_typenv_l1 E vs p :
+      VSLemmas.disjoint vs (lvs_program p) ->
+      MA.agree vs (program_succ_typenv p E) E.
+    Proof.
+      elim: p E => [| i p IH] E //=.
+      rewrite VSLemmas.disjoint_union_r. move/andP=> [Hi Hp].
+      apply: (MA.agree_trans _ (agree_instr_succ_typenv_l1 _ Hi)).
+      exact: (IH _ Hp).
+    Qed.
+
+    Lemma agree_program_succ_typenv_r E1 E2 vs p :
+      VSLemmas.disjoint vs (lvs_program p) ->
+      MA.agree vs E1 E2 ->
+      MA.agree vs E1 (program_succ_typenv p E2).
+    Proof.
+      move=> Hdisj /MA.agree_sym Hag. apply: MA.agree_sym.
+      exact: agree_program_succ_typenv_l.
+    Qed.
+
+    Lemma agree_program_succ_typenv_r1 E vs p :
+      VSLemmas.disjoint vs (lvs_program p) ->
+      MA.agree vs E (program_succ_typenv p E).
+    Proof.
+      move=> H. apply: MA.agree_sym. exact: agree_program_succ_typenv_l1.
     Qed.
 
   End Agree.
@@ -7456,8 +7333,6 @@ Module MakeDSL
       exact: VSLemmas.subset_refl.
     Qed.
 
-
-    From Coq Require Import Recdef.
 
     Section AddRelevantVarsRec.
 
@@ -8668,7 +8543,7 @@ Module MakeDSL
                     | H : is_true false \/ _ |- _ => (case: H => H); [discriminate | idtac]
                     | H : is_true (well_formed_instr ?E1 ?i) |-
                         is_true (well_formed_instr ?E2 ?i) =>
-                        rewrite (@agree_well_formed_instr E2 E1)
+                        rewrite (@agree_vars_well_formed_instr E2 E1)
                     | |- MA.agree (vars_instr _) _ _ => simpl
                     | Hag : MA.agree ?vs ?E1 ?E2 |- MA.agree _ ?E2 ?E1 =>
                         apply: (MA.subset_set_agree _ (MA.agree_sym Hag))
@@ -8695,7 +8570,7 @@ Module MakeDSL
                     | H : is_true false \/ _ |- _ => (case: H => H); [discriminate | idtac]
                     | H : is_true (well_formed_instr ?E1 ?i) |-
                         is_true (well_formed_instr ?E2 ?i) =>
-                        rewrite (@agree_well_formed_instr E2 E1)
+                        rewrite (@agree_vars_well_formed_instr E2 E1)
                     | |- MA.agree (vars_instr _) _ _ => simpl
                     | Hag : MA.agree ?vs ?E1 ?E2 |- MA.agree _ ?E2 ?E1 =>
                         apply: (MA.subset_set_agree _ (MA.agree_sym Hag))

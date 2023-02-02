@@ -1,6 +1,7 @@
 open BinNat
 open BinNums
 open Bool
+open DSLRaw
 open Datatypes
 open NBitsDef
 open Options0
@@ -699,15 +700,15 @@ module SSA :
     val eequalP : typ TypEnv.SSATE.t -> typ TypEnv.SSATE.t -> reflect
    end
 
-  type eexp = DSL.eexp
+  type eexp = DSLRaw.eexp
 
   val evar : SSAVarOrder.t -> eexp
 
   val econst : coq_Z -> eexp
 
-  val eunary : DSL.eunop -> eexp -> eexp
+  val eunary : eunop -> eexp -> eexp
 
-  val ebinary : DSL.ebinop -> eexp -> eexp -> eexp
+  val ebinary : ebinop -> eexp -> eexp -> eexp
 
   val eneg : eexp -> eexp
 
@@ -719,7 +720,7 @@ module SSA :
 
   val esq : eexp -> eexp
 
-  val epow : eexp -> coq_N -> DSL.eexp
+  val epow : eexp -> coq_N -> DSLRaw.eexp
 
   val eadds : eexp list -> eexp
 
@@ -727,9 +728,9 @@ module SSA :
 
   val z2expn : coq_Z -> coq_Z
 
-  val e2expn : coq_Z -> DSL.eexp
+  val e2expn : coq_Z -> DSLRaw.eexp
 
-  val emul2p : DSL.eexp -> coq_Z -> DSL.eexp
+  val emul2p : DSLRaw.eexp -> coq_Z -> DSLRaw.eexp
 
   val vars_eexp : eexp -> SSAVS.t
 
@@ -741,13 +742,13 @@ module SSA :
 
   val eexp_eqType : Equality.coq_type
 
-  val eexp_eqn : DSL.eexp -> DSL.eexp -> bool
+  val eexp_eqn : DSLRaw.eexp -> DSLRaw.eexp -> bool
 
   val limbsi : int -> coq_Z -> eexp list -> eexp
 
   val limbs : coq_Z -> eexp list -> eexp
 
-  type rexp = DSL.rexp
+  type rexp = DSLRaw.rexp
 
   val size_of_rexp : rexp -> TypEnv.SSATE.env -> int
 
@@ -757,9 +758,9 @@ module SSA :
 
   val rbits : bits -> rexp
 
-  val runary : int -> DSL.runop -> rexp -> rexp
+  val runary : int -> runop -> rexp -> rexp
 
-  val rbinary : int -> DSL.rbinop -> rexp -> rexp -> rexp
+  val rbinary : int -> rbinop -> rexp -> rexp -> rexp
 
   val rnegb : int -> rexp -> rexp
 
@@ -801,9 +802,9 @@ module SSA :
 
   val rexp_eqType : Equality.coq_type
 
-  val rexp_eqn : DSL.rexp -> DSL.rexp -> bool
+  val rexp_eqn : DSLRaw.rexp -> DSLRaw.rexp -> bool
 
-  type ebexp = DSL.ebexp
+  type ebexp = DSLRaw.ebexp
 
   val etrue : ebexp
 
@@ -825,9 +826,9 @@ module SSA :
 
   val ebexp_eqType : Equality.coq_type
 
-  val ebexp_eqn : DSL.ebexp -> DSL.ebexp -> bool
+  val ebexp_eqn : DSLRaw.ebexp -> DSLRaw.ebexp -> bool
 
-  type rbexp = DSL.rbexp
+  type rbexp = DSLRaw.rbexp
 
   val rtrue : rbexp
 
@@ -835,7 +836,7 @@ module SSA :
 
   val req : int -> rexp -> rexp -> rbexp
 
-  val rcmp : int -> DSL.rcmpop -> rexp -> rexp -> rbexp
+  val rcmp : int -> rcmpop -> rexp -> rexp -> rbexp
 
   val rult : int -> rexp -> rexp -> rbexp
 
@@ -873,7 +874,7 @@ module SSA :
 
   val rbexp_eqType : Equality.coq_type
 
-  val rbexp_eqn : DSL.rbexp -> DSL.rbexp -> bool
+  val rbexp_eqn : DSLRaw.rbexp -> DSLRaw.rbexp -> bool
 
   type bexp = ebexp * rbexp
 
@@ -891,26 +892,15 @@ module SSA :
 
   val vars_bexp : bexp -> SSAVS.t
 
-  type atom =
-  | Avar of SSAVarOrder.t
-  | Aconst of typ * bits
+  val avar : Equality.sort -> atom
 
-  val atom_rect :
-    (SSAVarOrder.t -> 'a1) -> (typ -> bits -> 'a1) -> atom -> 'a1
+  val aconst : typ -> bits -> atom
 
-  val atom_rec : (SSAVarOrder.t -> 'a1) -> (typ -> bits -> 'a1) -> atom -> 'a1
+  type atom = DSLRaw.atom
 
   val atyp : atom -> TypEnv.SSATE.env -> typ
 
   val asize : atom -> TypEnv.SSATE.env -> int
-
-  val atom_eqn : atom -> atom -> bool
-
-  val atom_eqP : atom -> atom -> reflect
-
-  val atom_eqMixin : atom Equality.mixin_of
-
-  val atom_eqType : Equality.coq_type
 
   type instr =
   | Imov of SSAVarOrder.t * atom
@@ -1062,29 +1052,27 @@ module SSA :
 
   val vars_rspec : rspec -> SSAVS.t
 
-  val string_of_eunop : DSL.eunop -> char list
+  val string_of_eunop : eunop -> char list
 
-  val string_of_ebinop : DSL.ebinop -> char list
+  val string_of_ebinop : ebinop -> char list
 
-  val string_of_runop : DSL.runop -> char list
+  val string_of_runop : runop -> char list
 
-  val string_of_rbinop : DSL.rbinop -> char list
+  val string_of_rbinop : rbinop -> char list
 
-  val string_of_rcmpop : DSL.rcmpop -> char list
+  val string_of_rcmpop : rcmpop -> char list
 
-  val string_of_eexp : DSL.eexp -> char list
+  val string_of_eexp : DSLRaw.eexp -> char list
 
-  val string_of_eexps : char list -> DSL.eexp list -> char list
+  val string_of_eexps : char list -> DSLRaw.eexp list -> char list
 
-  val string_of_ebexp : DSL.ebexp -> char list
+  val string_of_ebexp : DSLRaw.ebexp -> char list
 
-  val string_of_rexp : DSL.rexp -> char list
+  val string_of_rexp : DSLRaw.rexp -> char list
 
-  val string_of_rbexp : DSL.rbexp -> char list
+  val string_of_rbexp : DSLRaw.rbexp -> char list
 
   val string_of_bexp : bexp -> char list
-
-  val string_of_typ : typ -> char list
 
   val string_of_var_with_typ : (SSAVarOrder.t * typ) -> char list
 
@@ -1120,15 +1108,15 @@ module SSA :
 
   val program_succ_typenv : program -> TypEnv.SSATE.env -> TypEnv.SSATE.env
 
-  val eval_eunop : DSL.eunop -> coq_Z -> coq_Z
+  val eval_eunop : eunop -> coq_Z -> coq_Z
 
-  val eval_ebinop : DSL.ebinop -> coq_Z -> coq_Z -> coq_Z
+  val eval_ebinop : ebinop -> coq_Z -> coq_Z -> coq_Z
 
-  val eval_runop : DSL.runop -> bits -> bits
+  val eval_runop : runop -> bits -> bits
 
-  val eval_rbinop : DSL.rbinop -> bits -> bits -> bits
+  val eval_rbinop : rbinop -> bits -> bits -> bits
 
-  val eval_rcmpop : DSL.rcmpop -> bits -> bits -> bool
+  val eval_rcmpop : rcmpop -> bits -> bits -> bool
 
   val eval_eexp : eexp -> TypEnv.SSATE.env -> SSAStore.t -> coq_Z
 
@@ -1890,6 +1878,12 @@ module SSA :
 
   val defsubP : SSAVS.t -> TypEnv.SSATE.env -> reflect
 
+  val inputs_program_rec : SSAVS.t -> program -> SSAVS.t
+
+  val inputs_program : program -> SSAVS.t
+
+  val is_nondet : instr -> bool
+
   val is_assume : instr -> bool
 
   val force_conform_vars :
@@ -2148,6 +2142,697 @@ module SSA :
 
   module MA :
    sig
+    module MA :
+     sig
+      module VSLemmas :
+       sig
+        module F :
+         sig
+          val eqb : Equality.sort -> Equality.sort -> bool
+         end
+
+        module OP :
+         sig
+          module ME :
+           sig
+            module TO :
+             sig
+              type t = Equality.sort
+             end
+
+            module IsTO :
+             sig
+             end
+
+            module OrderTac :
+             sig
+             end
+
+            val eq_dec : Equality.sort -> Equality.sort -> bool
+
+            val lt_dec : Equality.sort -> Equality.sort -> bool
+
+            val eqb : Equality.sort -> Equality.sort -> bool
+           end
+
+          module P :
+           sig
+            module Dec :
+             sig
+              module F :
+               sig
+                val eqb : Equality.sort -> Equality.sort -> bool
+               end
+
+              module FSetLogicalFacts :
+               sig
+               end
+
+              module FSetDecideAuxiliary :
+               sig
+               end
+
+              module FSetDecideTestCases :
+               sig
+               end
+             end
+
+            module FM :
+             sig
+              val eqb : Equality.sort -> Equality.sort -> bool
+             end
+
+            val coq_In_dec : SSAVS.elt -> SSAVS.t -> bool
+
+            val of_list : SSAVS.elt list -> SSAVS.t
+
+            val to_list : SSAVS.t -> SSAVS.elt list
+
+            val fold_rec :
+              (SSAVS.elt -> 'a1 -> 'a1) -> 'a1 -> SSAVS.t -> (SSAVS.t -> __
+              -> 'a2) -> (SSAVS.elt -> 'a1 -> SSAVS.t -> SSAVS.t -> __ -> __
+              -> __ -> 'a2 -> 'a2) -> 'a2
+
+            val fold_rec_bis :
+              (SSAVS.elt -> 'a1 -> 'a1) -> 'a1 -> SSAVS.t -> (SSAVS.t ->
+              SSAVS.t -> 'a1 -> __ -> 'a2 -> 'a2) -> 'a2 -> (SSAVS.elt -> 'a1
+              -> SSAVS.t -> __ -> __ -> 'a2 -> 'a2) -> 'a2
+
+            val fold_rec_nodep :
+              (SSAVS.elt -> 'a1 -> 'a1) -> 'a1 -> SSAVS.t -> 'a2 ->
+              (SSAVS.elt -> 'a1 -> __ -> 'a2 -> 'a2) -> 'a2
+
+            val fold_rec_weak :
+              (SSAVS.elt -> 'a1 -> 'a1) -> 'a1 -> (SSAVS.t -> SSAVS.t -> 'a1
+              -> __ -> 'a2 -> 'a2) -> 'a2 -> (SSAVS.elt -> 'a1 -> SSAVS.t ->
+              __ -> 'a2 -> 'a2) -> SSAVS.t -> 'a2
+
+            val fold_rel :
+              (SSAVS.elt -> 'a1 -> 'a1) -> (SSAVS.elt -> 'a2 -> 'a2) -> 'a1
+              -> 'a2 -> SSAVS.t -> 'a3 -> (SSAVS.elt -> 'a1 -> 'a2 -> __ ->
+              'a3 -> 'a3) -> 'a3
+
+            val set_induction :
+              (SSAVS.t -> __ -> 'a1) -> (SSAVS.t -> SSAVS.t -> 'a1 ->
+              SSAVS.elt -> __ -> __ -> 'a1) -> SSAVS.t -> 'a1
+
+            val set_induction_bis :
+              (SSAVS.t -> SSAVS.t -> __ -> 'a1 -> 'a1) -> 'a1 -> (SSAVS.elt
+              -> SSAVS.t -> __ -> 'a1 -> 'a1) -> SSAVS.t -> 'a1
+
+            val cardinal_inv_2 : SSAVS.t -> int -> SSAVS.elt
+
+            val cardinal_inv_2b : SSAVS.t -> SSAVS.elt
+           end
+
+          val gtb : Equality.sort -> Equality.sort -> bool
+
+          val leb : Equality.sort -> Equality.sort -> bool
+
+          val elements_lt : Equality.sort -> SSAVS.t -> Equality.sort list
+
+          val elements_ge : Equality.sort -> SSAVS.t -> Equality.sort list
+
+          val set_induction_max :
+            (SSAVS.t -> __ -> 'a1) -> (SSAVS.t -> SSAVS.t -> 'a1 ->
+            Equality.sort -> __ -> __ -> 'a1) -> SSAVS.t -> 'a1
+
+          val set_induction_min :
+            (SSAVS.t -> __ -> 'a1) -> (SSAVS.t -> SSAVS.t -> 'a1 ->
+            Equality.sort -> __ -> __ -> 'a1) -> SSAVS.t -> 'a1
+         end
+
+        val eqb : Equality.sort -> Equality.sort -> bool
+
+        module ME :
+         sig
+          module TO :
+           sig
+            type t = Equality.sort
+           end
+
+          module IsTO :
+           sig
+           end
+
+          module OrderTac :
+           sig
+           end
+
+          val eq_dec : Equality.sort -> Equality.sort -> bool
+
+          val lt_dec : Equality.sort -> Equality.sort -> bool
+
+          val eqb : Equality.sort -> Equality.sort -> bool
+         end
+
+        module P :
+         sig
+          module Dec :
+           sig
+            module F :
+             sig
+              val eqb : Equality.sort -> Equality.sort -> bool
+             end
+
+            module FSetLogicalFacts :
+             sig
+             end
+
+            module FSetDecideAuxiliary :
+             sig
+             end
+
+            module FSetDecideTestCases :
+             sig
+             end
+           end
+
+          module FM :
+           sig
+            val eqb : Equality.sort -> Equality.sort -> bool
+           end
+
+          val coq_In_dec : SSAVS.elt -> SSAVS.t -> bool
+
+          val of_list : SSAVS.elt list -> SSAVS.t
+
+          val to_list : SSAVS.t -> SSAVS.elt list
+
+          val fold_rec :
+            (SSAVS.elt -> 'a1 -> 'a1) -> 'a1 -> SSAVS.t -> (SSAVS.t -> __ ->
+            'a2) -> (SSAVS.elt -> 'a1 -> SSAVS.t -> SSAVS.t -> __ -> __ -> __
+            -> 'a2 -> 'a2) -> 'a2
+
+          val fold_rec_bis :
+            (SSAVS.elt -> 'a1 -> 'a1) -> 'a1 -> SSAVS.t -> (SSAVS.t ->
+            SSAVS.t -> 'a1 -> __ -> 'a2 -> 'a2) -> 'a2 -> (SSAVS.elt -> 'a1
+            -> SSAVS.t -> __ -> __ -> 'a2 -> 'a2) -> 'a2
+
+          val fold_rec_nodep :
+            (SSAVS.elt -> 'a1 -> 'a1) -> 'a1 -> SSAVS.t -> 'a2 -> (SSAVS.elt
+            -> 'a1 -> __ -> 'a2 -> 'a2) -> 'a2
+
+          val fold_rec_weak :
+            (SSAVS.elt -> 'a1 -> 'a1) -> 'a1 -> (SSAVS.t -> SSAVS.t -> 'a1 ->
+            __ -> 'a2 -> 'a2) -> 'a2 -> (SSAVS.elt -> 'a1 -> SSAVS.t -> __ ->
+            'a2 -> 'a2) -> SSAVS.t -> 'a2
+
+          val fold_rel :
+            (SSAVS.elt -> 'a1 -> 'a1) -> (SSAVS.elt -> 'a2 -> 'a2) -> 'a1 ->
+            'a2 -> SSAVS.t -> 'a3 -> (SSAVS.elt -> 'a1 -> 'a2 -> __ -> 'a3 ->
+            'a3) -> 'a3
+
+          val set_induction :
+            (SSAVS.t -> __ -> 'a1) -> (SSAVS.t -> SSAVS.t -> 'a1 -> SSAVS.elt
+            -> __ -> __ -> 'a1) -> SSAVS.t -> 'a1
+
+          val set_induction_bis :
+            (SSAVS.t -> SSAVS.t -> __ -> 'a1 -> 'a1) -> 'a1 -> (SSAVS.elt ->
+            SSAVS.t -> __ -> 'a1 -> 'a1) -> SSAVS.t -> 'a1
+
+          val cardinal_inv_2 : SSAVS.t -> int -> SSAVS.elt
+
+          val cardinal_inv_2b : SSAVS.t -> SSAVS.elt
+         end
+
+        val gtb : Equality.sort -> Equality.sort -> bool
+
+        val leb : Equality.sort -> Equality.sort -> bool
+
+        val elements_lt : Equality.sort -> SSAVS.t -> Equality.sort list
+
+        val elements_ge : Equality.sort -> SSAVS.t -> Equality.sort list
+
+        val set_induction_max :
+          (SSAVS.t -> __ -> 'a1) -> (SSAVS.t -> SSAVS.t -> 'a1 ->
+          Equality.sort -> __ -> __ -> 'a1) -> SSAVS.t -> 'a1
+
+        val set_induction_min :
+          (SSAVS.t -> __ -> 'a1) -> (SSAVS.t -> SSAVS.t -> 'a1 ->
+          Equality.sort -> __ -> __ -> 'a1) -> SSAVS.t -> 'a1
+
+        val memP : SSAVS.elt -> SSAVS.t -> reflect
+
+        val equalP : SSAVS.t -> SSAVS.t -> reflect
+
+        val subsetP : SSAVS.t -> SSAVS.t -> reflect
+
+        val emptyP : SSAVS.t -> reflect
+
+        val disjoint : SSAVS.t -> SSAVS.t -> bool
+
+        val proper_subset : SSAVS.t -> SSAVS.t -> bool
+       end
+
+      module VMLemmas :
+       sig
+        module F :
+         sig
+          val eqb : Equality.sort -> Equality.sort -> bool
+
+          val coq_In_dec : 'a1 TypEnv.SSATE.t -> TypEnv.SSATE.key -> bool
+         end
+
+        module OP :
+         sig
+          module ME :
+           sig
+            module TO :
+             sig
+              type t = Equality.sort
+             end
+
+            module IsTO :
+             sig
+             end
+
+            module OrderTac :
+             sig
+             end
+
+            val eq_dec : Equality.sort -> Equality.sort -> bool
+
+            val lt_dec : Equality.sort -> Equality.sort -> bool
+
+            val eqb : Equality.sort -> Equality.sort -> bool
+           end
+
+          module O :
+           sig
+            module MO :
+             sig
+              module TO :
+               sig
+                type t = Equality.sort
+               end
+
+              module IsTO :
+               sig
+               end
+
+              module OrderTac :
+               sig
+               end
+
+              val eq_dec : Equality.sort -> Equality.sort -> bool
+
+              val lt_dec : Equality.sort -> Equality.sort -> bool
+
+              val eqb : Equality.sort -> Equality.sort -> bool
+             end
+           end
+
+          module P :
+           sig
+            module F :
+             sig
+              val eqb : Equality.sort -> Equality.sort -> bool
+
+              val coq_In_dec : 'a1 TypEnv.SSATE.t -> TypEnv.SSATE.key -> bool
+             end
+
+            val uncurry : ('a1 -> 'a2 -> 'a3) -> ('a1 * 'a2) -> 'a3
+
+            val of_list : (TypEnv.SSATE.key * 'a1) list -> 'a1 TypEnv.SSATE.t
+
+            val to_list : 'a1 TypEnv.SSATE.t -> (TypEnv.SSATE.key * 'a1) list
+
+            val fold_rec :
+              (TypEnv.SSATE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1
+              TypEnv.SSATE.t -> ('a1 TypEnv.SSATE.t -> __ -> 'a3) ->
+              (TypEnv.SSATE.key -> 'a1 -> 'a2 -> 'a1 TypEnv.SSATE.t -> 'a1
+              TypEnv.SSATE.t -> __ -> __ -> __ -> 'a3 -> 'a3) -> 'a3
+
+            val fold_rec_bis :
+              (TypEnv.SSATE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1
+              TypEnv.SSATE.t -> ('a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t ->
+              'a2 -> __ -> 'a3 -> 'a3) -> 'a3 -> (TypEnv.SSATE.key -> 'a1 ->
+              'a2 -> 'a1 TypEnv.SSATE.t -> __ -> __ -> 'a3 -> 'a3) -> 'a3
+
+            val fold_rec_nodep :
+              (TypEnv.SSATE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1
+              TypEnv.SSATE.t -> 'a3 -> (TypEnv.SSATE.key -> 'a1 -> 'a2 -> __
+              -> 'a3 -> 'a3) -> 'a3
+
+            val fold_rec_weak :
+              (TypEnv.SSATE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> ('a1
+              TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t -> 'a2 -> __ -> 'a3 ->
+              'a3) -> 'a3 -> (TypEnv.SSATE.key -> 'a1 -> 'a2 -> 'a1
+              TypEnv.SSATE.t -> __ -> 'a3 -> 'a3) -> 'a1 TypEnv.SSATE.t -> 'a3
+
+            val fold_rel :
+              (TypEnv.SSATE.key -> 'a1 -> 'a2 -> 'a2) -> (TypEnv.SSATE.key ->
+              'a1 -> 'a3 -> 'a3) -> 'a2 -> 'a3 -> 'a1 TypEnv.SSATE.t -> 'a4
+              -> (TypEnv.SSATE.key -> 'a1 -> 'a2 -> 'a3 -> __ -> 'a4 -> 'a4)
+              -> 'a4
+
+            val map_induction :
+              ('a1 TypEnv.SSATE.t -> __ -> 'a2) -> ('a1 TypEnv.SSATE.t -> 'a1
+              TypEnv.SSATE.t -> 'a2 -> TypEnv.SSATE.key -> 'a1 -> __ -> __ ->
+              'a2) -> 'a1 TypEnv.SSATE.t -> 'a2
+
+            val map_induction_bis :
+              ('a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t -> __ -> 'a2 -> 'a2)
+              -> 'a2 -> (TypEnv.SSATE.key -> 'a1 -> 'a1 TypEnv.SSATE.t -> __
+              -> 'a2 -> 'a2) -> 'a1 TypEnv.SSATE.t -> 'a2
+
+            val cardinal_inv_2 :
+              'a1 TypEnv.SSATE.t -> int -> (TypEnv.SSATE.key * 'a1)
+
+            val cardinal_inv_2b :
+              'a1 TypEnv.SSATE.t -> (TypEnv.SSATE.key * 'a1)
+
+            val filter :
+              (TypEnv.SSATE.key -> 'a1 -> bool) -> 'a1 TypEnv.SSATE.t -> 'a1
+              TypEnv.SSATE.t
+
+            val for_all :
+              (TypEnv.SSATE.key -> 'a1 -> bool) -> 'a1 TypEnv.SSATE.t -> bool
+
+            val exists_ :
+              (TypEnv.SSATE.key -> 'a1 -> bool) -> 'a1 TypEnv.SSATE.t -> bool
+
+            val partition :
+              (TypEnv.SSATE.key -> 'a1 -> bool) -> 'a1 TypEnv.SSATE.t -> 'a1
+              TypEnv.SSATE.t * 'a1 TypEnv.SSATE.t
+
+            val update :
+              'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t
+
+            val restrict :
+              'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t
+
+            val diff :
+              'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t
+
+            val coq_Partition_In :
+              'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t
+              -> TypEnv.SSATE.key -> bool
+
+            val update_dec :
+              'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t -> TypEnv.SSATE.key ->
+              'a1 -> bool
+
+            val filter_dom :
+              (TypEnv.SSATE.key -> bool) -> 'a1 TypEnv.SSATE.t -> 'a1
+              TypEnv.SSATE.t
+
+            val filter_range :
+              ('a1 -> bool) -> 'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t
+
+            val for_all_dom :
+              (TypEnv.SSATE.key -> bool) -> 'a1 TypEnv.SSATE.t -> bool
+
+            val for_all_range : ('a1 -> bool) -> 'a1 TypEnv.SSATE.t -> bool
+
+            val exists_dom :
+              (TypEnv.SSATE.key -> bool) -> 'a1 TypEnv.SSATE.t -> bool
+
+            val exists_range : ('a1 -> bool) -> 'a1 TypEnv.SSATE.t -> bool
+
+            val partition_dom :
+              (TypEnv.SSATE.key -> bool) -> 'a1 TypEnv.SSATE.t -> 'a1
+              TypEnv.SSATE.t * 'a1 TypEnv.SSATE.t
+
+            val partition_range :
+              ('a1 -> bool) -> 'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t * 'a1
+              TypEnv.SSATE.t
+           end
+
+          val gtb :
+            (TypEnv.SSATE.key * 'a1) -> (TypEnv.SSATE.key * 'a1) -> bool
+
+          val leb :
+            (TypEnv.SSATE.key * 'a1) -> (TypEnv.SSATE.key * 'a1) -> bool
+
+          val elements_lt :
+            (TypEnv.SSATE.key * 'a1) -> 'a1 TypEnv.SSATE.t ->
+            (TypEnv.SSATE.key * 'a1) list
+
+          val elements_ge :
+            (TypEnv.SSATE.key * 'a1) -> 'a1 TypEnv.SSATE.t ->
+            (TypEnv.SSATE.key * 'a1) list
+
+          val max_elt_aux :
+            (TypEnv.SSATE.key * 'a1) list -> (TypEnv.SSATE.key * 'a1) option
+
+          val max_elt : 'a1 TypEnv.SSATE.t -> (TypEnv.SSATE.key * 'a1) option
+
+          val min_elt : 'a1 TypEnv.SSATE.t -> (TypEnv.SSATE.key * 'a1) option
+
+          val map_induction_max :
+            ('a1 TypEnv.SSATE.t -> __ -> 'a2) -> ('a1 TypEnv.SSATE.t -> 'a1
+            TypEnv.SSATE.t -> 'a2 -> Equality.sort -> 'a1 -> __ -> __ -> 'a2)
+            -> 'a1 TypEnv.SSATE.t -> 'a2
+
+          val map_induction_min :
+            ('a1 TypEnv.SSATE.t -> __ -> 'a2) -> ('a1 TypEnv.SSATE.t -> 'a1
+            TypEnv.SSATE.t -> 'a2 -> Equality.sort -> 'a1 -> __ -> __ -> 'a2)
+            -> 'a1 TypEnv.SSATE.t -> 'a2
+         end
+
+        val eqb : Equality.sort -> Equality.sort -> bool
+
+        val coq_In_dec : 'a1 TypEnv.SSATE.t -> TypEnv.SSATE.key -> bool
+
+        module ME :
+         sig
+          module TO :
+           sig
+            type t = Equality.sort
+           end
+
+          module IsTO :
+           sig
+           end
+
+          module OrderTac :
+           sig
+           end
+
+          val eq_dec : Equality.sort -> Equality.sort -> bool
+
+          val lt_dec : Equality.sort -> Equality.sort -> bool
+
+          val eqb : Equality.sort -> Equality.sort -> bool
+         end
+
+        module O :
+         sig
+          module MO :
+           sig
+            module TO :
+             sig
+              type t = Equality.sort
+             end
+
+            module IsTO :
+             sig
+             end
+
+            module OrderTac :
+             sig
+             end
+
+            val eq_dec : Equality.sort -> Equality.sort -> bool
+
+            val lt_dec : Equality.sort -> Equality.sort -> bool
+
+            val eqb : Equality.sort -> Equality.sort -> bool
+           end
+         end
+
+        module P :
+         sig
+          module F :
+           sig
+            val eqb : Equality.sort -> Equality.sort -> bool
+
+            val coq_In_dec : 'a1 TypEnv.SSATE.t -> TypEnv.SSATE.key -> bool
+           end
+
+          val uncurry : ('a1 -> 'a2 -> 'a3) -> ('a1 * 'a2) -> 'a3
+
+          val of_list : (TypEnv.SSATE.key * 'a1) list -> 'a1 TypEnv.SSATE.t
+
+          val to_list : 'a1 TypEnv.SSATE.t -> (TypEnv.SSATE.key * 'a1) list
+
+          val fold_rec :
+            (TypEnv.SSATE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1
+            TypEnv.SSATE.t -> ('a1 TypEnv.SSATE.t -> __ -> 'a3) ->
+            (TypEnv.SSATE.key -> 'a1 -> 'a2 -> 'a1 TypEnv.SSATE.t -> 'a1
+            TypEnv.SSATE.t -> __ -> __ -> __ -> 'a3 -> 'a3) -> 'a3
+
+          val fold_rec_bis :
+            (TypEnv.SSATE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1
+            TypEnv.SSATE.t -> ('a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t ->
+            'a2 -> __ -> 'a3 -> 'a3) -> 'a3 -> (TypEnv.SSATE.key -> 'a1 ->
+            'a2 -> 'a1 TypEnv.SSATE.t -> __ -> __ -> 'a3 -> 'a3) -> 'a3
+
+          val fold_rec_nodep :
+            (TypEnv.SSATE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> 'a1
+            TypEnv.SSATE.t -> 'a3 -> (TypEnv.SSATE.key -> 'a1 -> 'a2 -> __ ->
+            'a3 -> 'a3) -> 'a3
+
+          val fold_rec_weak :
+            (TypEnv.SSATE.key -> 'a1 -> 'a2 -> 'a2) -> 'a2 -> ('a1
+            TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t -> 'a2 -> __ -> 'a3 -> 'a3)
+            -> 'a3 -> (TypEnv.SSATE.key -> 'a1 -> 'a2 -> 'a1 TypEnv.SSATE.t
+            -> __ -> 'a3 -> 'a3) -> 'a1 TypEnv.SSATE.t -> 'a3
+
+          val fold_rel :
+            (TypEnv.SSATE.key -> 'a1 -> 'a2 -> 'a2) -> (TypEnv.SSATE.key ->
+            'a1 -> 'a3 -> 'a3) -> 'a2 -> 'a3 -> 'a1 TypEnv.SSATE.t -> 'a4 ->
+            (TypEnv.SSATE.key -> 'a1 -> 'a2 -> 'a3 -> __ -> 'a4 -> 'a4) -> 'a4
+
+          val map_induction :
+            ('a1 TypEnv.SSATE.t -> __ -> 'a2) -> ('a1 TypEnv.SSATE.t -> 'a1
+            TypEnv.SSATE.t -> 'a2 -> TypEnv.SSATE.key -> 'a1 -> __ -> __ ->
+            'a2) -> 'a1 TypEnv.SSATE.t -> 'a2
+
+          val map_induction_bis :
+            ('a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t -> __ -> 'a2 -> 'a2) ->
+            'a2 -> (TypEnv.SSATE.key -> 'a1 -> 'a1 TypEnv.SSATE.t -> __ ->
+            'a2 -> 'a2) -> 'a1 TypEnv.SSATE.t -> 'a2
+
+          val cardinal_inv_2 :
+            'a1 TypEnv.SSATE.t -> int -> (TypEnv.SSATE.key * 'a1)
+
+          val cardinal_inv_2b : 'a1 TypEnv.SSATE.t -> (TypEnv.SSATE.key * 'a1)
+
+          val filter :
+            (TypEnv.SSATE.key -> 'a1 -> bool) -> 'a1 TypEnv.SSATE.t -> 'a1
+            TypEnv.SSATE.t
+
+          val for_all :
+            (TypEnv.SSATE.key -> 'a1 -> bool) -> 'a1 TypEnv.SSATE.t -> bool
+
+          val exists_ :
+            (TypEnv.SSATE.key -> 'a1 -> bool) -> 'a1 TypEnv.SSATE.t -> bool
+
+          val partition :
+            (TypEnv.SSATE.key -> 'a1 -> bool) -> 'a1 TypEnv.SSATE.t -> 'a1
+            TypEnv.SSATE.t * 'a1 TypEnv.SSATE.t
+
+          val update :
+            'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t
+
+          val restrict :
+            'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t
+
+          val diff :
+            'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t
+
+          val coq_Partition_In :
+            'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t ->
+            TypEnv.SSATE.key -> bool
+
+          val update_dec :
+            'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t -> TypEnv.SSATE.key ->
+            'a1 -> bool
+
+          val filter_dom :
+            (TypEnv.SSATE.key -> bool) -> 'a1 TypEnv.SSATE.t -> 'a1
+            TypEnv.SSATE.t
+
+          val filter_range :
+            ('a1 -> bool) -> 'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t
+
+          val for_all_dom :
+            (TypEnv.SSATE.key -> bool) -> 'a1 TypEnv.SSATE.t -> bool
+
+          val for_all_range : ('a1 -> bool) -> 'a1 TypEnv.SSATE.t -> bool
+
+          val exists_dom :
+            (TypEnv.SSATE.key -> bool) -> 'a1 TypEnv.SSATE.t -> bool
+
+          val exists_range : ('a1 -> bool) -> 'a1 TypEnv.SSATE.t -> bool
+
+          val partition_dom :
+            (TypEnv.SSATE.key -> bool) -> 'a1 TypEnv.SSATE.t -> 'a1
+            TypEnv.SSATE.t * 'a1 TypEnv.SSATE.t
+
+          val partition_range :
+            ('a1 -> bool) -> 'a1 TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t * 'a1
+            TypEnv.SSATE.t
+         end
+
+        val gtb : (TypEnv.SSATE.key * 'a1) -> (TypEnv.SSATE.key * 'a1) -> bool
+
+        val leb : (TypEnv.SSATE.key * 'a1) -> (TypEnv.SSATE.key * 'a1) -> bool
+
+        val elements_lt :
+          (TypEnv.SSATE.key * 'a1) -> 'a1 TypEnv.SSATE.t ->
+          (TypEnv.SSATE.key * 'a1) list
+
+        val elements_ge :
+          (TypEnv.SSATE.key * 'a1) -> 'a1 TypEnv.SSATE.t ->
+          (TypEnv.SSATE.key * 'a1) list
+
+        val max_elt_aux :
+          (TypEnv.SSATE.key * 'a1) list -> (TypEnv.SSATE.key * 'a1) option
+
+        val max_elt : 'a1 TypEnv.SSATE.t -> (TypEnv.SSATE.key * 'a1) option
+
+        val min_elt : 'a1 TypEnv.SSATE.t -> (TypEnv.SSATE.key * 'a1) option
+
+        val map_induction_max :
+          ('a1 TypEnv.SSATE.t -> __ -> 'a2) -> ('a1 TypEnv.SSATE.t -> 'a1
+          TypEnv.SSATE.t -> 'a2 -> Equality.sort -> 'a1 -> __ -> __ -> 'a2)
+          -> 'a1 TypEnv.SSATE.t -> 'a2
+
+        val map_induction_min :
+          ('a1 TypEnv.SSATE.t -> __ -> 'a2) -> ('a1 TypEnv.SSATE.t -> 'a1
+          TypEnv.SSATE.t -> 'a2 -> Equality.sort -> 'a1 -> __ -> __ -> 'a2)
+          -> 'a1 TypEnv.SSATE.t -> 'a2
+
+        val memP : TypEnv.SSATE.key -> 'a1 TypEnv.SSATE.t -> reflect
+
+        val split :
+          ('a1 * 'a2) TypEnv.SSATE.t -> 'a1 TypEnv.SSATE.t * 'a2
+          TypEnv.SSATE.t
+
+        module EFacts :
+         sig
+          module TO :
+           sig
+            type t = Equality.sort
+           end
+
+          module IsTO :
+           sig
+           end
+
+          module OrderTac :
+           sig
+           end
+
+          val eq_dec : Equality.sort -> Equality.sort -> bool
+
+          val lt_dec : Equality.sort -> Equality.sort -> bool
+
+          val eqb : Equality.sort -> Equality.sort -> bool
+         end
+
+        val max_opt :
+          TypEnv.SSATE.key -> TypEnv.SSATE.key option -> TypEnv.SSATE.key
+
+        val max_key_elements :
+          (TypEnv.SSATE.key * 'a1) list -> TypEnv.SSATE.key option
+
+        val max_key : 'a1 TypEnv.SSATE.t -> TypEnv.SSATE.key option
+
+        val min_opt :
+          TypEnv.SSATE.key -> TypEnv.SSATE.key option -> TypEnv.SSATE.key
+
+        val min_key_elements :
+          (TypEnv.SSATE.key * 'a1) list -> TypEnv.SSATE.key option
+
+        val min_key : 'a1 TypEnv.SSATE.t -> TypEnv.SSATE.key option
+       end
+     end
+
     module VSLemmas :
      sig
       module F :
@@ -2836,7 +3521,7 @@ module SSA :
 
   val depvars_rexp : SSAVS.t -> rexp -> SSAVS.t
 
-  val depvars_rbexp : SSAVS.t -> DSL.rbexp -> SSAVS.t
+  val depvars_rbexp : SSAVS.t -> DSLRaw.rbexp -> SSAVS.t
 
   val depvars_einstr : options -> SSAVS.t -> instr -> SSAVS.t
 
@@ -2850,7 +3535,7 @@ module SSA :
     options -> SSAVS.t -> ebexp -> instr list -> SSAVS.t
 
   val depvars_rpre_rprogram :
-    options -> SSAVS.t -> DSL.rbexp -> instr list -> SSAVS.t
+    options -> SSAVS.t -> DSLRaw.rbexp -> instr list -> SSAVS.t
 
   val evsize : ebexp -> program -> SSAVS.t -> int
 
@@ -2928,9 +3613,9 @@ module SSA :
     options -> rbexp -> program -> SSAVS.t -> SSAVS.t ->
     coq_R_depvars_rpre_rprogram_sat
 
-  val slice_ebexp : SSAVS.t -> DSL.ebexp -> DSL.ebexp
+  val slice_ebexp : SSAVS.t -> DSLRaw.ebexp -> DSLRaw.ebexp
 
-  val slice_rbexp : SSAVS.t -> DSL.rbexp -> DSL.rbexp
+  val slice_rbexp : SSAVS.t -> DSLRaw.rbexp -> DSLRaw.rbexp
 
   val slice_einstr : SSAVS.t -> instr -> instr option
 
