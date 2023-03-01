@@ -4,6 +4,7 @@
 From Coq Require Import List ZArith Btauto.
 From mathcomp Require Import ssreflect ssrbool ssrnat eqtype seq ssrfun.
 From ssrlib Require Import Var Types SsrOrder Seqs Tactics.
+From BitBlasting Require Import State QFBV Typ TypEnv.
 From Cryptoline Require Import Options DSL SSA ZSSA SSA2QFBV SSA2ZSSA QFBV2CNF Poly.
 From Coq Require Import Ring_polynom.
 
@@ -16,8 +17,9 @@ Section Verification.
 
   Import CNF.
 
-  (* This is the external SAT solver.
-     The correctness is guaranteed by the external solver. *)
+  (** Assumed external solvers *)
+
+  (* External SAT solver *)
   Parameter ext_all_unsat : seq cnf -> bool.
 
   Axiom all_unsat_sound :
@@ -30,12 +32,87 @@ Section Verification.
       (forall cs, cs \in css -> ~ sat cs) ->
       ext_all_unsat css.
 
+
+  (* External computer algebra system.
+     Solve an ideal membership problems by the external computer algebra system.
+     An ideal membership problem is given as a tuple (ps, ms, q). The problem
+     is to check if q is in the ideal of ms++ps, i.e., there are cps and cms such
+     that q = cps * ps + cms * ms. ext_solve_imp returns such (cps, cms). *)
+  Parameter ext_solve_imp :
+    seq (PExpr Z) -> PExpr Z -> seq (PExpr Z) -> seq (PExpr Z) * seq (PExpr Z).
+
+
+  (* External computer algebra system.
+     Solve a sequence of ideal membership problems by the external computer
+     algebra system. An ideal membership problem is given as a tuple
+     (ps, ms, q). The problem is to check if q is in the ideal of ms++ps,
+     i.e., there are cps and cms such that q = cps * ps + cms * ms.
+     ext_solve_imp_list returns a sequence of (cps, cms). *)
+  Parameter ext_solve_imp_list :
+    seq (seq (PExpr Z) * PExpr Z * seq (PExpr Z)) -> seq (seq (PExpr Z) * seq (PExpr Z)).
+
+  Axiom ext_solve_imp_list_nil :
+    ext_solve_imp_list [::] = [::].
+
+  Axiom ext_solve_imp_list_cons :
+    forall ps q ms tl,
+      ext_solve_imp_list ((ps, q, ms)::tl) =
+      (ext_solve_imp ps q ms)::(ext_solve_imp_list tl).
+
+
+  (** Verification procedures *)
+
+  (* Verify QF_BV predicates *)
+
+  Definition verify_qfbv_bexps fE (es : seq QFBV.bexp) : bool :=
+    let '(_, _, _, cnfs) := bb_hbexps_cache fE (tmap QFBVHash.hash_bexp es) in
+    ext_all_unsat cnfs.
+
+  Lemma verify_qfbv_bexps_empty fE :
+    verify_qfbv_bexps fE [::].
+  Proof.
+    rewrite /verify_qfbv_bexps /=. apply: all_unsat_complete. done.
+  Qed.
+
+  Lemma verify_qfbv_bexps_sound fE es :
+    QFBV.well_formed_bexps es fE ->
+    verify_qfbv_bexps fE es ->
+    QFBV.valid_bexps fE es.
+  Proof.
+    move=> Hwf Hv. apply: (bb_hbexps_cache_sound Hwf).
+    move=> m c g cnfs cnf Hbb Hin. rewrite /verify_qfbv_bexps in Hv.
+    rewrite tmap_map Hbb in Hv. move: (all_unsat_sound Hv) => Hsat.
+    exact: (Hsat cnf Hin).
+  Qed.
+
+  Lemma verify_qfbv_bexps_complete fE es :
+    QFBV.well_formed_bexps es fE ->
+    QFBV.valid_bexps fE es ->
+    verify_qfbv_bexps fE es.
+  Proof.
+    move=> Hwf Hv. rewrite /verify_qfbv_bexps tmap_map.
+    dcase (bb_hbexps_cache fE (map QFBVHash.hash_bexp es)) => [[[[m c] g] cnfs] Hbb].
+    apply: all_unsat_complete. move=> cs Hin.
+    exact: (bb_hbexps_cache_complete Hwf Hv Hbb Hin).
+  Qed.
+
+  Lemma agree_verify_qfbv_bexps E1 E2 es :
+    SSA.MA.agree (QFBV.vars_bexps es) E1 E2 ->
+    verify_qfbv_bexps E1 es = verify_qfbv_bexps E2 es.
+  Proof.
+    move=> Hag. rewrite /verify_qfbv_bexps.
+    rewrite (agree_bb_hbexps_cache Hag). reflexivity.
+  Qed.
+
+
+  (* Range reduction and algebraic soundness conditions *)
+
   Definition verify_rspec_algsnd (o : options) (s : SSA.spec) : bool :=
     let rs := SSA.rspec_of_spec s in
     let fE := SSA.program_succ_typenv (SSA.rsprog rs) (SSA.rsinputs rs) in
     let es := bb_rngred_algsnd o rs in
-    let '(_, _, _, cnfs) := bb_hbexps_cache fE (tmap QFBVHash.hash_bexp es) in
-    ext_all_unsat cnfs.
+    verify_qfbv_bexps fE es.
+
 
   Lemma verify_rspec_algsnd_sound o (s : SSA.spec) :
     well_formed_ssa_spec s ->
@@ -46,8 +123,8 @@ Section Verification.
     apply: (bb_rngred_algsnd_sound (o:=o)
               (SSA.rspec_of_spec_is_rng_rspec s) (well_formed_ssa_rng_spec Hwf)).
     move=> m c g cnfs cnf Hbb Hin. rewrite /verify_rspec_algsnd in Hv.
-    rewrite tmap_map Hbb in Hv. move: (all_unsat_sound Hv) => Hsat.
-    move: (Hsat cnf Hin) => {} Hsat.
+    rewrite /verify_qfbv_bexps tmap_map Hbb in Hv.
+    move: (all_unsat_sound Hv) => Hsat. move: (Hsat cnf Hin) => {} Hsat.
     move=> Hsat'; apply: Hsat. exact: Hsat'.
   Qed.
 
@@ -57,7 +134,8 @@ Section Verification.
     SSA.valid_rspec (SSA.rspec_of_spec s) -> ssa_spec_algsnd (SSA.rspec_of_spec s) ->
     verify_rspec_algsnd o s.
   Proof.
-    move=> Ho Hwf Hrange Hsafe. rewrite /verify_rspec_algsnd. rewrite tmap_map.
+    move=> Ho Hwf Hrange Hsafe. rewrite /verify_rspec_algsnd /verify_qfbv_bexps.
+    rewrite tmap_map.
     dcase (bb_hbexps_cache (SSA.program_succ_typenv (SSA.rsprog (SSA.rspec_of_spec s)) (SSA.rsinputs (SSA.rspec_of_spec s)))
                            (map QFBVHash.hash_bexp
                                 (bb_rngred_algsnd o (SSA.rspec_of_spec s)))) =>
@@ -69,12 +147,7 @@ Section Verification.
   Qed.
 
 
-  (** Solve an ideal membership problems by external computer algebra systems.
-      An ideal membership problem is given as a tuple (ps, ms, q). The problem
-      is to check if q is in the ideal of ms++ps, i.e., there are cps and cms such
-      that q = cps * ps + cms * ms. ext_solve_imp returns such (cps, cms). *)
-  Parameter ext_solve_imp :
-    seq (PExpr Z) -> PExpr Z -> seq (PExpr Z) -> seq (PExpr Z) * seq (PExpr Z).
+  (* Verify an atomic root entailment problem - sequential version *)
 
   Definition polys_of_arep (o : options) (ps : arep) : seq (PExpr Z) * PExpr Z * seq (PExpr Z) :=
     let '(_, _, ps, ms, q) := imp_of_arep ps in
@@ -85,10 +158,10 @@ Section Verification.
       else (ps, q) in
     (ps', q', ms).
 
-  (** Verify an atomic root entailment problem by reducing the problem to an
-      ideal membership problem, solving the ideal membership problem by an
-      external computer algebra system, and validating the answer from the
-      computer algebra system. *)
+  (* Verify an atomic root entailment problem by reducing the problem to an
+     ideal membership problem, solving the ideal membership problem by an
+     external computer algebra system, and validating the answer from the
+     computer algebra system. *)
   Definition verify_arep (o : options) (ps : arep) : bool :=
     let '(ps', q', ms) := polys_of_arep o ps in
     let (cps, cms) := ext_solve_imp ps' q' ms in
@@ -96,31 +169,11 @@ Section Verification.
 
   Definition verify_areps (o : options) (pss : seq arep) : bool := all (verify_arep o) pss.
 
-  (** Verify a root entailment problem by reducing the problem to atomic
-      root entailment problems and then verifying the atomic problems
-      through verify_areps. *)
-  Definition verify_rep (o : options) (zs : ZSSA.rep) : bool :=
-    if rewrite_assignments_arep o
-    then verify_areps o (areps_of_rep_simplified o zs)
-    else verify_areps o (areps_of_rep zs).
-
-  (** Sequentail version *)
-  Definition verify_reps_seq (o : options) (zss : seq ZSSA.rep) : bool :=
-    all (verify_rep o) zss.
 
   Lemma verify_areps_rev o pss :
     verify_areps o (rev pss) = verify_areps o pss.
   Proof.
     rewrite /verify_areps. rewrite all_rev. reflexivity.
-  Qed.
-
-  Lemma verify_reps_seq_in o zs zss :
-    In zs zss -> verify_reps_seq o zss -> verify_rep o zs.
-  Proof.
-    elim: zss => [| z zss IH] //= Hin Hv. move/andP: Hv => [Hvz Hvzss].
-    case: Hin.
-    - move=> ?; subst. exact: Hvz.
-    - move=> Hin. exact: (IH Hin Hvzss).
   Qed.
 
   Lemma verify_arep_sound o ps : verify_arep o ps -> valid_arep ps.
@@ -148,61 +201,12 @@ Section Verification.
     - exact: (IH Htl Hin).
   Qed.
 
-  Lemma verify_rep_sound o (zs : ZSSA.rep) :
-    verify_rep o zs -> ZSSA.valid_rep zs.
-  Proof.
-    rewrite /verify_rep. case: (rewrite_assignments_arep o) => Hv.
-    - apply: (@areps_of_rep_simplified_sound o) => ps Hin.
-      exact: (verify_areps_in Hv Hin).
-    - apply: areps_of_rep_sound => ps Hin.
-      exact: (verify_areps_in Hv Hin).
-  Qed.
 
-  Lemma verify_reps_seq_sound o (zss : seq ZSSA.rep) :
-    verify_reps_seq o zss -> ZSSA.valid_reps zss.
-  Proof.
-    elim: zss => [| zs zss IH] //=. move/andP=> [Hzs Hzss].
-    rewrite ZSSA.valid_reps_cons. split.
-    - exact: (verify_rep_sound Hzs).
-    - exact: (IH Hzss).
-  Qed.
-
-
-  (* Solve a sequence of ideal membership problems by external computer
-     algebra systems. An ideal membership problem is given as a tuple
-     (ps, ms, q). The problem is to check if q is in the ideal of ms++ps,
-     i.e., there are cps and cms such that q = cps * ps + cms * ms.
-     ext_solve_imp_list returns a sequence of (cps, cms). *)
-  Parameter ext_solve_imp_list :
-    seq (seq (PExpr Z) * PExpr Z * seq (PExpr Z)) -> seq (seq (PExpr Z) * seq (PExpr Z)).
-
-  Axiom ext_solve_imp_list_nil :
-    ext_solve_imp_list [::] = [::].
-
-  Axiom ext_solve_imp_list_cons :
-    forall ps q ms tl,
-      ext_solve_imp_list ((ps, q, ms)::tl) =
-      (ext_solve_imp ps q ms)::(ext_solve_imp_list tl).
-
-  Lemma size_ext_solve_imp_list ins :
-    size (ext_solve_imp_list ins) = size ins.
-  Proof.
-    elim: ins => [| i ins IH] /=.
-    - rewrite ext_solve_imp_list_nil. reflexivity.
-    - case: i => [[ps q] ms]. rewrite ext_solve_imp_list_cons /=.
-      rewrite IH. reflexivity.
-  Qed.
+  (* Verify atomic root entailment problems - concurrent solving, sequential validating *)
 
   Definition polys_of_areps (o : options) (pss : seq arep) :
     seq (seq (PExpr Z) * PExpr Z * seq (PExpr Z)) :=
     tmap (polys_of_arep o) pss.
-
-  Lemma polys_of_areps_cons o p ps :
-    polys_of_areps o (p::ps) = (polys_of_arep o p)::(polys_of_areps o ps).
-  Proof.
-    rewrite /polys_of_areps. rewrite !tmap_map /=. reflexivity.
-  Qed.
-
 
   Fixpoint validate_imp_answer_list polys coefs : bool :=
     match polys, coefs with
@@ -220,8 +224,24 @@ Section Verification.
     then validate_imp_answer_list poly_list coef_list
     else false.
 
+
   Lemma polys_of_areps_nil o : polys_of_areps o [::] = [::].
   Proof. reflexivity. Qed.
+
+  Lemma polys_of_areps_cons o p ps :
+    polys_of_areps o (p::ps) = (polys_of_arep o p)::(polys_of_areps o ps).
+  Proof.
+    rewrite /polys_of_areps. rewrite !tmap_map /=. reflexivity.
+  Qed.
+
+  Lemma size_ext_solve_imp_list ins :
+    size (ext_solve_imp_list ins) = size ins.
+  Proof.
+    elim: ins => [| i ins IH] /=.
+    - rewrite ext_solve_imp_list_nil. reflexivity.
+    - case: i => [[ps q] ms]. rewrite ext_solve_imp_list_cons /=.
+      rewrite IH. reflexivity.
+  Qed.
 
   Lemma verify_areps_list_nil o : verify_areps_list o [::].
   Proof.
@@ -313,11 +333,56 @@ Section Verification.
   Qed.
 
 
-  (** Concurrent version *)
+  (* Verify root entailment problems - sequential version *)
+
+  (* Verify a root entailment problem by reducing the problem to atomic
+     root entailment problems and then verifying the atomic problems
+     through verify_areps. *)
+  Definition verify_rep (o : options) (zs : ZSSA.rep) : bool :=
+    if rewrite_assignments_arep o
+    then verify_areps o (areps_of_rep_simplified o zs)
+    else verify_areps o (areps_of_rep zs).
+
+  Definition verify_reps_seq (o : options) (zss : seq ZSSA.rep) : bool :=
+    all (verify_rep o) zss.
+
+
+  Lemma verify_reps_seq_in o zs zss :
+    In zs zss -> verify_reps_seq o zss -> verify_rep o zs.
+  Proof.
+    elim: zss => [| z zss IH] //= Hin Hv. move/andP: Hv => [Hvz Hvzss].
+    case: Hin.
+    - move=> ?; subst. exact: Hvz.
+    - move=> Hin. exact: (IH Hin Hvzss).
+  Qed.
+
+  Lemma verify_rep_sound o (zs : ZSSA.rep) :
+    verify_rep o zs -> ZSSA.valid_rep zs.
+  Proof.
+    rewrite /verify_rep. case: (rewrite_assignments_arep o) => Hv.
+    - apply: (@areps_of_rep_simplified_sound o) => ps Hin.
+      exact: (verify_areps_in Hv Hin).
+    - apply: areps_of_rep_sound => ps Hin.
+      exact: (verify_areps_in Hv Hin).
+  Qed.
+
+  Lemma verify_reps_seq_sound o (zss : seq ZSSA.rep) :
+    verify_reps_seq o zss -> ZSSA.valid_reps zss.
+  Proof.
+    elim: zss => [| zs zss IH] //=. move/andP=> [Hzs Hzss].
+    rewrite ZSSA.valid_reps_cons. split.
+    - exact: (verify_rep_sound Hzs).
+    - exact: (IH Hzss).
+  Qed.
+
+
+  (* Verify root entailment problems - concurrent version *)
+
   Definition verify_reps_paral (o : options) (zss : seq ZSSA.rep) : bool :=
     if rewrite_assignments_arep o
     then verify_areps_list o (tflatten (tmap (areps_of_rep_simplified o) zss))
     else verify_areps_list o (tflatten (tmap areps_of_rep zss)).
+
 
   Lemma verify_reps_paral_nil o : verify_reps_paral o [::].
   Proof.
@@ -351,7 +416,6 @@ Section Verification.
     - rewrite verify_reps_paral_cons IH. reflexivity.
   Qed.
 
-
   Lemma verify_reps_paral_sound o (zss : seq ZSSA.rep) :
     verify_reps_paral o zss -> ZSSA.valid_reps zss.
   Proof.
@@ -369,19 +433,91 @@ Section Verification.
   Qed.
 
 
+  (* Algebraic reduction *)
+
+  Definition verify_reps o (reps : seq ZSSA.rep) : bool :=
+    if compute_coefficients_one_by_one o
+    then verify_reps_seq o reps
+    else verify_reps_paral o reps.
+
+  Definition verify_rep1 o (rep : ZSSA.rep) : bool :=
+    if compute_coefficients_one_by_one o
+    then verify_rep o rep
+    else verify_reps_paral o [:: rep].
+
   Definition verify_espec (o : options) (s : SSA.spec) :=
     let avn := new_svar_spec s in
     let apply_algred s := algred_espec o avn s in
     if apply_slicing_espec o
     then let reps := tmap apply_algred
                           (tmap (SSA.slice_espec o) (SSA.split_espec (SSA.espec_of_spec s))) in
-         if compute_coefficients_one_by_one o
-         then verify_reps_seq o reps
-         else verify_reps_paral o reps
+         verify_reps o reps
     else let rep := apply_algred (SSA.espec_of_spec s) in
-         if compute_coefficients_one_by_one o
-         then verify_rep o rep
-         else verify_reps_paral o [:: rep].
+         verify_rep1 o rep.
+
+
+  Lemma verify_reps_nil o : verify_reps o [::].
+  Proof.
+    rewrite /verify_reps. rewrite verify_reps_paral_nil /=.
+    by case_if.
+  Qed.
+
+  Lemma verify_reps_cons o r rs :
+    verify_reps o (r::rs) = verify_rep o r && verify_reps o rs.
+  Proof.
+    rewrite /verify_reps. case_if.
+    - rewrite /=. reflexivity.
+    - rewrite verify_reps_paral_cons. reflexivity.
+  Qed.
+
+  Lemma verify_reps_rcons o rs r :
+    verify_reps o (rcons rs r) = verify_reps o rs && verify_rep o r.
+  Proof.
+    elim: rs => [| s rs IH] /=.
+    - rewrite verify_reps_cons verify_reps_nil andbT /=. reflexivity.
+    - rewrite !verify_reps_cons IH. rewrite andbA. reflexivity.
+  Qed.
+
+  Lemma verify_reps_rev o rs :
+    verify_reps o (rev rs) = verify_reps o rs.
+  Proof.
+    elim: rs => [| r rs IH] //=.
+    rewrite rev_cons verify_reps_rcons verify_reps_cons IH.
+    rewrite andbC. reflexivity.
+  Qed.
+
+  Lemma verify_reps_cat o rs1 rs2 :
+    verify_reps o (rs1 ++ rs2) = verify_reps o rs1 && verify_reps o rs2.
+  Proof.
+    elim: rs1 => [| r1 rs1 IH] /=.
+    - rewrite verify_reps_nil. reflexivity.
+    - rewrite !verify_reps_cons IH. rewrite andbA. reflexivity.
+  Qed.
+
+  Lemma verify_reps_tflatten o rss :
+    verify_reps o (tflatten rss) = all (verify_reps o) rss.
+  Proof.
+    elim: rss => [| rs rss IH] /=.
+    - rewrite verify_reps_nil. reflexivity.
+    - rewrite tflatten_cons verify_reps_cat IH.
+      rewrite verify_reps_rev andbC. reflexivity.
+  Qed.
+
+  Lemma verify_reps_sound o reps :
+    verify_reps o reps ->
+    ZSSA.valid_reps reps.
+  Proof.
+    rewrite /verify_reps. case_if; eauto using verify_reps_seq_sound, verify_reps_paral_sound.
+  Qed.
+
+  Lemma verify_rep1_sound o rep :
+    verify_rep1 o rep ->
+    ZSSA.valid_rep rep.
+  Proof.
+    rewrite /verify_rep1. case_if.
+    - exact: (verify_rep_sound H0).
+    - exact: (ZSSA.valid_reps_hd (verify_reps_paral_sound H0)).
+  Qed.
 
 
   (* Verify specifications *)
@@ -391,6 +527,7 @@ Section Verification.
 
   Definition verify_dsl (o : options) (s : DSL.spec) :=
     verify_ssa o (ssa_spec s).
+
 
   Theorem verify_ssa_sound (o : options) (s : SSA.spec) :
     well_formed_ssa_spec s -> verify_ssa o s ->
@@ -402,19 +539,17 @@ Section Verification.
     - case: (compute_coefficients_one_by_one o) => Hrep.
       + apply: (algred_spec_slice_sound
                   (o:=o) Hwf Hvs (fresh_var_spec_espec (new_svar_spec_fresh s)) Hvr).
-        move=> ss Hin. apply: (verify_rep_sound (o:=o)).
-        apply: (verify_reps_seq_in _ Hrep). apply/in_In. assumption.
+        move=> ss Hin. exact: (verify_reps_sound (o:=o) Hrep Hin).
       + apply: (algred_spec_slice_sound
                   (o:=o) Hwf Hvs (fresh_var_spec_espec (new_svar_spec_fresh s)) Hvr).
-        move=> ss Hin. apply: (verify_reps_paral_sound Hrep).
-        rewrite !tmap_map in Hin *. assumption.
+        move=> ss Hin. exact: (verify_reps_sound Hrep Hin).
     - case: (compute_coefficients_one_by_one o) => Hrep.
       + apply: (algred_spec_sound
                   (o:=o) Hwf Hvs Hvr (fresh_var_spec_espec (new_svar_spec_fresh s))).
-        exact: (verify_rep_sound Hrep).
+        exact: (verify_rep1_sound Hrep).
       + apply: (algred_spec_sound
                   (o:=o) Hwf Hvs Hvr (fresh_var_spec_espec (new_svar_spec_fresh s))).
-        apply: (verify_reps_paral_sound Hrep). exact: mem_head.
+        exact: (verify_rep1_sound Hrep).
   Qed.
 
   Theorem verify_dsl_sound (o : options) (s : DSL.spec) :
@@ -425,6 +560,5 @@ Section Verification.
     apply: (verify_ssa_sound _ Hv).
     exact: (ssa_spec_well_formed Hwf).
   Qed.
-
 
 End Verification.

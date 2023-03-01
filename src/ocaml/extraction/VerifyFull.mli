@@ -1,16 +1,11 @@
 open Options0
 open QFBV2CNF
-open QFBVHash
 open SSA2QFBV
 open SSA2ZSSA
 open SSAFull2SSA
 open Seqs
 open Verify
 open Seq
-
-val verify_qfbv_bexps : TypEnv.SSATE.env -> QFBV.QFBV.bexp list -> bool
-
-val verify_reps : options -> ZSSA.ZSSA.rep list -> bool
 
 val rngred_spec : options -> SSA.SSA.spec -> QFBV.QFBV.bexp list
 

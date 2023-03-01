@@ -1,25 +1,11 @@
 open Options0
 open QFBV2CNF
-open QFBVHash
 open SSA2QFBV
 open SSA2ZSSA
 open SSAFull2SSA
 open Seqs
 open Verify
 open Seq
-
-(** val verify_qfbv_bexps :
-    TypEnv.SSATE.env -> QFBV.QFBV.bexp list -> bool **)
-
-let verify_qfbv_bexps fE es =
-  let (_, cnfs) = bb_hbexps_cache fE (tmap hash_bexp es) in ext_all_unsat cnfs
-
-(** val verify_reps : options -> ZSSA.ZSSA.rep list -> bool **)
-
-let verify_reps o reps =
-  if o.compute_coefficients_one_by_one
-  then verify_reps_seq o reps
-  else verify_reps_paral o reps
 
 (** val rngred_spec : options -> SSA.SSA.spec -> QFBV.QFBV.bexp list **)
 
