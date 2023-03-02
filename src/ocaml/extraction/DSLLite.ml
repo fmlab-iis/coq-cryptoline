@@ -7,6 +7,7 @@ open FMaps
 open FSets
 open NBitsDef
 open NBitsOp
+open Options0
 open Seqs
 open Store
 open String0
@@ -939,38 +940,6 @@ module MakeDSL =
   let asize a te =
     sizeof_typ (atyp a te)
 
-  (** val atom_eqn : atom -> atom -> bool **)
-
-  let atom_eqn a1 a2 =
-    match a1 with
-    | Avar v1 ->
-      (match a2 with
-       | Avar v2 -> eq_op V.coq_T v1 v2
-       | Aconst (_, _) -> false)
-    | Aconst (ty1, n1) ->
-      (match a2 with
-       | Avar _ -> false
-       | Aconst (ty2, n2) ->
-         (&&) (eq_op typ_eqType (Obj.magic ty1) (Obj.magic ty2))
-           (eq_op bitseq_eqType (Obj.magic n1) (Obj.magic n2)))
-
-  (** val atom_eqP : atom -> atom -> reflect **)
-
-  let atom_eqP a1 a2 =
-    let _evar_0_ = fun _ -> ReflectT in
-    let _evar_0_0 = fun _ -> ReflectF in
-    if atom_eqn a1 a2 then _evar_0_ __ else _evar_0_0 __
-
-  (** val atom_eqMixin : atom Equality.mixin_of **)
-
-  let atom_eqMixin =
-    { Equality.op = atom_eqn; Equality.mixin_of__1 = atom_eqP }
-
-  (** val atom_eqType : Equality.coq_type **)
-
-  let atom_eqType =
-    Obj.magic atom_eqMixin
-
   type instr =
   | Imov of V.t * atom
   | Ishl of V.t * atom * int
@@ -1000,8 +969,6 @@ module MakeDSL =
   | Icast of V.t * typ * atom
   | Ivpc of V.t * typ * atom
   | Ijoin of V.t * atom * atom
-  | Icut of bexp
-  | Iassert of bexp
   | Iassume of bexp
 
   (** val instr_rect :
@@ -1019,9 +986,9 @@ module MakeDSL =
       'a1) -> (V.t -> typ -> atom -> atom -> 'a1) -> (V.t -> typ -> atom ->
       atom -> 'a1) -> (V.t -> typ -> atom -> atom -> 'a1) -> (V.t -> typ ->
       atom -> 'a1) -> (V.t -> typ -> atom -> 'a1) -> (V.t -> atom -> atom ->
-      'a1) -> (bexp -> 'a1) -> (bexp -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1 **)
+      'a1) -> (bexp -> 'a1) -> instr -> 'a1 **)
 
-  let instr_rect f f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15 f16 f17 f18 f19 f20 f21 f22 f23 f24 f25 f26 f27 f28 f29 = function
+  let instr_rect f f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15 f16 f17 f18 f19 f20 f21 f22 f23 f24 f25 f26 f27 = function
   | Imov (t0, a) -> f t0 a
   | Ishl (t0, a, n) -> f0 t0 a n
   | Icshl (t0, t1, a, a0, n) -> f1 t0 t1 a a0 n
@@ -1050,9 +1017,7 @@ module MakeDSL =
   | Icast (t0, t1, a) -> f24 t0 t1 a
   | Ivpc (t0, t1, a) -> f25 t0 t1 a
   | Ijoin (t0, a, a0) -> f26 t0 a a0
-  | Icut b -> f27 b
-  | Iassert b -> f28 b
-  | Iassume b -> f29 b
+  | Iassume b -> f27 b
 
   (** val instr_rec :
       (V.t -> atom -> 'a1) -> (V.t -> atom -> int -> 'a1) -> (V.t -> V.t ->
@@ -1069,9 +1034,9 @@ module MakeDSL =
       'a1) -> (V.t -> typ -> atom -> atom -> 'a1) -> (V.t -> typ -> atom ->
       atom -> 'a1) -> (V.t -> typ -> atom -> atom -> 'a1) -> (V.t -> typ ->
       atom -> 'a1) -> (V.t -> typ -> atom -> 'a1) -> (V.t -> atom -> atom ->
-      'a1) -> (bexp -> 'a1) -> (bexp -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1 **)
+      'a1) -> (bexp -> 'a1) -> instr -> 'a1 **)
 
-  let instr_rec f f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15 f16 f17 f18 f19 f20 f21 f22 f23 f24 f25 f26 f27 f28 f29 = function
+  let instr_rec f f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15 f16 f17 f18 f19 f20 f21 f22 f23 f24 f25 f26 f27 = function
   | Imov (t0, a) -> f t0 a
   | Ishl (t0, a, n) -> f0 t0 a n
   | Icshl (t0, t1, a, a0, n) -> f1 t0 t1 a a0 n
@@ -1100,9 +1065,7 @@ module MakeDSL =
   | Icast (t0, t1, a) -> f24 t0 t1 a
   | Ivpc (t0, t1, a) -> f25 t0 t1 a
   | Ijoin (t0, a, a0) -> f26 t0 a a0
-  | Icut b -> f27 b
-  | Iassert b -> f28 b
-  | Iassume b -> f29 b
+  | Iassume b -> f27 b
 
   type program = instr list
 
@@ -1114,14 +1077,14 @@ module MakeDSL =
       (match i2 with
        | Imov (b1, b2) ->
          (&&) (eq_op V.coq_T a1 b1)
-           (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a2) (Obj.magic b2))
        | _ -> false)
     | Ishl (a1, a2, a3) ->
       (match i2 with
        | Ishl (b1, b2, b3) ->
          (&&)
            ((&&) (eq_op V.coq_T a1 b1)
-             (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a2) (Obj.magic b2)))
            (eq_op nat_eqType (Obj.magic a3) (Obj.magic b3))
        | _ -> false)
     | Icshl (a1, a2, a3, a4, a5) ->
@@ -1130,8 +1093,8 @@ module MakeDSL =
          (&&)
            ((&&)
              ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
-               (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
-             (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4)))
+               (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3)))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a4) (Obj.magic b4)))
            (eq_op nat_eqType (Obj.magic a5) (Obj.magic b5))
        | _ -> false)
     | Inondet (a1, a2) ->
@@ -1146,9 +1109,9 @@ module MakeDSL =
          (&&)
            ((&&)
              ((&&) (eq_op V.coq_T a1 b1)
-               (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
-             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
-           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+               (eq_op (atom_eqType V.coq_T) (Obj.magic a2) (Obj.magic b2)))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a4) (Obj.magic b4))
        | _ -> false)
     | Inop -> (match i2 with
                | Inop -> true
@@ -1159,23 +1122,23 @@ module MakeDSL =
          (&&)
            ((&&) (eq_op V.coq_T a1 b1)
              (eq_op typ_eqType (Obj.magic a2) (Obj.magic b2)))
-           (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3))
        | _ -> false)
     | Iadd (a1, a2, a3) ->
       (match i2 with
        | Iadd (b1, b2, b3) ->
          (&&)
            ((&&) (eq_op V.coq_T a1 b1)
-             (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
-           (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a2) (Obj.magic b2)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3))
        | _ -> false)
     | Iadds (a1, a2, a3, a4) ->
       (match i2 with
        | Iadds (b1, b2, b3, b4) ->
          (&&)
            ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
-             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
-           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a4) (Obj.magic b4))
        | _ -> false)
     | Iadc (a1, a2, a3, a4) ->
       (match i2 with
@@ -1183,9 +1146,9 @@ module MakeDSL =
          (&&)
            ((&&)
              ((&&) (eq_op V.coq_T a1 b1)
-               (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
-             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
-           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+               (eq_op (atom_eqType V.coq_T) (Obj.magic a2) (Obj.magic b2)))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a4) (Obj.magic b4))
        | _ -> false)
     | Iadcs (a1, a2, a3, a4, a5) ->
       (match i2 with
@@ -1193,33 +1156,33 @@ module MakeDSL =
          (&&)
            ((&&)
              ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
-               (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
-             (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4)))
-           (eq_op atom_eqType (Obj.magic a5) (Obj.magic b5))
+               (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3)))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a4) (Obj.magic b4)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a5) (Obj.magic b5))
        | _ -> false)
     | Isub (a1, a2, a3) ->
       (match i2 with
        | Isub (b1, b2, b3) ->
          (&&)
            ((&&) (eq_op V.coq_T a1 b1)
-             (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
-           (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a2) (Obj.magic b2)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3))
        | _ -> false)
     | Isubc (a1, a2, a3, a4) ->
       (match i2 with
        | Isubc (b1, b2, b3, b4) ->
          (&&)
            ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
-             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
-           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a4) (Obj.magic b4))
        | _ -> false)
     | Isubb (a1, a2, a3, a4) ->
       (match i2 with
        | Isubb (b1, b2, b3, b4) ->
          (&&)
            ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
-             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
-           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a4) (Obj.magic b4))
        | _ -> false)
     | Isbc (a1, a2, a3, a4) ->
       (match i2 with
@@ -1227,9 +1190,9 @@ module MakeDSL =
          (&&)
            ((&&)
              ((&&) (eq_op V.coq_T a1 b1)
-               (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
-             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
-           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+               (eq_op (atom_eqType V.coq_T) (Obj.magic a2) (Obj.magic b2)))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a4) (Obj.magic b4))
        | _ -> false)
     | Isbcs (a1, a2, a3, a4, a5) ->
       (match i2 with
@@ -1237,9 +1200,9 @@ module MakeDSL =
          (&&)
            ((&&)
              ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
-               (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
-             (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4)))
-           (eq_op atom_eqType (Obj.magic a5) (Obj.magic b5))
+               (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3)))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a4) (Obj.magic b4)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a5) (Obj.magic b5))
        | _ -> false)
     | Isbb (a1, a2, a3, a4) ->
       (match i2 with
@@ -1247,9 +1210,9 @@ module MakeDSL =
          (&&)
            ((&&)
              ((&&) (eq_op V.coq_T a1 b1)
-               (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
-             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
-           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+               (eq_op (atom_eqType V.coq_T) (Obj.magic a2) (Obj.magic b2)))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a4) (Obj.magic b4))
        | _ -> false)
     | Isbbs (a1, a2, a3, a4, a5) ->
       (match i2 with
@@ -1257,40 +1220,40 @@ module MakeDSL =
          (&&)
            ((&&)
              ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
-               (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
-             (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4)))
-           (eq_op atom_eqType (Obj.magic a5) (Obj.magic b5))
+               (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3)))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a4) (Obj.magic b4)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a5) (Obj.magic b5))
        | _ -> false)
     | Imul (a1, a2, a3) ->
       (match i2 with
        | Imul (b1, b2, b3) ->
          (&&)
            ((&&) (eq_op V.coq_T a1 b1)
-             (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
-           (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a2) (Obj.magic b2)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3))
        | _ -> false)
     | Imull (a1, a2, a3, a4) ->
       (match i2 with
        | Imull (b1, b2, b3, b4) ->
          (&&)
            ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
-             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
-           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a4) (Obj.magic b4))
        | _ -> false)
     | Imulj (a1, a2, a3) ->
       (match i2 with
        | Imulj (b1, b2, b3) ->
          (&&)
            ((&&) (eq_op V.coq_T a1 b1)
-             (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
-           (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a2) (Obj.magic b2)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3))
        | _ -> false)
     | Isplit (a1, a2, a3, a4) ->
       (match i2 with
        | Isplit (b1, b2, b3, b4) ->
          (&&)
            ((&&) ((&&) (eq_op V.coq_T a1 b1) (eq_op V.coq_T a2 b2))
-             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3)))
            (eq_op nat_eqType (Obj.magic a4) (Obj.magic b4))
        | _ -> false)
     | Iand (a1, a2, a3, a4) ->
@@ -1300,8 +1263,8 @@ module MakeDSL =
            ((&&)
              ((&&) (eq_op V.coq_T a1 b1)
                (eq_op typ_eqType (Obj.magic a2) (Obj.magic b2)))
-             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
-           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a4) (Obj.magic b4))
        | _ -> false)
     | Ior (a1, a2, a3, a4) ->
       (match i2 with
@@ -1310,8 +1273,8 @@ module MakeDSL =
            ((&&)
              ((&&) (eq_op V.coq_T a1 b1)
                (eq_op typ_eqType (Obj.magic a2) (Obj.magic b2)))
-             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
-           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a4) (Obj.magic b4))
        | _ -> false)
     | Ixor (a1, a2, a3, a4) ->
       (match i2 with
@@ -1320,8 +1283,8 @@ module MakeDSL =
            ((&&)
              ((&&) (eq_op V.coq_T a1 b1)
                (eq_op typ_eqType (Obj.magic a2) (Obj.magic b2)))
-             (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3)))
-           (eq_op atom_eqType (Obj.magic a4) (Obj.magic b4))
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a4) (Obj.magic b4))
        | _ -> false)
     | Icast (a1, a2, a3) ->
       (match i2 with
@@ -1329,7 +1292,7 @@ module MakeDSL =
          (&&)
            ((&&) (eq_op V.coq_T a1 b1)
              (eq_op typ_eqType (Obj.magic a2) (Obj.magic b2)))
-           (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3))
        | _ -> false)
     | Ivpc (a1, a2, a3) ->
       (match i2 with
@@ -1337,27 +1300,15 @@ module MakeDSL =
          (&&)
            ((&&) (eq_op V.coq_T a1 b1)
              (eq_op typ_eqType (Obj.magic a2) (Obj.magic b2)))
-           (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3))
        | _ -> false)
     | Ijoin (a1, a2, a3) ->
       (match i2 with
        | Ijoin (b1, b2, b3) ->
          (&&)
            ((&&) (eq_op V.coq_T a1 b1)
-             (eq_op atom_eqType (Obj.magic a2) (Obj.magic b2)))
-           (eq_op atom_eqType (Obj.magic a3) (Obj.magic b3))
-       | _ -> false)
-    | Icut a1 ->
-      (match i2 with
-       | Icut b1 ->
-         eq_op (prod_eqType ebexp_eqType rbexp_eqType) (Obj.magic a1)
-           (Obj.magic b1)
-       | _ -> false)
-    | Iassert a1 ->
-      (match i2 with
-       | Iassert b1 ->
-         eq_op (prod_eqType ebexp_eqType rbexp_eqType) (Obj.magic a1)
-           (Obj.magic b1)
+             (eq_op (atom_eqType V.coq_T) (Obj.magic a2) (Obj.magic b2)))
+           (eq_op (atom_eqType V.coq_T) (Obj.magic a3) (Obj.magic b3))
        | _ -> false)
     | Iassume a1 ->
       (match i2 with
@@ -1438,8 +1389,6 @@ module MakeDSL =
   | Icast (v, _, a) -> VS.add v (vars_atom a)
   | Ivpc (v, _, a) -> VS.add v (vars_atom a)
   | Ijoin (v, ah, al) -> VS.add v (VS.union (vars_atom ah) (vars_atom al))
-  | Icut e -> vars_bexp e
-  | Iassert e -> vars_bexp e
   | Iassume e -> vars_bexp e
 
   (** val lvs_instr : instr -> VS.t **)
@@ -1510,8 +1459,6 @@ module MakeDSL =
   | Icast (_, _, a) -> vars_atom a
   | Ivpc (_, _, a) -> vars_atom a
   | Ijoin (_, ah, al) -> VS.union (vars_atom ah) (vars_atom al)
-  | Icut e -> vars_bexp e
-  | Iassert e -> vars_bexp e
   | Iassume e -> vars_bexp e
   | _ -> VS.empty
 
@@ -1532,6 +1479,30 @@ module MakeDSL =
   let rec rvs_program = function
   | [] -> VS.empty
   | hd :: tl -> VS.union (rvs_instr hd) (rvs_program tl)
+
+  (** val eqn_instr : instr -> instr **)
+
+  let eqn_instr i = match i with
+  | Iassume b -> let (ee, _) = b in Iassume (ee, rtrue)
+  | _ -> i
+
+  (** val rng_instr : instr -> instr **)
+
+  let rng_instr i = match i with
+  | Iassume b -> let (_, re) = b in Iassume (etrue, re)
+  | _ -> i
+
+  (** val eqn_program : program -> program **)
+
+  let rec eqn_program = function
+  | [] -> []
+  | hd :: tl -> (eqn_instr hd) :: (eqn_program tl)
+
+  (** val rng_program : program -> program **)
+
+  let rec rng_program = function
+  | [] -> []
+  | hd :: tl -> (rng_instr hd) :: (rng_program tl)
 
   type spec = { sinputs : TE.env; spre : bexp; sprog : program; spost : bexp }
 
@@ -1555,11 +1526,81 @@ module MakeDSL =
   let spost s =
     s.spost
 
+  type espec = { esinputs : TE.env; espre : bexp; esprog : program;
+                 espost : ebexp }
+
+  (** val esinputs : espec -> TE.env **)
+
+  let esinputs e =
+    e.esinputs
+
+  (** val espre : espec -> bexp **)
+
+  let espre e =
+    e.espre
+
+  (** val esprog : espec -> program **)
+
+  let esprog e =
+    e.esprog
+
+  (** val espost : espec -> ebexp **)
+
+  let espost e =
+    e.espost
+
+  type rspec = { rsinputs : TE.env; rspre : rbexp; rsprog : program;
+                 rspost : rbexp }
+
+  (** val rsinputs : rspec -> TE.env **)
+
+  let rsinputs r =
+    r.rsinputs
+
+  (** val rspre : rspec -> rbexp **)
+
+  let rspre r =
+    r.rspre
+
+  (** val rsprog : rspec -> program **)
+
+  let rsprog r =
+    r.rsprog
+
+  (** val rspost : rspec -> rbexp **)
+
+  let rspost r =
+    r.rspost
+
+  (** val espec_of_spec : spec -> espec **)
+
+  let espec_of_spec s =
+    { esinputs = (sinputs s); espre = (spre s); esprog = (sprog s); espost =
+      (eqn_bexp (spost s)) }
+
+  (** val rspec_of_spec : spec -> rspec **)
+
+  let rspec_of_spec s =
+    { rsinputs = (sinputs s); rspre = (rng_bexp (spre s)); rsprog =
+      (rng_program (sprog s)); rspost = (rng_bexp (spost s)) }
+
   (** val vars_spec : spec -> VS.t **)
 
   let vars_spec s =
     VS.union (vars_bexp (spre s))
       (VS.union (vars_program (sprog s)) (vars_bexp (spost s)))
+
+  (** val vars_espec : espec -> VS.t **)
+
+  let vars_espec s =
+    VS.union (vars_bexp (espre s))
+      (VS.union (vars_program (esprog s)) (vars_ebexp (espost s)))
+
+  (** val vars_rspec : rspec -> VS.t **)
+
+  let vars_rspec s =
+    VS.union (vars_rbexp (rspre s))
+      (VS.union (vars_program (rsprog s)) (vars_rbexp (rspost s)))
 
   (** val string_of_eunop : eunop -> char list **)
 
@@ -1616,12 +1657,6 @@ module MakeDSL =
   let string_of_bexp e =
     append (string_of_ebexp (eqn_bexp e))
       (append (' '::('&'::('&'::(' '::[])))) (string_of_rbexp (rng_bexp e)))
-
-  (** val string_of_typ : typ -> char list **)
-
-  let string_of_typ = function
-  | Tuint n -> append ('u'::('i'::('n'::('t'::[])))) (string_of_nat n)
-  | Tsint n -> append ('s'::('i'::('n'::('t'::[])))) (string_of_nat n)
 
   (** val string_of_var_with_typ : (V.t * typ) -> char list **)
 
@@ -1814,10 +1849,6 @@ module MakeDSL =
       (append (VP.to_string v)
         (append (' '::[])
           (append (string_of_atom ah) (append (' '::[]) (string_of_atom al)))))
-  | Icut e -> append ('c'::('u'::('t'::(' '::[])))) (string_of_bexp e)
-  | Iassert e ->
-    append ('a'::('s'::('s'::('e'::('r'::('t'::(' '::[])))))))
-      (string_of_bexp e)
   | Iassume e ->
     append ('a'::('s'::('s'::('u'::('m'::('e'::(' '::[])))))))
       (string_of_bexp e)
@@ -1854,6 +1885,59 @@ module MakeDSL =
                         (append ('{'::(' '::[]))
                           (append (string_of_bexp (spost s))
                             (append ('}'::[]) newline))))))))))))
+
+  (** val string_of_espec : espec -> char list **)
+
+  let string_of_espec s =
+    append
+      ('p'::('r'::('o'::('c'::(' '::('m'::('a'::('i'::('n'::('('::[]))))))))))
+      (append (string_of_typenv (esinputs s))
+        (append (')'::(' '::('='::[])))
+          (append newline
+            (append ('{'::(' '::[]))
+              (append (string_of_bexp (espre s))
+                (append ('}'::[])
+                  (append newline
+                    (append (string_of_program (esprog s))
+                      (append newline
+                        (append ('{'::(' '::[]))
+                          (append (string_of_ebexp (espost s))
+                            (append ('}'::[]) newline))))))))))))
+
+  (** val string_of_rspec : rspec -> char list **)
+
+  let string_of_rspec s =
+    append
+      ('p'::('r'::('o'::('c'::(' '::('m'::('a'::('i'::('n'::('('::[]))))))))))
+      (append (string_of_typenv (rsinputs s))
+        (append
+          (')'::(' '::('='::(' '::('+'::('+'::(' '::('n'::('e'::('w'::('l'::('i'::('n'::('e'::[]))))))))))))))
+          (append ('{'::(' '::[]))
+            (append (string_of_rbexp (rspre s))
+              (append ('}'::[])
+                (append newline
+                  (append (string_of_program (rsprog s))
+                    (append newline
+                      (append ('{'::(' '::[]))
+                        (append (string_of_rbexp (rspost s))
+                          ('}'::(' '::('+'::('+'::(' '::('n'::('e'::('w'::('l'::('i'::('n'::('e'::[]))))))))))))))))))))))
+
+  (** val is_rng_instr : instr -> bool **)
+
+  let is_rng_instr = function
+  | Iassume b ->
+    let (e, _) = b in eq_op ebexp_eqType (Obj.magic e) (Obj.magic etrue)
+  | _ -> true
+
+  (** val is_rng_program : program -> bool **)
+
+  let is_rng_program p =
+    all is_rng_instr p
+
+  (** val is_rng_rspec : rspec -> bool **)
+
+  let is_rng_rspec s =
+    is_rng_program (rsprog s)
 
   (** val bv2z : typ -> bits -> coq_Z **)
 
@@ -2227,8 +2311,6 @@ module MakeDSL =
       ((&&)
         ((&&) (is_unsigned (atyp al e)) (compatible (atyp ah e) (atyp al e)))
         (well_typed_atom e ah)) (well_typed_atom e al)
-  | Icut e0 -> well_typed_bexp e e0
-  | Iassert e0 -> well_typed_bexp e e0
   | Iassume e0 -> well_typed_bexp e e0
   | _ -> true
 
@@ -2325,8 +2407,6 @@ module MakeDSL =
   | Ivpc (_, _, a) -> are_defined (vars_atom a) te
   | Ijoin (_, ah, al) ->
     (&&) (are_defined (vars_atom ah) te) (are_defined (vars_atom al) te)
-  | Icut e -> are_defined (vars_bexp e) te
-  | Iassert e -> are_defined (vars_bexp e) te
   | Iassume e -> are_defined (vars_bexp e) te
   | _ -> true
 
@@ -2391,6 +2471,24 @@ module MakeDSL =
         (well_formed_program (sinputs s) (sprog s)))
       (well_formed_bexp (program_succ_typenv (sprog s) (sinputs s)) (spost s))
 
+  (** val well_formed_espec : espec -> bool **)
+
+  let well_formed_espec s =
+    (&&)
+      ((&&) (well_formed_bexp (esinputs s) (espre s))
+        (well_formed_program (esinputs s) (esprog s)))
+      (well_formed_ebexp (program_succ_typenv (esprog s) (esinputs s))
+        (espost s))
+
+  (** val well_formed_rspec : rspec -> bool **)
+
+  let well_formed_rspec s =
+    (&&)
+      ((&&) (well_formed_rbexp (rsinputs s) (rspre s))
+        (well_formed_program (rsinputs s) (rsprog s)))
+      (well_formed_rbexp (program_succ_typenv (rsprog s) (rsinputs s))
+        (rspost s))
+
   (** val defmemP : V.t -> TE.env -> reflect **)
 
   let defmemP v e =
@@ -2431,18 +2529,6 @@ module MakeDSL =
   | Inondet (_, _) -> true
   | _ -> false
 
-  (** val is_cut : instr -> bool **)
-
-  let is_cut = function
-  | Icut _ -> true
-  | _ -> false
-
-  (** val is_assert : instr -> bool **)
-
-  let is_assert = function
-  | Iassert _ -> true
-  | _ -> false
-
   (** val is_assume : instr -> bool **)
 
   let is_assume = function
@@ -2462,103 +2548,418 @@ module MakeDSL =
     force_conform_vars e2 (VS.elements (VS.diff (vars_env e2) (vars_env e1)))
       s
 
+  (** val split_espec : espec -> espec list **)
+
+  let split_espec s =
+    tmap (fun q -> { esinputs = (esinputs s); espre = (espre s); esprog =
+      (esprog s); espost = q }) (split_eand (espost s))
+
+  (** val split_rspec : rspec -> rspec list **)
+
+  let split_rspec s =
+    tmap (fun q -> { rsinputs = (rsinputs s); rspre = (rspre s); rsprog =
+      (rsprog s); rspost = q }) (split_rand V.coq_T (rspost s))
+
   module TSEQM = TStateEqmod(V)(State.BitsValueType)(S)(VS)
 
   module MA = TypEnv.TypEnvAgree(V)(TE)(VS)
 
-  (** val cut_spec_rec :
-      instr list -> TE.env -> bexp -> instr list -> bexp -> spec list **)
+  (** val depvars_ebexp : VS.t -> ebexp -> VS.t **)
 
-  let rec cut_spec_rec visited_rev e f p g =
-    match p with
-    | [] ->
-      { sinputs = e; spre = f; sprog = (rev visited_rev); spost = g } :: []
-    | i :: p0 ->
-      (match i with
-       | Icut e0 ->
-         let visited = rev visited_rev in
-         { sinputs = e; spre = f; sprog = visited; spost =
-         e0 } :: (cut_spec_rec [] (program_succ_typenv visited e) e0 p0 g)
-       | _ -> cut_spec_rec (i :: visited_rev) e f p0 g)
+  let depvars_ebexp vs e =
+    foldl (fun vs0 e0 ->
+      let vse = vars_ebexp e0 in
+      if VSLemmas.disjoint vs0 vse then vs0 else VS.union vs0 vse) vs
+      (split_eand e)
 
-  (** val cut_spec : spec -> spec list **)
+  (** val depvars_rexp : VS.t -> rexp -> VS.t **)
 
-  let cut_spec s =
-    cut_spec_rec [] (sinputs s) (spre s) (sprog s) (spost s)
+  let depvars_rexp vs e =
+    let vse = vars_rexp e in
+    if VSLemmas.disjoint vs vse then vs else VS.union vs vse
 
-  (** val compose_spec : spec -> spec -> spec **)
+  (** val depvars_rbexp : VS.t -> DSLRaw.rbexp -> VS.t **)
 
-  let compose_spec s1 s2 =
-    { sinputs = (sinputs s1); spre = (spre s1); sprog =
-      (cat (sprog s1) ((Icut (spost s1)) :: (sprog s2))); spost = (spost s2) }
+  let depvars_rbexp vs e =
+    foldl (fun vs0 e0 ->
+      let vse = vars_rbexp e0 in
+      if VSLemmas.disjoint vs0 vse then vs0 else VS.union vs0 vse) vs
+      (split_rand V.coq_T e)
 
-  (** val program_has_no_cut : program -> bool **)
+  (** val depvars_einstr : options -> VS.t -> instr -> VS.t **)
 
-  let program_has_no_cut p =
-    negb (has is_cut p)
+  let depvars_einstr o vs i = match i with
+  | Imov (_, a) ->
+    (match a with
+     | Avar _ ->
+       if VSLemmas.disjoint vs (vars_instr i)
+       then vs
+       else VS.union vs (vars_instr i)
+     | Aconst (_, _) ->
+       if VSLemmas.disjoint vs (lvs_instr i)
+       then vs
+       else VS.union vs (vars_instr i))
+  | Ivpc (_, _, a) ->
+    (match a with
+     | Avar _ ->
+       if VSLemmas.disjoint vs (vars_instr i)
+       then vs
+       else VS.union vs (vars_instr i)
+     | Aconst (_, _) ->
+       if VSLemmas.disjoint vs (lvs_instr i)
+       then vs
+       else VS.union vs (vars_instr i))
+  | Iassume b ->
+    let (e, _) = b in
+    if o.apply_slicing_assume
+    then depvars_ebexp vs e
+    else VS.union vs (vars_ebexp e)
+  | _ ->
+    if VSLemmas.disjoint vs (lvs_instr i)
+    then vs
+    else VS.union vs (vars_instr i)
 
-  (** val spec_has_no_cut : spec -> bool **)
+  (** val depvars_rinstr : options -> VS.t -> instr -> VS.t **)
 
-  let spec_has_no_cut s =
-    program_has_no_cut (sprog s)
+  let depvars_rinstr o vs i = match i with
+  | Imov (_, a) ->
+    (match a with
+     | Avar _ ->
+       if VSLemmas.disjoint vs (vars_instr i)
+       then vs
+       else VS.union vs (vars_instr i)
+     | Aconst (_, _) ->
+       if VSLemmas.disjoint vs (lvs_instr i)
+       then vs
+       else VS.union vs (vars_instr i))
+  | Ivpc (_, _, a) ->
+    (match a with
+     | Avar _ ->
+       if VSLemmas.disjoint vs (vars_instr i)
+       then vs
+       else VS.union vs (vars_instr i)
+     | Aconst (_, _) ->
+       if VSLemmas.disjoint vs (lvs_instr i)
+       then vs
+       else VS.union vs (vars_instr i))
+  | Iassume b ->
+    let (_, r) = b in
+    if o.apply_slicing_assume
+    then depvars_rbexp vs r
+    else VS.union vs (vars_rbexp r)
+  | _ ->
+    if VSLemmas.disjoint vs (lvs_instr i)
+    then vs
+    else VS.union vs (vars_instr i)
 
-  (** val cut_asserts_rec :
-      instr list -> TE.env -> bexp -> instr list -> bexp -> spec list **)
+  (** val depvars_eprogram : options -> VS.t -> instr list -> VS.t **)
 
-  let rec cut_asserts_rec visited_rev e f p g =
-    match p with
-    | [] ->
-      { sinputs = e; spre = f; sprog = (rev visited_rev); spost = g } :: []
-    | i :: p0 ->
-      (match i with
-       | Iassert e0 ->
-         { sinputs = e; spre = f; sprog = (rev visited_rev); spost =
-           e0 } :: (cut_asserts_rec visited_rev e f p0 g)
-       | _ -> cut_asserts_rec (i :: visited_rev) e f p0 g)
+  let depvars_eprogram o vs p =
+    foldl (depvars_einstr o) vs (rev p)
 
-  (** val cut_asserts : spec -> spec list **)
+  (** val depvars_rprogram : options -> VS.t -> instr list -> VS.t **)
 
-  let cut_asserts s =
-    cut_asserts_rec [] (sinputs s) (spre s) (sprog s) (spost s)
+  let depvars_rprogram o vs p =
+    foldl (depvars_rinstr o) vs (rev p)
 
-  (** val program_has_no_assert : program -> bool **)
+  (** val depvars_epre_eprogram :
+      options -> VS.t -> ebexp -> instr list -> VS.t **)
 
-  let program_has_no_assert p =
-    negb (has is_assert p)
+  let depvars_epre_eprogram o vs e p =
+    depvars_ebexp (depvars_eprogram o vs p) e
 
-  (** val spec_has_no_assert : spec -> bool **)
+  (** val depvars_rpre_rprogram :
+      options -> VS.t -> DSLRaw.rbexp -> instr list -> VS.t **)
 
-  let spec_has_no_assert s =
-    program_has_no_assert (sprog s)
+  let depvars_rpre_rprogram o vs e p =
+    depvars_rbexp (depvars_rprogram o vs p) e
 
-  (** val extract_asserts_rec :
-      instr list -> TE.env -> bexp -> instr list -> spec list **)
+  (** val evsize : ebexp -> program -> VS.t -> int **)
 
-  let rec extract_asserts_rec visited_rev e f = function
+  let evsize e p vs =
+    let vsall = VS.union vs (VS.union (vars_ebexp e) (vars_program p)) in
+    subn (VS.cardinal vsall) (VS.cardinal vs)
+
+  (** val rvsize : rbexp -> program -> VS.t -> int **)
+
+  let rvsize r p vs =
+    let vsall = VS.union vs (VS.union (vars_rbexp r) (vars_program p)) in
+    subn (VS.cardinal vsall) (VS.cardinal vs)
+
+  (** val depvars_epre_eprogram_sat_F :
+      options -> ebexp -> program -> (VS.t -> VS.t) -> VS.t -> VS.t **)
+
+  let depvars_epre_eprogram_sat_F o e p depvars_epre_eprogram_sat0 vs =
+    if leq (Pervasives.succ (VS.cardinal vs))
+         (VS.cardinal (depvars_epre_eprogram o vs e p))
+    then depvars_epre_eprogram_sat0 (depvars_epre_eprogram o vs e p)
+    else depvars_epre_eprogram o vs e p
+
+  (** val depvars_epre_eprogram_sat_terminate :
+      options -> ebexp -> program -> VS.t -> VS.t **)
+
+  let rec depvars_epre_eprogram_sat_terminate o e p vs =
+    if leq (Pervasives.succ (VS.cardinal vs))
+         (VS.cardinal (depvars_epre_eprogram o vs e p))
+    then depvars_epre_eprogram_sat_terminate o e p
+           (depvars_epre_eprogram o vs e p)
+    else depvars_epre_eprogram o vs e p
+
+  (** val depvars_epre_eprogram_sat :
+      options -> ebexp -> program -> VS.t -> VS.t **)
+
+  let depvars_epre_eprogram_sat =
+    depvars_epre_eprogram_sat_terminate
+
+  type coq_R_depvars_epre_eprogram_sat =
+  | R_depvars_epre_eprogram_sat_0 of VS.t * VS.t
+     * coq_R_depvars_epre_eprogram_sat
+  | R_depvars_epre_eprogram_sat_1 of VS.t
+
+  (** val coq_R_depvars_epre_eprogram_sat_rect :
+      options -> ebexp -> program -> (VS.t -> __ -> VS.t ->
+      coq_R_depvars_epre_eprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
+      -> VS.t -> VS.t -> coq_R_depvars_epre_eprogram_sat -> 'a1 **)
+
+  let rec coq_R_depvars_epre_eprogram_sat_rect o e p f f0 _ _ = function
+  | R_depvars_epre_eprogram_sat_0 (vs, x, x0) ->
+    let vs' = depvars_epre_eprogram o vs e p in
+    f vs __ x x0 (coq_R_depvars_epre_eprogram_sat_rect o e p f f0 vs' x x0)
+  | R_depvars_epre_eprogram_sat_1 vs -> f0 vs __
+
+  (** val coq_R_depvars_epre_eprogram_sat_rec :
+      options -> ebexp -> program -> (VS.t -> __ -> VS.t ->
+      coq_R_depvars_epre_eprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
+      -> VS.t -> VS.t -> coq_R_depvars_epre_eprogram_sat -> 'a1 **)
+
+  let rec coq_R_depvars_epre_eprogram_sat_rec o e p f f0 _ _ = function
+  | R_depvars_epre_eprogram_sat_0 (vs, x, x0) ->
+    let vs' = depvars_epre_eprogram o vs e p in
+    f vs __ x x0 (coq_R_depvars_epre_eprogram_sat_rec o e p f f0 vs' x x0)
+  | R_depvars_epre_eprogram_sat_1 vs -> f0 vs __
+
+  (** val depvars_epre_eprogram_sat_rect :
+      options -> ebexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t ->
+      __ -> 'a1) -> VS.t -> 'a1 **)
+
+  let rec depvars_epre_eprogram_sat_rect o e p f f0 vs =
+    let f1 = f0 vs in
+    let f2 = f vs in
+    if leq (Pervasives.succ (VS.cardinal vs))
+         (VS.cardinal (depvars_epre_eprogram o vs e p))
+    then let f3 = f2 __ in
+         let hrec =
+           depvars_epre_eprogram_sat_rect o e p f f0
+             (depvars_epre_eprogram o vs e p)
+         in
+         f3 hrec
+    else f1 __
+
+  (** val depvars_epre_eprogram_sat_rec :
+      options -> ebexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t ->
+      __ -> 'a1) -> VS.t -> 'a1 **)
+
+  let depvars_epre_eprogram_sat_rec =
+    depvars_epre_eprogram_sat_rect
+
+  (** val coq_R_depvars_epre_eprogram_sat_correct :
+      options -> ebexp -> program -> VS.t -> VS.t ->
+      coq_R_depvars_epre_eprogram_sat **)
+
+  let coq_R_depvars_epre_eprogram_sat_correct o e p vs _res =
+    depvars_epre_eprogram_sat_rect o e p (fun y _ y1 _ _ ->
+      R_depvars_epre_eprogram_sat_0 (y,
+      (depvars_epre_eprogram_sat o e p (depvars_epre_eprogram o y e p)),
+      (y1 (depvars_epre_eprogram_sat o e p (depvars_epre_eprogram o y e p))
+        __))) (fun y _ _ _ -> R_depvars_epre_eprogram_sat_1 y) vs _res __
+
+  (** val depvars_rpre_rprogram_sat_F :
+      options -> rbexp -> program -> (VS.t -> VS.t) -> VS.t -> VS.t **)
+
+  let depvars_rpre_rprogram_sat_F o r p depvars_rpre_rprogram_sat0 vs =
+    if leq (Pervasives.succ (VS.cardinal vs))
+         (VS.cardinal (depvars_rpre_rprogram o vs r p))
+    then depvars_rpre_rprogram_sat0 (depvars_rpre_rprogram o vs r p)
+    else depvars_rpre_rprogram o vs r p
+
+  (** val depvars_rpre_rprogram_sat_terminate :
+      options -> rbexp -> program -> VS.t -> VS.t **)
+
+  let rec depvars_rpre_rprogram_sat_terminate o r p vs =
+    if leq (Pervasives.succ (VS.cardinal vs))
+         (VS.cardinal (depvars_rpre_rprogram o vs r p))
+    then depvars_rpre_rprogram_sat_terminate o r p
+           (depvars_rpre_rprogram o vs r p)
+    else depvars_rpre_rprogram o vs r p
+
+  (** val depvars_rpre_rprogram_sat :
+      options -> rbexp -> program -> VS.t -> VS.t **)
+
+  let depvars_rpre_rprogram_sat =
+    depvars_rpre_rprogram_sat_terminate
+
+  type coq_R_depvars_rpre_rprogram_sat =
+  | R_depvars_rpre_rprogram_sat_0 of VS.t * VS.t
+     * coq_R_depvars_rpre_rprogram_sat
+  | R_depvars_rpre_rprogram_sat_1 of VS.t
+
+  (** val coq_R_depvars_rpre_rprogram_sat_rect :
+      options -> rbexp -> program -> (VS.t -> __ -> VS.t ->
+      coq_R_depvars_rpre_rprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
+      -> VS.t -> VS.t -> coq_R_depvars_rpre_rprogram_sat -> 'a1 **)
+
+  let rec coq_R_depvars_rpre_rprogram_sat_rect o r p f f0 _ _ = function
+  | R_depvars_rpre_rprogram_sat_0 (vs, x, x0) ->
+    let vs' = depvars_rpre_rprogram o vs r p in
+    f vs __ x x0 (coq_R_depvars_rpre_rprogram_sat_rect o r p f f0 vs' x x0)
+  | R_depvars_rpre_rprogram_sat_1 vs -> f0 vs __
+
+  (** val coq_R_depvars_rpre_rprogram_sat_rec :
+      options -> rbexp -> program -> (VS.t -> __ -> VS.t ->
+      coq_R_depvars_rpre_rprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1)
+      -> VS.t -> VS.t -> coq_R_depvars_rpre_rprogram_sat -> 'a1 **)
+
+  let rec coq_R_depvars_rpre_rprogram_sat_rec o r p f f0 _ _ = function
+  | R_depvars_rpre_rprogram_sat_0 (vs, x, x0) ->
+    let vs' = depvars_rpre_rprogram o vs r p in
+    f vs __ x x0 (coq_R_depvars_rpre_rprogram_sat_rec o r p f f0 vs' x x0)
+  | R_depvars_rpre_rprogram_sat_1 vs -> f0 vs __
+
+  (** val depvars_rpre_rprogram_sat_rect :
+      options -> rbexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t ->
+      __ -> 'a1) -> VS.t -> 'a1 **)
+
+  let rec depvars_rpre_rprogram_sat_rect o r p f f0 vs =
+    let f1 = f0 vs in
+    let f2 = f vs in
+    if leq (Pervasives.succ (VS.cardinal vs))
+         (VS.cardinal (depvars_rpre_rprogram o vs r p))
+    then let f3 = f2 __ in
+         let hrec =
+           depvars_rpre_rprogram_sat_rect o r p f f0
+             (depvars_rpre_rprogram o vs r p)
+         in
+         f3 hrec
+    else f1 __
+
+  (** val depvars_rpre_rprogram_sat_rec :
+      options -> rbexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t ->
+      __ -> 'a1) -> VS.t -> 'a1 **)
+
+  let depvars_rpre_rprogram_sat_rec =
+    depvars_rpre_rprogram_sat_rect
+
+  (** val coq_R_depvars_rpre_rprogram_sat_correct :
+      options -> rbexp -> program -> VS.t -> VS.t ->
+      coq_R_depvars_rpre_rprogram_sat **)
+
+  let coq_R_depvars_rpre_rprogram_sat_correct o r p vs _res =
+    depvars_rpre_rprogram_sat_rect o r p (fun y _ y1 _ _ ->
+      R_depvars_rpre_rprogram_sat_0 (y,
+      (depvars_rpre_rprogram_sat o r p (depvars_rpre_rprogram o y r p)),
+      (y1 (depvars_rpre_rprogram_sat o r p (depvars_rpre_rprogram o y r p))
+        __))) (fun y _ _ _ -> R_depvars_rpre_rprogram_sat_1 y) vs _res __
+
+  (** val slice_ebexp : VS.t -> DSLRaw.ebexp -> DSLRaw.ebexp **)
+
+  let rec slice_ebexp vs e = match e with
+  | Etrue -> e
+  | Eeq (e1, e2) ->
+    if (&&) (VSLemmas.disjoint vs (vars_eexp e1))
+         (VSLemmas.disjoint vs (vars_eexp e2))
+    then etrue
+    else e
+  | Eeqmod (e1, e2, ms) ->
+    if (&&)
+         ((&&) (VSLemmas.disjoint vs (vars_eexp e1))
+           (VSLemmas.disjoint vs (vars_eexp e2)))
+         (VSLemmas.disjoint vs (vars_eexps ms))
+    then etrue
+    else e
+  | Eand (e1, e2) ->
+    (match slice_ebexp vs e1 with
+     | Etrue -> slice_ebexp vs e2
+     | x -> (match slice_ebexp vs e2 with
+             | Etrue -> x
+             | x0 -> Eand (x, x0)))
+
+  (** val slice_rbexp : VS.t -> DSLRaw.rbexp -> DSLRaw.rbexp **)
+
+  let rec slice_rbexp vs e = match e with
+  | Rtrue -> e
+  | Req (_, e1, e2) ->
+    if (&&) (VSLemmas.disjoint vs (vars_rexp e1))
+         (VSLemmas.disjoint vs (vars_rexp e2))
+    then rtrue
+    else e
+  | Rcmp (_, _, e1, e2) ->
+    if (&&) (VSLemmas.disjoint vs (vars_rexp e1))
+         (VSLemmas.disjoint vs (vars_rexp e2))
+    then rtrue
+    else e
+  | Rneg e' -> if VSLemmas.disjoint vs (vars_rbexp e') then rtrue else e
+  | Rand (e1, e2) ->
+    (match slice_rbexp vs e1 with
+     | Rtrue -> slice_rbexp vs e2
+     | x -> (match slice_rbexp vs e2 with
+             | Rtrue -> x
+             | x0 -> Rand (x, x0)))
+  | Ror (e1, e2) ->
+    if (&&) (VSLemmas.disjoint vs (vars_rbexp e1))
+         (VSLemmas.disjoint vs (vars_rbexp e2))
+    then rtrue
+    else e
+
+  (** val slice_einstr : VS.t -> instr -> instr option **)
+
+  let slice_einstr vs i = match i with
+  | Iassume b -> let (e, _) = b in Some (Iassume ((slice_ebexp vs e), rtrue))
+  | _ -> if VSLemmas.disjoint (lvs_instr i) vs then None else Some i
+
+  (** val slice_rinstr : VS.t -> instr -> instr option **)
+
+  let slice_rinstr vs i = match i with
+  | Iassume b -> let (_, r) = b in Some (Iassume (etrue, (slice_rbexp vs r)))
+  | _ -> if VSLemmas.disjoint (lvs_instr i) vs then None else Some i
+
+  (** val slice_eprogram : VS.t -> instr list -> instr list **)
+
+  let rec slice_eprogram vs = function
   | [] -> []
-  | i :: p0 ->
-    (match i with
-     | Iassert e0 ->
-       { sinputs = e; spre = f; sprog = (rev visited_rev); spost =
-         e0 } :: (extract_asserts_rec visited_rev e f p0)
-     | _ -> extract_asserts_rec (i :: visited_rev) e f p0)
+  | hd :: tl ->
+    (match slice_einstr vs hd with
+     | Some i -> i :: (slice_eprogram vs tl)
+     | None -> slice_eprogram vs tl)
 
-  (** val extract_asserts : spec -> spec list **)
+  (** val slice_rprogram : VS.t -> instr list -> instr list **)
 
-  let extract_asserts s =
-    extract_asserts_rec [] (sinputs s) (spre s) (sprog s)
+  let rec slice_rprogram vs = function
+  | [] -> []
+  | hd :: tl ->
+    (match slice_rinstr vs hd with
+     | Some i -> i :: (slice_rprogram vs tl)
+     | None -> slice_rprogram vs tl)
 
-  (** val remove_asserts_program : program -> program **)
+  (** val slice_espec : options -> espec -> espec **)
 
-  let remove_asserts_program p =
-    filter (fun i -> negb (is_assert i)) p
+  let slice_espec o s =
+    let vs =
+      depvars_epre_eprogram_sat o (eqn_bexp (espre s)) (esprog s)
+        (vars_ebexp (espost s))
+    in
+    { esinputs = (esinputs s); espre =
+    ((slice_ebexp vs (eqn_bexp (espre s))), (rng_bexp (espre s))); esprog =
+    (slice_eprogram vs (esprog s)); espost = (espost s) }
 
-  (** val remove_asserts : spec -> spec **)
+  (** val slice_rspec : options -> rspec -> rspec **)
 
-  let remove_asserts s =
-    { sinputs = (sinputs s); spre = (spre s); sprog =
-      (remove_asserts_program (sprog s)); spost = (spost s) }
+  let slice_rspec o s =
+    let vs =
+      depvars_rpre_rprogram_sat o (rspre s) (rsprog s) (vars_rbexp (rspost s))
+    in
+    { rsinputs = (rsinputs s); rspre = (slice_rbexp vs (rspre s)); rsprog =
+    (slice_rprogram vs (rsprog s)); rspost = (rspost s) }
  end
 
-module DSLFull =
+module DSLLite =
  MakeDSL(VarOrder)(VarOrderPrinter)(VS)(VM)(TypEnv.TE)(State.Store)

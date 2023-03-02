@@ -24,7 +24,7 @@ let parse_and_check file =
   let (vs, s) = Common.parse_and_check file in
   let vs = VS.of_list vs in
   let coq_spec = Translator.Visitor.visit_spec vs s in
-  if Extraction.DSLFull.DSLFull.well_formed_spec coq_spec then (vs, s, coq_spec)
+  if Extraction.DSL.DSL.well_formed_spec coq_spec then (vs, s, coq_spec)
   else failwith ("The program is not well-formed.")
 
 let anon file =
@@ -45,7 +45,7 @@ let anon file =
                 apply_slicing_rspec = !apply_slicing_rspec;
                 apply_slicing_assume = !apply_slicing_assume }
       in
-	  let res = Extraction.VerifyFull.verify_fulldsl o coq_spec in
+	  let res = Extraction.Verify.verify_dsl o coq_spec in
       let t2 = Unix.gettimeofday() in
       let _ = print_endline ("Verification result:\t\t\t"
                              ^ (if res then "[OK]\t" else "[FAILED]") ^ "\t"

@@ -6,9 +6,9 @@ module ZSSA :
 
   val string_of_zexps : char list -> eexp list -> char list
 
-  type rep = { premise : SSA.SSA.ebexp; conseq : SSA.SSA.ebexp }
+  type rep = { premise : SSALite.SSALite.ebexp; conseq : SSALite.SSALite.ebexp }
 
-  val premise : rep -> SSA.SSA.ebexp
+  val premise : rep -> SSALite.SSALite.ebexp
 
-  val conseq : rep -> SSA.SSA.ebexp
+  val conseq : rep -> SSALite.SSALite.ebexp
  end

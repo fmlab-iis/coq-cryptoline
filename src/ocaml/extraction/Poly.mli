@@ -23,8 +23,9 @@ open Ssrnat
 type __ = Obj.t
 
 type azbexp =
-| Seq of SSA.SSA.eexp * SSA.SSA.eexp
-| Seqmod of SSA.SSA.eexp * SSA.SSA.eexp * SSA.SSA.eexp list
+| Seq of SSALite.SSALite.eexp * SSALite.SSALite.eexp
+| Seqmod of SSALite.SSALite.eexp * SSALite.SSALite.eexp
+   * SSALite.SSALite.eexp list
 
 val azbexp_eqn : azbexp -> azbexp -> bool
 
@@ -40,25 +41,31 @@ type arep = { apremises : azbexp list; aconseq : azbexp }
 
 val is_arep_trivial : arep -> bool
 
-val zexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp -> eexp
+val zexp_subst :
+  SSALite.SSALite.eexp -> SSALite.SSALite.eexp -> SSALite.SSALite.eexp -> eexp
 
 val zexps_subst :
-  SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp list -> eexp list
+  SSALite.SSALite.eexp -> SSALite.SSALite.eexp -> SSALite.SSALite.eexp list
+  -> eexp list
 
-val azbexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> azbexp -> azbexp
+val azbexp_subst :
+  SSALite.SSALite.eexp -> SSALite.SSALite.eexp -> azbexp -> azbexp
 
-val subst_azbexps : SSA.SSA.eexp -> SSA.SSA.eexp -> azbexp list -> azbexp list
+val subst_azbexps :
+  SSALite.SSALite.eexp -> SSALite.SSALite.eexp -> azbexp list -> azbexp list
 
-val single_variables : SSA.SSA.eexp -> SSAVS.t
+val single_variables : SSALite.SSALite.eexp -> SSAVS.t
 
-val num_occurrence : SSAVarOrder.t -> SSA.SSA.eexp -> int
+val num_occurrence : SSAVarOrder.t -> SSALite.SSALite.eexp -> int
 
 val separate :
-  Equality.sort -> SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp option
+  Equality.sort -> SSALite.SSALite.eexp -> SSALite.SSALite.eexp ->
+  SSALite.SSALite.eexp option
 
-val get_rewrite_pattern : SSA.SSA.eexp -> (SSAVS.elt * SSA.SSA.eexp) option
+val get_rewrite_pattern :
+  SSALite.SSALite.eexp -> (SSAVS.elt * SSALite.SSALite.eexp) option
 
-val is_assignment : azbexp -> (ssavar * SSA.SSA.eexp) option
+val is_assignment : azbexp -> (ssavar * SSALite.SSALite.eexp) option
 
 val simplify_arep_rec :
   azbexp list -> azbexp list -> azbexp -> azbexp list * azbexp
@@ -66,10 +73,11 @@ val simplify_arep_rec :
 val simplify_arep : arep -> arep
 
 val azbexp_subst_vars_cache :
-  ssavar -> SSA.SSA.eexp -> SSAVS.t -> (SSAVS.t * azbexp) -> SSAVS.t * azbexp
+  ssavar -> SSALite.SSALite.eexp -> SSAVS.t -> (SSAVS.t * azbexp) ->
+  SSAVS.t * azbexp
 
 val subst_azbexps_vars_cache :
-  ssavar -> SSA.SSA.eexp -> SSAVS.t -> (SSAVS.t * azbexp) list ->
+  ssavar -> SSALite.SSALite.eexp -> SSAVS.t -> (SSAVS.t * azbexp) list ->
   (SSAVS.t * azbexp) list
 
 val simplify_arep_vars_cache_rec :
@@ -82,7 +90,7 @@ val pair_azbexp_with_vars : azbexp -> SSAVS.t * azbexp
 
 val simplify_arep_vars_cache : arep -> arep
 
-val split_zbexp : SSA.SSA.ebexp -> azbexp list
+val split_zbexp : SSALite.SSALite.ebexp -> azbexp list
 
 val areps_of_rep_full : ZSSA.ZSSA.rep -> arep list
 
@@ -116,12 +124,12 @@ val zpexpr_of_ebinop :
   ebinop -> coq_Z coq_PExpr -> coq_Z coq_PExpr -> coq_Z coq_PExpr
 
 val zpexpr_of_zexp :
-  positive -> positive SSAVM.t -> SSA.SSA.eexp -> (positive * positive
-  SSAVM.t) * coq_Z coq_PExpr
+  positive -> positive SSAVM.t -> SSALite.SSALite.eexp ->
+  (positive * positive SSAVM.t) * coq_Z coq_PExpr
 
 val zpexprs_of_zexps :
-  positive -> positive SSAVM.t -> SSA.SSA.eexp list -> (positive * positive
-  SSAVM.t) * coq_Z coq_PExpr list
+  positive -> positive SSAVM.t -> SSALite.SSALite.eexp list ->
+  (positive * positive SSAVM.t) * coq_Z coq_PExpr list
 
 val pvars : positive -> int -> coq_Z coq_PExpr list
 

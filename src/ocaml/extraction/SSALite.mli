@@ -2,7 +2,9 @@ open BinNat
 open BinNums
 open Bool
 open DSLRaw
+open Datatypes
 open NBitsDef
+open Options0
 open State
 open Typ
 open Var
@@ -11,7 +13,7 @@ open Seq
 
 type __ = Obj.t
 
-module SSAFull :
+module SSALite :
  sig
   module VSLemmas :
    sig
@@ -900,14 +902,6 @@ module SSAFull :
 
   val asize : atom -> TypEnv.SSATE.env -> int
 
-  val atom_eqn : atom -> atom -> bool
-
-  val atom_eqP : atom -> atom -> reflect
-
-  val atom_eqMixin : atom Equality.mixin_of
-
-  val atom_eqType : Equality.coq_type
-
   type instr =
   | Imov of SSAVarOrder.t * atom
   | Ishl of SSAVarOrder.t * atom * int
@@ -937,8 +931,6 @@ module SSAFull :
   | Icast of SSAVarOrder.t * typ * atom
   | Ivpc of SSAVarOrder.t * typ * atom
   | Ijoin of SSAVarOrder.t * atom * atom
-  | Icut of bexp
-  | Iassert of bexp
   | Iassume of bexp
 
   val instr_rect :
@@ -961,8 +953,7 @@ module SSAFull :
     atom -> 'a1) -> (SSAVarOrder.t -> typ -> atom -> atom -> 'a1) ->
     (SSAVarOrder.t -> typ -> atom -> atom -> 'a1) -> (SSAVarOrder.t -> typ ->
     atom -> 'a1) -> (SSAVarOrder.t -> typ -> atom -> 'a1) -> (SSAVarOrder.t
-    -> atom -> atom -> 'a1) -> (bexp -> 'a1) -> (bexp -> 'a1) -> (bexp ->
-    'a1) -> instr -> 'a1
+    -> atom -> atom -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1
 
   val instr_rec :
     (SSAVarOrder.t -> atom -> 'a1) -> (SSAVarOrder.t -> atom -> int -> 'a1)
@@ -984,8 +975,7 @@ module SSAFull :
     atom -> 'a1) -> (SSAVarOrder.t -> typ -> atom -> atom -> 'a1) ->
     (SSAVarOrder.t -> typ -> atom -> atom -> 'a1) -> (SSAVarOrder.t -> typ ->
     atom -> 'a1) -> (SSAVarOrder.t -> typ -> atom -> 'a1) -> (SSAVarOrder.t
-    -> atom -> atom -> 'a1) -> (bexp -> 'a1) -> (bexp -> 'a1) -> (bexp ->
-    'a1) -> instr -> 'a1
+    -> atom -> atom -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1
 
   type program = instr list
 
@@ -1011,6 +1001,14 @@ module SSAFull :
 
   val rvs_program : program -> SSAVS.t
 
+  val eqn_instr : instr -> instr
+
+  val rng_instr : instr -> instr
+
+  val eqn_program : program -> program
+
+  val rng_program : program -> program
+
   type spec = { sinputs : TypEnv.SSATE.env; spre : bexp; sprog : program;
                 spost : bexp }
 
@@ -1022,7 +1020,37 @@ module SSAFull :
 
   val spost : spec -> bexp
 
+  type espec = { esinputs : TypEnv.SSATE.env; espre : bexp; esprog : 
+                 program; espost : ebexp }
+
+  val esinputs : espec -> TypEnv.SSATE.env
+
+  val espre : espec -> bexp
+
+  val esprog : espec -> program
+
+  val espost : espec -> ebexp
+
+  type rspec = { rsinputs : TypEnv.SSATE.env; rspre : rbexp;
+                 rsprog : program; rspost : rbexp }
+
+  val rsinputs : rspec -> TypEnv.SSATE.env
+
+  val rspre : rspec -> rbexp
+
+  val rsprog : rspec -> program
+
+  val rspost : rspec -> rbexp
+
+  val espec_of_spec : spec -> espec
+
+  val rspec_of_spec : spec -> rspec
+
   val vars_spec : spec -> SSAVS.t
+
+  val vars_espec : espec -> SSAVS.t
+
+  val vars_rspec : rspec -> SSAVS.t
 
   val string_of_eunop : eunop -> char list
 
@@ -1046,8 +1074,6 @@ module SSAFull :
 
   val string_of_bexp : bexp -> char list
 
-  val string_of_typ : typ -> char list
-
   val string_of_var_with_typ : (SSAVarOrder.t * typ) -> char list
 
   val string_of_vars : SSAVS.t -> char list
@@ -1063,6 +1089,16 @@ module SSAFull :
   val string_of_typenv : TypEnv.SSATE.env -> char list
 
   val string_of_spec : spec -> char list
+
+  val string_of_espec : espec -> char list
+
+  val string_of_rspec : rspec -> char list
+
+  val is_rng_instr : instr -> bool
+
+  val is_rng_program : program -> bool
+
+  val is_rng_rspec : rspec -> bool
 
   val bv2z : typ -> bits -> coq_Z
 
@@ -1832,6 +1868,10 @@ module SSAFull :
 
   val well_formed_spec : spec -> bool
 
+  val well_formed_espec : espec -> bool
+
+  val well_formed_rspec : rspec -> bool
+
   val defmemP : SSAVarOrder.t -> TypEnv.SSATE.env -> reflect
 
   val memdefP : TypEnv.SSATE.key -> typ TypEnv.SSATE.t -> reflect
@@ -1844,10 +1884,6 @@ module SSAFull :
 
   val is_nondet : instr -> bool
 
-  val is_cut : instr -> bool
-
-  val is_assert : instr -> bool
-
   val is_assume : instr -> bool
 
   val force_conform_vars :
@@ -1855,6 +1891,10 @@ module SSAFull :
 
   val force_conform :
     TypEnv.SSATE.env -> TypEnv.SSATE.env -> SSAStore.t -> SSAStore.t
+
+  val split_espec : espec -> espec list
+
+  val split_rspec : rspec -> rspec list
 
   module TSEQM :
    sig
@@ -3477,34 +3517,117 @@ module SSAFull :
      end
    end
 
-  val cut_spec_rec :
-    instr list -> TypEnv.SSATE.env -> bexp -> instr list -> bexp -> spec list
+  val depvars_ebexp : SSAVS.t -> ebexp -> SSAVS.t
 
-  val cut_spec : spec -> spec list
+  val depvars_rexp : SSAVS.t -> rexp -> SSAVS.t
 
-  val compose_spec : spec -> spec -> spec
+  val depvars_rbexp : SSAVS.t -> DSLRaw.rbexp -> SSAVS.t
 
-  val program_has_no_cut : program -> bool
+  val depvars_einstr : options -> SSAVS.t -> instr -> SSAVS.t
 
-  val spec_has_no_cut : spec -> bool
+  val depvars_rinstr : options -> SSAVS.t -> instr -> SSAVS.t
 
-  val cut_asserts_rec :
-    instr list -> TypEnv.SSATE.env -> bexp -> instr list -> bexp -> spec list
+  val depvars_eprogram : options -> SSAVS.t -> instr list -> SSAVS.t
 
-  val cut_asserts : spec -> spec list
+  val depvars_rprogram : options -> SSAVS.t -> instr list -> SSAVS.t
 
-  val program_has_no_assert : program -> bool
+  val depvars_epre_eprogram :
+    options -> SSAVS.t -> ebexp -> instr list -> SSAVS.t
 
-  val spec_has_no_assert : spec -> bool
+  val depvars_rpre_rprogram :
+    options -> SSAVS.t -> DSLRaw.rbexp -> instr list -> SSAVS.t
 
-  val extract_asserts_rec :
-    instr list -> TypEnv.SSATE.env -> bexp -> instr list -> spec list
+  val evsize : ebexp -> program -> SSAVS.t -> int
 
-  val extract_asserts : spec -> spec list
+  val rvsize : rbexp -> program -> SSAVS.t -> int
 
-  val remove_asserts_program : program -> program
+  val depvars_epre_eprogram_sat_F :
+    options -> ebexp -> program -> (SSAVS.t -> SSAVS.t) -> SSAVS.t -> SSAVS.t
 
-  val remove_asserts : spec -> spec
+  val depvars_epre_eprogram_sat_terminate :
+    options -> ebexp -> program -> SSAVS.t -> SSAVS.t
+
+  val depvars_epre_eprogram_sat :
+    options -> ebexp -> program -> SSAVS.t -> SSAVS.t
+
+  type coq_R_depvars_epre_eprogram_sat =
+  | R_depvars_epre_eprogram_sat_0 of SSAVS.t * SSAVS.t
+     * coq_R_depvars_epre_eprogram_sat
+  | R_depvars_epre_eprogram_sat_1 of SSAVS.t
+
+  val coq_R_depvars_epre_eprogram_sat_rect :
+    options -> ebexp -> program -> (SSAVS.t -> __ -> SSAVS.t ->
+    coq_R_depvars_epre_eprogram_sat -> 'a1 -> 'a1) -> (SSAVS.t -> __ -> 'a1)
+    -> SSAVS.t -> SSAVS.t -> coq_R_depvars_epre_eprogram_sat -> 'a1
+
+  val coq_R_depvars_epre_eprogram_sat_rec :
+    options -> ebexp -> program -> (SSAVS.t -> __ -> SSAVS.t ->
+    coq_R_depvars_epre_eprogram_sat -> 'a1 -> 'a1) -> (SSAVS.t -> __ -> 'a1)
+    -> SSAVS.t -> SSAVS.t -> coq_R_depvars_epre_eprogram_sat -> 'a1
+
+  val depvars_epre_eprogram_sat_rect :
+    options -> ebexp -> program -> (SSAVS.t -> __ -> 'a1 -> 'a1) -> (SSAVS.t
+    -> __ -> 'a1) -> SSAVS.t -> 'a1
+
+  val depvars_epre_eprogram_sat_rec :
+    options -> ebexp -> program -> (SSAVS.t -> __ -> 'a1 -> 'a1) -> (SSAVS.t
+    -> __ -> 'a1) -> SSAVS.t -> 'a1
+
+  val coq_R_depvars_epre_eprogram_sat_correct :
+    options -> ebexp -> program -> SSAVS.t -> SSAVS.t ->
+    coq_R_depvars_epre_eprogram_sat
+
+  val depvars_rpre_rprogram_sat_F :
+    options -> rbexp -> program -> (SSAVS.t -> SSAVS.t) -> SSAVS.t -> SSAVS.t
+
+  val depvars_rpre_rprogram_sat_terminate :
+    options -> rbexp -> program -> SSAVS.t -> SSAVS.t
+
+  val depvars_rpre_rprogram_sat :
+    options -> rbexp -> program -> SSAVS.t -> SSAVS.t
+
+  type coq_R_depvars_rpre_rprogram_sat =
+  | R_depvars_rpre_rprogram_sat_0 of SSAVS.t * SSAVS.t
+     * coq_R_depvars_rpre_rprogram_sat
+  | R_depvars_rpre_rprogram_sat_1 of SSAVS.t
+
+  val coq_R_depvars_rpre_rprogram_sat_rect :
+    options -> rbexp -> program -> (SSAVS.t -> __ -> SSAVS.t ->
+    coq_R_depvars_rpre_rprogram_sat -> 'a1 -> 'a1) -> (SSAVS.t -> __ -> 'a1)
+    -> SSAVS.t -> SSAVS.t -> coq_R_depvars_rpre_rprogram_sat -> 'a1
+
+  val coq_R_depvars_rpre_rprogram_sat_rec :
+    options -> rbexp -> program -> (SSAVS.t -> __ -> SSAVS.t ->
+    coq_R_depvars_rpre_rprogram_sat -> 'a1 -> 'a1) -> (SSAVS.t -> __ -> 'a1)
+    -> SSAVS.t -> SSAVS.t -> coq_R_depvars_rpre_rprogram_sat -> 'a1
+
+  val depvars_rpre_rprogram_sat_rect :
+    options -> rbexp -> program -> (SSAVS.t -> __ -> 'a1 -> 'a1) -> (SSAVS.t
+    -> __ -> 'a1) -> SSAVS.t -> 'a1
+
+  val depvars_rpre_rprogram_sat_rec :
+    options -> rbexp -> program -> (SSAVS.t -> __ -> 'a1 -> 'a1) -> (SSAVS.t
+    -> __ -> 'a1) -> SSAVS.t -> 'a1
+
+  val coq_R_depvars_rpre_rprogram_sat_correct :
+    options -> rbexp -> program -> SSAVS.t -> SSAVS.t ->
+    coq_R_depvars_rpre_rprogram_sat
+
+  val slice_ebexp : SSAVS.t -> DSLRaw.ebexp -> DSLRaw.ebexp
+
+  val slice_rbexp : SSAVS.t -> DSLRaw.rbexp -> DSLRaw.rbexp
+
+  val slice_einstr : SSAVS.t -> instr -> instr option
+
+  val slice_rinstr : SSAVS.t -> instr -> instr option
+
+  val slice_eprogram : SSAVS.t -> instr list -> instr list
+
+  val slice_rprogram : SSAVS.t -> instr list -> instr list
+
+  val slice_espec : options -> espec -> espec
+
+  val slice_rspec : options -> rspec -> rspec
  end
 
 type vmap = coq_N VM.t
@@ -3521,26 +3644,28 @@ val upd_index : var -> vmap -> vmap
 
 val ssa_var : vmap -> var -> ssavar
 
-val ssa_atom : vmap -> DSLFull.DSLFull.atom -> SSAFull.atom
+val svar : ssavar -> Equality.sort
 
-val ssa_eexp : vmap -> DSLFull.DSLFull.eexp -> SSAFull.eexp
+val ssa_atom : vmap -> DSLLite.DSLLite.atom -> SSALite.atom
 
-val ssa_eexps : vmap -> DSLFull.DSLFull.eexp list -> SSAFull.eexp list
+val ssa_eexp : vmap -> DSLLite.DSLLite.eexp -> SSALite.eexp
 
-val ssa_rexp : vmap -> DSLFull.DSLFull.rexp -> SSAFull.rexp
+val ssa_eexps : vmap -> DSLLite.DSLLite.eexp list -> SSALite.eexp list
 
-val ssa_ebexp : vmap -> DSLFull.DSLFull.ebexp -> SSAFull.ebexp
+val ssa_rexp : vmap -> DSLLite.DSLLite.rexp -> SSALite.rexp
 
-val ssa_rbexp : vmap -> DSLFull.DSLFull.rbexp -> SSAFull.rbexp
+val ssa_ebexp : vmap -> DSLLite.DSLLite.ebexp -> SSALite.ebexp
 
-val ssa_bexp : vmap -> DSLFull.DSLFull.bexp -> SSAFull.ebexp * SSAFull.rbexp
+val ssa_rbexp : vmap -> DSLLite.DSLLite.rbexp -> SSALite.rbexp
 
-val ssa_instr : vmap -> DSLFull.DSLFull.instr -> vmap * SSAFull.instr
+val ssa_bexp : vmap -> DSLLite.DSLLite.bexp -> SSALite.ebexp * SSALite.rbexp
 
-val ssa_program : vmap -> DSLFull.DSLFull.program -> vmap * SSAFull.program
+val ssa_instr : vmap -> DSLLite.DSLLite.instr -> vmap * SSALite.instr
+
+val ssa_program : vmap -> DSLLite.DSLLite.program -> vmap * SSALite.program
 
 val add_to_ste : vmap -> var -> typ -> TypEnv.SSATE.env -> typ TypEnv.SSATE.t
 
 val ssa_typenv : vmap -> TypEnv.TE.env -> TypEnv.SSATE.env
 
-val ssa_spec : DSLFull.DSLFull.spec -> SSAFull.spec
+val ssa_spec : DSLLite.DSLLite.spec -> SSALite.spec

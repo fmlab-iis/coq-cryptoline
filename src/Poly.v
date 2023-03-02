@@ -5,7 +5,7 @@ From Coq Require Import List Arith ZArith String Lia BinaryString.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From ssrlib Require Import Var Types SsrOrder Nats ZAriths Seqs Store Tactics Compatibility FSets.
 From BitBlasting Require Import State.
-From Cryptoline Require Import Options DSL SSA ZSSA.
+From Cryptoline Require Import Options DSLLite SSALite ZSSA.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -122,7 +122,7 @@ From Coq Require Import Recdef.
 (* Simplification of arep *)
 Section AtomicRootEntailmentSimpl.
 
-  Import SSA ZSSA.
+  Import SSALite ZSSA.
 
   Local Notation var := SSAVarOrder.t.
 
@@ -1357,12 +1357,12 @@ Section REP2IMP.
     (g_q, t_q, ps, ms, q).
 
   Lemma zpexpr_of_eunop_zpeeval op vl pe :
-    ZPEeval vl (zpexpr_of_eunop op pe) = SSA.eval_eunop op (ZPEeval vl pe).
+    ZPEeval vl (zpexpr_of_eunop op pe) = SSALite.eval_eunop op (ZPEeval vl pe).
   Proof. by case: op. Qed.
 
   Lemma zpexpr_of_ebinop_zpeeval op vl pe1 pe2 :
     ZPEeval vl (zpexpr_of_ebinop op pe1 pe2) =
-    SSA.eval_ebinop op (ZPEeval vl pe1) (ZPEeval vl pe2).
+    SSALite.eval_ebinop op (ZPEeval vl pe1) (ZPEeval vl pe2).
   Proof. by case: op. Qed.
 
 

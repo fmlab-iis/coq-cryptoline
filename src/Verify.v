@@ -1,11 +1,11 @@
 
 (** Verification procedures *)
 
-From Coq Require Import List ZArith Btauto.
+From Coq Require Import List ZArith.
 From mathcomp Require Import ssreflect ssrbool ssrnat eqtype seq ssrfun.
-From ssrlib Require Import Var Types SsrOrder Seqs Tactics.
+From ssrlib Require Import Var Types SsrOrder Lists Seqs Tactics.
 From BitBlasting Require Import State QFBV Typ TypEnv.
-From Cryptoline Require Import Options DSL SSA ZSSA SSA2QFBV SSA2ZSSA QFBV2CNF Poly.
+From Cryptoline Require Import Options DSLLite SSALite DSL SSA SSA2SSALite ZSSA SSA2QFBV SSA2ZSSA QFBV2CNF Poly VerifyLite.
 From Coq Require Import Ring_polynom.
 
 Set Implicit Arguments.
@@ -13,552 +13,491 @@ Unset Strict Implicit.
 Import Prenex Implicits.
 
 
+(* Verify full specifications *)
+
 Section Verification.
 
-  Import CNF.
-
-  (** Assumed external solvers *)
-
-  (* External SAT solver *)
-  Parameter ext_all_unsat : seq cnf -> bool.
-
-  Axiom all_unsat_sound :
-    forall css : seq cnf,
-      ext_all_unsat css ->
-      forall cs, cs \in css -> ~ sat cs.
-
-  Axiom all_unsat_complete :
-    forall css : seq cnf,
-      (forall cs, cs \in css -> ~ sat cs) ->
-      ext_all_unsat css.
-
-
-  (* External computer algebra system.
-     Solve an ideal membership problems by the external computer algebra system.
-     An ideal membership problem is given as a tuple (ps, ms, q). The problem
-     is to check if q is in the ideal of ms++ps, i.e., there are cps and cms such
-     that q = cps * ps + cms * ms. ext_solve_imp returns such (cps, cms). *)
-  Parameter ext_solve_imp :
-    seq (PExpr Z) -> PExpr Z -> seq (PExpr Z) -> seq (PExpr Z) * seq (PExpr Z).
-
-
-  (* External computer algebra system.
-     Solve a sequence of ideal membership problems by the external computer
-     algebra system. An ideal membership problem is given as a tuple
-     (ps, ms, q). The problem is to check if q is in the ideal of ms++ps,
-     i.e., there are cps and cms such that q = cps * ps + cms * ms.
-     ext_solve_imp_list returns a sequence of (cps, cms). *)
-  Parameter ext_solve_imp_list :
-    seq (seq (PExpr Z) * PExpr Z * seq (PExpr Z)) -> seq (seq (PExpr Z) * seq (PExpr Z)).
-
-  Axiom ext_solve_imp_list_nil :
-    ext_solve_imp_list [::] = [::].
-
-  Axiom ext_solve_imp_list_cons :
-    forall ps q ms tl,
-      ext_solve_imp_list ((ps, q, ms)::tl) =
-      (ext_solve_imp ps q ms)::(ext_solve_imp_list tl).
-
-
-  (** Verification procedures *)
-
-  (* Verify QF_BV predicates *)
-
-  Definition verify_qfbv_bexps fE (es : seq QFBV.bexp) : bool :=
-    let '(_, _, _, cnfs) := bb_hbexps_cache fE (tmap QFBVHash.hash_bexp es) in
-    ext_all_unsat cnfs.
-
-  Lemma verify_qfbv_bexps_empty fE :
-    verify_qfbv_bexps fE [::].
-  Proof.
-    rewrite /verify_qfbv_bexps /=. apply: all_unsat_complete. done.
-  Qed.
-
-  Lemma verify_qfbv_bexps_sound fE es :
-    QFBV.well_formed_bexps es fE ->
-    verify_qfbv_bexps fE es ->
-    QFBV.valid_bexps fE es.
-  Proof.
-    move=> Hwf Hv. apply: (bb_hbexps_cache_sound Hwf).
-    move=> m c g cnfs cnf Hbb Hin. rewrite /verify_qfbv_bexps in Hv.
-    rewrite tmap_map Hbb in Hv. move: (all_unsat_sound Hv) => Hsat.
-    exact: (Hsat cnf Hin).
-  Qed.
-
-  Lemma verify_qfbv_bexps_complete fE es :
-    QFBV.well_formed_bexps es fE ->
-    QFBV.valid_bexps fE es ->
-    verify_qfbv_bexps fE es.
-  Proof.
-    move=> Hwf Hv. rewrite /verify_qfbv_bexps tmap_map.
-    dcase (bb_hbexps_cache fE (map QFBVHash.hash_bexp es)) => [[[[m c] g] cnfs] Hbb].
-    apply: all_unsat_complete. move=> cs Hin.
-    exact: (bb_hbexps_cache_complete Hwf Hv Hbb Hin).
-  Qed.
-
-  Lemma agree_verify_qfbv_bexps E1 E2 es :
-    SSA.MA.agree (QFBV.vars_bexps es) E1 E2 ->
-    verify_qfbv_bexps E1 es = verify_qfbv_bexps E2 es.
-  Proof.
-    move=> Hag. rewrite /verify_qfbv_bexps.
-    rewrite (agree_bb_hbexps_cache Hag). reflexivity.
-  Qed.
-
-
-  (* Range reduction and algebraic soundness conditions *)
-
-  Definition verify_rspec_algsnd (o : options) (s : SSA.spec) : bool :=
-    let rs := SSA.rspec_of_spec s in
-    let fE := SSA.program_succ_typenv (SSA.rsprog rs) (SSA.rsinputs rs) in
-    let es := bb_rngred_algsnd o rs in
-    verify_qfbv_bexps fE es.
-
-
-  Lemma verify_rspec_algsnd_sound o (s : SSA.spec) :
-    well_formed_ssa_spec s ->
-    verify_rspec_algsnd o s ->
-    SSA.valid_rspec (SSA.rspec_of_spec s) /\ ssa_spec_algsnd (SSA.rspec_of_spec s).
-  Proof.
-    move=> Hwf Hv.
-    apply: (bb_rngred_algsnd_sound (o:=o)
-              (SSA.rspec_of_spec_is_rng_rspec s) (well_formed_ssa_rng_spec Hwf)).
-    move=> m c g cnfs cnf Hbb Hin. rewrite /verify_rspec_algsnd in Hv.
-    rewrite /verify_qfbv_bexps tmap_map Hbb in Hv.
-    move: (all_unsat_sound Hv) => Hsat. move: (Hsat cnf Hin) => {} Hsat.
-    move=> Hsat'; apply: Hsat. exact: Hsat'.
-  Qed.
-
-  Lemma verify_rspec_algsnd_complete o (s : SSA.spec) :
-    apply_slicing_rspec o = false ->
-    well_formed_ssa_spec s ->
-    SSA.valid_rspec (SSA.rspec_of_spec s) -> ssa_spec_algsnd (SSA.rspec_of_spec s) ->
-    verify_rspec_algsnd o s.
-  Proof.
-    move=> Ho Hwf Hrange Hsafe. rewrite /verify_rspec_algsnd /verify_qfbv_bexps.
-    rewrite tmap_map.
-    dcase (bb_hbexps_cache (SSA.program_succ_typenv (SSA.rsprog (SSA.rspec_of_spec s)) (SSA.rsinputs (SSA.rspec_of_spec s)))
-                           (map QFBVHash.hash_bexp
-                                (bb_rngred_algsnd o (SSA.rspec_of_spec s)))) =>
-    [[[[m c] g] cnfs] Hbb].
-    apply: all_unsat_complete.
-    move: (bb_rngred_algsnd_complete Ho
-             (SSA.rspec_of_spec_is_rng_rspec s) (well_formed_ssa_rng_spec Hwf) Hrange Hsafe) => Hv.
-    move=> cs Hin. apply: (Hv _ _ _ _ _ Hbb). assumption.
-  Qed.
-
-
-  (* Verify an atomic root entailment problem - sequential version *)
-
-  Definition polys_of_arep (o : options) (ps : arep) : seq (PExpr Z) * PExpr Z * seq (PExpr Z) :=
-    let '(_, _, ps, ms, q) := imp_of_arep ps in
-    let '(ps', q') :=
-      if rewrite_assignments_imp o then
-        if vars_cache_in_rewrite_assignments o then simplify_generator_vars_cache ps q
-        else simplify_generator ps q
-      else (ps, q) in
-    (ps', q', ms).
-
-  (* Verify an atomic root entailment problem by reducing the problem to an
-     ideal membership problem, solving the ideal membership problem by an
-     external computer algebra system, and validating the answer from the
-     computer algebra system. *)
-  Definition verify_arep (o : options) (ps : arep) : bool :=
-    let '(ps', q', ms) := polys_of_arep o ps in
-    let (cps, cms) := ext_solve_imp ps' q' ms in
-    validate_imp_answer ps' ms q' cps cms.
-
-  Definition verify_areps (o : options) (pss : seq arep) : bool := all (verify_arep o) pss.
-
-
-  Lemma verify_areps_rev o pss :
-    verify_areps o (rev pss) = verify_areps o pss.
-  Proof.
-    rewrite /verify_areps. rewrite all_rev. reflexivity.
-  Qed.
-
-  Lemma verify_arep_sound o ps : verify_arep o ps -> valid_arep ps.
-  Proof.
-    rewrite /verify_arep. rewrite /polys_of_arep.
-    dcase (imp_of_arep ps) => [[[[[g t] zps] zms] zq] Hzp].
-    case: (rewrite_assignments_imp o).
-    - case: (vars_cache_in_rewrite_assignments o).
-      + dcase (simplify_generator_vars_cache zps zq) => [[zps' zq'] Hsimp].
-        dcase (ext_solve_imp zps' zq' zms) => [[cs c] Hco]. move=> Hch.
-        exact: (validated_simplified_imp_vars_cache_valid_arep Hzp Hsimp Hch).
-      + dcase (simplify_generator zps zq) => [[zps' zq'] Hsimp].
-        dcase (ext_solve_imp zps' zq' zms) => [[cs c] Hco]. move=> Hch.
-        exact: (validated_simplified_imp_valid_arep Hzp Hsimp Hch).
-    - dcase (ext_solve_imp zps zq zms) => [[cs c] Hco]. move=> Hch.
-      exact: (validated_imp_valid_arep Hzp Hch).
-  Qed.
-
-  Lemma verify_areps_in o ps pss :
-    verify_areps o pss -> ps \in pss -> valid_arep ps.
-  Proof.
-    elim: pss => [| hd tl IH] //=. move/andP=> [Hhd Htl] Hin.
-    rewrite in_cons in Hin. case/orP: Hin => Hin.
-    - rewrite (eqP Hin). exact: (verify_arep_sound Hhd).
-    - exact: (IH Htl Hin).
-  Qed.
-
-
-  (* Verify atomic root entailment problems - concurrent solving, sequential validating *)
-
-  Definition polys_of_areps (o : options) (pss : seq arep) :
-    seq (seq (PExpr Z) * PExpr Z * seq (PExpr Z)) :=
-    tmap (polys_of_arep o) pss.
-
-  Fixpoint validate_imp_answer_list polys coefs : bool :=
-    match polys, coefs with
-    | [::], [::] => true
-    | ((ps, q, ms)::tlp), ((cps, cms)::tlc) => if validate_imp_answer ps ms q cps cms
-                                               then validate_imp_answer_list tlp tlc
-                                               else false
-    | _, _ => false
-    end.
-
-  Definition verify_areps_list (o : options) (pss : seq arep) : bool :=
-    let poly_list := polys_of_areps o pss in
-    let coef_list := ext_solve_imp_list poly_list in
-    if size poly_list == size coef_list
-    then validate_imp_answer_list poly_list coef_list
-    else false.
-
-
-  Lemma polys_of_areps_nil o : polys_of_areps o [::] = [::].
-  Proof. reflexivity. Qed.
-
-  Lemma polys_of_areps_cons o p ps :
-    polys_of_areps o (p::ps) = (polys_of_arep o p)::(polys_of_areps o ps).
-  Proof.
-    rewrite /polys_of_areps. rewrite !tmap_map /=. reflexivity.
-  Qed.
-
-  Lemma size_ext_solve_imp_list ins :
-    size (ext_solve_imp_list ins) = size ins.
-  Proof.
-    elim: ins => [| i ins IH] /=.
-    - rewrite ext_solve_imp_list_nil. reflexivity.
-    - case: i => [[ps q] ms]. rewrite ext_solve_imp_list_cons /=.
-      rewrite IH. reflexivity.
-  Qed.
-
-  Lemma verify_areps_list_nil o : verify_areps_list o [::].
-  Proof.
-    rewrite /verify_areps_list /=. rewrite polys_of_areps_nil.
-    rewrite ext_solve_imp_list_nil. by rewrite eqxx.
-  Qed.
-
-  Lemma verify_areps_list_cons o p ps :
-    verify_areps_list o (p::ps) = verify_arep o p && verify_areps_list o ps.
-  Proof.
-    rewrite /verify_areps_list /verify_arep. rewrite !size_ext_solve_imp_list.
-    rewrite !eqxx. rewrite polys_of_areps_cons.
-    dcase (polys_of_arep o p) => [[[ps' q'] ms] Hpp].
-    rewrite ext_solve_imp_list_cons /=.
-    dcase (ext_solve_imp ps' q' ms) => [[cps cms] Hs].
-    by case: (validate_imp_answer ps' ms q' cps cms).
-  Qed.
-
-  Lemma verify_areps_list_singleton o p :
-    verify_areps_list o [:: p] = verify_arep o p.
-  Proof.
-    rewrite verify_areps_list_cons verify_areps_list_nil andbT. reflexivity.
-  Qed.
-
-  Lemma verify_areps_list_rcons o ps p :
-    verify_areps_list o (rcons ps p) = verify_areps_list o ps && verify_arep o p.
-  Proof.
-    elim: ps => [| q ps IH] /=.
-    - rewrite verify_areps_list_cons verify_areps_list_nil andbT /=. reflexivity.
-    - rewrite !verify_areps_list_cons IH. by btauto.
-  Qed.
-
-  Lemma verify_areps_list_rev o ps :
-    verify_areps_list o (rev ps) = verify_areps_list o ps.
-  Proof.
-    elim: ps => [| p ps IH] //=. rewrite verify_areps_list_cons.
-    rewrite rev_cons. rewrite verify_areps_list_rcons IH.
-    by rewrite andbC.
-  Qed.
-
-  Lemma verify_areps_list_cat o ps1 ps2 :
-    verify_areps_list o (ps1 ++ ps2) = verify_areps_list o ps1 && verify_areps_list o ps2.
-  Proof.
-    elim: ps1 ps2 => [| p1 ps1 IH1] ps2 /=.
-    - rewrite verify_areps_list_nil. reflexivity.
-    - rewrite !verify_areps_list_cons. rewrite IH1. rewrite andbA. reflexivity.
-  Qed.
-
-  Lemma verify_areps_list_verify_areps o ps :
-    verify_areps_list o ps = verify_areps o ps.
-  Proof.
-    elim: ps => [| p ps IH] /=.
-    - rewrite verify_areps_list_nil. reflexivity.
-    - rewrite verify_areps_list_cons IH. reflexivity.
-  Qed.
-
-  Lemma verify_areps_list_in o psp psps :
-    verify_areps_list o psps -> psp \in psps -> valid_arep psp.
-  Proof.
-    elim: psps => [| hd tl IH] //=. rewrite /verify_areps_list.
-    case Hs: (size (polys_of_areps o (hd :: tl)) ==
-                size (ext_solve_imp_list (polys_of_areps o (hd :: tl)))) => //=.
-    move: Hs. rewrite /polys_of_areps /polys_of_arep !tmap_map /= -!tmap_map -/(polys_of_areps o tl).
-    case: (rewrite_assignments_imp o).
-    - dcase (imp_of_arep hd) => [[[[[g t] ps] m] q] Hhd] /=.
-      case: (vars_cache_in_rewrite_assignments o).
-      + dcase (simplify_generator_vars_cache ps q) => [[ps' q'] Hsimp] Hs.
-        rewrite ext_solve_imp_list_cons /= in Hs. rewrite eqSS in Hs.
-        rewrite ext_solve_imp_list_cons. dcase (ext_solve_imp ps' q' m) => [[cs c] Hcs].
-        case Hchk_hd: (validate_imp_answer ps' m q' cs c) => //=.
-        move=> Hchk_tl Hin. rewrite in_cons in Hin. case/orP: Hin => Hin.
-        * rewrite (eqP Hin).
-          exact: (validated_simplified_imp_vars_cache_valid_arep Hhd Hsimp Hchk_hd).
-        * apply: (IH _ Hin). rewrite /verify_areps_list. rewrite Hs. exact: Hchk_tl.
-      + dcase (simplify_generator ps q) => [[ps' q'] Hsimp] Hs.
-        rewrite ext_solve_imp_list_cons /= in Hs. rewrite eqSS in Hs.
-        rewrite ext_solve_imp_list_cons. dcase (ext_solve_imp ps' q' m) => [[cs c] Hcs].
-        case Hchk_hd: (validate_imp_answer ps' m q' cs c) => //=.
-        move=> Hchk_tl Hin. rewrite in_cons in Hin. case/orP: Hin => Hin.
-        * rewrite (eqP Hin). exact: (validated_simplified_imp_valid_arep Hhd Hsimp Hchk_hd).
-        * apply: (IH _ Hin). rewrite /verify_areps_list. rewrite Hs. exact: Hchk_tl.
-    - dcase (imp_of_arep hd) => [[[[[g t] ps] m] q] Hhd] /=.
-      rewrite !ext_solve_imp_list_cons /= => Hs.
-      rewrite eqSS in Hs. dcase (ext_solve_imp ps q m) => [[cs c] Hcs].
-      case Hchk_hd: (validate_imp_answer ps m q cs c) => //=.
-      move=> Hchk_tl Hin. rewrite in_cons in Hin. case/orP: Hin => Hin.
-      + rewrite (eqP Hin). exact: (validated_imp_valid_arep Hhd Hchk_hd).
-      + apply: (IH _ Hin). rewrite /verify_areps_list. rewrite Hs. exact: Hchk_tl.
-  Qed.
-
-
-  (* Verify root entailment problems - sequential version *)
-
-  (* Verify a root entailment problem by reducing the problem to atomic
-     root entailment problems and then verifying the atomic problems
-     through verify_areps. *)
-  Definition verify_rep (o : options) (zs : ZSSA.rep) : bool :=
-    if rewrite_assignments_arep o
-    then verify_areps o (areps_of_rep_simplified o zs)
-    else verify_areps o (areps_of_rep zs).
-
-  Definition verify_reps_seq (o : options) (zss : seq ZSSA.rep) : bool :=
-    all (verify_rep o) zss.
-
-
-  Lemma verify_reps_seq_in o zs zss :
-    In zs zss -> verify_reps_seq o zss -> verify_rep o zs.
-  Proof.
-    elim: zss => [| z zss IH] //= Hin Hv. move/andP: Hv => [Hvz Hvzss].
-    case: Hin.
-    - move=> ?; subst. exact: Hvz.
-    - move=> Hin. exact: (IH Hin Hvzss).
-  Qed.
-
-  Lemma verify_rep_sound o (zs : ZSSA.rep) :
-    verify_rep o zs -> ZSSA.valid_rep zs.
-  Proof.
-    rewrite /verify_rep. case: (rewrite_assignments_arep o) => Hv.
-    - apply: (@areps_of_rep_simplified_sound o) => ps Hin.
-      exact: (verify_areps_in Hv Hin).
-    - apply: areps_of_rep_sound => ps Hin.
-      exact: (verify_areps_in Hv Hin).
-  Qed.
-
-  Lemma verify_reps_seq_sound o (zss : seq ZSSA.rep) :
-    verify_reps_seq o zss -> ZSSA.valid_reps zss.
-  Proof.
-    elim: zss => [| zs zss IH] //=. move/andP=> [Hzs Hzss].
-    rewrite ZSSA.valid_reps_cons. split.
-    - exact: (verify_rep_sound Hzs).
-    - exact: (IH Hzss).
-  Qed.
-
-
-  (* Verify root entailment problems - concurrent version *)
-
-  Definition verify_reps_paral (o : options) (zss : seq ZSSA.rep) : bool :=
-    if rewrite_assignments_arep o
-    then verify_areps_list o (tflatten (tmap (areps_of_rep_simplified o) zss))
-    else verify_areps_list o (tflatten (tmap areps_of_rep zss)).
-
-
-  Lemma verify_reps_paral_nil o : verify_reps_paral o [::].
-  Proof.
-    rewrite /verify_reps_paral. rewrite verify_areps_list_nil.
-    by case_if.
-  Qed.
-
-  Lemma verify_reps_paral_cons o z zs :
-    verify_reps_paral o (z::zs) = verify_rep o z && verify_reps_paral o zs.
-  Proof.
-    rewrite /verify_reps_paral. case Hrw: (rewrite_assignments_arep o).
-    - rewrite tflatten_flatten tmap_map /=. rewrite rev_cat.
-      rewrite verify_areps_list_cat. rewrite -tflatten_flatten -tmap_map.
-      rewrite (andbC (verify_rep _ _)).
-      case: (verify_areps_list o (tflatten (tmap (areps_of_rep_simplified o) zs))) => //=.
-      rewrite /verify_rep. rewrite Hrw. rewrite verify_areps_list_rev.
-      exact: verify_areps_list_verify_areps.
-    - rewrite tflatten_flatten tmap_map /=. rewrite rev_cat.
-      rewrite verify_areps_list_cat. rewrite -tflatten_flatten -tmap_map.
-      rewrite (andbC (verify_rep _ _)).
-      case: (verify_areps_list o (tflatten (tmap areps_of_rep zs))) => //=.
-      rewrite /verify_rep. rewrite Hrw. rewrite verify_areps_list_rev.
-      exact: verify_areps_list_verify_areps.
-  Qed.
-
-  Lemma verify_reps_paral_seqs o zss :
-    verify_reps_paral o zss = verify_reps_seq o zss.
-  Proof.
-    elim: zss => [| zs zss IH] //=.
-    - rewrite verify_reps_paral_nil. reflexivity.
-    - rewrite verify_reps_paral_cons IH. reflexivity.
-  Qed.
-
-  Lemma verify_reps_paral_sound o (zss : seq ZSSA.rep) :
-    verify_reps_paral o zss -> ZSSA.valid_reps zss.
-  Proof.
-    rewrite /verify_reps_paral. case: (rewrite_assignments_arep o) => /= Hv.
-    - move=> s Hs. apply: (@areps_of_rep_simplified_sound o) => ps Hin.
-      apply: (verify_areps_list_in Hv). rewrite !tflatten_flatten !tmap_map /=.
-      rewrite mem_rev. apply/flattenP. exists (areps_of_rep_simplified o s).
-      + exact: (map_f _ Hs).
-      + assumption.
-    - move=> s Hs. apply: areps_of_rep_sound => ps Hin.
-      apply: (verify_areps_list_in Hv). rewrite !tflatten_flatten !tmap_map /=.
-      rewrite mem_rev. apply/flattenP. exists (areps_of_rep s).
-      + exact: (map_f _ Hs).
-      + assumption.
-  Qed.
-
-
-  (* Algebraic reduction *)
-
-  Definition verify_reps o (reps : seq ZSSA.rep) : bool :=
-    if compute_coefficients_one_by_one o
-    then verify_reps_seq o reps
-    else verify_reps_paral o reps.
-
-  Definition verify_rep1 o (rep : ZSSA.rep) : bool :=
-    if compute_coefficients_one_by_one o
-    then verify_rep o rep
-    else verify_reps_paral o [:: rep].
-
-  Definition verify_espec (o : options) (s : SSA.spec) :=
+  (* Reductions *)
+
+  Definition rngred_spec (o : options) (s : SSALite.spec) : seq QFBV.bexp :=
+    let rs := SSALite.rspec_of_spec s in
+    let fE := SSALite.program_succ_typenv (SSALite.rsprog rs) (SSALite.rsinputs rs) in
+    filter_not_true
+      (simplify_bexps
+         (if apply_slicing_rspec o then rngred_rspec_slice_split_la o rs
+          else rngred_rspec_split_la rs)).
+
+  Definition algsnd_spec (o : options) (s : SSALite.spec) : seq QFBV.bexp :=
+    let rs := SSALite.rspec_of_spec s in
+    let fE := SSALite.program_succ_typenv (SSALite.rsprog rs) (SSALite.rsinputs rs) in
+    filter_not_true
+      (simplify_bexps
+         (if apply_slicing_rspec o then algsnd_slice_la o rs
+          else qfbv_spec_algsnd_la rs)).
+
+  Definition algred_spec (o : options) (s : SSALite.spec) : seq ZSSA.rep :=
     let avn := new_svar_spec s in
     let apply_algred s := algred_espec o avn s in
     if apply_slicing_espec o
-    then let reps := tmap apply_algred
-                          (tmap (SSA.slice_espec o) (SSA.split_espec (SSA.espec_of_spec s))) in
-         verify_reps o reps
-    else let rep := apply_algred (SSA.espec_of_spec s) in
-         verify_rep1 o rep.
+    then tmap apply_algred
+              (tmap (SSALite.slice_espec o) (SSALite.split_espec (SSALite.espec_of_spec s)))
+    else [:: apply_algred (SSALite.espec_of_spec s)].
 
-
-  Lemma verify_reps_nil o : verify_reps o [::].
+  Lemma algsnd_spec_vars_subset o s :
+    SSAVS.subset (QFBV.vars_bexps (algsnd_spec o s)) (SSALite.vars_spec s).
   Proof.
-    rewrite /verify_reps. rewrite verify_reps_paral_nil /=.
-    by case_if.
+    rewrite /algsnd_spec. rewrite vars_filter_not_true.
+    apply: (SSAVS.Lemmas.subset_trans (vars_simplify_bexps _)). case_if.
+    - rewrite /SSALite.vars_spec.
+      apply: (SSAVS.Lemmas.subset_trans (vars_algsnd_slice_la o (SSALite.rspec_of_spec s))).
+      simpl. case: s => E [e r] p g /=.
+      rewrite /SSALite.vars_bexp /=. move: (SSALite.vars_rng_program p) => Hsub.
+      by SSAVS.Lemmas.dp_subset.
+    - rewrite /SSALite.vars_spec.
+      apply: (SSAVS.Lemmas.subset_trans (vars_qfbv_spec_algsnd_la _)).
+      case: s => E [e r] p g /=. rewrite /SSALite.vars_bexp /=.
+      move: (SSALite.vars_rng_program p) => Hsub.
+      by SSAVS.Lemmas.dp_subset.
   Qed.
 
-  Lemma verify_reps_cons o r rs :
-    verify_reps o (r::rs) = verify_rep o r && verify_reps o rs.
+  Lemma rngred_spec_vars_subset o s :
+    SSAVS.subset (QFBV.vars_bexps (rngred_spec o s)) (SSALite.vars_spec s).
   Proof.
-    rewrite /verify_reps. case_if.
-    - rewrite /=. reflexivity.
-    - rewrite verify_reps_paral_cons. reflexivity.
+    rewrite /rngred_spec. rewrite vars_filter_not_true.
+    apply: (SSAVS.Lemmas.subset_trans (vars_simplify_bexps _)). case_if.
+    - apply: (SSAVS.Lemmas.subset_trans (vars_rngred_rspec_slice_split_la _ _)).
+      exact: SSALite.vars_rspec_of_spec.
+    - apply: (SSAVS.Lemmas.subset_trans (vars_rngred_rspec_split_la _)).
+      exact: SSALite.vars_rspec_of_spec.
   Qed.
 
-  Lemma verify_reps_rcons o rs r :
-    verify_reps o (rcons rs r) = verify_reps o rs && verify_rep o r.
+  Lemma rngred_spec_sound o s :
+    let rs := SSALite.rspec_of_spec s in
+    let fE := SSALite.program_succ_typenv (SSALite.rsprog rs) (SSALite.rsinputs rs) in
+    SSALite.well_formed_ssa_spec s ->
+    verify_qfbv_bexps fE (rngred_spec o s) ->
+    SSALite.valid_rspec (SSALite.rspec_of_spec s).
   Proof.
-    elim: rs => [| s rs IH] /=.
-    - rewrite verify_reps_cons verify_reps_nil andbT /=. reflexivity.
-    - rewrite !verify_reps_cons IH. rewrite andbA. reflexivity.
+    move=> rs fE Hwf. move: (well_formed_ssa_rng_spec Hwf) => {}Hwf.
+    rewrite /rngred_spec. case_if.
+    - apply: (rngred_rspec_slice_split_la_sound (SSALite.rspec_of_spec_is_rng_rspec s) Hwf (o:=o)).
+      rewrite /valid_rngred_rspec_slice_split_la /=.
+      apply/simplify_bexps_valid. apply/filter_not_true_valid.
+      apply: (verify_qfbv_bexps_sound _ H0).
+      apply/filter_not_true_well_formed. apply/simplify_bexps_well_formed.
+      exact: (rngred_rspec_slice_split_la_well_formed _ Hwf).
+    - apply: (rngred_rspec_split_la_sound Hwf).
+      rewrite /valid_rngred_rspec_split_la /=.
+      apply/simplify_bexps_valid. apply/filter_not_true_valid.
+      apply: (verify_qfbv_bexps_sound _ H0).
+      apply/filter_not_true_well_formed. apply/simplify_bexps_well_formed.
+      exact: (well_formed_qfbv_rngred_rspec_split_la Hwf).
   Qed.
 
-  Lemma verify_reps_rev o rs :
-    verify_reps o (rev rs) = verify_reps o rs.
+  Lemma algsnd_spec_sound o s :
+    let rs := SSALite.rspec_of_spec s in
+    let fE := SSALite.program_succ_typenv (SSALite.rsprog rs) (SSALite.rsinputs rs) in
+    SSALite.well_formed_ssa_spec s ->
+    verify_qfbv_bexps fE (algsnd_spec o s) ->
+    ssa_spec_algsnd (SSALite.rspec_of_spec s).
   Proof.
-    elim: rs => [| r rs IH] //=.
-    rewrite rev_cons verify_reps_rcons verify_reps_cons IH.
-    rewrite andbC. reflexivity.
+    move=> rs fE Hwf. move: (well_formed_ssa_rng_spec Hwf) => {}Hwf.
+    rewrite /algsnd_spec. case_if.
+    - apply: (algsnd_slice_la_sound Hwf (o:=o)).
+      apply/simplify_bexps_valid. apply/filter_not_true_valid.
+      apply: (verify_qfbv_bexps_sound _ H0).
+      apply/filter_not_true_well_formed. apply/simplify_bexps_well_formed.
+      exact: (algsnd_slice_la_well_formed _ Hwf).
+    - apply: (qfbv_spec_algsnd_la_sound Hwf).
+      apply/simplify_bexps_valid. apply/filter_not_true_valid.
+      apply: (verify_qfbv_bexps_sound _ H0).
+      apply/filter_not_true_well_formed. apply/simplify_bexps_well_formed.
+      exact: (qfbv_spec_algsnd_la_well_formed Hwf).
   Qed.
 
-  Lemma verify_reps_cat o rs1 rs2 :
-    verify_reps o (rs1 ++ rs2) = verify_reps o rs1 && verify_reps o rs2.
+  Lemma algred_spec_sound o s :
+    SSALite.well_formed_ssa_spec s ->
+    ssa_spec_algsnd (SSALite.rspec_of_spec s) ->
+    SSALite.valid_rspec (SSALite.rspec_of_spec s) ->
+    ZSSA.valid_reps (algred_spec o s) ->
+    SSALite.valid_spec s.
   Proof.
-    elim: rs1 => [| r1 rs1 IH] /=.
-    - rewrite verify_reps_nil. reflexivity.
-    - rewrite !verify_reps_cons IH. rewrite andbA. reflexivity.
-  Qed.
-
-  Lemma verify_reps_tflatten o rss :
-    verify_reps o (tflatten rss) = all (verify_reps o) rss.
-  Proof.
-    elim: rss => [| rs rss IH] /=.
-    - rewrite verify_reps_nil. reflexivity.
-    - rewrite tflatten_cons verify_reps_cat IH.
-      rewrite verify_reps_rev andbC. reflexivity.
-  Qed.
-
-  Lemma verify_reps_sound o reps :
-    verify_reps o reps ->
-    ZSSA.valid_reps reps.
-  Proof.
-    rewrite /verify_reps. case_if; eauto using verify_reps_seq_sound, verify_reps_paral_sound.
-  Qed.
-
-  Lemma verify_rep1_sound o rep :
-    verify_rep1 o rep ->
-    ZSSA.valid_rep rep.
-  Proof.
-    rewrite /verify_rep1. case_if.
-    - exact: (verify_rep_sound H0).
-    - exact: (ZSSA.valid_reps_hd (verify_reps_paral_sound H0)).
+    move=> Hwf Hsnd Hvr. move: (fresh_var_spec_espec (new_svar_spec_fresh s)) => Havn.
+    rewrite /algred_spec. case_if.
+    - exact: (algred_spec_slice_sound Hwf Hsnd Havn Hvr H0).
+    - exact: (algred_spec_sound Hwf Hsnd Hvr Havn (ZSSA.valid_reps_hd H0)).
   Qed.
 
 
-  (* Verify specifications *)
+  (* Verification procedure *)
 
-  Definition verify_ssa (o : options) (s : SSA.spec) :=
-    (verify_rspec_algsnd o s) && (verify_espec o s).
+  Definition verify_ssa (o : options) (s : SSA.spec) : bool :=
+    let fE := SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s) in
+    (* Rewrite mov statements before cutting the specification *)
+    let s := rewrite_mov s in
+    (* Split cuts *)
+    let cuts := SSA.cut_spec s in
+    (* Extract all assertions *)
+    let asserts := tflatten (tmap SSA.extract_asserts cuts) in
+    let asserts_ssa := tmap SSA2SSALite.ssa2lite_spec asserts in
+    (* Cuts without any assertions *)
+    let nacuts := tmap SSA.remove_asserts cuts in
+    let nacuts_ssa := tmap SSA2SSALite.ssa2lite_spec nacuts in
+    (* range reduction and algebraic soundness *)
+    let rngconds :=
+      (* QF_BV predicates for soundness conditions *)
+      let sndconds := tflatten (tmap (algsnd_spec o) nacuts_ssa) in
+      (* QF_BV predicates for range assertions *)
+      let rngasserts := tflatten (tmap (rngred_spec o) asserts_ssa) in
+      (* QF_BV predicates for range postcondition *)
+      let rngpost := tflatten (tmap (rngred_spec o) nacuts_ssa) in
+      catrev (rev sndconds) (catrev (rev rngasserts) rngpost) in
+    (* algebraic reduction *)
+    let reps :=
+      let algasserts := tflatten (tmap (algred_spec o) asserts_ssa) in
+      let algpost := tflatten (tmap (algred_spec o) nacuts_ssa) in
+      catrev (rev algasserts) algpost in
+    (verify_qfbv_bexps fE rngconds) && (verify_reps o reps).
 
   Definition verify_dsl (o : options) (s : DSL.spec) :=
-    verify_ssa o (ssa_spec s).
+    verify_ssa o (SSA.ssa_spec s).
 
 
-  Theorem verify_ssa_sound (o : options) (s : SSA.spec) :
-    well_formed_ssa_spec s -> verify_ssa o s ->
-    SSA.valid_spec s.
+  (* Soundness *)
+
+  Lemma algsnd_spec_remove_asserts_well_formed_bexps o s cut :
+    let fE := SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s) : SSATE.env in
+    let rms := rewrite_mov s : SSA.spec in
+    let cuts := SSA.cut_spec rms : seq SSA.spec in
+    well_formed_ssa_spec s ->
+    In cut cuts ->
+    QFBV.well_formed_bexps (algsnd_spec o (ssa2lite_spec (SSA.remove_asserts cut))) fE.
   Proof.
-    rewrite /verify_ssa /verify_espec=> Hwf /andP [Hvrs Hvz].
-    move: (verify_rspec_algsnd_sound Hwf Hvrs) => [Hvr Hvs].
-    case: (apply_slicing_espec o) Hvz.
-    - case: (compute_coefficients_one_by_one o) => Hrep.
-      + apply: (algred_spec_slice_sound
-                  (o:=o) Hwf Hvs (fresh_var_spec_espec (new_svar_spec_fresh s)) Hvr).
-        move=> ss Hin. exact: (verify_reps_sound (o:=o) Hrep Hin).
-      + apply: (algred_spec_slice_sound
-                  (o:=o) Hwf Hvs (fresh_var_spec_espec (new_svar_spec_fresh s)) Hvr).
-        move=> ss Hin. exact: (verify_reps_sound Hrep Hin).
-    - case: (compute_coefficients_one_by_one o) => Hrep.
-      + apply: (algred_spec_sound
-                  (o:=o) Hwf Hvs Hvr (fresh_var_spec_espec (new_svar_spec_fresh s))).
-        exact: (verify_rep1_sound Hrep).
-      + apply: (algred_spec_sound
-                  (o:=o) Hwf Hvs Hvr (fresh_var_spec_espec (new_svar_spec_fresh s))).
-        exact: (verify_rep1_sound Hrep).
+    move=> fE rms cuts Hwf Hin. rewrite /algsnd_spec.
+    apply/filter_not_true_well_formed. apply: simplify_bexps_well_formed.
+    (* well_formed SSA *)
+    have Hwfssa: SSALite.well_formed_ssa_spec (ssa2lite_spec (SSA.remove_asserts cut)).
+    { rewrite (ssa2lite_spec_well_formed_ssa (cut_remove_asserts_is_lite_in Hin)).
+      apply: remove_asserts_well_formed_ssa. apply: (cut_spec_well_formed_ssa_in _ Hin).
+      exact: (rewrite_mov_well_formed_ssa Hwf). }
+    (* from fE to (program_succ_typenv (sprog cut) (sinputs cut)) *)
+    rewrite -(@agree_well_formed_bexps
+                (SSA.program_succ_typenv (SSA.sprog cut) (SSA.sinputs cut)) fE).
+    - (* well_formed *)
+      rewrite -SSA.remove_asserts_succ_typenv. rewrite -ssa2lite_spec_succ_typenv.
+      rewrite -SSALite.rspec_of_spec_succ_typenv. case_if.
+      + apply: algsnd_slice_la_well_formed. apply: well_formed_ssa_rng_spec.
+        exact: Hwfssa.
+      + apply: qfbv_spec_algsnd_la_well_formed. apply: well_formed_ssa_rng_spec.
+        exact: Hwfssa.
+    - (* agree *)
+      move: (cut_spec_agree_in (rewrite_mov_well_formed_ssa Hwf) Hin) => Hag.
+      apply: (SSALite.MA.subset_set_agree _ Hag).
+      apply: (SSAVS.Lemmas.subset_trans _ (SSA.remove_asserts_vars_subset _)).
+      apply: (SSAVS.Lemmas.subset_trans _ (ssa2lite_spec_vars_subset _)).
+      apply: (SSAVS.Lemmas.subset_trans _ (SSALite.vars_rspec_of_spec _)).
+      case_if.
+      + apply: (SSAVS.Lemmas.subset_trans (vars_algsnd_slice_la _ _)).
+        rewrite /SSALite.vars_rspec. by SSAVS.Lemmas.dp_subset.
+      + apply: (SSAVS.Lemmas.subset_trans (vars_qfbv_spec_algsnd_la _)).
+        rewrite /SSALite.vars_rspec. by SSAVS.Lemmas.dp_subset.
   Qed.
 
-  Theorem verify_dsl_sound (o : options) (s : DSL.spec) :
-    DSL.well_formed_spec s -> verify_dsl o s ->
+  Lemma rngred_spec_remove_asserts_well_formed_bexps o s cut :
+    let fE := SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s) : SSATE.env in
+    let rms := rewrite_mov s : SSA.spec in
+    let cuts := SSA.cut_spec rms : seq SSA.spec in
+    well_formed_ssa_spec s ->
+    In cut cuts ->
+    QFBV.well_formed_bexps (rngred_spec o (ssa2lite_spec (SSA.remove_asserts cut))) fE.
+  Proof.
+    move=> fE rms cuts Hwf Hin. rewrite /rngred_spec.
+    apply/filter_not_true_well_formed. apply: simplify_bexps_well_formed.
+    (* well_formed SSA *)
+    have Hwfssa: SSALite.well_formed_ssa_spec (ssa2lite_spec (SSA.remove_asserts cut)).
+    { rewrite (ssa2lite_spec_well_formed_ssa (cut_remove_asserts_is_lite_in Hin)).
+      apply: remove_asserts_well_formed_ssa.
+      exact: (cut_spec_well_formed_ssa_in (rewrite_mov_well_formed_ssa Hwf) Hin). }
+    (* from fE to (program_succ_typenv (sprog cut) (sinputs cut)) *)
+    rewrite -(@agree_well_formed_bexps
+                (SSA.program_succ_typenv (SSA.sprog cut) (SSA.sinputs cut)) fE).
+    - (* well_formed *)
+      rewrite -SSA.remove_asserts_succ_typenv. rewrite -ssa2lite_spec_succ_typenv.
+      rewrite -SSALite.rspec_of_spec_succ_typenv. case_if.
+      + apply: rngred_rspec_slice_split_la_well_formed. apply: well_formed_ssa_rng_spec.
+        exact: Hwfssa.
+      + apply: well_formed_qfbv_rngred_rspec_split_la. apply: well_formed_ssa_rng_spec.
+        exact: Hwfssa.
+    - (* agree *)
+      move: (cut_spec_agree_in (rewrite_mov_well_formed_ssa Hwf) Hin) => Hag.
+      apply: (SSALite.MA.subset_set_agree _ Hag).
+      apply: (SSAVS.Lemmas.subset_trans _ (SSA.remove_asserts_vars_subset _)).
+      apply: (SSAVS.Lemmas.subset_trans _ (ssa2lite_spec_vars_subset _)).
+      apply: (SSAVS.Lemmas.subset_trans _ (SSALite.vars_rspec_of_spec _)).
+      case_if.
+      + apply: (SSAVS.Lemmas.subset_trans (vars_rngred_rspec_slice_split_la _ _)).
+        rewrite /SSALite.vars_rspec. by SSAVS.Lemmas.dp_subset.
+      + apply: (SSAVS.Lemmas.subset_trans (vars_rngred_rspec_split_la _)).
+        rewrite /SSALite.vars_rspec. by SSAVS.Lemmas.dp_subset.
+  Qed.
+
+  Lemma rngred_spec_extract_asserts_well_formed_bexps o s cut a :
+    let fE := SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s) : SSATE.env in
+    let rms := rewrite_mov s : SSA.spec in
+    let cuts := SSA.cut_spec rms : seq SSA.spec in
+    well_formed_ssa_spec s ->
+    In cut cuts ->
+    In a (SSA.extract_asserts cut) ->
+    QFBV.well_formed_bexps (rngred_spec o (ssa2lite_spec a)) fE.
+  Proof.
+    move=> fE rms cuts Hwf Hinc Hina. rewrite /rngred_spec.
+    apply/filter_not_true_well_formed. apply: simplify_bexps_well_formed.
+    (* well_formed SSA *)
+    move: (cut_spec_well_formed_ssa_in (rewrite_mov_well_formed_ssa Hwf) Hinc) => Hwfc.
+    move: (extract_asserts_well_formed_ssa_in Hwfc Hina) => Hwfa.
+    have Hwfssa: SSALite.well_formed_ssa_spec (ssa2lite_spec a).
+    { rewrite (ssa2lite_spec_well_formed_ssa (cut_extract_asserts_ls_lite_in Hinc Hina)).
+      exact: Hwfa. }
+    (* from fE to (program_succ_typenv (sprog a) (sinputs a)) *)
+    rewrite -(@agree_well_formed_bexps
+                (SSA.program_succ_typenv (SSA.sprog a) (SSA.sinputs a)) fE).
+    - (* well_formed *)
+      rewrite -ssa2lite_spec_succ_typenv. rewrite -SSALite.rspec_of_spec_succ_typenv. case_if.
+      + apply: rngred_rspec_slice_split_la_well_formed. apply: well_formed_ssa_rng_spec.
+        exact: Hwfssa.
+      + apply: well_formed_qfbv_rngred_rspec_split_la. apply: well_formed_ssa_rng_spec.
+        exact: Hwfssa.
+    - (* agree *)
+      move: (cut_spec_agree_in (rewrite_mov_well_formed_ssa Hwf) Hinc) => Hagc.
+      move: (extract_asserts_agree_in Hwfc Hina) => Haga.
+      move: (SSA.MA.subset_set_agree (SSA.extract_asserts_vars_subset Hina) Hagc) => {}Hagc.
+      move: (SSA.MA.agree_trans Haga Hagc) => {Haga Hagc} Hag.
+      apply: (SSALite.MA.subset_set_agree _ Hag).
+      apply: (SSAVS.Lemmas.subset_trans _ (ssa2lite_spec_vars_subset _)).
+      apply: (SSAVS.Lemmas.subset_trans _ (SSALite.vars_rspec_of_spec _)).
+      case_if.
+      + apply: (SSAVS.Lemmas.subset_trans (vars_rngred_rspec_slice_split_la _ _)).
+        rewrite /SSALite.vars_rspec. by SSAVS.Lemmas.dp_subset.
+      + apply: (SSAVS.Lemmas.subset_trans (vars_rngred_rspec_split_la _)).
+        rewrite /SSALite.vars_rspec. by SSAVS.Lemmas.dp_subset.
+  Qed.
+
+  Lemma rngred_algsnd_well_formed_bexps o s :
+    let fE := SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s) : SSATE.env in
+    let rms := rewrite_mov s : SSA.spec in
+    let cuts := SSA.cut_spec rms : seq SSA.spec in
+    let asserts := tflatten (tmap SSA.extract_asserts cuts) : seq SSA.spec in
+    let asserts_ssa := tmap ssa2lite_spec asserts : seq SSALite.spec in
+    let nacuts := tmap SSA.remove_asserts cuts : seq SSA.spec in
+    let nacuts_ssa := tmap ssa2lite_spec nacuts : seq SSALite.spec in
+    let sndconds := tflatten (tmap (algsnd_spec o) nacuts_ssa) : seq QFBV.bexp in
+    let rngasserts := tflatten (tmap (rngred_spec o) asserts_ssa) : seq QFBV.bexp in
+    let rngpost := tflatten (tmap (rngred_spec o) nacuts_ssa) : seq QFBV.bexp in
+    well_formed_ssa_spec s ->
+    QFBV.well_formed_bexps (catrev (rev sndconds) (catrev (rev rngasserts) rngpost)) fE.
+  Proof.
+    move=> fE rms cuts asserts asserts_ssa nacuts nacuts_ssa sndconds rngasserts rngpost Hwf.
+    rewrite !catrev_rev. rewrite 2!QFBV.well_formed_bexps_cat.
+    apply/andP; split; last (apply/andP; split).
+    - rewrite /sndconds. rewrite QFBV.well_formed_bexps_tflatten tmap_map.
+      apply/all_forall=> c Hinc. move: (in_map_exists Hinc) => {Hinc} [d [Hind ?]]; subst.
+      rewrite /nacuts_ssa tmap_map in Hind. move: (in_map_exists Hind) => {Hind} [c [Hinc ?]]; subst.
+      rewrite /nacuts tmap_map in Hinc. move: (in_map_exists Hinc) => {Hinc} [d [Hind ?]]; subst.
+      exact: (algsnd_spec_remove_asserts_well_formed_bexps _ Hwf Hind).
+    - rewrite /rngasserts. rewrite QFBV.well_formed_bexps_tflatten tmap_map.
+      apply/all_forall=> c Hinc. move: (in_map_exists Hinc) => {Hinc} [d [Hind ?]]; subst.
+      rewrite /asserts_ssa tmap_map in Hind. move: (in_map_exists Hind) => {Hind} [c [Hinc ?]]; subst.
+      rewrite /asserts tmap_map in Hinc. move/in_tflatten: Hinc => [asts [Hinasts Hinc]].
+      move: (in_map_exists Hinasts) => {Hinasts} [cut [Hincut ?]]; subst.
+      exact: (rngred_spec_extract_asserts_well_formed_bexps _ Hwf Hincut Hinc).
+    - rewrite /rngpost. rewrite QFBV.well_formed_bexps_tflatten tmap_map.
+      apply/all_forall=> c Hinc. move: (in_map_exists Hinc) => {Hinc} [d [Hind ?]]; subst.
+      rewrite /nacuts_ssa tmap_map in Hind. move: (in_map_exists Hind) => {Hind} [c [Hinc ?]]; subst.
+      rewrite /nacuts tmap_map in Hinc. move: (in_map_exists Hinc) => {Hinc} [d [Hind ?]]; subst.
+      exact: (rngred_spec_remove_asserts_well_formed_bexps _ Hwf Hind).
+  Qed.
+
+  Lemma algsnd_extract_asserts s a :
+    well_formed_ssa_spec s ->
+    SSA.spec_has_no_cut s ->
+    ssa_spec_algsnd (SSALite.rspec_of_spec (ssa2lite_spec (SSA.remove_asserts s))) ->
+    In a (SSA.extract_asserts s) ->
+    ssa_spec_algsnd (SSALite.rspec_of_spec (ssa2lite_spec a)).
+  Proof.
+    case: s => E f p g. rewrite /well_formed_ssa_spec /SSA.well_formed_spec /=.
+    move=> H. caseb H. move=> Hwff Hwfp Hwfg HunEp Hssap.
+    rewrite /SSA.spec_has_no_cut /=. move=> Hnocp.
+    rewrite /ssa_spec_algsnd /=. move=> Has.
+    rewrite /SSA.extract_asserts /=. move=> Hina.
+    move=> s Hco Hevf.
+    rewrite (SSA.extract_asserts_rec_inputs Hina) in Hco.
+    rewrite (SSA.extract_asserts_rec_pre Hina) in Hevf.
+    move: (Has s Hco Hevf) => {Has}. clear Hwff Hwfg Hwfp HunEp Hssap Hevf Hco g.
+    move: Hina Hnocp.
+    have: ssa_program_algsnd_at E (SSALite.rng_program (ssa2lite_program [::])) s
+      by exact: ssa_program_algsnd_at_nil.
+    have: SSA.program_has_no_assert [::] by done.
+    rewrite -{2 3}(cat0s p).
+    have {3}->: [::] = rev [::] by reflexivity.
+    move: [::].
+    elim: p a E f s => [| i p IH] a E f s visited //=. rewrite revK.
+    move=> Hnav Hsndv.
+    case: i; intros;
+      try by (rewrite -rev_rcons in Hina; rewrite -cat_rcons in Hnocp Has;
+              apply: (IH _ _ _ _ _ _ _ Hina Hnocp Has);
+                [ by rewrite SSA.program_has_no_assert_rcons /= Hnav
+                | rewrite SSA.remove_asserts_program_cat in Has;
+                  rewrite ssa2lite_program_cat in Has;
+                  rewrite SSALite.rng_program_cat in Has;
+                  (rewrite SSA.no_asserts_remove_asserts in Has; last by
+                     (rewrite SSA.program_has_no_assert_rcons Hnav /=));
+                  (move/ssa_program_algsnd_at_cat: Has => [Has1 Has2]);
+                  exact: Has1 ]).
+    (* Iassert *)
+    case: (in_inv Hina) => {}Hina.
+    - subst; simpl. exact: Hsndv.
+    - apply: (IH _ E f s visited Hnav Hsndv Hina).
+      + rewrite 2!SSA.program_has_no_cut_cat in Hnocp *. move/andP: Hnocp => [-> Hnocp].
+        rewrite SSA.program_has_no_cut_cons in Hnocp. move/andP: Hnocp => [_ ->]. reflexivity.
+      + rewrite SSA.remove_asserts_program_cat /= in Has.
+        rewrite -SSA.remove_asserts_program_cat in Has. exact: Has.
+  Qed.
+
+  Lemma verify_ssa_sound o s :
+    SSA.well_formed_ssa_spec s ->
+    verify_ssa o s ->
+    SSA.valid_spec s.
+  Proof.
+    move=> Hwf. rewrite /verify_ssa.
+    set fE := SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s).
+    set rms := rewrite_mov s.
+    set cuts := SSA.cut_spec rms.
+    set asserts := tflatten (tmap SSA.extract_asserts cuts).
+    set asserts_ssa := tmap SSA2SSALite.ssa2lite_spec asserts.
+    set nacuts := tmap SSA.remove_asserts cuts.
+    set nacuts_ssa := tmap SSA2SSALite.ssa2lite_spec nacuts.
+    set sndconds := tflatten (tmap (algsnd_spec o) nacuts_ssa).
+    set rngasserts := tflatten (tmap (rngred_spec o) asserts_ssa).
+    set rngpost := tflatten (tmap (rngred_spec o) nacuts_ssa).
+    set algasserts := tflatten (tmap (algred_spec o) asserts_ssa).
+    set algpost := tflatten (tmap (algred_spec o) nacuts_ssa).
+    move/andP => [Hrngred Halgred].
+    (* rewrite mov statements *)
+    apply: (rewrite_mov_sound Hwf).
+    move: (rewrite_mov_well_formed_ssa Hwf) => Hwfrw.
+    (* cut specification *)
+    apply: (SSA.cut_spec_sound
+              (SSA.well_formed_spec_prog
+                 (SSA.well_formed_ssa_spec_well_formed Hwfrw))).
+    rewrite -/cuts.
+    (* Each cut is valid *)
+    apply/Forall_forall. move=> cut Hincut.
+    (* cut is well-formed *)
+    move: (cut_spec_well_formed_ssa_in Hwfrw Hincut) => Hwfcut.
+    (* well-formed after removing assertions *)
+    have Hwfra: SSALite.well_formed_ssa_spec (ssa2lite_spec (SSA.remove_asserts cut)).
+    { rewrite (ssa2lite_spec_well_formed_ssa (cut_remove_asserts_is_lite_in Hincut)).
+      apply: remove_asserts_well_formed_ssa. assumption. }
+    (* QF_BV predicates are well-formed *)
+    have Hwfrngred_algsnd:
+      QFBV.well_formed_bexps (catrev (rev sndconds) (catrev (rev rngasserts) rngpost)) fE.
+    { exact: (rngred_algsnd_well_formed_bexps _ Hwf). }
+    (* cut is algebraic sound *)
+    have Halgsnd_cut: ssa_spec_algsnd (SSALite.rspec_of_spec (ssa2lite_spec (SSA.remove_asserts cut))).
+    { apply: (algsnd_spec_sound Hwfra (o:=o)). simpl.
+      rewrite SSALite.rng_program_succ_typenv. rewrite ssa2lite_program_succ_typenv.
+      rewrite SSA.remove_asserts_program_succ_typenv.
+      rewrite (agree_verify_qfbv_bexps (E2:=fE)).
+      - apply: (verify_qfbv_bexps_complete (algsnd_spec_remove_asserts_well_formed_bexps _ Hwf Hincut)).
+        move: (verify_qfbv_bexps_sound Hwfrngred_algsnd Hrngred).
+        rewrite !catrev_rev. move/QFBV.valid_bexps_cat=> [H _].
+        rewrite /sndconds in H. move/QFBV.valid_bexps_tflatten: H => H.
+        apply: H. apply/in_In. apply: in_tmap. apply: in_tmap.
+        apply: in_tmap. exact: Hincut.
+      - apply: (SSA.MA.subset_set_agree _ (cut_spec_agree_in Hwfrw Hincut)).
+        apply: (SSAVS.Lemmas.subset_trans (algsnd_spec_vars_subset _ _)).
+        apply: (SSAVS.Lemmas.subset_trans (ssa2lite_spec_vars_subset _)).
+        exact: SSA.remove_asserts_vars_subset. }
+    apply: SSA.extract_asserts_sound.
+    - (* The postcondition of a cut is valid *)
+      apply: ssa2lite_spec_sound.
+      + (* The specification is lite after cutting and removing asserts *)
+        move: (cut_remove_asserts_is_lite rms). move/all_forall. apply.
+        rewrite tmap_map. apply: in_map. exact: Hincut.
+      + apply: (algred_spec_sound Hwfra Halgsnd_cut (o:=o)).
+        * (* Range postcondition *)
+          apply: (rngred_spec_sound Hwfra (o:=o)).
+          rewrite SSALite.rng_program_succ_typenv. rewrite ssa2lite_program_succ_typenv.
+          rewrite SSA.remove_asserts_program_succ_typenv.
+          rewrite (agree_verify_qfbv_bexps (E2:=fE)).
+          -- apply: (verify_qfbv_bexps_complete (rngred_spec_remove_asserts_well_formed_bexps _ Hwf Hincut)).
+             move: (verify_qfbv_bexps_sound Hwfrngred_algsnd Hrngred).
+             rewrite !catrev_rev. move/QFBV.valid_bexps_cat=> [_ /QFBV.valid_bexps_cat [_ H]].
+             rewrite /rngpost in H. move/QFBV.valid_bexps_tflatten: H => H.
+             apply: H. apply/in_In. apply: in_tmap. apply: in_tmap.
+             apply: in_tmap. exact: Hincut.
+          -- apply: (SSA.MA.subset_set_agree _ (cut_spec_agree_in Hwfrw Hincut)).
+             apply: (SSAVS.Lemmas.subset_trans (rngred_spec_vars_subset _ _)).
+             apply: (SSAVS.Lemmas.subset_trans (ssa2lite_spec_vars_subset _)).
+             exact: SSA.remove_asserts_vars_subset.
+        * (* Algebraic postcondition *)
+          apply: (verify_reps_sound (o:=o)).
+          rewrite catrev_rev in Halgred. rewrite verify_reps_cat in Halgred.
+          move/andP: Halgred => [Halgassert Halgpost].
+          rewrite /algpost in Halgpost.
+          rewrite verify_reps_tflatten in Halgpost.
+          move/all_forall: Halgpost => Halgpost. apply: Halgpost.
+          apply: in_tmap. apply: in_tmap. apply: in_tmap. assumption.
+    - (* The assertions of a cut are all valid *)
+      apply/Forall_forall => noca Hinoca. apply: ssa2lite_spec_sound.
+      + (* The extracted specification for assertions is lite *)
+        move/all_forall: (cut_extract_asserts_ls_lite rms). apply.
+        exact: (in_tflatten_tmap Hincut Hinoca).
+      + (* The extracted specification for assertions is valid *)
+        have Hwfnoca: SSALite.well_formed_ssa_spec (ssa2lite_spec noca).
+        { rewrite (ssa2lite_spec_well_formed_ssa (cut_extract_asserts_ls_lite_in Hincut Hinoca)).
+          apply: (extract_asserts_well_formed_ssa_in _ Hinoca).
+          exact: Hwfcut. }
+        apply: (algred_spec_sound Hwfnoca (o:=o)).
+        * (* Algebraic soundness of assertion specifications *)
+          exact: (algsnd_extract_asserts
+                    Hwfcut (SSA.cut_spec_has_no_cut_in Hincut) Halgsnd_cut Hinoca).
+        * (* Range reduction of assertion specifications *)
+          apply: (rngred_spec_sound Hwfnoca (o:=o)).
+          rewrite SSALite.rng_program_succ_typenv. rewrite ssa2lite_program_succ_typenv.
+          rewrite (agree_verify_qfbv_bexps (E2:=fE)).
+          -- apply: (verify_qfbv_bexps_complete (rngred_spec_extract_asserts_well_formed_bexps _ Hwf Hincut Hinoca)).
+             move: (verify_qfbv_bexps_sound Hwfrngred_algsnd Hrngred).
+             rewrite !catrev_rev. move/QFBV.valid_bexps_cat=> [_ /QFBV.valid_bexps_cat [H _]].
+             rewrite /rngasserts in H. move/QFBV.valid_bexps_tflatten: H => H.
+             apply: H. apply/in_In. apply: in_tmap. apply: in_tmap.
+             exact: (in_tflatten_tmap Hincut Hinoca).
+          -- move: (extract_asserts_agree_in Hwfcut Hinoca). simpl => Hag1.
+             move: (cut_spec_agree_in Hwfrw Hincut) => Hag2.
+             move: (SSA.MA.subset_set_agree (SSA.extract_asserts_vars_subset Hinoca) Hag2) => {}Hag2.
+             move: (SSA.MA.agree_trans Hag1 Hag2) =>{Hag1 Hag2}.
+             apply: SSA.MA.subset_set_agree.
+             apply: (SSAVS.Lemmas.subset_trans (rngred_spec_vars_subset _ _)).
+             apply: (SSAVS.Lemmas.subset_trans (ssa2lite_spec_vars_subset _)).
+             exact: SSAVS.Lemmas.subset_refl.
+        * (* Algebraic reduction of assertion specifications *)
+          apply: (verify_reps_sound (o:=o)).
+          rewrite catrev_rev in Halgred. rewrite verify_reps_cat in Halgred.
+          move/andP: Halgred => [Halgassert Halgpost].
+          rewrite /algasserts in Halgassert.
+          rewrite verify_reps_tflatten in Halgassert.
+          move/all_forall: Halgassert => Halgassert. apply: Halgassert.
+          apply: in_tmap. apply: in_tmap.
+          exact: (in_tflatten_tmap Hincut Hinoca).
+  Qed.
+
+  Lemma verify_dsl_sound o s :
+    DSL.well_formed_spec s ->
+    verify_dsl o s ->
     DSL.valid_spec s.
   Proof.
-    rewrite /verify_dsl => Hwf Hv. apply: ssa_spec_sound.
-    apply: (verify_ssa_sound _ Hv).
-    exact: (ssa_spec_well_formed Hwf).
+    move=> Hwf Hv. apply: SSA.ssa_spec_sound.
+    exact: (verify_ssa_sound (ssa_spec_well_formed Hwf) Hv).
   Qed.
 
 End Verification.

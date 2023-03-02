@@ -2,9 +2,7 @@ open BinNat
 open BinNums
 open Bool
 open DSLRaw
-open Datatypes
 open NBitsDef
-open Options0
 open State
 open Typ
 open Var
@@ -51,11 +49,6 @@ let upd_index v m =
 
 let ssa_var m v =
   Obj.magic (v, (get_index v m))
-
-(** val svar : ssavar -> Equality.sort **)
-
-let svar x =
-  fst (Obj.magic x)
 
 (** val ssa_atom : vmap -> DSL.DSL.atom -> SSA.atom **)
 
@@ -267,6 +260,8 @@ let ssa_instr m = function
   let al0 = ssa_atom m al in
   let m0 = upd_index (Obj.magic v) m in
   (m0, (SSA.Ijoin ((ssa_var m0 (Obj.magic v)), ah0, al0)))
+| DSL.DSL.Icut e -> (m, (SSA.Icut (ssa_bexp m e)))
+| DSL.DSL.Iassert e -> (m, (SSA.Iassert (ssa_bexp m e)))
 | DSL.DSL.Iassume e -> (m, (SSA.Iassume (ssa_bexp m e)))
 
 (** val ssa_program : vmap -> DSL.DSL.program -> vmap * SSA.program **)

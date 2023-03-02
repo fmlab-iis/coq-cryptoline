@@ -24,8 +24,9 @@ type __ = Obj.t
 let __ = let rec f _ = Obj.repr f in Obj.repr f
 
 type azbexp =
-| Seq of SSA.SSA.eexp * SSA.SSA.eexp
-| Seqmod of SSA.SSA.eexp * SSA.SSA.eexp * SSA.SSA.eexp list
+| Seq of SSALite.SSALite.eexp * SSALite.SSALite.eexp
+| Seqmod of SSALite.SSALite.eexp * SSALite.SSALite.eexp
+   * SSALite.SSALite.eexp list
 
 (** val azbexp_eqn : azbexp -> azbexp -> bool **)
 
@@ -83,10 +84,12 @@ let is_arep_trivial s =
   in_mem (Obj.magic s.aconseq)
     (mem (seq_predType azbexp_eqType) (Obj.magic s.apremises))
 
-(** val zexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp -> eexp **)
+(** val zexp_subst :
+    SSALite.SSALite.eexp -> SSALite.SSALite.eexp -> SSALite.SSALite.eexp ->
+    eexp **)
 
 let rec zexp_subst p r e =
-  if eq_op SSA.SSA.eexp_eqType (Obj.magic e) (Obj.magic p)
+  if eq_op SSALite.SSALite.eexp_eqType (Obj.magic e) (Obj.magic p)
   then r
   else (match e with
         | Eunop (op0, e0) -> Eunop (op0, (zexp_subst p r e0))
@@ -96,12 +99,14 @@ let rec zexp_subst p r e =
         | _ -> e)
 
 (** val zexps_subst :
-    SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp list -> eexp list **)
+    SSALite.SSALite.eexp -> SSALite.SSALite.eexp -> SSALite.SSALite.eexp list
+    -> eexp list **)
 
 let zexps_subst p r es =
   tmap (zexp_subst p r) es
 
-(** val azbexp_subst : SSA.SSA.eexp -> SSA.SSA.eexp -> azbexp -> azbexp **)
+(** val azbexp_subst :
+    SSALite.SSALite.eexp -> SSALite.SSALite.eexp -> azbexp -> azbexp **)
 
 let azbexp_subst p r = function
 | Seq (e1, e2) -> Seq ((zexp_subst p r e1), (zexp_subst p r e2))
@@ -109,12 +114,12 @@ let azbexp_subst p r = function
   Seqmod ((zexp_subst p r e1), (zexp_subst p r e2), (zexps_subst p r ms))
 
 (** val subst_azbexps :
-    SSA.SSA.eexp -> SSA.SSA.eexp -> azbexp list -> azbexp list **)
+    SSALite.SSALite.eexp -> SSALite.SSALite.eexp -> azbexp list -> azbexp list **)
 
 let subst_azbexps p r es =
   tmap (azbexp_subst p r) es
 
-(** val single_variables : SSA.SSA.eexp -> SSAVS.t **)
+(** val single_variables : SSALite.SSALite.eexp -> SSAVS.t **)
 
 let rec single_variables = function
 | Evar v -> SSAVS.singleton v
@@ -126,7 +131,7 @@ let rec single_variables = function
   else SSAVS.empty
 | _ -> SSAVS.empty
 
-(** val num_occurrence : SSAVarOrder.t -> SSA.SSA.eexp -> int **)
+(** val num_occurrence : SSAVarOrder.t -> SSALite.SSALite.eexp -> int **)
 
 let rec num_occurrence v = function
 | Evar x -> if eq_op SSAVarOrder.coq_T x v then Pervasives.succ 0 else 0
@@ -136,32 +141,33 @@ let rec num_occurrence v = function
 | Epow (e0, _) -> num_occurrence v e0
 
 (** val separate :
-    Equality.sort -> SSA.SSA.eexp -> SSA.SSA.eexp -> SSA.SSA.eexp option **)
+    Equality.sort -> SSALite.SSALite.eexp -> SSALite.SSALite.eexp ->
+    SSALite.SSALite.eexp option **)
 
 let rec separate v e pat =
   match e with
   | Evar x -> if eq_op SSAVarOrder.coq_T x v then Some pat else None
   | Eunop (_, e0) ->
-    if SSAVS.mem v (SSA.SSA.vars_eexp e0)
-    then separate v e0 (SSA.SSA.eneg pat)
+    if SSAVS.mem v (SSALite.SSALite.vars_eexp e0)
+    then separate v e0 (SSALite.SSALite.eneg pat)
     else None
   | Ebinop (op0, e1, e2) ->
-    let in1 = SSAVS.mem v (SSA.SSA.vars_eexp e1) in
-    let in2 = SSAVS.mem v (SSA.SSA.vars_eexp e2) in
+    let in1 = SSAVS.mem v (SSALite.SSALite.vars_eexp e1) in
+    let in2 = SSAVS.mem v (SSALite.SSALite.vars_eexp e2) in
     (match op0 with
      | Eadd ->
        if in1
-       then if in2 then None else separate v e1 (SSA.SSA.esub pat e2)
-       else if in2 then separate v e2 (SSA.SSA.esub pat e1) else None
+       then if in2 then None else separate v e1 (SSALite.SSALite.esub pat e2)
+       else if in2 then separate v e2 (SSALite.SSALite.esub pat e1) else None
      | Esub ->
        if in1
-       then if in2 then None else separate v e1 (SSA.SSA.eadd pat e2)
-       else if in2 then separate v e2 (SSA.SSA.esub e1 pat) else None
+       then if in2 then None else separate v e1 (SSALite.SSALite.eadd pat e2)
+       else if in2 then separate v e2 (SSALite.SSALite.esub e1 pat) else None
      | Emul -> None)
   | _ -> None
 
 (** val get_rewrite_pattern :
-    SSA.SSA.eexp -> (SSAVS.elt * SSA.SSA.eexp) option **)
+    SSALite.SSALite.eexp -> (SSAVS.elt * SSALite.SSALite.eexp) option **)
 
 let get_rewrite_pattern e =
   let candidates =
@@ -173,12 +179,12 @@ let get_rewrite_pattern e =
   then None
   else (match SSAVS.min_elt candidates with
         | Some v ->
-          (match separate v e (SSA.SSA.econst Z.zero) with
+          (match separate v e (SSALite.SSALite.econst Z.zero) with
            | Some pat -> Some (v, pat)
            | None -> None)
         | None -> None)
 
-(** val is_assignment : azbexp -> (ssavar * SSA.SSA.eexp) option **)
+(** val is_assignment : azbexp -> (ssavar * SSALite.SSALite.eexp) option **)
 
 let is_assignment = function
 | Seq (e1, e2) ->
@@ -192,9 +198,9 @@ let is_assignment = function
          | Eadd ->
            (match e3 with
             | Evar v -> Some (v, (Ebinop (Esub, e1, er)))
-            | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
-         | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
-      | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+            | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
+         | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
+      | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
    | Eunop (_, _) ->
      (match e2 with
       | Evar v -> Some (v, e1)
@@ -203,9 +209,9 @@ let is_assignment = function
          | Eadd ->
            (match e5 with
             | Evar v -> Some (v, (Ebinop (Esub, e1, er)))
-            | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
-         | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
-      | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+            | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
+         | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
+      | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
    | Ebinop (e0, e3, el) ->
      (match e0 with
       | Eadd ->
@@ -222,9 +228,9 @@ let is_assignment = function
                | Eadd ->
                  (match e5 with
                   | Evar v -> Some (v, (Ebinop (Esub, e1, er)))
-                  | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
-               | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
-            | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+                  | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
+               | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
+            | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
          | Eunop (_, _) ->
            (match e2 with
             | Evar v -> Some (v, e1)
@@ -233,9 +239,9 @@ let is_assignment = function
                | Eadd ->
                  (match e7 with
                   | Evar v -> Some (v, (Ebinop (Esub, e1, er)))
-                  | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
-               | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
-            | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+                  | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
+               | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
+            | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
          | Ebinop (_, _, _) ->
            (match e2 with
             | Evar v -> Some (v, e1)
@@ -244,9 +250,9 @@ let is_assignment = function
                | Eadd ->
                  (match e8 with
                   | Evar v -> Some (v, (Ebinop (Esub, e1, er)))
-                  | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
-               | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
-            | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
+                  | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
+               | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
+            | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
          | Epow (_, _) ->
            (match e2 with
             | Evar v -> Some (v, e1)
@@ -255,9 +261,9 @@ let is_assignment = function
                | Eadd ->
                  (match e6 with
                   | Evar v -> Some (v, (Ebinop (Esub, e1, er)))
-                  | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
-               | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
-            | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2)))
+                  | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
+               | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
+            | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2)))
       | _ ->
         (match e2 with
          | Evar v -> Some (v, e1)
@@ -266,9 +272,9 @@ let is_assignment = function
             | Eadd ->
               (match e5 with
                | Evar v -> Some (v, (Ebinop (Esub, e1, er)))
-               | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
-            | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
-         | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2)))
+               | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
+            | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
+         | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2)))
    | Epow (_, _) ->
      (match e2 with
       | Evar v -> Some (v, e1)
@@ -277,9 +283,9 @@ let is_assignment = function
          | Eadd ->
            (match e4 with
             | Evar v -> Some (v, (Ebinop (Esub, e1, er)))
-            | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
-         | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2))
-      | _ -> get_rewrite_pattern (SSA.SSA.esub e1 e2)))
+            | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
+         | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2))
+      | _ -> get_rewrite_pattern (SSALite.SSALite.esub e1 e2)))
 | Seqmod (_, _, _) -> None
 
 (** val simplify_arep_rec :
@@ -292,9 +298,9 @@ let rec simplify_arep_rec visited premises conseq0 =
     (match is_assignment a with
      | Some a0 ->
        let (a1, b) = a0 in
-       simplify_arep_rec (subst_azbexps (SSA.SSA.evar a1) b visited)
-         (subst_azbexps (SSA.SSA.evar a1) b l)
-         (azbexp_subst (SSA.SSA.evar a1) b conseq0)
+       simplify_arep_rec (subst_azbexps (SSALite.SSALite.evar a1) b visited)
+         (subst_azbexps (SSALite.SSALite.evar a1) b l)
+         (azbexp_subst (SSALite.SSALite.evar a1) b conseq0)
      | None -> simplify_arep_rec (a :: visited) l conseq0)
 
 (** val simplify_arep : arep -> arep **)
@@ -304,7 +310,7 @@ let simplify_arep s =
   { apremises = ps; aconseq = q }
 
 (** val azbexp_subst_vars_cache :
-    ssavar -> SSA.SSA.eexp -> SSAVS.t -> (SSAVS.t * azbexp) ->
+    ssavar -> SSALite.SSALite.eexp -> SSAVS.t -> (SSAVS.t * azbexp) ->
     SSAVS.t * azbexp **)
 
 let azbexp_subst_vars_cache p r vspr ve =
@@ -312,11 +318,11 @@ let azbexp_subst_vars_cache p r vspr ve =
   let e = snd ve in
   if SSAVS.mem p vs
   then ((SSAVS.remove p (SSAVS.union vs vspr)),
-         (azbexp_subst (SSA.SSA.evar p) r e))
+         (azbexp_subst (SSALite.SSALite.evar p) r e))
   else ve
 
 (** val subst_azbexps_vars_cache :
-    ssavar -> SSA.SSA.eexp -> SSAVS.t -> (SSAVS.t * azbexp) list ->
+    ssavar -> SSALite.SSALite.eexp -> SSAVS.t -> (SSAVS.t * azbexp) list ->
     (SSAVS.t * azbexp) list **)
 
 let subst_azbexps_vars_cache p r vspr ves =
@@ -342,10 +348,12 @@ let rec simplify_arep_vars_cache_rec visited premises conseq0 =
 (** val vars_azbexp : azbexp -> SSAVS.t **)
 
 let vars_azbexp = function
-| Seq (e1, e2) -> SSAVS.union (SSA.SSA.vars_eexp e1) (SSA.SSA.vars_eexp e2)
+| Seq (e1, e2) ->
+  SSAVS.union (SSALite.SSALite.vars_eexp e1) (SSALite.SSALite.vars_eexp e2)
 | Seqmod (e1, e2, ms) ->
-  SSAVS.union (SSAVS.union (SSA.SSA.vars_eexp e1) (SSA.SSA.vars_eexp e2))
-    (SSA.SSA.vars_eexps ms)
+  SSAVS.union
+    (SSAVS.union (SSALite.SSALite.vars_eexp e1)
+      (SSALite.SSALite.vars_eexp e2)) (SSALite.SSALite.vars_eexps ms)
 
 (** val pair_azbexp_with_vars : azbexp -> SSAVS.t * azbexp **)
 
@@ -360,7 +368,7 @@ let simplify_arep_vars_cache s =
   let (vs_ps', vs_q') = simplify_arep_vars_cache_rec [] vs_ps vs_q in
   { apremises = (snd (split vs_ps')); aconseq = (snd vs_q') }
 
-(** val split_zbexp : SSA.SSA.ebexp -> azbexp list **)
+(** val split_zbexp : SSALite.SSALite.ebexp -> azbexp list **)
 
 let rec split_zbexp = function
 | Etrue -> []
@@ -455,8 +463,8 @@ let zpexpr_of_ebinop op0 x x0 =
   | Emul -> PEmul (x, x0)
 
 (** val zpexpr_of_zexp :
-    positive -> positive SSAVM.t -> SSA.SSA.eexp -> (positive * positive
-    SSAVM.t) * coq_Z coq_PExpr **)
+    positive -> positive SSAVM.t -> SSALite.SSALite.eexp ->
+    (positive * positive SSAVM.t) * coq_Z coq_PExpr **)
 
 let rec zpexpr_of_zexp g t0 = function
 | Evar v -> zpexpr_of_var g t0 v
@@ -470,8 +478,8 @@ let rec zpexpr_of_zexp g t0 = function
 | Epow (e0, n) -> let (p, e') = zpexpr_of_zexp g t0 e0 in (p, (PEpow (e', n)))
 
 (** val zpexprs_of_zexps :
-    positive -> positive SSAVM.t -> SSA.SSA.eexp list -> (positive * positive
-    SSAVM.t) * coq_Z coq_PExpr list **)
+    positive -> positive SSAVM.t -> SSALite.SSALite.eexp list ->
+    (positive * positive SSAVM.t) * coq_Z coq_PExpr list **)
 
 let rec zpexprs_of_zexps g t0 = function
 | [] -> ((g, t0), [])

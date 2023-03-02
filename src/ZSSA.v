@@ -5,7 +5,7 @@ From Coq Require Import List ZArith.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From ssrlib Require Import Var Types SsrOrder ZAriths Store FSets FMaps Tactics.
 From BitBlasting Require Import State.
-From Cryptoline Require Import DSL SSA.
+From Cryptoline Require Import DSLLite SSALite.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -21,15 +21,15 @@ Module ZSSA.
 
   (* Syntax *)
 
-  Notation zexp := SSA.eexp.
+  Notation zexp := SSALite.eexp.
 
-  Notation zbexp := SSA.ebexp.
+  Notation zbexp := SSALite.ebexp.
 
-  Notation vars_zexp := SSA.vars_eexp.
+  Notation vars_zexp := SSALite.vars_eexp.
 
-  Notation vars_zexps := SSA.vars_eexps.
+  Notation vars_zexps := SSALite.vars_eexps.
 
-  Notation vars_zbexp := SSA.vars_ebexp.
+  Notation vars_zbexp := SSALite.vars_ebexp.
 
 
   (* Semantics *)
@@ -38,8 +38,8 @@ Module ZSSA.
     match e with
     | Evar v => ZSSAStore.acc v s
     | Econst n => n
-    | Eunop op e => SSA.eval_eunop op (eval_zexp e s)
-    | Ebinop op e1 e2 => SSA.eval_ebinop op (eval_zexp e1 s) (eval_zexp e2 s)
+    | Eunop op e => SSALite.eval_eunop op (eval_zexp e s)
+    | Ebinop op e1 e2 => SSALite.eval_ebinop op (eval_zexp e1 s) (eval_zexp e2 s)
     | Epow e n => Z.pow (eval_zexp e s) (Z.of_N n)
     end.
 
@@ -72,12 +72,12 @@ Module ZSSA.
   Proof. elim: es => [| e es IH] //=. by rewrite IH. Qed.
 
   Lemma eval_zbexp_eands_cons e es s :
-    eval_zbexp (SSA.eands (e::es)) s <-> eval_zbexp e s /\ eval_zbexp (SSA.eands es) s.
+    eval_zbexp (SSALite.eands (e::es)) s <-> eval_zbexp e s /\ eval_zbexp (SSALite.eands es) s.
   Proof. done. Qed.
 
   Lemma eval_zbexp_eands_cat es1 es2 s :
-    eval_zbexp (SSA.eands (es1 ++ es2)) s <->
-    (eval_zbexp (SSA.eands es1) s) /\ (eval_zbexp (SSA.eands es2) s).
+    eval_zbexp (SSALite.eands (es1 ++ es2)) s <->
+    (eval_zbexp (SSALite.eands es1) s) /\ (eval_zbexp (SSALite.eands es2) s).
   Proof.
     elim: es1 es2 => [| e1 es1 IH] es2 /=.
     - by tauto.
@@ -106,11 +106,11 @@ Module ZSSA.
 
   (* String outputs *)
 
-  Definition string_of_zexp := SSA.string_of_eexp.
+  Definition string_of_zexp := SSALite.string_of_eexp.
 
-  Definition string_of_zexps := SSA.string_of_eexps.
+  Definition string_of_zexps := SSALite.string_of_eexps.
 
-  Definition string_of_zbexp := SSA.string_of_ebexp.
+  Definition string_of_zbexp := SSALite.string_of_ebexp.
 
 
   (* Specification *)
@@ -369,29 +369,29 @@ Module ZSSA.
   (* Slicing*)
 
   Lemma slice_zbexp_eval vs e s :
-    eval_zbexp e s -> eval_zbexp (SSA.slice_ebexp vs e) s.
+    eval_zbexp e s -> eval_zbexp (SSALite.slice_ebexp vs e) s.
   Proof.
     elim: e => //=.
     - move=> e1 e2 H. by case_if.
     - move=> e1 e2 ms H. by case_if.
     - move=> e1 IH1 e2 IH2 [H1 H2].
-      case Hs1: (SSA.slice_ebexp vs e1) => //=; rewrite Hs1 /= in IH1.
-      + (case Hs2: (SSA.slice_ebexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+      case Hs1: (SSALite.slice_ebexp vs e1) => //=; rewrite Hs1 /= in IH1.
+      + (case Hs2: (SSALite.slice_ebexp vs e2) => //=); (rewrite Hs2 /= in IH2);
         move: (IH1 H1) (IH2 H2) => /=; tauto.
-      + (case Hs2: (SSA.slice_ebexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+      + (case Hs2: (SSALite.slice_ebexp vs e2) => //=); (rewrite Hs2 /= in IH2);
         move: (IH1 H1) (IH2 H2) => /=; tauto.
-      + (case Hs2: (SSA.slice_ebexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+      + (case Hs2: (SSALite.slice_ebexp vs e2) => //=); (rewrite Hs2 /= in IH2);
         move: (IH1 H1) (IH2 H2) => /=; tauto.
-      + (case Hs2: (SSA.slice_ebexp vs e2) => //=); (rewrite Hs2 /= in IH2);
+      + (case Hs2: (SSALite.slice_ebexp vs e2) => //=); (rewrite Hs2 /= in IH2);
         move: (IH1 H1) (IH2 H2) => /=; tauto.
   Qed.
 
   Lemma state_eqmod_eval_zexp e s1 s2 :
-    ZSEQM.state_eqmod (SSA.vars_eexp e) s1 s2 ->
+    ZSEQM.state_eqmod (SSALite.vars_eexp e) s1 s2 ->
     eval_zexp e s1 = eval_zexp e s2.
   Proof.
     elim: e => //=.
-    - move=> v. apply. apply: SSA.VSLemmas.mem_singleton2. exact: eqxx.
+    - move=> v. apply. apply: SSALite.VSLemmas.mem_singleton2. exact: eqxx.
     - move=> op e IH Heqm. rewrite (IH Heqm). reflexivity.
     - move=> op e1 IH1 e2 IH2 /ZSEQM.state_eqmod_union1 [Heqm1 Heqm2].
       rewrite (IH1 Heqm1) (IH2 Heqm2). reflexivity.
@@ -399,7 +399,7 @@ Module ZSSA.
   Qed.
 
   Lemma state_eqmod_eval_zexps es s1 s2 :
-    ZSEQM.state_eqmod (SSA.vars_eexps es) s1 s2 ->
+    ZSEQM.state_eqmod (SSALite.vars_eexps es) s1 s2 ->
     eval_zexps es s1 = eval_zexps es s2.
   Proof.
     elim: es => [| e es IH] //=. move/ZSEQM.state_eqmod_union1 => [Heqm1 Heqm2].
@@ -407,7 +407,7 @@ Module ZSSA.
   Qed.
 
   Lemma state_eqmod_eval_zbexp e s1 s2 :
-    ZSEQM.state_eqmod (SSA.vars_ebexp e) s1 s2 ->
+    ZSEQM.state_eqmod (SSALite.vars_ebexp e) s1 s2 ->
     eval_zbexp e s1 -> eval_zbexp e s2.
   Proof.
     elim: e => //=.

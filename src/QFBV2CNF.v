@@ -7,7 +7,7 @@ From ssrlib Require Import Var Tactics Seqs.
 From BitBlasting Require Import State QFBV TypEnv CNF.
 From BBCache Require Import Cache BitBlastingInit BitBlastingCacheDef BitBlastingCache.
 From BBCache Require Import CacheHash BitBlastingCacheHash.
-From Cryptoline Require Import Options SSA SSA2ZSSA SSA2QFBV.
+From Cryptoline Require Import Options SSALite SSA2ZSSA SSA2QFBV.
 From nbits Require Import NBits.
 
 Set Implicit Arguments.
@@ -16,7 +16,7 @@ Import Prenex Implicits.
 
 Section QFBV2CNF.
 
-  Import SSA.
+  Import SSALite.
   Import QFBV.
 
   Lemma wf_conform_exp E e s :
@@ -110,7 +110,7 @@ Section QFBV2CNF.
     case H: (v \in (SSAVS.elements (SSAVS.diff (vars_env E) (vars_exp e)))).
     - rewrite (force_conform_vars_in E s H). rewrite size_zeros. reflexivity.
     - move/idP/negP: H => H. rewrite (force_conform_vars_notin E s H).
-      rewrite -VSLemmas.mem_in in H. rewrite SSA.VSLemmas.diff_b in H.
+      rewrite -VSLemmas.mem_in in H. rewrite SSALite.VSLemmas.diff_b in H.
       rewrite negb_and Bool.negb_involutive in H. move/memenvP: Hmem => Hmem.
       rewrite Hmem /= in H. rewrite (AdhereConform.conform_exp_mem Hco H).
       reflexivity.
@@ -126,7 +126,7 @@ Section QFBV2CNF.
     case H: (v \in (SSAVS.elements (SSAVS.diff (vars_env E) (vars_bexp e)))).
     - rewrite (force_conform_vars_in E s H). rewrite size_zeros. reflexivity.
     - move/idP/negP: H => H. rewrite (force_conform_vars_notin E s H).
-      rewrite -VSLemmas.mem_in in H. rewrite SSA.VSLemmas.diff_b in H.
+      rewrite -VSLemmas.mem_in in H. rewrite SSALite.VSLemmas.diff_b in H.
       rewrite negb_and Bool.negb_involutive in H. move/memenvP: Hmem => Hmem.
       rewrite Hmem /= in H. rewrite (AdhereConform.conform_bexp_mem Hco H).
       reflexivity.
@@ -152,14 +152,14 @@ Section QFBV2CNF.
       ~ (CNF.sat cnf).
 
   Lemma agree_bb_hbexps_cache E1 E2 es :
-    SSA.MA.agree (QFBV.vars_bexps es) E1 E2 ->
+    SSALite.MA.agree (QFBV.vars_bexps es) E1 E2 ->
     bb_hbexps_cache E1 (tmap QFBVHash.hash_bexp es) = bb_hbexps_cache E2 (tmap QFBVHash.hash_bexp es).
   Proof.
     elim: es => [| e es IH] //=. move=> Hag.
     rewrite tmap_map /=. rewrite -tmap_map.
-    rewrite (IH (SSA.MA.agree_union_set_r Hag)).
+    rewrite (IH (SSALite.MA.agree_union_set_r Hag)).
     dcase (bb_hbexps_cache E2 (tmap QFBVHash.hash_bexp es)) => [[[[mes ces] ges] cnfses] Hes].
-    move: (SSA.MA.agree_union_set_l Hag).
+    move: (SSALite.MA.agree_union_set_l Hag).
     rewrite -{1}(QFBVHash.unhash_hash_bexp e) => Hage.
     rewrite (agree_bit_blast_bexp_hcache_tflatten _ _ _ Hage).
     reflexivity.

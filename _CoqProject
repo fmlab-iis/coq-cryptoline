@@ -5,17 +5,16 @@
 -Q src Cryptoline
 src/Options.v
 src/DSLRaw.v
-src/DSLFull.v
-src/SSAFull.v
-src/SSAFull2SSA.v
 src/DSL.v
 src/SSA.v
+src/DSLLite.v
+src/SSALite.v
+src/SSA2SSALite.v
 src/ZSSA.v
 src/SSA2ZSSA.v
 src/SSA2QFBV.v
 src/QFBV2CNF.v
 src/Poly.v
+src/VerifyLite.v
 src/Verify.v
-src/VerifyFull.v
 src/Extract.v
-

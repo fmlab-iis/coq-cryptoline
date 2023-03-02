@@ -6,13 +6,13 @@ From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
 From ssrlib Require Import Var SsrOrder FMaps ZAriths Tactics Lists FSets Seqs Strings.
-From Cryptoline Require Import Options DSLRaw DSLFull.
+From Cryptoline Require Import Options DSLRaw DSLLite.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
-Module SSAFull := MakeDSL SSAVarOrder SSAVarOrderPrinter SSAVS SSAVM SSATE SSAStore.
+Module SSALite := MakeDSL SSAVarOrder SSAVarOrderPrinter SSAVS SSAVM SSATE SSAStore.
 
 Module M2 := Map2 VS SSAVS.
 
@@ -75,207 +75,205 @@ Section MakeSSA.
   Definition ssa_vars (m : vmap) (vs : VS.t) : SSAVS.t :=
     M2.map2 (ssa_var m) vs.
 
-  Definition ssa_atom (m : vmap) (a : DSLFull.atom) : SSAFull.atom :=
+  Definition ssa_atom (m : vmap) (a : DSLLite.atom) : SSALite.atom :=
     match a with
-    | Avar v => SSAFull.avar (ssa_var m v)
-    | Aconst ty n => SSAFull.aconst ty n
+    | Avar v => SSALite.avar (ssa_var m v)
+    | Aconst ty n => SSALite.aconst ty n
     end.
 
-  Fixpoint ssa_eexp (m : vmap) (e : DSLFull.eexp) : SSAFull.eexp :=
+  Fixpoint ssa_eexp (m : vmap) (e : DSLLite.eexp) : SSALite.eexp :=
     match e with
-    | Evar v => SSAFull.evar (ssa_var m v)
-    | Econst c => SSAFull.econst c
-    | Eunop op e => SSAFull.eunary op (ssa_eexp m e)
-    | Ebinop op e1 e2 => SSAFull.ebinary op (ssa_eexp m e1) (ssa_eexp m e2)
-    | Epow e n => SSAFull.epow (ssa_eexp m e) n
+    | Evar v => SSALite.evar (ssa_var m v)
+    | Econst c => SSALite.econst c
+    | Eunop op e => SSALite.eunary op (ssa_eexp m e)
+    | Ebinop op e1 e2 => SSALite.ebinary op (ssa_eexp m e1) (ssa_eexp m e2)
+    | Epow e n => SSALite.epow (ssa_eexp m e) n
     end.
 
-  Definition ssa_eexps (m : vmap) (es : seq DSLFull.eexp) : seq SSAFull.eexp :=
+  Definition ssa_eexps (m : vmap) (es : seq DSLLite.eexp) : seq SSALite.eexp :=
     map (ssa_eexp m) es.
 
-  Fixpoint ssa_rexp (m : vmap) (e : DSLFull.rexp) :=
+  Fixpoint ssa_rexp (m : vmap) (e : DSLLite.rexp) :=
     match e with
-    | Rvar v => SSAFull.rvar (ssa_var m v)
-    | Rconst w n => SSAFull.rconst w n
-    | Runop w op e => SSAFull.runary w op (ssa_rexp m e)
-    | Rbinop w op e1 e2 => SSAFull.rbinary w op (ssa_rexp m e1) (ssa_rexp m e2)
-    | Ruext w e i => SSAFull.ruext w (ssa_rexp m e) i
-    | Rsext w e i => SSAFull.rsext w (ssa_rexp m e) i
+    | Rvar v => SSALite.rvar (ssa_var m v)
+    | Rconst w n => SSALite.rconst w n
+    | Runop w op e => SSALite.runary w op (ssa_rexp m e)
+    | Rbinop w op e1 e2 => SSALite.rbinary w op (ssa_rexp m e1) (ssa_rexp m e2)
+    | Ruext w e i => SSALite.ruext w (ssa_rexp m e) i
+    | Rsext w e i => SSALite.rsext w (ssa_rexp m e) i
     end.
 
-  Fixpoint ssa_ebexp (m : vmap) (e : DSLFull.ebexp) :=
+  Fixpoint ssa_ebexp (m : vmap) (e : DSLLite.ebexp) :=
     match e with
-    | Etrue => SSAFull.etrue
-    | Eeq e1 e2 => SSAFull.eeq (ssa_eexp m e1) (ssa_eexp m e2)
-    | Eeqmod e1 e2 ms => SSAFull.eeqmod (ssa_eexp m e1) (ssa_eexp m e2) (ssa_eexps m ms)
-    | Eand e1 e2 => SSAFull.eand (ssa_ebexp m e1) (ssa_ebexp m e2)
+    | Etrue => SSALite.etrue
+    | Eeq e1 e2 => SSALite.eeq (ssa_eexp m e1) (ssa_eexp m e2)
+    | Eeqmod e1 e2 ms => SSALite.eeqmod (ssa_eexp m e1) (ssa_eexp m e2) (ssa_eexps m ms)
+    | Eand e1 e2 => SSALite.eand (ssa_ebexp m e1) (ssa_ebexp m e2)
     end.
 
-  Fixpoint ssa_rbexp (m : vmap) (e : DSLFull.rbexp) :=
+  Fixpoint ssa_rbexp (m : vmap) (e : DSLLite.rbexp) :=
     match e with
-    | Rtrue => SSAFull.rtrue
-    | Req w e1 e2 => SSAFull.req w (ssa_rexp m e1) (ssa_rexp m e2)
-    | Rcmp w op e1 e2 => SSAFull.rcmp w op (ssa_rexp m e1) (ssa_rexp m e2)
-    | Rneg e => SSAFull.rneg (ssa_rbexp m e)
-    | Rand e1 e2 => SSAFull.rand (ssa_rbexp m e1) (ssa_rbexp m e2)
-    | Ror e1 e2 => SSAFull.ror (ssa_rbexp m e1) (ssa_rbexp m e2)
+    | Rtrue => SSALite.rtrue
+    | Req w e1 e2 => SSALite.req w (ssa_rexp m e1) (ssa_rexp m e2)
+    | Rcmp w op e1 e2 => SSALite.rcmp w op (ssa_rexp m e1) (ssa_rexp m e2)
+    | Rneg e => SSALite.rneg (ssa_rbexp m e)
+    | Rand e1 e2 => SSALite.rand (ssa_rbexp m e1) (ssa_rbexp m e2)
+    | Ror e1 e2 => SSALite.ror (ssa_rbexp m e1) (ssa_rbexp m e2)
     end.
 
-  Definition ssa_bexp (m : vmap) (e : DSLFull.bexp) :=
-    (ssa_ebexp m (DSLFull.eqn_bexp e) , ssa_rbexp m (DSLFull.rng_bexp e)).
+  Definition ssa_bexp (m : vmap) (e : DSLLite.bexp) :=
+    (ssa_ebexp m (DSLLite.eqn_bexp e) , ssa_rbexp m (DSLLite.rng_bexp e)).
 
-  Definition ssa_instr (m : vmap) (i : DSLFull.instr) : vmap * SSAFull.instr :=
+  Definition ssa_instr (m : vmap) (i : DSLLite.instr) : vmap * SSALite.instr :=
     match i with
-    | DSLFull.Imov v a =>
+    | DSLLite.Imov v a =>
       let a := ssa_atom m a in
       let m := upd_index v m in
-      (m, SSAFull.Imov (ssa_var m v) a)
-    | DSLFull.Ishl v a p =>
+      (m, SSALite.Imov (ssa_var m v) a)
+    | DSLLite.Ishl v a p =>
       let a := ssa_atom m a in
       let m := upd_index v m in
-      (m, SSAFull.Ishl (ssa_var m v) a p)
-    | DSLFull.Icshl vh vl a1 a2 p =>
+      (m, SSALite.Ishl (ssa_var m v) a p)
+    | DSLLite.Icshl vh vl a1 a2 p =>
       let a1 := ssa_atom m a1 in
       let a2 := ssa_atom m a2 in
       let ml := upd_index vl m in
       let mh := upd_index vh ml in
-      (mh, SSAFull.Icshl (ssa_var mh vh) (ssa_var ml vl) a1 a2 p)
-    | DSLFull.Inondet v ty =>
+      (mh, SSALite.Icshl (ssa_var mh vh) (ssa_var ml vl) a1 a2 p)
+    | DSLLite.Inondet v ty =>
       let m := upd_index v m in
-      (m, SSAFull.Inondet (ssa_var m v) ty)
-    | DSLFull.Icmov v c a1 a2 =>
+      (m, SSALite.Inondet (ssa_var m v) ty)
+    | DSLLite.Icmov v c a1 a2 =>
       let c := ssa_atom m c in
       let a1 := ssa_atom m a1 in
       let a2 := ssa_atom m a2 in
       let m := upd_index v m in
-      (m, SSAFull.Icmov (ssa_var m v) c a1 a2)
-    | DSLFull.Inop => (m, SSAFull.Inop)
-    | DSLFull.Inot v ty a =>
+      (m, SSALite.Icmov (ssa_var m v) c a1 a2)
+    | DSLLite.Inop => (m, SSALite.Inop)
+    | DSLLite.Inot v ty a =>
       let a := ssa_atom m a in
       let m := upd_index v m in
-      (m, SSAFull.Inot (ssa_var m v) ty a)
-    | DSLFull.Iadd v a1 a2 =>
+      (m, SSALite.Inot (ssa_var m v) ty a)
+    | DSLLite.Iadd v a1 a2 =>
       let a1 := ssa_atom m a1 in
       let a2 := ssa_atom m a2 in
       let m := upd_index v m in
-      (m, SSAFull.Iadd (ssa_var m v) a1 a2)
-    | DSLFull.Iadds c v a1 a2 =>
+      (m, SSALite.Iadd (ssa_var m v) a1 a2)
+    | DSLLite.Iadds c v a1 a2 =>
       let a1 := ssa_atom m a1 in
       let a2 := ssa_atom m a2 in
       let mv := upd_index v m in
       let mc := upd_index c mv in
-      (mc, SSAFull.Iadds (ssa_var mc c) (ssa_var mv v) a1 a2)
-    | DSLFull.Iadc v a1 a2 y =>
+      (mc, SSALite.Iadds (ssa_var mc c) (ssa_var mv v) a1 a2)
+    | DSLLite.Iadc v a1 a2 y =>
       let a1 := ssa_atom m a1 in
       let a2 := ssa_atom m a2 in
       let y := ssa_atom m y in
       let m := upd_index v m in
-      (m, SSAFull.Iadc (ssa_var m v) a1 a2 y)
-    | DSLFull.Iadcs c v a1 a2 y =>
-      let a1 := ssa_atom m a1 in
-      let a2 := ssa_atom m a2 in
-      let y := ssa_atom m y in
-      let mv := upd_index v m in
-      let mc := upd_index c mv in
-      (mc, SSAFull.Iadcs (ssa_var mc c) (ssa_var mv v) a1 a2 y)
-    | DSLFull.Isub v a1 a2 =>
-      let a1 := ssa_atom m a1 in
-      let a2 := ssa_atom m a2 in
-      let m := upd_index v m in
-      (m, SSAFull.Isub (ssa_var m v) a1 a2)
-    | DSLFull.Isubc c v a1 a2 =>
-      let a1 := ssa_atom m a1 in
-      let a2 := ssa_atom m a2 in
-      let mv := upd_index v m in
-      let mc := upd_index c mv in
-      (mc, SSAFull.Isubc (ssa_var mc c) (ssa_var mv v) a1 a2)
-    | DSLFull.Isubb c v a1 a2 =>
-      let a1 := ssa_atom m a1 in
-      let a2 := ssa_atom m a2 in
-      let mv := upd_index v m in
-      let mc := upd_index c mv in
-      (mc, SSAFull.Isubb (ssa_var mc c) (ssa_var mv v) a1 a2)
-    | DSLFull.Isbc v a1 a2 y =>
-      let a1 := ssa_atom m a1 in
-      let a2 := ssa_atom m a2 in
-      let y := ssa_atom m y in
-      let m := upd_index v m in
-      (m, SSAFull.Isbc (ssa_var m v) a1 a2 y)
-    | DSLFull.Isbcs c v a1 a2 y =>
+      (m, SSALite.Iadc (ssa_var m v) a1 a2 y)
+    | DSLLite.Iadcs c v a1 a2 y =>
       let a1 := ssa_atom m a1 in
       let a2 := ssa_atom m a2 in
       let y := ssa_atom m y in
       let mv := upd_index v m in
       let mc := upd_index c mv in
-      (mc, SSAFull.Isbcs (ssa_var mc c) (ssa_var mv v) a1 a2 y)
-    | DSLFull.Isbb v a1 a2 y =>
+      (mc, SSALite.Iadcs (ssa_var mc c) (ssa_var mv v) a1 a2 y)
+    | DSLLite.Isub v a1 a2 =>
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
+      let m := upd_index v m in
+      (m, SSALite.Isub (ssa_var m v) a1 a2)
+    | DSLLite.Isubc c v a1 a2 =>
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
+      let mv := upd_index v m in
+      let mc := upd_index c mv in
+      (mc, SSALite.Isubc (ssa_var mc c) (ssa_var mv v) a1 a2)
+    | DSLLite.Isubb c v a1 a2 =>
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
+      let mv := upd_index v m in
+      let mc := upd_index c mv in
+      (mc, SSALite.Isubb (ssa_var mc c) (ssa_var mv v) a1 a2)
+    | DSLLite.Isbc v a1 a2 y =>
       let a1 := ssa_atom m a1 in
       let a2 := ssa_atom m a2 in
       let y := ssa_atom m y in
       let m := upd_index v m in
-      (m, SSAFull.Isbb (ssa_var m v) a1 a2 y)
-    | DSLFull.Isbbs c v a1 a2 y =>
+      (m, SSALite.Isbc (ssa_var m v) a1 a2 y)
+    | DSLLite.Isbcs c v a1 a2 y =>
       let a1 := ssa_atom m a1 in
       let a2 := ssa_atom m a2 in
       let y := ssa_atom m y in
       let mv := upd_index v m in
       let mc := upd_index c mv in
-      (mc, SSAFull.Isbbs (ssa_var mc c) (ssa_var mv v) a1 a2 y)
-    | DSLFull.Imul v a1 a2 =>
+      (mc, SSALite.Isbcs (ssa_var mc c) (ssa_var mv v) a1 a2 y)
+    | DSLLite.Isbb v a1 a2 y =>
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
+      let y := ssa_atom m y in
+      let m := upd_index v m in
+      (m, SSALite.Isbb (ssa_var m v) a1 a2 y)
+    | DSLLite.Isbbs c v a1 a2 y =>
+      let a1 := ssa_atom m a1 in
+      let a2 := ssa_atom m a2 in
+      let y := ssa_atom m y in
+      let mv := upd_index v m in
+      let mc := upd_index c mv in
+      (mc, SSALite.Isbbs (ssa_var mc c) (ssa_var mv v) a1 a2 y)
+    | DSLLite.Imul v a1 a2 =>
       let a1 := ssa_atom m a1 in
       let a2 := ssa_atom m a2 in
       let m := upd_index v m in
-      (m, SSAFull.Imul (ssa_var m v) a1 a2)
-    | DSLFull.Imull vh vl a1 a2 =>
+      (m, SSALite.Imul (ssa_var m v) a1 a2)
+    | DSLLite.Imull vh vl a1 a2 =>
       let a1 := ssa_atom m a1 in
       let a2 := ssa_atom m a2 in
       let ml := upd_index vl m in
       let mh := upd_index vh ml in
-      (mh, SSAFull.Imull (ssa_var mh vh) (ssa_var ml vl) a1 a2)
-    | DSLFull.Imulj v a1 a2 =>
+      (mh, SSALite.Imull (ssa_var mh vh) (ssa_var ml vl) a1 a2)
+    | DSLLite.Imulj v a1 a2 =>
       let a1 := ssa_atom m a1 in
       let a2 := ssa_atom m a2 in
       let m := upd_index v m in
-      (m, SSAFull.Imulj (ssa_var m v) a1 a2)
-    | DSLFull.Isplit vh vl a n =>
+      (m, SSALite.Imulj (ssa_var m v) a1 a2)
+    | DSLLite.Isplit vh vl a n =>
       let a := ssa_atom m a in
       let ml := upd_index vl m in
       let mh := upd_index vh ml in
-      (mh, SSAFull.Isplit (ssa_var mh vh) (ssa_var ml vl) a n)
-    | DSLFull.Iand v ty a1 a2 =>
+      (mh, SSALite.Isplit (ssa_var mh vh) (ssa_var ml vl) a n)
+    | DSLLite.Iand v ty a1 a2 =>
       let a1 := ssa_atom m a1 in
       let a2 := ssa_atom m a2 in
       let m := upd_index v m in
-      (m, SSAFull.Iand (ssa_var m v) ty a1 a2)
-    | DSLFull.Ior v ty a1 a2 =>
+      (m, SSALite.Iand (ssa_var m v) ty a1 a2)
+    | DSLLite.Ior v ty a1 a2 =>
       let a1 := ssa_atom m a1 in
       let a2 := ssa_atom m a2 in
       let m := upd_index v m in
-      (m, SSAFull.Ior (ssa_var m v) ty a1 a2)
-    | DSLFull.Ixor v ty a1 a2 =>
+      (m, SSALite.Ior (ssa_var m v) ty a1 a2)
+    | DSLLite.Ixor v ty a1 a2 =>
       let a1 := ssa_atom m a1 in
       let a2 := ssa_atom m a2 in
       let m := upd_index v m in
-      (m, SSAFull.Ixor (ssa_var m v) ty a1 a2)
-    | DSLFull.Icast v ty a =>
+      (m, SSALite.Ixor (ssa_var m v) ty a1 a2)
+    | DSLLite.Icast v ty a =>
       let a := ssa_atom m a in
       let m := upd_index v m in
-      (m, SSAFull.Icast (ssa_var m v) ty a)
-    | DSLFull.Ivpc v ty a =>
+      (m, SSALite.Icast (ssa_var m v) ty a)
+    | DSLLite.Ivpc v ty a =>
       let a := ssa_atom m a in
       let m := upd_index v m in
-      (m, SSAFull.Ivpc (ssa_var m v) ty a)
-    | DSLFull.Ijoin v ah al =>
+      (m, SSALite.Ivpc (ssa_var m v) ty a)
+    | DSLLite.Ijoin v ah al =>
       let ah := ssa_atom m ah in
       let al := ssa_atom m al in
       let m := upd_index v m in
-      (m, SSAFull.Ijoin (ssa_var m v) ah al)
-    | DSLFull.Icut e => (m, SSAFull.Icut (ssa_bexp m e))
-    | DSLFull.Iassert e => (m, SSAFull.Iassert (ssa_bexp m e))
-    | DSLFull.Iassume e => (m, SSAFull.Iassume (ssa_bexp m e))
+      (m, SSALite.Ijoin (ssa_var m v) ah al)
+    | DSLLite.Iassume e => (m, SSALite.Iassume (ssa_bexp m e))
     end.
 
-  Fixpoint ssa_program (m : vmap) (p : DSLFull.program) : vmap * SSAFull.program :=
+  Fixpoint ssa_program (m : vmap) (p : DSLLite.program) : vmap * SSALite.program :=
     match p with
     | [::] => (m, [::])
     | hd::tl =>
@@ -291,16 +289,16 @@ Section MakeSSA.
   Definition ssa_typenv (m: vmap) (te: TE.env) : SSATE.env :=
     TE.fold (add_to_ste m) te (SSATE.empty typ).
 
-  Definition ssa_spec (s : DSLFull.spec) : SSAFull.spec :=
+  Definition ssa_spec (s : DSLLite.spec) : SSALite.spec :=
     let m := empty_vmap in
-    let si := ssa_typenv m (DSLFull.sinputs s) in
-    let f := ssa_bexp m (DSLFull.spre s) in
-    let (m, p) := ssa_program m (DSLFull.sprog s) in
-    let g := ssa_bexp m (DSLFull.spost s) in
-    {| SSAFull.sinputs := si;
-       SSAFull.spre := f;
-       SSAFull.sprog := p;
-       SSAFull.spost := g;
+    let si := ssa_typenv m (DSLLite.sinputs s) in
+    let f := ssa_bexp m (DSLLite.spre s) in
+    let (m, p) := ssa_program m (DSLLite.sprog s) in
+    let g := ssa_bexp m (DSLLite.spost s) in
+    {| SSALite.sinputs := si;
+       SSALite.spre := f;
+       SSALite.sprog := p;
+       SSALite.spost := g;
     |}.
 
   Lemma ssa_program_empty : forall m, ssa_program m [::] = (m, [::]).
@@ -331,10 +329,10 @@ Section MakeSSA.
 
   Lemma ssa_spec_unfold s :
     exists m,
-      SSAFull.sinputs (ssa_spec s) = ssa_typenv empty_vmap (DSLFull.sinputs s) /\
-      SSAFull.spre (ssa_spec s) = ssa_bexp empty_vmap (DSLFull.spre s) /\
-      (m, SSAFull.sprog (ssa_spec s)) = ssa_program empty_vmap (DSLFull.sprog s) /\
-      SSAFull.spost (ssa_spec s) = ssa_bexp m (DSLFull.spost s).
+      SSALite.sinputs (ssa_spec s) = ssa_typenv empty_vmap (DSLLite.sinputs s) /\
+      SSALite.spre (ssa_spec s) = ssa_bexp empty_vmap (DSLLite.spre s) /\
+      (m, SSALite.sprog (ssa_spec s)) = ssa_program empty_vmap (DSLLite.sprog s) /\
+      SSALite.spost (ssa_spec s) = ssa_bexp m (DSLLite.spost s).
   Proof.
     destruct s as [si f p g sep srp] => /=.
     rewrite /ssa_spec /=.
@@ -643,9 +641,9 @@ Section MakeSSA.
     reflexivity.
   Qed.
 
-  Lemma ssa_vars_atom_comm  m (e : DSLFull.atom) :
-    SSAVS.Equal (ssa_vars m (DSLFull.vars_atom e))
-                (SSAFull.vars_atom (ssa_atom m e)).
+  Lemma ssa_vars_atom_comm  m (e : DSLLite.atom) :
+    SSAVS.Equal (ssa_vars m (DSLLite.vars_atom e))
+                (SSALite.vars_atom (ssa_atom m e)).
   Proof.
     case: e.
     - move=> v.
@@ -653,9 +651,9 @@ Section MakeSSA.
     - reflexivity.
   Qed.
 
-  Lemma ssa_vars_eexp_comm m (e : DSLFull.eexp) :
-    SSAVS.Equal (ssa_vars m (DSLFull.vars_eexp e))
-                (SSAFull.vars_eexp (ssa_eexp m e)).
+  Lemma ssa_vars_eexp_comm m (e : DSLLite.eexp) :
+    SSAVS.Equal (ssa_vars m (DSLLite.vars_eexp e))
+                (SSALite.vars_eexp (ssa_eexp m e)).
   Proof.
     elim: e => /=.
     - exact: ssa_vars_singleton.
@@ -665,17 +663,17 @@ Section MakeSSA.
     - move=> e H n. assumption.
   Qed.
 
-  Lemma ssa_vars_eexps_comm m (es : seq DSLFull.eexp) :
-    SSAVS.Equal (ssa_vars m (DSLFull.vars_eexps es))
-                (SSAFull.vars_eexps (ssa_eexps m es)).
+  Lemma ssa_vars_eexps_comm m (es : seq DSLLite.eexp) :
+    SSAVS.Equal (ssa_vars m (DSLLite.vars_eexps es))
+                (SSALite.vars_eexps (ssa_eexps m es)).
   Proof.
     elim: es => [| e es IH] //=. rewrite -ssa_vars_eexp_comm.
     rewrite -IH. rewrite -ssa_vars_union. reflexivity.
   Qed.
 
-  Lemma ssa_vars_rexp_comm m (e : DSLFull.rexp) :
-    SSAVS.Equal (ssa_vars m (DSLFull.vars_rexp e))
-                (SSAFull.vars_rexp (ssa_rexp m e)).
+  Lemma ssa_vars_rexp_comm m (e : DSLLite.rexp) :
+    SSAVS.Equal (ssa_vars m (DSLLite.vars_rexp e))
+                (SSALite.vars_rexp (ssa_rexp m e)).
   Proof.
     elim: e => /=.
     - exact: ssa_vars_singleton.
@@ -690,28 +688,28 @@ Section MakeSSA.
       assumption.
   Qed.
 
-  Lemma ssa_vars_eexp_union m (e1 e2 : DSLFull.eexp) :
-    SSAVS.Equal (ssa_vars m (VS.union (DSLFull.vars_eexp e1) (DSLFull.vars_eexp e2)))
-                (SSAVS.union (SSAFull.vars_eexp (ssa_eexp m e1))
-                             (SSAFull.vars_eexp (ssa_eexp m e2))).
+  Lemma ssa_vars_eexp_union m (e1 e2 : DSLLite.eexp) :
+    SSAVS.Equal (ssa_vars m (VS.union (DSLLite.vars_eexp e1) (DSLLite.vars_eexp e2)))
+                (SSAVS.union (SSALite.vars_eexp (ssa_eexp m e1))
+                             (SSALite.vars_eexp (ssa_eexp m e2))).
   Proof.
     rewrite ssa_vars_union -2!ssa_vars_eexp_comm.
     reflexivity.
   Qed.
 
-  Lemma ssa_vars_eexps_union m (e : DSLFull.eexp) (es : seq DSLFull.eexp) :
-    SSAVS.Equal (ssa_vars m (VS.union (DSLFull.vars_eexp e) (DSLFull.vars_eexps es)))
-                (SSAVS.union (SSAFull.vars_eexp (ssa_eexp m e))
-                             (SSAFull.vars_eexps (ssa_eexps m es))).
+  Lemma ssa_vars_eexps_union m (e : DSLLite.eexp) (es : seq DSLLite.eexp) :
+    SSAVS.Equal (ssa_vars m (VS.union (DSLLite.vars_eexp e) (DSLLite.vars_eexps es)))
+                (SSAVS.union (SSALite.vars_eexp (ssa_eexp m e))
+                             (SSALite.vars_eexps (ssa_eexps m es))).
   Proof.
     rewrite ssa_vars_union ssa_vars_eexp_comm ssa_vars_eexps_comm.
     reflexivity.
   Qed.
 
-  Lemma ssa_vars_rexp_union m (e1 e2 : DSLFull.rexp) :
-    SSAVS.Equal (ssa_vars m (VS.union (DSLFull.vars_rexp e1) (DSLFull.vars_rexp e2)))
-                (SSAVS.union (SSAFull.vars_rexp (ssa_rexp m e1))
-                             (SSAFull.vars_rexp (ssa_rexp m e2))).
+  Lemma ssa_vars_rexp_union m (e1 e2 : DSLLite.rexp) :
+    SSAVS.Equal (ssa_vars m (VS.union (DSLLite.vars_rexp e1) (DSLLite.vars_rexp e2)))
+                (SSAVS.union (SSALite.vars_rexp (ssa_rexp m e1))
+                             (SSALite.vars_rexp (ssa_rexp m e2))).
   Proof.
     rewrite ssa_vars_union -2!ssa_vars_rexp_comm.
     reflexivity.
@@ -735,8 +733,8 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_vars_ebexp_comm m e :
-    SSAVS.Equal (ssa_vars m (DSLFull.vars_ebexp e))
-                (SSAFull.vars_ebexp (ssa_ebexp m e)).
+    SSAVS.Equal (ssa_vars m (DSLLite.vars_ebexp e))
+                (SSALite.vars_ebexp (ssa_ebexp m e)).
   Proof.
     elim: e => /=.
     - reflexivity.
@@ -748,8 +746,8 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_vars_rbexp_comm m e :
-    SSAVS.Equal (ssa_vars m (DSLFull.vars_rbexp e))
-                (SSAFull.vars_rbexp (ssa_rbexp m e)).
+    SSAVS.Equal (ssa_vars m (DSLLite.vars_rbexp e))
+                (SSALite.vars_rbexp (ssa_rbexp m e)).
   Proof.
     elim: e => /=.
     - reflexivity.
@@ -761,44 +759,44 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_vars_bexp_comm m e :
-    SSAVS.Equal (ssa_vars m (DSLFull.vars_bexp e))
-                (SSAFull.vars_bexp (ssa_bexp m e)).
+    SSAVS.Equal (ssa_vars m (DSLLite.vars_bexp e))
+                (SSALite.vars_bexp (ssa_bexp m e)).
   Proof.
-    rewrite /ssa_bexp /DSLFull.vars_bexp /SSAFull.vars_bexp /=.
+    rewrite /ssa_bexp /DSLLite.vars_bexp /SSALite.vars_bexp /=.
     rewrite ssa_vars_union ssa_vars_ebexp_comm ssa_vars_rbexp_comm.
     reflexivity.
   Qed.
 
   Lemma ssa_vars_ebexp_union m e1 e2 :
-    SSAVS.Equal (ssa_vars m (VS.union (DSLFull.vars_ebexp e1) (DSLFull.vars_ebexp e2)))
-                (SSAVS.union (SSAFull.vars_ebexp (ssa_ebexp m e1))
-                             (SSAFull.vars_ebexp (ssa_ebexp m e2))).
+    SSAVS.Equal (ssa_vars m (VS.union (DSLLite.vars_ebexp e1) (DSLLite.vars_ebexp e2)))
+                (SSAVS.union (SSALite.vars_ebexp (ssa_ebexp m e1))
+                             (SSALite.vars_ebexp (ssa_ebexp m e2))).
   Proof.
     rewrite ssa_vars_union -2!ssa_vars_ebexp_comm.
     reflexivity.
   Qed.
 
   Lemma ssa_vars_rbexp_union m e1 e2 :
-    SSAVS.Equal (ssa_vars m (VS.union (DSLFull.vars_rbexp e1) (DSLFull.vars_rbexp e2)))
-                (SSAVS.union (SSAFull.vars_rbexp (ssa_rbexp m e1))
-                             (SSAFull.vars_rbexp (ssa_rbexp m e2))).
+    SSAVS.Equal (ssa_vars m (VS.union (DSLLite.vars_rbexp e1) (DSLLite.vars_rbexp e2)))
+                (SSAVS.union (SSALite.vars_rbexp (ssa_rbexp m e1))
+                             (SSALite.vars_rbexp (ssa_rbexp m e2))).
   Proof.
     rewrite ssa_vars_union -2!ssa_vars_rbexp_comm.
     reflexivity.
   Qed.
 
   Lemma ssa_vars_bexp_union m e1 e2 :
-    SSAVS.Equal (ssa_vars m (VS.union (DSLFull.vars_bexp e1) (DSLFull.vars_bexp e2)))
-                (SSAVS.union (SSAFull.vars_bexp (ssa_bexp m e1))
-                             (SSAFull.vars_bexp (ssa_bexp m e2))).
+    SSAVS.Equal (ssa_vars m (VS.union (DSLLite.vars_bexp e1) (DSLLite.vars_bexp e2)))
+                (SSAVS.union (SSALite.vars_bexp (ssa_bexp m e1))
+                             (SSALite.vars_bexp (ssa_bexp m e2))).
   Proof.
     rewrite ssa_vars_union -2!ssa_vars_bexp_comm.
     reflexivity.
   Qed.
 
   Lemma ssa_vars_atom_subset m e vs :
-    SSAVS.subset (SSAFull.vars_atom (ssa_atom m e)) (ssa_vars m vs) =
-    VS.subset (DSLFull.vars_atom e) vs.
+    SSAVS.subset (SSALite.vars_atom (ssa_atom m e)) (ssa_vars m vs) =
+    VS.subset (DSLLite.vars_atom e) vs.
   Proof.
     case: e => /=.
     - move=> v.
@@ -810,11 +808,11 @@ Section MakeSSA.
       reflexivity.
   Qed.
 
-  Lemma ssa_vars_eexp_subset m (e : DSLFull.eexp) vs :
-    SSAVS.subset (SSAFull.vars_eexp (ssa_eexp m e)) (ssa_vars m vs) =
-    VS.subset (DSLFull.vars_eexp e) vs.
+  Lemma ssa_vars_eexp_subset m (e : DSLLite.eexp) vs :
+    SSAVS.subset (SSALite.vars_eexp (ssa_eexp m e)) (ssa_vars m vs) =
+    VS.subset (DSLLite.vars_eexp e) vs.
   Proof.
-    case Hsub: (VS.subset (DSLFull.vars_eexp e) vs).
+    case Hsub: (VS.subset (DSLLite.vars_eexp e) vs).
     - apply: SSAVS.subset_1 => x.
       rewrite -ssa_vars_eexp_comm => /SSAVS.Lemmas.memP Hx.
       move: (ssa_vars_mem2 Hx) => [v [Hv Hmemv]].
@@ -832,20 +830,20 @@ Section MakeSSA.
       assumption.
   Qed.
 
-  Lemma ssa_vars_eexps_subset m (es : seq DSLFull.eexp) vs :
-    SSAVS.subset (SSAFull.vars_eexps (ssa_eexps m es)) (ssa_vars m vs) =
-    VS.subset (DSLFull.vars_eexps es) vs.
+  Lemma ssa_vars_eexps_subset m (es : seq DSLLite.eexp) vs :
+    SSAVS.subset (SSALite.vars_eexps (ssa_eexps m es)) (ssa_vars m vs) =
+    VS.subset (DSLLite.vars_eexps es) vs.
   Proof.
     elim: es => [| e es IH] //=. rewrite SSAVS.Lemmas.subset_union6.
     rewrite VS.Lemmas.subset_union6. rewrite ssa_vars_eexp_subset IH.
     reflexivity.
   Qed.
 
-  Lemma ssa_vars_rexp_subset m (e : DSLFull.rexp) vs :
-    SSAVS.subset (SSAFull.vars_rexp (ssa_rexp m e)) (ssa_vars m vs) =
-    VS.subset (DSLFull.vars_rexp e) vs.
+  Lemma ssa_vars_rexp_subset m (e : DSLLite.rexp) vs :
+    SSAVS.subset (SSALite.vars_rexp (ssa_rexp m e)) (ssa_vars m vs) =
+    VS.subset (DSLLite.vars_rexp e) vs.
   Proof.
-    case Hsub: (VS.subset (DSLFull.vars_rexp e) vs).
+    case Hsub: (VS.subset (DSLLite.vars_rexp e) vs).
     - apply: SSAVS.subset_1 => x.
       rewrite -ssa_vars_rexp_comm => /SSAVS.Lemmas.memP Hx.
       move: (ssa_vars_mem2 Hx) => [v [Hv Hmemv]].
@@ -864,10 +862,10 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_vars_ebexp_subset m e vs :
-    SSAVS.subset (SSAFull.vars_ebexp (ssa_ebexp m e)) (ssa_vars m vs) =
-    VS.subset (DSLFull.vars_ebexp e) vs.
+    SSAVS.subset (SSALite.vars_ebexp (ssa_ebexp m e)) (ssa_vars m vs) =
+    VS.subset (DSLLite.vars_ebexp e) vs.
   Proof.
-    case Hsub: (VS.subset (DSLFull.vars_ebexp e) vs).
+    case Hsub: (VS.subset (DSLLite.vars_ebexp e) vs).
     - apply: SSAVS.subset_1 => x.
       rewrite -ssa_vars_ebexp_comm => /SSAVS.Lemmas.memP Hx.
       move: (ssa_vars_mem2 Hx) => [v [Hv Hmemv]].
@@ -886,10 +884,10 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_vars_rbexp_subset m e vs :
-    SSAVS.subset (SSAFull.vars_rbexp (ssa_rbexp m e)) (ssa_vars m vs) =
-    VS.subset (DSLFull.vars_rbexp e) vs.
+    SSAVS.subset (SSALite.vars_rbexp (ssa_rbexp m e)) (ssa_vars m vs) =
+    VS.subset (DSLLite.vars_rbexp e) vs.
   Proof.
-    case Hsub: (VS.subset (DSLFull.vars_rbexp e) vs).
+    case Hsub: (VS.subset (DSLLite.vars_rbexp e) vs).
     - apply: SSAVS.subset_1 => x.
       rewrite -ssa_vars_rbexp_comm => /SSAVS.Lemmas.memP Hx.
       move: (ssa_vars_mem2 Hx) => [v [Hv Hmemv]].
@@ -908,10 +906,10 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_vars_bexp_subset m e vs :
-    SSAVS.subset (SSAFull.vars_bexp (ssa_bexp m e)) (ssa_vars m vs) =
-    VS.subset (DSLFull.vars_bexp e) vs.
+    SSAVS.subset (SSALite.vars_bexp (ssa_bexp m e)) (ssa_vars m vs) =
+    VS.subset (DSLLite.vars_bexp e) vs.
   Proof.
-    case Hsub: (VS.subset (DSLFull.vars_bexp e) vs).
+    case Hsub: (VS.subset (DSLLite.vars_bexp e) vs).
     - apply: SSAVS.subset_1 => x.
       rewrite -ssa_vars_bexp_comm => /SSAVS.Lemmas.memP Hx.
       move: (ssa_vars_mem2 Hx) => [v [Hv Hmemv]].
@@ -1090,11 +1088,11 @@ Section MakeSSA.
     have Heq: (TE.fold (add_to_ste m) te (SSATE.empty typ)) = (SSATE.empty typ).
     {
 
-      apply (DSLFull.TEKS.MLemmas.OP.P.fold_Empty _ (add_to_ste m) (SSATE.empty typ) Hempty).
+      apply (DSLLite.TEKS.MLemmas.OP.P.fold_Empty _ (add_to_ste m) (SSATE.empty typ) Hempty).
     }
     rewrite Heq.
     intros x.
-    move: (DSLFull.TEKS.MLemmas.Empty_mem x Hempty) => Hnm.
+    move: (DSLLite.TEKS.MLemmas.Empty_mem x Hempty) => Hnm.
     rewrite (TE.not_mem_vtyp Hnm).
     have Hsnmem: (~~ SSATE.mem (ssa_var m x) (SSATE.empty typ)) by rewrite SSATE.Lemmas.empty_a.
     rewrite (SSATE.not_mem_vtyp Hsnmem).
@@ -1112,7 +1110,7 @@ Section MakeSSA.
   Qed.
 
   Lemma add_to_set_transpose_neqkey m:
-    DSLFull.TEKS.MLemmas.OP.P.transpose_neqkey SSATE.Equal (add_to_ste m).
+    DSLLite.TEKS.MLemmas.OP.P.transpose_neqkey SSATE.Equal (add_to_ste m).
   Proof.
     move=> x y a b s Hxy.
     rewrite /add_to_ste.
@@ -1130,20 +1128,20 @@ Section MakeSSA.
       move/eqP: Hnxy => Hnxy.
         by destruct Hnxy.
     - move/idP: H1 => H1. move/negP: H2 => H2.
-      rewrite (SSAFull.TEKS.MLemmas.find_add_eq H1).
-      rewrite (SSAFull.TEKS.MLemmas.find_add_neq H2).
-      rewrite (SSAFull.TEKS.MLemmas.find_add_eq H1).
+      rewrite (SSALite.TEKS.MLemmas.find_add_eq H1).
+      rewrite (SSALite.TEKS.MLemmas.find_add_neq H2).
+      rewrite (SSALite.TEKS.MLemmas.find_add_eq H1).
       reflexivity.
     - move/idP: H2 => H2. move/negP: H1 => H1.
-      rewrite (SSAFull.TEKS.MLemmas.find_add_eq H2).
-      rewrite (SSAFull.TEKS.MLemmas.find_add_neq H1).
-      rewrite (SSAFull.TEKS.MLemmas.find_add_eq H2).
+      rewrite (SSALite.TEKS.MLemmas.find_add_eq H2).
+      rewrite (SSALite.TEKS.MLemmas.find_add_neq H1).
+      rewrite (SSALite.TEKS.MLemmas.find_add_eq H2).
       reflexivity.
     - move/negP: H1 => H1. move/negP: H2 => H2.
-      rewrite (SSAFull.TEKS.MLemmas.find_add_neq H1).
-      rewrite (SSAFull.TEKS.MLemmas.find_add_neq H2).
-      rewrite (SSAFull.TEKS.MLemmas.find_add_neq H2).
-      rewrite (SSAFull.TEKS.MLemmas.find_add_neq H1).
+      rewrite (SSALite.TEKS.MLemmas.find_add_neq H1).
+      rewrite (SSALite.TEKS.MLemmas.find_add_neq H2).
+      rewrite (SSALite.TEKS.MLemmas.find_add_neq H2).
+      rewrite (SSALite.TEKS.MLemmas.find_add_neq H1).
       reflexivity.
   Qed.
 
@@ -1151,13 +1149,13 @@ Section MakeSSA.
     typenv_equiv m te (ssa_typenv m te).
   Proof.
     move: te.
-    apply DSLFull.TEKS.MLemmas.OP.P.map_induction.
+    apply DSLLite.TEKS.MLemmas.OP.P.map_induction.
     intros te.
     - exact: ssa_typenv_equiv_empty.
     - intros te te' IH x e HnIn HAdd y.
       rewrite /ssa_typenv.
-      move: (DSLFull.TEKS.MLemmas.Add_mem_add x HAdd) => Hmem.
-      move: (DSLFull.TEKS.MLemmas.Add_in HAdd) => Hin.
+      move: (DSLLite.TEKS.MLemmas.Add_mem_add x HAdd) => Hmem.
+      move: (DSLLite.TEKS.MLemmas.Add_in HAdd) => Hin.
       rewrite /TE.vtyp.
       replace (TE.vtyp y te') with
           (
@@ -1176,8 +1174,8 @@ Section MakeSSA.
             end
 
           ) by reflexivity.
-      move: (DSLFull.TEKS.MLemmas.OP.P.fold_Add
-               (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+      move: (DSLLite.TEKS.MLemmas.OP.P.fold_Add
+               (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                (add_to_set_proper m)
                (add_to_set_transpose_neqkey m)
                (SSATE.empty typ)
@@ -1188,17 +1186,17 @@ Section MakeSSA.
       case Hyx: (y == x).
       + rewrite (eqP Hyx).
         rewrite HAdd.
-        rewrite (DSLFull.TEKS.MLemmas.find_add_eq).
+        rewrite (DSLLite.TEKS.MLemmas.find_add_eq).
         rewrite /add_to_ste.
-        rewrite SSAFull.TEKS.MLemmas.find_add_eq.
+        rewrite SSALite.TEKS.MLemmas.find_add_eq.
         reflexivity.
         reflexivity.
         reflexivity.
       + rewrite HAdd.
         move/negP: Hyx => Hyx.
-        rewrite (DSLFull.TEKS.MLemmas.find_add_neq Hyx).
+        rewrite (DSLLite.TEKS.MLemmas.find_add_neq Hyx).
         rewrite /add_to_ste.
-        rewrite SSAFull.TEKS.MLemmas.find_add_neq.
+        rewrite SSALite.TEKS.MLemmas.find_add_neq.
         exact: IH.
         move/idP: Hyx => Hyx.
         rewrite /SSATE.SE.eq.
@@ -1223,10 +1221,10 @@ Section MakeSSA.
     have Heq: (TE.fold (add_to_ste m) te (SSATE.empty typ)) = (SSATE.empty typ).
     {
 
-      apply (DSLFull.TEKS.MLemmas.OP.P.fold_Empty _ (add_to_ste m) (SSATE.empty typ) Hempty).
+      apply (DSLLite.TEKS.MLemmas.OP.P.fold_Empty _ (add_to_ste m) (SSATE.empty typ) Hempty).
     }
     rewrite Heq.
-    move: (DSLFull.TEKS.MLemmas.Empty_mem x Hempty) => Hnm.
+    move: (DSLLite.TEKS.MLemmas.Empty_mem x Hempty) => Hnm.
     have Hsnmem: (~~ SSATE.mem (ssa_var m x) (SSATE.empty typ)) by rewrite SSATE.Lemmas.empty_a.
     move/negPf: Hnm => ->.
     move/negPf: Hsnmem => ->.
@@ -1237,15 +1235,15 @@ Section MakeSSA.
     TE.mem x te = SSATE.mem (ssa_var m x) (ssa_typenv m te).
   Proof.
     move: te.
-    apply DSLFull.TEKS.MLemmas.OP.P.map_induction.
+    apply DSLLite.TEKS.MLemmas.OP.P.map_induction.
     - intros te.
       exact: ssa_typenv_mem_empty.
     - intros te te' IH y e HnIn HAdd.
       rewrite /ssa_typenv.
-      move: (DSLFull.TEKS.MLemmas.Add_mem_add x HAdd) => Hmem.
-      move: (DSLFull.TEKS.MLemmas.Add_in HAdd) => Hin.
-      move: (DSLFull.TEKS.MLemmas.OP.P.fold_Add
-               (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+      move: (DSLLite.TEKS.MLemmas.Add_mem_add x HAdd) => Hmem.
+      move: (DSLLite.TEKS.MLemmas.Add_in HAdd) => Hin.
+      move: (DSLLite.TEKS.MLemmas.OP.P.fold_Add
+               (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                (add_to_set_proper m)
                (add_to_set_transpose_neqkey m)
                (SSATE.empty typ)
@@ -1253,20 +1251,20 @@ Section MakeSSA.
       rewrite /SSATE.Equal in Heq.
       case Hyx: (x == y).
     - rewrite Hmem.
-      rewrite (DSLFull.TELemmas.mem_add_eq Hyx).
+      rewrite (DSLLite.TELemmas.mem_add_eq Hyx).
       move: (Heq (ssa_var m x)) => Heq2.
-      move: (SSAFull.TELemmas.find_eq_mem_eq Heq2) => Heq3.
+      move: (SSALite.TELemmas.find_eq_mem_eq Heq2) => Heq3.
       rewrite Heq3.
-      rewrite SSAFull.TEKS.MLemmas.mem_add_eq.
+      rewrite SSALite.TEKS.MLemmas.mem_add_eq.
       + reflexivity.
       + rewrite (eqP Hyx). reflexivity.
     - rewrite Hmem.
       move/negP: Hyx => Hyx.
-      rewrite (DSLFull.TELemmas.mem_add_neq Hyx).
+      rewrite (DSLLite.TELemmas.mem_add_neq Hyx).
       move: (Heq (ssa_var m x)) => Heq2.
-      move: (SSAFull.TELemmas.find_eq_mem_eq Heq2) => Heq3.
+      move: (SSALite.TELemmas.find_eq_mem_eq Heq2) => Heq3.
       rewrite Heq3.
-      rewrite SSAFull.TEKS.MLemmas.mem_add_neq.
+      rewrite SSALite.TEKS.MLemmas.mem_add_neq.
       exact: IH.
       move/idP: Hyx => Hyx.
       rewrite /SSATE.SE.eq.
@@ -1279,15 +1277,15 @@ Section MakeSSA.
     ~ SSATE.mem x (ssa_typenv m te) \/ exists v, ssa_var m v = x.
   Proof.
     move: te.
-    apply DSLFull.TEKS.MLemmas.OP.P.map_induction_bis.
+    apply DSLLite.TEKS.MLemmas.OP.P.map_induction_bis.
     - move=> te te' Heq.
-      move: (DSLFull.TEKS.MLemmas.F.Equal_sym Heq) => {Heq} Heq.
+      move: (DSLLite.TEKS.MLemmas.F.Equal_sym Heq) => {Heq} Heq.
       move=> H.
       case: H => H.
       + left.
         rewrite /ssa_typenv in H |- *.
-          by rewrite (DSLFull.TEKS.MLemmas.fold_Equal
-                        (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+          by rewrite (DSLLite.TEKS.MLemmas.fold_Equal
+                        (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                         (SSATE.empty typ)
                         (add_to_set_proper m)
                         Heq).
@@ -1297,8 +1295,8 @@ Section MakeSSA.
       rewrite /ssa_typenv.
       move=> Hnin H.
       case: H => H.
-      + rewrite (DSLFull.TEKS.MLemmas.OP.P.fold_add
-                   (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+      + rewrite (DSLLite.TEKS.MLemmas.OP.P.fold_add
+                   (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                    (add_to_set_proper m)
                    (add_to_set_transpose_neqkey m)
                    yty (SSATE.empty typ)
@@ -1328,30 +1326,30 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_vars_env_comm m te :
-    SSAVS.Equal (SSAFull.vars_env (ssa_typenv m te))
-                (ssa_vars m (DSLFull.vars_env te)).
+    SSAVS.Equal (SSALite.vars_env (ssa_typenv m te))
+                (ssa_vars m (DSLLite.vars_env te)).
   Proof.
     move=> x.
     split.
     - move=> Hin.
-      move/SSAFull.VSLemmas.memP: Hin => Hmem.
-      apply/SSAFull.VSLemmas.memP.
-      rewrite SSAFull.mem_vars_env in Hmem.
+      move/SSALite.VSLemmas.memP: Hin => Hmem.
+      apply/SSALite.VSLemmas.memP.
+      rewrite SSALite.mem_vars_env in Hmem.
       move: (ssa_typenv_exist Hmem) => [v] Hsv.
       rewrite -Hsv.
       rewrite ssa_vars_mem1.
       rewrite -Hsv in Hmem.
       rewrite -ssa_typenv_mem in Hmem.
-      rewrite DSLFull.mem_vars_env.
+      rewrite DSLLite.mem_vars_env.
       exact: Hmem.
     - move=> Hin.
-      move/SSAFull.VSLemmas.memP: Hin => Hmem.
-      apply/SSAFull.VSLemmas.memP.
-      rewrite SSAFull.mem_vars_env.
+      move/SSALite.VSLemmas.memP: Hin => Hmem.
+      apply/SSALite.VSLemmas.memP.
+      rewrite SSALite.mem_vars_env.
       move: (ssa_vars_mem2 Hmem) => [v [Hsv Hmem2]].
       rewrite Hsv.
       rewrite -ssa_typenv_mem.
-      rewrite DSLFull.mem_vars_env in Hmem2.
+      rewrite DSLLite.mem_vars_env in Hmem2.
       exact: Hmem2.
   Qed.
 
@@ -1366,14 +1364,14 @@ Section MakeSSA.
     move=> m.
     have Heq: (TE.fold (add_to_ste m) te (SSATE.empty typ)) = (SSATE.empty typ).
     {
-      apply (DSLFull.TEKS.MLemmas.OP.P.fold_Empty _ (add_to_ste m) (SSATE.empty typ) Hempty).
+      apply (DSLLite.TEKS.MLemmas.OP.P.fold_Empty _ (add_to_ste m) (SSATE.empty typ) Hempty).
     }
     rewrite Heq.
-    move: (DSLFull.TEKS.MLemmas.Empty_mem x Hempty) => Hnm.
+    move: (DSLLite.TEKS.MLemmas.Empty_mem x Hempty) => Hnm.
     have Hsnmem: (~~ SSATE.mem (ssa_var m x) (SSATE.empty typ)) by rewrite SSATE.Lemmas.empty_a.
-    move/DSLFull.TELemmas.memP: Hnm => HnIn.
-    move: (DSLFull.TEKS.MLemmas.OP.P.fold_add
-             (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+    move/DSLLite.TELemmas.memP: Hnm => HnIn.
+    move: (DSLLite.TEKS.MLemmas.OP.P.fold_add
+             (SSALite.TEKS.MLemmas.F.Equal_ST typ)
              (add_to_set_proper (upd_index x m))
              (add_to_set_transpose_neqkey (upd_index x m))
              ty (SSATE.empty typ)
@@ -1381,7 +1379,7 @@ Section MakeSSA.
     rewrite -> Heq2.
     have Heq3: (TE.fold (add_to_ste (upd_index x m)) te (SSATE.empty typ)) = (SSATE.empty typ).
     {
-      apply (DSLFull.TEKS.MLemmas.OP.P.fold_Empty _ (add_to_ste (upd_index x m)) (SSATE.empty typ) Hempty).
+      apply (DSLLite.TEKS.MLemmas.OP.P.fold_Empty _ (add_to_ste (upd_index x m)) (SSATE.empty typ) Hempty).
     }
     rewrite Heq3.
     reflexivity.
@@ -1405,24 +1403,24 @@ Section MakeSSA.
                 (TE.fold (add_to_ste m) te (SSATE.empty typ)).
   Proof.
     move: te.
-    apply DSLFull.TEKS.MLemmas.OP.P.map_induction_bis.
+    apply DSLLite.TEKS.MLemmas.OP.P.map_induction_bis.
     - move=> t te' Heq.
-      move: (DSLFull.TEKS.MLemmas.F.Equal_sym Heq) => {Heq} Heq.
+      move: (DSLLite.TEKS.MLemmas.F.Equal_sym Heq) => {Heq} Heq.
       move=> H.
       case: H => H.
       + left.
-        eapply DSLFull.TELemmas.In_m.
+        eapply DSLLite.TELemmas.In_m.
         exact: eqxx.
         exact: Heq.
         exact: H.
       + right.
-        rewrite (DSLFull.TEKS.MLemmas.fold_Equal
-                   (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+        rewrite (DSLLite.TEKS.MLemmas.fold_Equal
+                   (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                    (SSATE.empty typ)
                    (add_to_set_proper (upd_index x m))
                    Heq).
-        rewrite (DSLFull.TEKS.MLemmas.fold_Equal
-                   (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+        rewrite (DSLLite.TEKS.MLemmas.fold_Equal
+                   (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                    (SSATE.empty typ)
                    (add_to_set_proper m)
                    Heq).
@@ -1433,21 +1431,21 @@ Section MakeSSA.
       move=> HnIny IH.
       elim: IH => H.
       + left.
-        rewrite DSLFull.TELemmas.add_in_iff.
+        rewrite DSLLite.TELemmas.add_in_iff.
         right. done.
       + case Hxy: (x == y).
         * left.
-          apply /DSLFull.TEKS.MLemmas.memP.
-          exact: (DSLFull.TEKS.MLemmas.mem_add_eq Hxy).
+          apply /DSLLite.TEKS.MLemmas.memP.
+          exact: (DSLLite.TEKS.MLemmas.mem_add_eq Hxy).
         * right.
-          rewrite (DSLFull.TEKS.MLemmas.OP.P.fold_add
-                     (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+          rewrite (DSLLite.TEKS.MLemmas.OP.P.fold_add
+                     (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                      (add_to_set_proper (upd_index x m))
                      (add_to_set_transpose_neqkey (upd_index x m))
                      yty (SSATE.empty typ)
                      HnIny).
-          rewrite (DSLFull.TEKS.MLemmas.OP.P.fold_add
-                     (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+          rewrite (DSLLite.TEKS.MLemmas.OP.P.fold_add
+                     (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                      (add_to_set_proper m)
                      (add_to_set_transpose_neqkey m)
                      yty (SSATE.empty typ)
@@ -1467,8 +1465,8 @@ Section MakeSSA.
     move=> HnIn.
     move: (SSATE_add_not_in_sub2 m x te) => Hsub.
     elim: Hsub => H.
-    - move /DSLFull.TEKS.MLemmas.memP: HnIn => HnIn.
-      move /DSLFull.TEKS.MLemmas.memP: H => H.
+    - move /DSLLite.TEKS.MLemmas.memP: HnIn => HnIn.
+      move /DSLLite.TEKS.MLemmas.memP: H => H.
       rewrite H in HnIn.
       discriminate.
     - exact: H.
@@ -1476,7 +1474,7 @@ Section MakeSSA.
 
   Lemma ssa_typenv_add_submap_sub1 m x xty yty te:
     ~ TE.In x te ->
-    SSAFull.TELemmas.submap
+    SSALite.TELemmas.submap
       (add_to_ste (upd_index x m) x xty (TE.fold (add_to_ste m) te (SSATE.empty typ)))
       (add_to_ste (upd_index x m) x xty
                   (add_to_ste m x yty (TE.fold (add_to_ste m) te (SSATE.empty typ)))).
@@ -1487,29 +1485,29 @@ Section MakeSSA.
     rewrite ssa_var_upd_eq.
     rewrite get_upd_index_eq.
     case Heq: ((x, get_index x m + 1) == z).
-    - rewrite (SSAFull.TELemmas.add_eq_o _ _ Heq).
+    - rewrite (SSALite.TELemmas.add_eq_o _ _ Heq).
       move=> H.
-      rewrite (SSAFull.TELemmas.add_eq_o _ _ Heq).
+      rewrite (SSALite.TELemmas.add_eq_o _ _ Heq).
       exact: H.
     - move/negP: Heq => Hneq.
-      rewrite (SSAFull.TELemmas.add_neq_o _ _ Hneq).
+      rewrite (SSALite.TELemmas.add_neq_o _ _ Hneq).
       move=> H.
-      rewrite (SSAFull.TELemmas.add_neq_o _ _ Hneq).
+      rewrite (SSALite.TELemmas.add_neq_o _ _ Hneq).
       rewrite /ssa_var.
       move: (ssa_typenv_mem m x te) => Hmem.
       rewrite -[(TE.fold (fun (k : var) (v : typ) => [eta SSATE.add (ssa_var m k) v]) te
                          (SSATE.empty typ))]/(ssa_typenv m te) in H.
-      move/DSLFull.TEKS.MLemmas.memP: HnIn => HnIn.
+      move/DSLLite.TEKS.MLemmas.memP: HnIn => HnIn.
       rewrite Hmem in HnIn.
       case Heq: ((x, get_index x m) == z).
-      + rewrite (SSAFull.TELemmas.add_eq_o _ _ Heq).
+      + rewrite (SSALite.TELemmas.add_eq_o _ _ Heq).
         move/eqP: Heq => Heq.
         rewrite -[(x, get_index x m)]/(ssa_var m x) in Heq.
         rewrite -Heq in H.
-        rewrite (SSAFull.TELemmas.not_mem_find_none HnIn) in H.
+        rewrite (SSALite.TELemmas.not_mem_find_none HnIn) in H.
         discriminate.
       + move/negP: Heq => Hneq2.
-        rewrite (SSAFull.TELemmas.add_neq_o _ _ Hneq2).
+        rewrite (SSALite.TELemmas.add_neq_o _ _ Hneq2).
         exact: H.
   Qed.
 
@@ -1521,22 +1519,22 @@ Section MakeSSA.
     move=> Hneq.
     move=> z.
     case Heq: (x == z).
-    - rewrite (DSLFull.TELemmas.add_eq_o _ _ Heq).
+    - rewrite (DSLLite.TELemmas.add_eq_o _ _ Heq).
       have Hneqyz: (y != z) by rewrite -(eqP Heq) eq_sym.
       move/negP: Hneqyz => Hneqyz.
-      rewrite (DSLFull.TELemmas.add_neq_o _ _ Hneqyz).
-      rewrite (DSLFull.TELemmas.add_eq_o _ _ Heq).
+      rewrite (DSLLite.TELemmas.add_neq_o _ _ Hneqyz).
+      rewrite (DSLLite.TELemmas.add_eq_o _ _ Heq).
       reflexivity.
     - move/negP: Heq => Hneqxz.
-      rewrite (DSLFull.TELemmas.add_neq_o _ _ Hneqxz).
+      rewrite (DSLLite.TELemmas.add_neq_o _ _ Hneqxz).
       case Heqyz: (y == z).
-      + rewrite (DSLFull.TELemmas.add_eq_o _ _ Heqyz).
-        rewrite (DSLFull.TELemmas.add_eq_o _ _ Heqyz).
+      + rewrite (DSLLite.TELemmas.add_eq_o _ _ Heqyz).
+        rewrite (DSLLite.TELemmas.add_eq_o _ _ Heqyz).
         reflexivity.
       + move/negP: Heqyz => Hneqyz.
-        rewrite (DSLFull.TELemmas.add_neq_o _ _ Hneqyz).
-        rewrite (DSLFull.TELemmas.add_neq_o _ _ Hneqyz).
-        rewrite (DSLFull.TELemmas.add_neq_o _ _ Hneqxz).
+        rewrite (DSLLite.TELemmas.add_neq_o _ _ Hneqyz).
+        rewrite (DSLLite.TELemmas.add_neq_o _ _ Hneqyz).
+        rewrite (DSLLite.TELemmas.add_neq_o _ _ Hneqxz).
         reflexivity.
   Qed.
 
@@ -1552,7 +1550,7 @@ Section MakeSSA.
     rewrite /add_to_ste.
     move=> z.
     case Heq: ((ssa_var (upd_index x m) x) == z).
-    - rewrite (SSAFull.TELemmas.add_eq_o _ _ Heq).
+    - rewrite (SSALite.TELemmas.add_eq_o _ _ Heq).
       have Hneqyz: ((ssa_var (upd_index x m) y) != z).
       {
         rewrite -(eqP Heq).
@@ -1560,32 +1558,32 @@ Section MakeSSA.
         exact: (pair_neq1 _ _ Hneq).
       }
       move/negP: Hneqyz => Hneqyz.
-      rewrite (SSAFull.TELemmas.add_neq_o _ _ Hneqyz).
-      rewrite (SSAFull.TELemmas.add_eq_o _ _ Heq).
+      rewrite (SSALite.TELemmas.add_neq_o _ _ Hneqyz).
+      rewrite (SSALite.TELemmas.add_eq_o _ _ Heq).
       reflexivity.
     - move/negP: Heq => Hneqxz.
-      rewrite (SSAFull.TELemmas.add_neq_o _ _ Hneqxz).
+      rewrite (SSALite.TELemmas.add_neq_o _ _ Hneqxz).
       case Heqyz: ((ssa_var m y) == z).
-      + rewrite (SSAFull.TELemmas.add_eq_o _ _ Heqyz).
+      + rewrite (SSALite.TELemmas.add_eq_o _ _ Heqyz).
         rewrite eq_sym in Hneq.
         rewrite (ssa_var_upd_neq _ Hneq).
-        rewrite (SSAFull.TELemmas.add_eq_o _ _ Heqyz).
+        rewrite (SSALite.TELemmas.add_eq_o _ _ Heqyz).
         reflexivity.
       + move/negP: Heqyz => Hneqyz.
-        rewrite (SSAFull.TELemmas.add_neq_o _ _ Hneqyz).
+        rewrite (SSALite.TELemmas.add_neq_o _ _ Hneqyz).
         rewrite eq_sym in Hneq.
         rewrite (ssa_var_upd_neq _ Hneq).
-        rewrite (SSAFull.TELemmas.add_neq_o _ _ Hneqyz).
-        rewrite (SSAFull.TELemmas.add_neq_o _ _ Hneqxz).
+        rewrite (SSALite.TELemmas.add_neq_o _ _ Hneqyz).
+        rewrite (SSALite.TELemmas.add_neq_o _ _ Hneqxz).
         reflexivity.
   Qed.
 
   Lemma ssa_typenv_add_submap m te x ty:
-    SSAFull.TELemmas.submap (ssa_typenv (upd_index x m) (TE.add x ty te))
+    SSALite.TELemmas.submap (ssa_typenv (upd_index x m) (TE.add x ty te))
                         (SSATE.add (ssa_var (upd_index x m) x) ty (ssa_typenv m te)).
   Proof.
     move: te.
-    apply DSLFull.TEKS.MLemmas.OP.P.map_induction.
+    apply DSLLite.TEKS.MLemmas.OP.P.map_induction.
     - move=> te Hempty.
       move=> y yty.
       rewrite (ssa_typenv_add_empty m x ty Hempty).
@@ -1593,26 +1591,26 @@ Section MakeSSA.
     - move=> te te' IH y yty HnIn HAdd.
       move=> z zty.
       rewrite /ssa_typenv.
-      move: (DSLFull.TEKS.MLemmas.OP.P.fold_add
-               (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+      move: (DSLLite.TEKS.MLemmas.OP.P.fold_add
+               (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                (add_to_set_proper m)
                (add_to_set_transpose_neqkey m)
                yty (SSATE.empty typ)
                HnIn) => Heq_add_m.
-      move: (DSLFull.TEKS.MLemmas.OP.P.fold_add
-               (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+      move: (DSLLite.TEKS.MLemmas.OP.P.fold_add
+               (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                (add_to_set_proper (upd_index x m))
                (add_to_set_transpose_neqkey (upd_index x m))
                yty (SSATE.empty typ)
                HnIn) => Heq_add_m'.
-      move: (DSLFull.TEKS.MLemmas.OP.P.fold_Add
-               (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+      move: (DSLLite.TEKS.MLemmas.OP.P.fold_Add
+               (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                (add_to_set_proper m)
                (add_to_set_transpose_neqkey m)
                (SSATE.empty typ)
                HnIn HAdd) => Heq_Add_m.
-      move: (DSLFull.TEKS.MLemmas.OP.P.fold_Add
-               (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+      move: (DSLLite.TEKS.MLemmas.OP.P.fold_Add
+               (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                (add_to_set_proper (upd_index x m))
                (add_to_set_transpose_neqkey (upd_index x m))
                (SSATE.empty typ)
@@ -1620,8 +1618,8 @@ Section MakeSSA.
       case Hyx: (x == y).
     - move: HnIn => HnInx.
       rewrite -(eqP Hyx) in HnInx.
-      move: (DSLFull.TEKS.MLemmas.OP.P.fold_add
-               (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+      move: (DSLLite.TEKS.MLemmas.OP.P.fold_add
+               (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                (add_to_set_proper (upd_index x m))
                (add_to_set_transpose_neqkey (upd_index x m))
                ty (SSATE.empty typ)
@@ -1633,18 +1631,18 @@ Section MakeSSA.
         rewrite -(eqP Hyx).
         move=> a.
         case Hax: (a == x).
-        + by rewrite !(DSLFull.TELemmas.find_add_eq Hax).
+        + by rewrite !(DSLLite.TELemmas.find_add_eq Hax).
         + move/negP: Hax => Hax.
-          rewrite !(DSLFull.TELemmas.find_add_neq Hax).
+          rewrite !(DSLLite.TELemmas.find_add_neq Hax).
           reflexivity.
       }
-      rewrite (DSLFull.TEKS.MLemmas.fold_Equal
-                 (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+      rewrite (DSLLite.TEKS.MLemmas.fold_Equal
+                 (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                  (SSATE.empty typ)
                  (add_to_set_proper (upd_index x m))
                  Hte'2).
-      rewrite (DSLFull.TEKS.MLemmas.fold_Equal
-                 (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+      rewrite (DSLLite.TEKS.MLemmas.fold_Equal
+                 (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                  (SSATE.empty typ)
                  (add_to_set_proper m)
                  Hte').
@@ -1657,23 +1655,23 @@ Section MakeSSA.
     - rewrite Heq_Add_m.
       have Hte': (TE.Equal te' (TE.add y yty te)) by exact: HAdd.
       have Hte'2: (TE.Equal (TE.add x ty te') (TE.add x ty (TE.add y yty te))) by rewrite Hte'.
-      rewrite (DSLFull.TEKS.MLemmas.fold_Equal
-                 (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+      rewrite (DSLLite.TEKS.MLemmas.fold_Equal
+                 (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                  (SSATE.empty typ)
                  (add_to_set_proper (upd_index x m))
                  Hte'2).
       move/negP/idP: Hyx => Hyx.
       move: (TE_add_neq_swap te ty yty Hyx) => Hswap.
-      rewrite (DSLFull.TEKS.MLemmas.fold_Equal
-                 (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+      rewrite (DSLLite.TEKS.MLemmas.fold_Equal
+                 (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                  (SSATE.empty typ)
                  (add_to_set_proper (upd_index x m))
                  Hswap).
       move: (HnIn) => HnIn2.
       move/negP: Hyx => Hyx.
-      rewrite <- (DSLFull.TELemmas.add_neq_in_iff te ty Hyx) in HnIn2.
-      move: (DSLFull.TEKS.MLemmas.OP.P.fold_add
-               (SSAFull.TEKS.MLemmas.F.Equal_ST typ)
+      rewrite <- (DSLLite.TELemmas.add_neq_in_iff te ty Hyx) in HnIn2.
+      move: (DSLLite.TEKS.MLemmas.OP.P.fold_add
+               (SSALite.TEKS.MLemmas.F.Equal_ST typ)
                (add_to_set_proper (upd_index x m))
                (add_to_set_transpose_neqkey (upd_index x m))
                yty (SSATE.empty typ)
@@ -1683,15 +1681,15 @@ Section MakeSSA.
       rewrite -[SSATE.add (ssa_var (upd_index x m) x) ty]/(add_to_ste (upd_index x m) x ty).
       move/negP: Hyx => Hyx.
       move: z zty.
-      apply: (@SSAFull.TELemmas.submap_trans _ (add_to_ste (upd_index x m) y yty
+      apply: (@SSALite.TELemmas.submap_trans _ (add_to_ste (upd_index x m) y yty
                                                        ((SSATE.add (ssa_var (upd_index x m) x) ty (TE.fold (add_to_ste m) te (SSATE.empty typ)))))).
       + move=> z zty.
         rewrite /add_to_ste.
         case Htmp: ((ssa_var (upd_index x m) y) == z).
-        * rewrite 2!(SSAFull.TELemmas.add_eq_o _ _ Htmp).
+        * rewrite 2!(SSALite.TELemmas.add_eq_o _ _ Htmp).
           done.
         * move/negP: Htmp => Htmp.
-          rewrite 2!(SSAFull.TELemmas.add_neq_o _ _ Htmp).
+          rewrite 2!(SSALite.TELemmas.add_neq_o _ _ Htmp).
           exact: IH.
       + move=> z zty.
         rewrite (add_to_ste_neq_swap m _ ty yty Hyx).
@@ -1699,19 +1697,19 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_typenv_add2_submap m te x xty y yty:
-    SSAFull.TELemmas.submap (ssa_typenv (upd_index y (upd_index x m)) (TE.add y yty (TE.add x xty te)))
+    SSALite.TELemmas.submap (ssa_typenv (upd_index y (upd_index x m)) (TE.add y yty (TE.add x xty te)))
                         (SSATE.add (ssa_var (upd_index y (upd_index x m)) y) yty
                                    (SSATE.add (ssa_var (upd_index x m) x) xty (ssa_typenv m te))).
   Proof.
     move: (@ssa_typenv_add_submap (upd_index x m) (TE.add x xty te) y yty) => Hsub.
-    eapply SSAFull.TELemmas.submap_trans.
+    eapply SSALite.TELemmas.submap_trans.
     - exact: Hsub.
-    - apply: SSAFull.TELemmas.submap_add. exact: ssa_typenv_add_submap.
+    - apply: SSALite.TELemmas.submap_add. exact: ssa_typenv_add_submap.
   Qed.
 
   Lemma ssa_atom_atyp m a te:
-    DSLFull.atyp a te =
-    SSAFull.atyp (ssa_atom m a) (ssa_typenv m te).
+    DSLLite.atyp a te =
+    SSALite.atyp (ssa_atom m a) (ssa_typenv m te).
   Proof.
     elim: a m te; intros; rewrite /=.
     - exact: ssa_typenv_preserve.
@@ -1719,15 +1717,15 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_atom_asize m a E :
-    DSLFull.asize a E = SSAFull.asize (ssa_atom m a) (ssa_typenv m E).
+    DSLLite.asize a E = SSALite.asize (ssa_atom m a) (ssa_typenv m E).
   Proof.
-    rewrite /DSLFull.asize /SSAFull.asize. rewrite -ssa_atom_atyp. reflexivity.
+    rewrite /DSLLite.asize /SSALite.asize. rewrite -ssa_atom_atyp. reflexivity.
   Qed.
 
   Lemma ssa_instr_succ_typenv_submap m1 m2 i si te:
     ssa_instr m1 i = (m2, si) ->
-    SSAFull.TELemmas.submap (ssa_typenv m2 (DSLFull.instr_succ_typenv i te))
-                        (SSAFull.instr_succ_typenv si (ssa_typenv m1 te)).
+    SSALite.TELemmas.submap (ssa_typenv m2 (DSLLite.instr_succ_typenv i te))
+                        (SSALite.instr_succ_typenv si (ssa_typenv m1 te)).
   Proof.
     elim: i m1 m2 si te => /=; rewrite /=; intros;
                              (let rec tac :=
@@ -1738,17 +1736,17 @@ Section MakeSSA.
                                     let H2 := fresh in
                                     move/andP: H => [H1 H2]; tac
                                   | |- is_true (_ && _) => apply/andP; split; tac
-                                  | |- context [SSAFull.atyp (ssa_atom ?m ?a) (ssa_typenv ?m ?te)]
+                                  | |- context [SSALite.atyp (ssa_atom ?m ?a) (ssa_typenv ?m ?te)]
                                     => rewrite -ssa_atom_atyp; tac
-                                  | |- SSAFull.TELemmas.submap (ssa_typenv (upd_index ?x ?m) (TE.add ?x ?ty ?te))
+                                  | |- SSALite.TELemmas.submap (ssa_typenv (upd_index ?x ?m) (TE.add ?x ?ty ?te))
                                                            ( SSATE.add (ssa_var (upd_index ?x ?m) ?x) ?ty (ssa_typenv ?m ?te) )
                                     => exact: ssa_typenv_add_submap
-                                  | |- SSAFull.TELemmas.submap (ssa_typenv (upd_index ?y (upd_index ?x ?m)) (TE.add ?y ?yty (TE.add ?x ?xty ?te)))
+                                  | |- SSALite.TELemmas.submap (ssa_typenv (upd_index ?y (upd_index ?x ?m)) (TE.add ?y ?yty (TE.add ?x ?xty ?te)))
                                                            ((SSATE.add (ssa_var (upd_index ?y (upd_index ?x ?m)) ?y) ?yty )
                                                               (SSATE.add (ssa_var (upd_index ?x ?m) ?x) ?xty (ssa_typenv ?m ?te)))
                                     => exact: ssa_typenv_add2_submap
-                                  | |- SSAFull.TELemmas.submap ?ste ?ste =>
-                                    exact: SSAFull.TELemmas.submap_refl
+                                  | |- SSALite.TELemmas.submap ?ste ?ste =>
+                                    exact: SSALite.TELemmas.submap_refl
                                   | |- is_true(true) => done
                                   | |- ?e => progress (auto)
                                   | |- ?e => idtac
@@ -1764,35 +1762,35 @@ Section MakeSSA.
 
   Lemma ssa_eval_eunop :
     forall (op : eunop) (v : Z),
-      SSAFull.eval_eunop op v = DSLFull.eval_eunop op v.
+      SSALite.eval_eunop op v = DSLLite.eval_eunop op v.
   Proof.
       by case.
   Qed.
 
   Lemma ssa_eval_runop :
     forall (op : runop)  (v : bits),
-      SSAFull.eval_runop op v = DSLFull.eval_runop op v.
+      SSALite.eval_runop op v = DSLLite.eval_runop op v.
   Proof.
       by case.
   Qed.
 
   Lemma ssa_eval_ebinop :
     forall (op : ebinop) (v1 v2 : Z),
-      SSAFull.eval_ebinop op v1 v2 = DSLFull.eval_ebinop op v1 v2.
+      SSALite.eval_ebinop op v1 v2 = DSLLite.eval_ebinop op v1 v2.
   Proof.
       by case.
   Qed.
 
   Lemma ssa_eval_rbinop :
     forall (op : rbinop) (v1 v2 : bits),
-      SSAFull.eval_rbinop op v1 v2 = DSLFull.eval_rbinop op v1 v2.
+      SSALite.eval_rbinop op v1 v2 = DSLLite.eval_rbinop op v1 v2.
   Proof.
       by case.
   Qed.
 
   Lemma ssa_eval_rcmpop :
     forall (op : rcmpop)  (v1 v2 : bits),
-      SSAFull.eval_rcmpop op v1 v2 = DSLFull.eval_rcmpop op v1 v2.
+      SSALite.eval_rcmpop op v1 v2 = DSLLite.eval_rcmpop op v1 v2.
   Proof.
       by case.
   Qed.
@@ -1800,15 +1798,15 @@ Section MakeSSA.
   Lemma ssa_acc2z m E SE s ss v :
     state_equiv m s ss ->
     typenv_equiv m E SE ->
-    SSAFull.acc2z SE (ssa_var m v) ss = DSLFull.acc2z E v s.
+    SSALite.acc2z SE (ssa_var m v) ss = DSLLite.acc2z E v s.
   Proof.
-    move=> Hs Ht. rewrite /DSLFull.acc2z /DSLFull.bv2z. rewrite (Hs v).
+    move=> Hs Ht. rewrite /DSLLite.acc2z /DSLLite.bv2z. rewrite (Hs v).
     rewrite (Ht v). reflexivity.
   Qed.
 
   Lemma ssa_eval_atom m s ss a :
     state_equiv m s ss ->
-    SSAFull.eval_atom (ssa_atom m a) ss = DSLFull.eval_atom a s.
+    SSALite.eval_atom (ssa_atom m a) ss = DSLLite.eval_atom a s.
   Proof.
     move=> Heq; elim: a => /=.
     - move=> v.
@@ -1817,10 +1815,10 @@ Section MakeSSA.
     - reflexivity.
   Qed.
 
-  Lemma ssa_eval_eexp m s ss te ste (e : DSLFull.eexp) :
+  Lemma ssa_eval_eexp m s ss te ste (e : DSLLite.eexp) :
     state_equiv m s ss ->
     typenv_equiv m te ste ->
-    SSAFull.eval_eexp (ssa_eexp m e) ste ss = DSLFull.eval_eexp e te s.
+    SSALite.eval_eexp (ssa_eexp m e) ste ss = DSLLite.eval_eexp e te s.
   Proof.
     move=> Hseq Hteq; elim: e => /=.
     - move=> v. exact: (ssa_acc2z v Hseq Hteq).
@@ -1830,18 +1828,18 @@ Section MakeSSA.
     - move=> e IH n. rewrite IH. reflexivity.
   Qed.
 
-  Lemma ssa_eval_eexps m s ss te ste (es : seq DSLFull.eexp) :
+  Lemma ssa_eval_eexps m s ss te ste (es : seq DSLLite.eexp) :
     state_equiv m s ss ->
     typenv_equiv m te ste ->
-    SSAFull.eval_eexps (ssa_eexps m es) ste ss = DSLFull.eval_eexps es te s.
+    SSALite.eval_eexps (ssa_eexps m es) ste ss = DSLLite.eval_eexps es te s.
   Proof.
     elim: es => [| e es IH] Hseq Hteq //=. rewrite (ssa_eval_eexp _ Hseq Hteq).
     rewrite (IH Hseq Hteq). reflexivity.
   Qed.
 
-  Lemma ssa_eval_rexp m s ss (e : DSLFull.rexp) :
+  Lemma ssa_eval_rexp m s ss (e : DSLLite.rexp) :
     state_equiv m s ss ->
-    SSAFull.eval_rexp (ssa_rexp m e) ss = DSLFull.eval_rexp e s.
+    SSALite.eval_rexp (ssa_rexp m e) ss = DSLLite.eval_rexp e s.
   Proof.
     move=> Heq; elim: e => /=.
     - move=> v. exact: (Logic.eq_sym (Heq v)).
@@ -1855,7 +1853,7 @@ Section MakeSSA.
   Lemma ssa_eval_ebexp m s ss te ste e :
     state_equiv m s ss ->
     typenv_equiv m te ste ->
-    SSAFull.eval_ebexp (ssa_ebexp m e) ste ss <-> DSLFull.eval_ebexp e te s.
+    SSALite.eval_ebexp (ssa_ebexp m e) ste ss <-> DSLLite.eval_ebexp e te s.
   Proof.
     move=> Hseq Hteq; elim: e => /=.
     - done.
@@ -1867,7 +1865,7 @@ Section MakeSSA.
   Lemma ssa_eval_ebexp1 m s ss te ste e :
     state_equiv m s ss ->
     typenv_equiv m te ste ->
-    SSAFull.eval_ebexp (ssa_ebexp m e) ste ss -> DSLFull.eval_ebexp e te s.
+    SSALite.eval_ebexp (ssa_ebexp m e) ste ss -> DSLLite.eval_ebexp e te s.
   Proof.
     move=> Hseq Hteq He.
     move: (ssa_eval_ebexp e Hseq Hteq) => [H1 H2].
@@ -1877,7 +1875,7 @@ Section MakeSSA.
   Lemma ssa_eval_ebexp2 m s ss te ste e :
     state_equiv m s ss ->
     typenv_equiv m te ste ->
-    DSLFull.eval_ebexp e te s -> SSAFull.eval_ebexp (ssa_ebexp m e) ste ss.
+    DSLLite.eval_ebexp e te s -> SSALite.eval_ebexp (ssa_ebexp m e) ste ss.
   Proof.
     move=> Hseq Hteq He.
     move: (ssa_eval_ebexp e Hseq Hteq) => [H1 H2].
@@ -1886,7 +1884,7 @@ Section MakeSSA.
 
   Lemma ssa_eval_rbexp m s ss e :
     state_equiv m s ss ->
-    SSAFull.eval_rbexp (ssa_rbexp m e) ss <-> DSLFull.eval_rbexp e s.
+    SSALite.eval_rbexp (ssa_rbexp m e) ss <-> DSLLite.eval_rbexp e s.
   Proof.
     move=> Heq; elim: e => /=.
     - done.
@@ -1899,7 +1897,7 @@ Section MakeSSA.
 
   Lemma ssa_eval_rbexp1 m s ss e :
     state_equiv m s ss ->
-    SSAFull.eval_rbexp (ssa_rbexp m e) ss -> DSLFull.eval_rbexp e s.
+    SSALite.eval_rbexp (ssa_rbexp m e) ss -> DSLLite.eval_rbexp e s.
   Proof.
     move=> Heq He.
     move: (ssa_eval_rbexp e Heq) => [H1 H2].
@@ -1908,7 +1906,7 @@ Section MakeSSA.
 
   Lemma ssa_eval_rbexp2 m s ss e :
     state_equiv m s ss ->
-    DSLFull.eval_rbexp e s -> SSAFull.eval_rbexp (ssa_rbexp m e) ss.
+    DSLLite.eval_rbexp e s -> SSALite.eval_rbexp (ssa_rbexp m e) ss.
   Proof.
     move=> Heq He.
     move: (ssa_eval_rbexp e Heq) => [H1 H2].
@@ -1918,7 +1916,7 @@ Section MakeSSA.
   Lemma ssa_eval_bexp m s ss te ste e :
     state_equiv m s ss ->
     typenv_equiv m te ste ->
-    SSAFull.eval_bexp (ssa_bexp m e) ste ss <-> DSLFull.eval_bexp e te s.
+    SSALite.eval_bexp (ssa_bexp m e) ste ss <-> DSLLite.eval_bexp e te s.
   Proof.
     move=> Hseq Hteq. split; move=> [H1 H2].
     - exact: (conj (ssa_eval_ebexp1 Hseq Hteq H1) (ssa_eval_rbexp1 Hseq H2)).
@@ -1928,7 +1926,7 @@ Section MakeSSA.
   Lemma ssa_eval_bexp1 m s ss te ste e :
     state_equiv m s ss ->
     typenv_equiv m te ste ->
-    SSAFull.eval_bexp (ssa_bexp m e) ste ss -> DSLFull.eval_bexp e te s.
+    SSALite.eval_bexp (ssa_bexp m e) ste ss -> DSLLite.eval_bexp e te s.
   Proof.
     move=> Hseq Hteq He.
     move: (ssa_eval_bexp e Hseq Hteq) => [H1 H2].
@@ -1938,7 +1936,7 @@ Section MakeSSA.
   Lemma ssa_eval_bexp2 m s ss te ste e :
     state_equiv m s ss ->
     typenv_equiv m te ste ->
-    DSLFull.eval_bexp e te s -> SSAFull.eval_bexp (ssa_bexp m e) ste ss.
+    DSLLite.eval_bexp e te s -> SSALite.eval_bexp (ssa_bexp m e) ste ss.
   Proof.
     move=> Hseq Hteq He.
     move: (ssa_eval_bexp e Hseq Hteq) => [H1 H2].
@@ -2063,7 +2061,7 @@ Section MakeSSA.
 
   Lemma ssa_atyp m a te ste:
     typenv_equiv m te ste ->
-    SSAFull.atyp (ssa_atom m a) ste = DSLFull.atyp a te.
+    SSALite.atyp (ssa_atom m a) ste = DSLLite.atyp a te.
   Proof.
     elim: a m te ste => /=; intros.
     - by rewrite H.
@@ -2073,21 +2071,20 @@ Section MakeSSA.
   Ltac ssa_eval_instr_succ_tac :=
     match goal with
     | H: ssa_instr _ _ = (?p1, ?p2) |- _ =>
-        case: H => <- <-
-    | H : (_, _) = (_, _) |- _ => case: H => ? ?; subst
+      case: H => <- <-
     | |- _ /\ _ => split
     | |- exists ss2, _ => eexists
     | H: ?e |- ?e => exact: H
-    | |- context [SSAFull.instr_succ_typenv _ _] => rewrite /=
-    | Heq: state_equiv ?m ?s ?ss |- context [SSAFull.eval_atom (ssa_atom ?m ?a) ?ss]
+    | |- context [SSALite.instr_succ_typenv _ _] => rewrite /=
+    | Heq: state_equiv ?m ?s ?ss |- context [SSALite.eval_atom (ssa_atom ?m ?a) ?ss]
       => rewrite (ssa_eval_atom a Heq)
-    | Heq: typenv_equiv ?m1 ?te1 ?ste1 |- context[SSAFull.atyp (ssa_atom ?m1 ?a) ?ste1]
+    | Heq: typenv_equiv ?m1 ?te1 ?ste1 |- context[SSALite.atyp (ssa_atom ?m1 ?a) ?ste1]
       => rewrite (ssa_atyp a Heq)
-    | |- SSAFull.eval_instr _ _ _ _ => econstructor
+    | |- SSALite.eval_instr _ _ _ _ => econstructor
     | |- SSAStore.Upd ?x ?v ?s ?s => exact: SSAStore.Upd_upd
     | |- SSAStore.Upd ?x ?v ?s1 ?s2 => exact: SSAStore.Upd_upd
     | |- SSAStore.Upd2 ?x1 ?v1 ?x2 ?v2 ?s1 ?s2 => exact: SSAStore.Upd2_upd2
-    | H: DSLFull.instr_succ_typenv _ ?te1 = ?te2 |- context [?te2]
+    | H: DSLLite.instr_succ_typenv _ ?te1 = ?te2 |- context [?te2]
       => rewrite /= in H; erewrite <- H; clear H
     | |- state_equiv _ _ (SSAStore.upd ?x ?v ?s) => eapply state_equiv_Upd
     | |- state_equiv _ _ (SSAStore.upd2 ?x1 ?v1 ?x2 ?v2 ?s) => eapply state_equiv_Upd2
@@ -2098,7 +2095,7 @@ Section MakeSSA.
     | H: typenv_equiv ?m1 ?te1 ?ste1
       |- typenv_equiv (upd_index ?t2 (upd_index ?t ?m1)) (TE.add ?t2 ?typ2 (TE.add ?t ?typ ?te1)) ?ste2
       => eapply typenv_equiv_add2
-    | H: DSLFull.eval_instr _ _ _ _ |- _ => inversion H; subst; clear H
+    | H: DSLLite.eval_instr _ _ _ _ |- _ => inversion H; subst; clear H
     | |- SSAStore.Equal ?ss1 _ => exact: SSAStore.Equal_refl
     | H1 : state_equiv ?m1 ?s1 ?ss1, H2 : Store.Equal ?s1 ?s2 |- state_equiv ?m1 ?s2 ?ss1 =>
         rewrite <- H2; exact: H1
@@ -2106,23 +2103,15 @@ Section MakeSSA.
     | |- ?e => fail "not match" e
     end.
 
-  Lemma ssa_instr_succ_typenv m1 m2 E SE i si :
-    ssa_instr m1 i = (m2, si) ->
-    typenv_equiv m1 E SE ->
-    typenv_equiv m2 (DSLFull.instr_succ_typenv i E) (SSAFull.instr_succ_typenv si SE).
-  Proof.
-    case: i => //=; intros; by repeat ssa_eval_instr_succ_tac.
-  Qed.
-
   Lemma ssa_eval_instr_succ m1 m2 s1 s2 te1 te2 ste1 ss1 i si:
     ssa_instr m1 i = (m2, si) ->
     state_equiv m1 s1 ss1 ->
     typenv_equiv m1 te1 ste1 ->
-    DSLFull.eval_instr te1 i (OK s1) (OK s2) ->
-    DSLFull.instr_succ_typenv i te1 = te2 ->
+    DSLLite.eval_instr te1 i s1 s2 ->
+    DSLLite.instr_succ_typenv i te1 = te2 ->
     exists ss2 ste2,
-      SSAFull.eval_instr ste1 si (OK ss1) (OK ss2) /\
-      SSAFull.instr_succ_typenv si ste1 = ste2 /\
+      SSALite.eval_instr ste1 si ss1 ss2 /\
+      SSALite.instr_succ_typenv si ste1 = ste2 /\
       state_equiv m2 s2 ss2 /\
       typenv_equiv m2 te2 ste2.
   Proof.
@@ -2138,7 +2127,7 @@ Section MakeSSA.
         by repeat ssa_eval_instr_succ_tac.
       + (* cmovF *)
         do 3 ssa_eval_instr_succ_tac.
-        * apply SSAFull.EIcmovF; by repeat ssa_eval_instr_succ_tac.
+        * apply SSALite.EIcmovF; by repeat ssa_eval_instr_succ_tac.
         * by repeat ssa_eval_instr_succ_tac.
     - by repeat ssa_eval_instr_succ_tac.
     - by repeat ssa_eval_instr_succ_tac.
@@ -2157,26 +2146,26 @@ Section MakeSSA.
     - ssa_eval_instr_succ_tac. rewrite /= in H3.
       inversion H2; subst; clear H2.
       + do 3 ssa_eval_instr_succ_tac.
-        * eapply SSAFull.EImullU; by repeat ssa_eval_instr_succ_tac.
+        * eapply SSALite.EImullU; by repeat ssa_eval_instr_succ_tac.
         * by repeat ssa_eval_instr_succ_tac.
       + do 3 ssa_eval_instr_succ_tac.
-        * eapply SSAFull.EImullS; by repeat ssa_eval_instr_succ_tac.
-        * by repeat ssa_eval_instr_succ_tac.
-    - ssa_eval_instr_succ_tac. rewrite /= in H3.
-      inversion H2; subst;clear H2.
-      + do 3 ssa_eval_instr_succ_tac.
-        * eapply SSAFull.EImuljU; by repeat ssa_eval_instr_succ_tac.
-        * by repeat ssa_eval_instr_succ_tac.
-      + do 3 ssa_eval_instr_succ_tac.
-        * eapply SSAFull.EImuljS; by repeat ssa_eval_instr_succ_tac.
+        * eapply SSALite.EImullS; by repeat ssa_eval_instr_succ_tac.
         * by repeat ssa_eval_instr_succ_tac.
     - ssa_eval_instr_succ_tac. rewrite /= in H3.
       inversion H2; subst;clear H2.
       + do 3 ssa_eval_instr_succ_tac.
-        * eapply SSAFull.EIsplitU; by repeat ssa_eval_instr_succ_tac.
+        * eapply SSALite.EImuljU; by repeat ssa_eval_instr_succ_tac.
         * by repeat ssa_eval_instr_succ_tac.
       + do 3 ssa_eval_instr_succ_tac.
-        * eapply SSAFull.EIsplitS; by repeat ssa_eval_instr_succ_tac.
+        * eapply SSALite.EImuljS; by repeat ssa_eval_instr_succ_tac.
+        * by repeat ssa_eval_instr_succ_tac.
+    - ssa_eval_instr_succ_tac. rewrite /= in H3.
+      inversion H2; subst;clear H2.
+      + do 3 ssa_eval_instr_succ_tac.
+        * eapply SSALite.EIsplitU; by repeat ssa_eval_instr_succ_tac.
+        * by repeat ssa_eval_instr_succ_tac.
+      + do 3 ssa_eval_instr_succ_tac.
+        * eapply SSALite.EIsplitS; by repeat ssa_eval_instr_succ_tac.
         * by repeat ssa_eval_instr_succ_tac.
     - by repeat ssa_eval_instr_succ_tac.
     - by repeat ssa_eval_instr_succ_tac.
@@ -2196,45 +2185,24 @@ Section MakeSSA.
       do 3 ssa_eval_instr_succ_tac.
       + repeat ssa_eval_instr_succ_tac. erewrite (ssa_eval_bexp); by repeat ssa_eval_instr_succ_tac.
       + by repeat ssa_eval_instr_succ_tac.
-    - ssa_eval_instr_succ_tac. inversion H2; subst; clear H2.
-      do 3 ssa_eval_instr_succ_tac.
-      + repeat ssa_eval_instr_succ_tac. erewrite (ssa_eval_bexp); by repeat ssa_eval_instr_succ_tac.
-      + by repeat ssa_eval_instr_succ_tac.
-    - ssa_eval_instr_succ_tac. inversion H2; subst; clear H2.
-      do 3 ssa_eval_instr_succ_tac.
-      + repeat ssa_eval_instr_succ_tac. erewrite (ssa_eval_bexp); by repeat ssa_eval_instr_succ_tac.
-      + by repeat ssa_eval_instr_succ_tac.
-  Qed.
-
-  Lemma ssa_program_succ_typenv m1 m2 E SE p sp :
-    ssa_program m1 p = (m2, sp) ->
-    typenv_equiv m1 E SE ->
-    typenv_equiv m2 (DSLFull.program_succ_typenv p E) (SSAFull.program_succ_typenv sp SE).
-  Proof.
-    elim: p m1 m2 E SE sp => [| i p IH] m1 m2 E SE sp //=.
-    - case=> ? ?; subst; simpl. by apply.
-    - case Hsi: (ssa_instr m1 i) => [sm1 si]. case Hsp: (ssa_program sm1 p) => [sm2 sp'].
-      case => ? ?; subst. move=> Heq. move: (ssa_instr_succ_typenv Hsi Heq) => Heq'.
-      exact: (IH _ _ _ _ _ Hsp Heq').
   Qed.
 
   Lemma ssa_eval_program_succ m1 m2 s1 s2 te1 te2 p sp ss1 ste1:
     ssa_program m1 p = (m2, sp) ->
     state_equiv m1 s1 ss1 ->
     typenv_equiv m1 te1 ste1 ->
-    DSLFull.eval_program te1 p (OK s1) (OK s2) ->
-    DSLFull.program_succ_typenv p te1 = te2 ->
+    DSLLite.eval_program te1 p s1 s2 ->
+    DSLLite.program_succ_typenv p te1 = te2 ->
     exists ss2 ste2,
-      SSAFull.eval_program ste1 sp (OK ss1) (OK ss2) /\
-      SSAFull.program_succ_typenv sp ste1 = ste2 /\
+      SSALite.eval_program ste1 sp ss1 ss2 /\
+      SSALite.program_succ_typenv sp ste1 = ste2 /\
       state_equiv m2 s2 ss2 /\
       typenv_equiv m2 te2 ste2.
   Proof.
     elim: p m1 m2 s1 s2 te1 te2 sp ss1 ste1 => [| hd tl IH].
     - move=> m1 m2 s1 s2 te1 te2 sp ss1 ste1 /=. case=> <- <-.
-      move=> Hse Hte Hep Hteq. rewrite /DSLFull.eval_program in Hep.
-      rewrite /= in Hep. inversion_clear Hep. simpl in H. subst.
-      exists ss1, ste1. split_andb_goal.
+      move=> Hse Hte Hep Hteq. rewrite /DSLLite.eval_program in Hep.
+      rewrite /= in Hep. inversion Hep; subst. exists ss1, ste1. split_andb_goal.
       + by constructor.
       + by constructor.
       + by rewrite <- H.
@@ -2248,68 +2216,20 @@ Section MakeSSA.
         case Hsi_hd: (ssa_instr m1 hd) => [sm1 sshd].
         case Hsp_tl: (ssa_program sm1 tl) => [sm2 sstl].
         move=> Hpair. case: Hpair => <- <- <-. move: Hpst.
-        move: (DSLFull.eval_program_cons_ok Hep) => [s3 [Hevi Hevp]].
-        move=> Hpst. rewrite /= in Hpst.
-        remember (DSLFull.instr_succ_typenv hd te1) as te3. symmetry in Heqte3.
-        move: (ssa_eval_instr_succ Hsi_hd Hseq Hteq Hevi Heqte3) => Htmp.
+        inversion Hep; subst. move=> Hpst. rewrite /= in Hpst.
+        remember (DSLLite.instr_succ_typenv hd te1) as te3. symmetry in Heqte3.
+        move: (ssa_eval_instr_succ Hsi_hd Hseq Hteq H1 Heqte3) => Htmp.
         destruct Htmp as [ss3 [ste3 Hwit]].
         inversion Hwit as [Hseval [Hsstyp [Hseq2 Hteq2]]].
-        move: (IH _ _ _ _ _ _ _ _ _ Hsp_tl Hseq2 Hteq2 Hevp Hpst) => HIH.
+        move: (IH _ _ _ _ _ _ _ _ _ Hsp_tl Hseq2 Hteq2 H4 Hpst) => HIH.
         destruct HIH as [ss2 [ste2 Hswit]].
         inversion Hswit as [Hsep [Hstyp [Hseq3 Hteq3]]].
-        exists ss2, ste2. split_andb_goal. eapply SSAFull.Econs.
+        exists ss2, ste2. split_andb_goal. eapply SSALite.Econs.
         * exact: Hseval.
         * by rewrite Hsstyp.
         * rewrite /=. by rewrite Hsstyp.
         * exact: Hseq3.
         * exact: Hteq3.
-  Qed.
-
-  Lemma ssa_eval_program_succ_err m1 m2 s1 te1 p sp ss1 ste1:
-    ssa_program m1 p = (m2, sp) ->
-    state_equiv m1 s1 ss1 ->
-    typenv_equiv m1 te1 ste1 ->
-    DSLFull.eval_program te1 p (OK s1) (ERR _) ->
-    SSAFull.eval_program ste1 sp (OK ss1) (ERR _) /\
-      typenv_equiv m2 (DSLFull.program_succ_typenv p te1) (SSAFull.program_succ_typenv sp ste1).
-  Proof.
-    elim: p m1 m2 s1 te1 sp ss1 ste1 => [| hd tl IH].
-    - move=> m1 m2 s1 te1 sp ss1 ste1 /=. move=> _ _ _ Hev.
-      inversion_clear Hev. simpl in H. by elim: H.
-    - move=> m1 m2 s1 te1 [| shd stl] ss1 ste1.
-      + move=> Hsp. rewrite /= in Hsp. move: Hsp.
-        case Hsi_hd: (ssa_instr m1 hd) => [sm1 shd].
-        case Hsp_tl: (ssa_program sm1 tl) => [sm2 stl].
-        by inversion 1.
-      + move=> Hsp Hseq Hteq Hep. inversion Hsp. move: H0.
-        case Hsi_hd: (ssa_instr m1 hd) => [sm1 sshd].
-        case Hsp_tl: (ssa_program sm1 tl) => [sm2 sstl].
-        move=> Hpair. case: Hpair => <- <- <-.
-        case: (DSLFull.eval_program_cons_ok_err Hep).
-        * move=> [s3 [Hevi Hevp]].
-          remember (DSLFull.instr_succ_typenv hd te1) as te3. symmetry in Heqte3.
-          move: (ssa_eval_instr_succ Hsi_hd Hseq Hteq Hevi Heqte3) => Htmp.
-          destruct Htmp as [ss3 [ste3 Hwit]].
-          inversion Hwit as [Hseval [Hsstyp [Hseq2 Hteq2]]].
-          move: (IH sm1 sm2 s3 te3 sstl ss3 ste3 Hsp_tl Hseq2 Hteq2 Hevp) => [Hsevp Hseqt].
-          split.
-          -- apply: (SSAFull.Econs Hseval). rewrite Hsstyp. exact: Hsevp.
-          -- simpl. apply: (ssa_program_succ_typenv Hsp_tl).
-             apply: (ssa_instr_succ_typenv Hsi_hd). assumption.
-        * move=> Hei. move: (DSLFull.eval_instr_ok_err Hei) => [e [Hi He]].
-          case: Hi => ?; subst.
-          -- simpl in Hsi_hd. case: Hsi_hd => ? ?; subst. simpl. split.
-             ++ apply: SSAFull.Econs.
-                ** apply: SSAFull.EIcutERR.
-                   move=> H; apply: He. exact: (ssa_eval_bexp1 Hseq Hteq H).
-                ** exact: SSAFull.eval_program_err_err.
-             ++ apply: (ssa_program_succ_typenv Hsp_tl). assumption.
-          -- simpl in Hsi_hd. case: Hsi_hd => ? ?; subst. simpl. split.
-             ++ apply: SSAFull.Econs.
-                ** apply: SSAFull.EIassertERR.
-                   move=> H; apply: He. exact: (ssa_eval_bexp1 Hseq Hteq H).
-                ** exact: SSAFull.eval_program_err_err.
-             ++ apply: (ssa_program_succ_typenv Hsp_tl). assumption.
   Qed.
 
   Ltac dessa_eval_instr_succ_tac :=
@@ -2319,16 +2239,16 @@ Section MakeSSA.
     | |- _ /\ _ => split
     | |- exists s2 , _ => eexists
     | H: ?e |- ?e => exact: H
-    | |- context [DSLFull.instr_succ_typenv _ _] => rewrite /=
-    | Heq: state_equiv ?m ?s ?ss |- context [DSLFull.eval_atom ?a ?s]
+    | |- context [DSLLite.instr_succ_typenv _ _] => rewrite /=
+    | Heq: state_equiv ?m ?s ?ss |- context [DSLLite.eval_atom ?a ?s]
       => rewrite -(ssa_eval_atom a Heq)
-    | Heq: typenv_equiv ?m1 ?te1 ?ste1 |- context[DSLFull.atyp ?a ?te1]
+    | Heq: typenv_equiv ?m1 ?te1 ?ste1 |- context[DSLLite.atyp ?a ?te1]
       => rewrite -(ssa_atyp a Heq)
-    | |- DSLFull.eval_instr _ _ _ _ => econstructor
+    | |- DSLLite.eval_instr _ _ _ _ => econstructor
     | |- Store.Upd ?x ?v ?s ?s => exact: Store.Upd_upd
     | |- Store.Upd ?x ?v ?s1 ?s2 => exact: Store.Upd_upd
     | |- Store.Upd2 ?x1 ?v1 ?x2 ?v2 ?s1 ?s2 => exact: Store.Upd2_upd2
-    | H: SSAFull.instr_succ_typenv _ ?ste1 = ?ste2 |- context [?ste2]
+    | H: SSALite.instr_succ_typenv _ ?ste1 = ?ste2 |- context [?ste2]
       => (rewrite /= in H); erewrite <- H; clear H
     | |- state_equiv _ (Store.upd ?x ?v ?s) _ => eapply state_equiv_Upd
     | |- state_equiv _ (Store.upd2 ?x1 ?v1 ?x2 ?v2 ?s) _ => eapply state_equiv_Upd2
@@ -2339,7 +2259,7 @@ Section MakeSSA.
     | H: typenv_equiv ?m1 ?te1 ?ste1
       |- typenv_equiv (upd_index ?t2 (upd_index ?t ?m1)) (TE.add ?t2 ?typ2 (TE.add ?t ?typ ?te1)) ?ste2
       => eapply typenv_equiv_add2
-    | H: SSAFull.eval_instr _ _ _ _ |- _ => inversion H; subst; clear H
+    | H: SSALite.eval_instr _ _ _ _ |- _ => inversion H; subst; clear H
     | |- ?e => progress (eauto)
     | |- ?e => fail "not match" e
     end.
@@ -2348,11 +2268,11 @@ Section MakeSSA.
     ssa_instr m1 i = (m2, si) ->
     state_equiv m1 s1 ss1 ->
     typenv_equiv m1 te1 ste1 ->
-    SSAFull.eval_instr ste1 si (OK ss1) (OK ss2) ->
-    SSAFull.instr_succ_typenv si ste1 = ste2 ->
+    SSALite.eval_instr ste1 si ss1 ss2 ->
+    SSALite.instr_succ_typenv si ste1 = ste2 ->
     exists s2 te2,
-      DSLFull.eval_instr te1 i (OK s1) (OK s2) /\
-      DSLFull.instr_succ_typenv i te1 = te2 /\
+      DSLLite.eval_instr te1 i s1 s2 /\
+      DSLLite.instr_succ_typenv i te1 = te2 /\
       state_equiv m2 s2 ss2 /\
       typenv_equiv m2 te2 ste2.
   Proof.
@@ -2360,18 +2280,18 @@ Section MakeSSA.
     - by repeat dessa_eval_instr_succ_tac.
     - by repeat dessa_eval_instr_succ_tac.
     - by repeat dessa_eval_instr_succ_tac.
-    - dessa_eval_instr_succ_tac. SSAFull.eval_instr_elim. exists (Store.upd t n s1).
+    - dessa_eval_instr_succ_tac. SSALite.eval_instr_elim. exists (Store.upd t n s1).
       by repeat dessa_eval_instr_succ_tac.
-    - dessa_eval_instr_succ_tac. SSAFull.eval_instr_elim.
+    - dessa_eval_instr_succ_tac. SSALite.eval_instr_elim.
       + (* cmovT *)
         by repeat dessa_eval_instr_succ_tac.
       + (* cmovF *)
         do 3 dessa_eval_instr_succ_tac.
-        + apply DSLFull.EIcmovF; by repeat dessa_eval_instr_succ_tac.
+        + apply DSLLite.EIcmovF; by repeat dessa_eval_instr_succ_tac.
         + by repeat dessa_eval_instr_succ_tac.
     - repeat dessa_eval_instr_succ_tac.
       + exact: Store.Equal_refl.
-      + by rewrite <- H4.
+      + by rewrite <- H.
     - by repeat dessa_eval_instr_succ_tac.
     - by repeat dessa_eval_instr_succ_tac.
     - by repeat dessa_eval_instr_succ_tac.
@@ -2385,20 +2305,20 @@ Section MakeSSA.
     - by repeat dessa_eval_instr_succ_tac.
     - by repeat dessa_eval_instr_succ_tac.
     - by repeat dessa_eval_instr_succ_tac.
-    - dessa_eval_instr_succ_tac. SSAFull.eval_instr_elim.
+    - dessa_eval_instr_succ_tac. SSALite.eval_instr_elim.
       + by repeat dessa_eval_instr_succ_tac.
       + do 3 dessa_eval_instr_succ_tac.
-        * eapply DSLFull.EImullS; by repeat dessa_eval_instr_succ_tac.
+        * eapply DSLLite.EImullS; by repeat dessa_eval_instr_succ_tac.
         * by repeat dessa_eval_instr_succ_tac.
-    - dessa_eval_instr_succ_tac. SSAFull.eval_instr_elim.
+    - dessa_eval_instr_succ_tac. SSALite.eval_instr_elim.
       + by repeat dessa_eval_instr_succ_tac.
       + do 3 dessa_eval_instr_succ_tac.
-        * eapply DSLFull.EImuljS; by repeat dessa_eval_instr_succ_tac.
+        * eapply DSLLite.EImuljS; by repeat dessa_eval_instr_succ_tac.
         * by repeat dessa_eval_instr_succ_tac.
-    - dessa_eval_instr_succ_tac. SSAFull.eval_instr_elim.
+    - dessa_eval_instr_succ_tac. SSALite.eval_instr_elim.
       + by repeat dessa_eval_instr_succ_tac.
       + do 3 dessa_eval_instr_succ_tac.
-        * eapply DSLFull.EIsplitS; by repeat dessa_eval_instr_succ_tac.
+        * eapply DSLLite.EIsplitS; by repeat dessa_eval_instr_succ_tac.
         * by repeat dessa_eval_instr_succ_tac.
     - by repeat dessa_eval_instr_succ_tac.
     - by repeat dessa_eval_instr_succ_tac.
@@ -2406,17 +2326,7 @@ Section MakeSSA.
     - by repeat dessa_eval_instr_succ_tac.
     - by repeat dessa_eval_instr_succ_tac.
     - by repeat dessa_eval_instr_succ_tac.
-    - dessa_eval_instr_succ_tac. SSAFull.eval_instr_elim.
-      do 4 dessa_eval_instr_succ_tac; first exact: Store.Equal_refl.
-      + rewrite <- (ssa_eval_bexp); by repeat dessa_eval_instr_succ_tac.
-      + by repeat dessa_eval_instr_succ_tac.
-      + repeat dessa_eval_instr_succ_tac. by rewrite <- H.
-    - dessa_eval_instr_succ_tac. SSAFull.eval_instr_elim.
-      do 4 dessa_eval_instr_succ_tac; first exact: Store.Equal_refl.
-      + rewrite <- (ssa_eval_bexp); by repeat dessa_eval_instr_succ_tac.
-      + by repeat dessa_eval_instr_succ_tac.
-      + repeat dessa_eval_instr_succ_tac. by rewrite <- H.
-    - dessa_eval_instr_succ_tac. SSAFull.eval_instr_elim.
+    - dessa_eval_instr_succ_tac. SSALite.eval_instr_elim.
       do 4 dessa_eval_instr_succ_tac; first exact: Store.Equal_refl.
       + rewrite <- (ssa_eval_bexp); by repeat dessa_eval_instr_succ_tac.
       + by repeat dessa_eval_instr_succ_tac.
@@ -2427,19 +2337,19 @@ Section MakeSSA.
     ssa_program m1 p = (m2, sp) ->
     state_equiv m1 s1 ss1 ->
     typenv_equiv m1 te1 ste1 ->
-    SSAFull.eval_program ste1 sp (OK ss1) (OK ss2) ->
-    SSAFull.program_succ_typenv sp ste1 = ste2 ->
+    SSALite.eval_program ste1 sp ss1 ss2 ->
+    SSALite.program_succ_typenv sp ste1 = ste2 ->
     exists s2 te2,
-      DSLFull.eval_program te1 p (OK s1) (OK s2) /\
-      DSLFull.program_succ_typenv p te1 = te2 /\
+      DSLLite.eval_program te1 p s1 s2 /\
+      DSLLite.program_succ_typenv p te1 = te2 /\
       state_equiv m2 s2 ss2 /\
       typenv_equiv m2 te2 ste2.
   Proof.
     elim: p m1 m2 s1 te1 sp ss1 ss2 ste1 ste2 => [| hd tl IH].
     - move=> m1 m2 s1 te1 sp ss1 ss2 ste1 ste2 /=.
       case=> <- <-. move=> Hse Hte Hep Hteq.
-      rewrite /SSAFull.eval_program in Hep. inversion Hep; subst.
-      simpl in H. exists s1, te1. split_andb_goal.
+      rewrite /SSALite.eval_program in Hep. rewrite /= in Hep. inversion Hep; subst.
+      exists s1, te1. split_andb_goal.
       + by constructor.
       + reflexivity.
       + by rewrite <- H.
@@ -2453,73 +2363,23 @@ Section MakeSSA.
         case Hsi_hd: (ssa_instr m1 hd) => [sm1 sshd].
         case Hsp_tl: (ssa_program sm1 tl) => [sm2 sstl].
         move=> Hpair. case: Hpair => Htmp1 Htmp2 Htmp3.
-        move: Hpst. subst. move: (SSAFull.eval_program_cons_ok Hep) => [ss3 [Hevi Hevp]].
-        move=> Hpst. rewrite /= in Hpst. remember (SSAFull.instr_succ_typenv shd ste1) as ste3.
+        move: Hpst. inversion Hep; subst. move=> Hpst.
+        rewrite /= in Hpst. remember (SSALite.instr_succ_typenv shd ste1) as ste3.
         symmetry in Heqste3.
-        move: (dessa_eval_instr_succ Hsi_hd Hseq Hteq Hevi Heqste3) => Htmp.
+        move: (dessa_eval_instr_succ Hsi_hd Hseq Hteq H1 Heqste3) => Htmp.
         destruct Htmp as [s3 [te3 Hwit]].
         inversion Hwit as [Hseval [Hsstyp [Hseq2 Hteq2]]].
-        move: (IH _ _ _ _ _ _ _ _ _ Hsp_tl Hseq2 Hteq2 Hevp Hpst) => HIH.
+        move: (IH _ _ _ _ _ _ _ _ _ Hsp_tl Hseq2 Hteq2 H4 Hpst) => HIH.
         destruct HIH as [s2 [te2 Hswit]].
         inversion Hswit as [Hsep [Hstyp [Hseq3 Hteq3]]].
         exists s2, te2. split_andb_goal.
-        * eapply DSLFull.Econs.
+        * eapply DSLLite.Econs.
           -- exact: Hseval.
           -- by rewrite Hsstyp.
         * rewrite /=. by rewrite Hsstyp.
         * exact: Hseq3.
         * exact: Hteq3.
   Qed.
-
-  Lemma dessa_eval_program_succ_err m1 m2 s1 ss1 te1 ste1 p sp:
-    ssa_program m1 p = (m2, sp) ->
-    state_equiv m1 s1 ss1 ->
-    typenv_equiv m1 te1 ste1 ->
-    SSAFull.eval_program ste1 sp (OK ss1) (ERR _) ->
-    DSLFull.eval_program te1 p (OK s1) (ERR _) /\
-      typenv_equiv m2 (DSLFull.program_succ_typenv p te1) (SSAFull.program_succ_typenv sp ste1).
-  Proof.
-    elim: p m1 m2 s1 te1 sp ss1 ste1 => [| hd tl IH].
-    - move=> m1 m2 s1 te1 sp ss1 ste1 /=. case=> ? ? _ _ Hev; subst.
-      inversion_clear Hev. simpl in H. by elim: H.
-    - move=> m1 m2 s1 te1 [| shd stl] ss1 ste1.
-      + move=> Hsp. rewrite /= in Hsp. move: Hsp.
-        case Hsi_hd: (ssa_instr m1 hd) => [sm1 shd].
-        case Hsp_tl: (ssa_program sm1 tl) => [sm2 stl].
-        by inversion 1.
-      + move=> Hsp Hseq Hteq Hep. inversion Hsp. move: H0.
-        case Hsi_hd: (ssa_instr m1 hd) => [sm1 sshd].
-        case Hsp_tl: (ssa_program sm1 tl) => [sm2 sstl].
-        case => ? ? ?; subst.
-        case: (SSAFull.eval_program_cons_ok_err Hep).
-        * move=> [ss3 [Hevi Hevp]].
-          remember (SSAFull.instr_succ_typenv shd ste1) as ste3. symmetry in Heqste3.
-          move: (dessa_eval_instr_succ Hsi_hd Hseq Hteq Hevi Heqste3) => Htmp.
-          destruct Htmp as [s3 [te3 Hwit]].
-          inversion Hwit as [Heval [Hstyp [Hseq2 Hteq2]]].
-          move: (IH sm1 m2 s3 te3 stl ss3 ste3 Hsp_tl Hseq2 Hteq2 Hevp) => [Hsevp Hseqt].
-          split.
-          -- apply: (DSLFull.Econs Heval). rewrite Hstyp. exact: Hsevp.
-          -- simpl. apply: (ssa_program_succ_typenv Hsp_tl).
-             apply: (ssa_instr_succ_typenv Hsi_hd). assumption.
-        * move=> Hei. move: (SSAFull.eval_instr_ok_err Hei) => [e [Hi He]].
-          case: Hi => ?; subst.
-          -- move: Hsi_hd. destruct hd => //=. case=> ? ?; subst.
-             split.
-             ++ apply: DSLFull.Econs.
-                ** apply: DSLFull.EIcutERR.
-                   move=> H; apply: He. exact: (ssa_eval_bexp2 Hseq Hteq H).
-                ** exact: DSLFull.eval_program_err_err.
-             ++ apply: (ssa_program_succ_typenv Hsp_tl). assumption.
-          -- move: Hsi_hd. destruct hd => //=. case=> ? ?; subst.
-             split.
-             ++ apply: DSLFull.Econs.
-                ** apply: DSLFull.EIassertERR.
-                   move=> H; apply: He. exact: (ssa_eval_bexp2 Hseq Hteq H).
-                ** exact: DSLFull.eval_program_err_err.
-             ++ apply: (ssa_program_succ_typenv Hsp_tl). assumption.
-  Qed.
-
 
   (** Convert an SSA state to a DSL state. *)
 
@@ -2641,8 +2501,8 @@ Section MakeSSA.
 
   (** Soundness and completeness *)
 
-  Theorem ssa_spec_sound (s : DSLFull.spec) :
-    SSAFull.valid_spec (ssa_spec s) -> DSLFull.valid_spec s.
+  Theorem ssa_spec_sound (s : DSLLite.spec) :
+    SSALite.valid_spec (ssa_spec s) -> DSLLite.valid_spec s.
   Proof.
     destruct s as [input pre pg post].
     rewrite /ssa_spec /=.
@@ -2652,38 +2512,29 @@ Section MakeSSA.
     destruct tmp as [m ssa_p].
     remember (ssa_p) as sprog.
     remember (ssa_bexp m post) as spost.
-    rewrite /SSAFull.valid_spec /DSLFull.valid_spec /=.
-    rewrite /SSAFull.valid_spec_ok /DSLFull.valid_spec_ok /=.
-    rewrite /SSAFull.valid_spec_err /DSLFull.valid_spec_err /=.
+    rewrite /SSALite.valid_spec /DSLLite.valid_spec /=.
     rewrite Heqsinput Heqspre Heqspost.
-    move=> [HsvalidOK HsvalidERR]. split.
-    - move=> s1 s2 Hconform Heval_bexp Heval_prog.
-      move: (ssa_state_equiv empty_vmap s1) => Heq_state.
-      move: (ssa_typenv_equiv empty_vmap input) => Heq_typenv.
-      move: (ssa_store_conform_empty Hconform) => Hsconform.
-      symmetry in Heqtmp.
-      remember (DSLFull.program_succ_typenv pg input) as tsucc.
-      symmetry in Heqtsucc.
-      move: (ssa_eval_program_succ Heqtmp Heq_state Heq_typenv Heval_prog Heqtsucc) => [ss2 [ste2 [Hsep [H]]]].
-      move: (HsvalidOK (ssa_state empty_vmap s1) ss2) => {HsvalidOK} HsvalidOK.
-      move: (HsvalidOK Hsconform) => {HsvalidOK} HsvalidOK.
-      move: (ssa_eval_bexp2 Heq_state Heq_typenv Heval_bexp) => Hsf.
-      move: (HsvalidOK Hsf) => {HsvalidOK} HsvalidOK.
-      move: (HsvalidOK Hsep) => {HsvalidOK} HsvalidOK.
-      move=> [Heq_state2 Heq_typenv2].
-      rewrite H in HsvalidOK.
-      exact: (ssa_eval_bexp1 Heq_state2 Heq_typenv2 HsvalidOK).
-    - move=> s Hco Hpre Herr.
-      move: (ssa_state_equiv empty_vmap s) => Heq_state.
-      move: (ssa_typenv_equiv empty_vmap input) => Heq_typenv.
-      move: (ssa_store_conform_empty Hco) => Hsco.
-      apply: (HsvalidERR _ Hsco (ssa_eval_bexp2 Heq_state Heq_typenv Hpre)).
-      move: (ssa_eval_program_succ_err (Logic.eq_sym Heqtmp) Heq_state Heq_typenv Herr) => [H _].
-      exact: H.
+    move=> Hsvalid.
+    move=> s1 s2 Hconform Heval_bexp Heval_prog.
+    move: (ssa_state_equiv empty_vmap s1) => Heq_state.
+    move: (ssa_typenv_equiv empty_vmap input) => Heq_typenv.
+    move: (ssa_store_conform_empty Hconform) => Hsconform.
+    symmetry in Heqtmp.
+    remember (DSLLite.program_succ_typenv pg input) as tsucc.
+    symmetry in Heqtsucc.
+    move: (ssa_eval_program_succ Heqtmp Heq_state Heq_typenv Heval_prog Heqtsucc) => [ss2 [ste2 [Hsep [H]]]].
+    move: (Hsvalid (ssa_state empty_vmap s1) ss2) => {Hsvalid} Hsvalid.
+    move: (Hsvalid Hsconform) => {Hsvalid} Hsvalid.
+    move: (ssa_eval_bexp2 Heq_state Heq_typenv Heval_bexp) => Hsf.
+    move: (Hsvalid Hsf) => {Hsvalid} Hsvalid.
+    move: (Hsvalid Hsep) => {Hsvalid} Hsvalid.
+    move=> [Heq_state2 Heq_typenv2].
+    rewrite H in Hsvalid.
+    exact: (ssa_eval_bexp1 Heq_state2 Heq_typenv2 Hsvalid).
   Qed.
 
-  Theorem ssa_spec_complete (s : DSLFull.spec) :
-    DSLFull.valid_spec s -> SSAFull.valid_spec (ssa_spec s).
+  Theorem ssa_spec_complete (s : DSLLite.spec) :
+    DSLLite.valid_spec s -> SSALite.valid_spec (ssa_spec s).
   Proof.
     destruct s as [input pre pg post].
     rewrite /ssa_spec /=.
@@ -2693,44 +2544,33 @@ Section MakeSSA.
     destruct tmp as [m ssa_p].
     remember (ssa_p) as sprog.
     remember (ssa_bexp m post) as spost.
-    rewrite /SSAFull.valid_spec /DSLFull.valid_spec /=.
-    rewrite /SSAFull.valid_spec_ok /DSLFull.valid_spec_ok /=.
-    rewrite /SSAFull.valid_spec_err /DSLFull.valid_spec_err /=.
-
+    rewrite /SSALite.valid_spec /DSLLite.valid_spec /=.
     rewrite Heqsinput Heqspre Heqspost.
-    move=> [HvalidOK HvalidERR]. split.
-    - move=> ss1 ss2 Hsconform Hseval_bexp Hseval_prog.
-      move: (dessa_state_equiv empty_vmap ss1) => Heq_state.
-      move: (ssa_typenv_equiv empty_vmap input) => Heq_typenv.
-      move: (dessa_store_conform_empty Hsconform) => Hconform.
-      symmetry in Heqtmp.
-      remember (SSAFull.program_succ_typenv sprog sinput) as tsucc.
-      symmetry in Heqtsucc.
-      rewrite Heqsinput in Heqtsucc.
-      move: (dessa_eval_program_succ Heqtmp Heq_state Heq_typenv Hseval_prog Heqtsucc)
-          => [s2 [ste2 [Hep [Hpst [Heq_state2 Heq_typenv2]]]]].
-      move: (HvalidOK (dessa_state empty_vmap ss1) s2) => {HvalidOK} HvalidOK.
-      move: (HvalidOK Hconform) => {HvalidOK} HvalidOK.
-      move: (ssa_eval_bexp1 Heq_state Heq_typenv Hseval_bexp) => Hsf.
-      move: (HvalidOK Hsf) => {HvalidOK} HvalidOK.
-      move: (HvalidOK Hep) => {HvalidOK} HvalidOK.
-      rewrite Hpst in HvalidOK.
-      rewrite Heqtsucc.
-      exact: (ssa_eval_bexp2 Heq_state2 Heq_typenv2 HvalidOK).
-    - move=> s Hco Hpre Herr.
-      move: (dessa_state_equiv empty_vmap s) => Heq_state.
-      move: (ssa_typenv_equiv empty_vmap input) => Heq_typenv.
-      move: (dessa_store_conform_empty Hco) => Hsco.
-      apply: (HvalidERR _ Hsco (ssa_eval_bexp1 Heq_state Heq_typenv Hpre)).
-      move: (dessa_eval_program_succ_err (Logic.eq_sym Heqtmp) Heq_state Heq_typenv Herr) => [H _].
-      exact: H.
+    move=> Hvalid.
+    move=> ss1 ss2 Hsconform Hseval_bexp Hseval_prog.
+    move: (dessa_state_equiv empty_vmap ss1) => Heq_state.
+    move: (ssa_typenv_equiv empty_vmap input) => Heq_typenv.
+    move: (dessa_store_conform_empty Hsconform) => Hconform.
+    symmetry in Heqtmp.
+    remember (SSALite.program_succ_typenv sprog sinput) as tsucc.
+    symmetry in Heqtsucc.
+    rewrite Heqsinput in Heqtsucc.
+    move: (dessa_eval_program_succ Heqtmp Heq_state Heq_typenv Hseval_prog Heqtsucc)
+    => [s2 [ste2 [Hep [Hpst [Heq_state2 Heq_typenv2]]]]].
+    move: (Hvalid (dessa_state empty_vmap ss1) s2) => {Hvalid} Hvalid.
+    move: (Hvalid Hconform) => {Hvalid} Hvalid.
+    move: (ssa_eval_bexp1 Heq_state Heq_typenv Hseval_bexp) => Hsf.
+    move: (Hvalid Hsf) => {Hvalid} Hvalid.
+    move: (Hvalid Hep) => {Hvalid} Hvalid.
+    rewrite Hpst in Hvalid.
+    rewrite Heqtsucc.
+    exact: (ssa_eval_bexp2 Heq_state2 Heq_typenv2 Hvalid).
   Qed.
-
 
   (** Well-formed SSA *)
 
   Definition ssa_var_unchanged_instr v i : bool :=
-    ~~ (SSAVS.mem v (SSAFull.lvs_instr i)).
+    ~~ (SSAVS.mem v (SSALite.lvs_instr i)).
 
   Definition ssa_unchanged_instr_var i v : bool :=
     ssa_var_unchanged_instr v i .
@@ -2747,23 +2587,33 @@ Section MakeSSA.
   Definition ssa_vars_unchanged_program vs p : bool :=
     SSAVS.for_all (ssa_unchanged_program_var p) vs .
 
-  Fixpoint ssa_single_assignment (p : SSAFull.program) : bool :=
+  Fixpoint ssa_single_assignment (p : SSALite.program) : bool :=
     match p with
     | [::] => true
     | hd::tl =>
-      (ssa_vars_unchanged_program (SSAFull.lvs_instr hd) tl) &&
+      (ssa_vars_unchanged_program (SSALite.lvs_instr hd) tl) &&
                                                          (ssa_single_assignment tl)
     end.
 
-  Definition well_formed_ssa_program (te: SSATE.env) (p : SSAFull.program) : bool :=
-    (SSAFull.well_formed_program te p)
-      && ssa_vars_unchanged_program (SSAFull.vars_env te) p
+  Definition well_formed_ssa_program (te: SSATE.env) (p : SSALite.program) : bool :=
+    (SSALite.well_formed_program te p)
+      && ssa_vars_unchanged_program (SSALite.vars_env te) p
       && ssa_single_assignment p.
 
-  Definition well_formed_ssa_spec (s : SSAFull.spec) : bool :=
-    (SSAFull.well_formed_spec s)
-      && ssa_vars_unchanged_program (SSAFull.vars_env (SSAFull.sinputs s)) (SSAFull.sprog s)
-      && ssa_single_assignment (SSAFull.sprog s).
+  Definition well_formed_ssa_spec (s : SSALite.spec) : bool :=
+    (SSALite.well_formed_spec s)
+      && ssa_vars_unchanged_program (SSALite.vars_env (SSALite.sinputs s)) (SSALite.sprog s)
+      && ssa_single_assignment (SSALite.sprog s).
+
+  Definition well_formed_ssa_espec (s : SSALite.espec) : bool :=
+    (SSALite.well_formed_espec s)
+      && ssa_vars_unchanged_program (SSALite.vars_env (SSALite.esinputs s)) (SSALite.esprog s)
+      && ssa_single_assignment (SSALite.esprog s).
+
+  Definition well_formed_ssa_rspec (s : SSALite.rspec) : bool :=
+    (SSALite.well_formed_rspec s)
+      && ssa_vars_unchanged_program (SSALite.vars_env (SSALite.rsinputs s)) (SSALite.rsprog s)
+      && ssa_single_assignment (SSALite.rsprog s).
 
   Ltac neq_store_upd_acc :=
     match goal with
@@ -2778,29 +2628,29 @@ Section MakeSSA.
   Ltac acc_unchanged_instr_upd :=
     match goal with
     | Hun : is_true (ssa_var_unchanged_instr ?x ?i),
-            Heval : SSAFull.eval_instr _ (?i) (OK ?s1) (OK ?s2)
+            Heval : SSALite.eval_instr _ (?i) ?s1 ?s2
       |- SSAStore.acc ?x ?s1 = SSAStore.acc ?x ?s2 =>
-      rewrite /ssa_var_unchanged_instr /SSAFull.lvs_instr in Hun;
-      move : (SSAFull.VSLemmas.not_mem_singleton1 Hun) => {Hun};
+      rewrite /ssa_var_unchanged_instr /SSALite.lvs_instr in Hun;
+      move : (SSALite.VSLemmas.not_mem_singleton1 Hun) => {Hun};
       rewrite /SSAVS.SE.eq => /negP Hneq;
       inversion_clear Heval;
       neq_store_upd_acc
     | Hun : is_true (ssa_var_unchanged_instr ?x ?i),
-            Heval : SSAFull.eval_instr _ (?i) (OK ?s1) (OK ?s2)
+            Heval : SSALite.eval_instr _ (?i) ?s1 ?s2
       |- SSAStore.acc ?x ?s1 = SSAStore.acc ?x ?s2 =>
       let Hun1 := fresh in
       let Hneqw := fresh in
       let Hneqv := fresh in
-      rewrite /ssa_var_unchanged_instr /SSAFull.lvs_instr in Hun;
-      move : (SSAFull.VSLemmas.not_mem_add1 Hun) => {Hun} [Hneqv Hun1];
-      move : (SSAFull.VSLemmas.not_mem_singleton1 Hun1) Hneqv => {Hun1};
+      rewrite /ssa_var_unchanged_instr /SSALite.lvs_instr in Hun;
+      move : (SSALite.VSLemmas.not_mem_add1 Hun) => {Hun} [Hneqv Hun1];
+      move : (SSALite.VSLemmas.not_mem_singleton1 Hun1) Hneqv => {Hun1};
       rewrite /SSAVS.SE.eq => /negP Hneqw /negP Hneqv;
       inversion_clear Heval;
       neq_store_upd_acc
     | Hun : is_true (ssa_var_unchanged_instr ?x ?i),
-            Heval : SSAFull.eval_instr _ (?i) (OK ?s1) (OK ?s2)
+            Heval : SSALite.eval_instr _ (?i) ?s1 ?s2
       |- SSAStore.acc ?x ?s1 = SSAStore.acc ?x ?s2 =>
-      rewrite /ssa_var_unchanged_instr /SSAFull.lvs_instr in Hun;
+      rewrite /ssa_var_unchanged_instr /SSALite.lvs_instr in Hun;
       inversion_clear Heval;
       trivial
     end .
@@ -2808,20 +2658,20 @@ Section MakeSSA.
 
   Lemma acc_unchanged_instr te v i s1 s2 :
     ssa_var_unchanged_instr v i ->
-    SSAFull.eval_instr te i (OK s1) (OK s2) ->
+    SSALite.eval_instr te i s1 s2 ->
     SSAStore.acc v s1 = SSAStore.acc v s2.
   Proof. elim: i; intros; by acc_unchanged_instr_upd. Qed.
 
   Lemma acc_unchanged_program te v p s1 s2 :
     ssa_unchanged_program_var p v ->
-    SSAFull.eval_program te p (OK s1) (OK s2) ->
+    SSALite.eval_program te p s1 s2 ->
     SSAStore.acc v s1 = SSAStore.acc v s2.
   Proof .
     elim: p te s1 s2 => /=.
     - move=> te s1 s2 _ Hep. inversion_clear Hep. rewrite -> H. reflexivity.
     - move=> hd tl IH te s1 s2 /andP [Huchd Huctl] Hep.
-      move: (SSAFull.eval_program_cons_ok Hep) => [s3 [Hevi Hevp]].
-      rewrite (acc_unchanged_instr Huchd Hevi). exact: (IH _ _ _ Huctl Hevp).
+      inversion_clear Hep. rewrite (acc_unchanged_instr Huchd H).
+      exact: (IH _ _ _ Huctl H0).
   Qed.
 
   Lemma ssa_var_unchanged_program_cons1 v hd tl :
@@ -2883,8 +2733,8 @@ Section MakeSSA.
 
   Lemma acc_unchanged_program_cons te v hd tl s1 s2 s3 :
     ssa_unchanged_program_var (hd::tl) v ->
-    SSAFull.eval_instr te hd (OK s1) (OK s2) ->
-    SSAFull.eval_program te tl (OK s2) (OK s3) ->
+    SSALite.eval_instr te hd s1 s2 ->
+    SSALite.eval_program te tl s2 s3 ->
     SSAStore.acc v s2 = SSAStore.acc v s1 /\
     SSAStore.acc v s3 = SSAStore.acc v s1 .
   Proof .
@@ -2897,8 +2747,8 @@ Section MakeSSA.
 
   Lemma acc_unchanged_program_cat te v p1 p2 s1 s2 s3 :
     ssa_unchanged_program_var (p1 ++ p2) v ->
-    SSAFull.eval_program te p1 (OK s1) (OK s2) ->
-    SSAFull.eval_program te p2 (OK s2) (OK s3) ->
+    SSALite.eval_program te p1 s1 s2 ->
+    SSALite.eval_program te p2 s2 s3 ->
     SSAStore.acc v s2 = SSAStore.acc v s1 /\
     SSAStore.acc v s3 = SSAStore.acc v s1 .
   Proof .
@@ -2955,7 +2805,7 @@ Section MakeSSA.
   Proof.
     move=> Hun Hmem.
     apply: (SSAVS.for_all_2 (ssa_unchanged_instr_var_compat i) Hun).
-    apply/SSAFull.VSLemmas.memP; assumption.
+    apply/SSALite.VSLemmas.memP; assumption.
   Qed.
 
   Lemma ssa_unchanged_program_mem v vs p :
@@ -2965,30 +2815,30 @@ Section MakeSSA.
   Proof.
     move=> Hun Hmem.
     apply: (SSAVS.for_all_2 (ssa_unchanged_program_var_compat p) Hun).
-    apply/SSAFull.VSLemmas.memP; assumption.
+    apply/SSALite.VSLemmas.memP; assumption.
   Qed.
 
   Lemma ssa_var_unchanged_instr_not_mem v i :
-    ssa_var_unchanged_instr v i = ~~ SSAVS.mem v (SSAFull.lvs_instr i).
+    ssa_var_unchanged_instr v i = ~~ SSAVS.mem v (SSALite.lvs_instr i).
   Proof.
-    case Hmem: (SSAVS.mem v (SSAFull.lvs_instr i)) => /=.
+    case Hmem: (SSAVS.mem v (SSALite.lvs_instr i)) => /=.
     - apply/negPn. exact: Hmem.
     - move/negP/idP: Hmem. by apply.
   Qed.
 
   Lemma ssa_var_unchanged_program_not_mem v p :
-    ssa_unchanged_program_var p v = ~~ SSAVS.mem v (SSAFull.lvs_program p) .
+    ssa_unchanged_program_var p v = ~~ SSAVS.mem v (SSALite.lvs_program p) .
   Proof .
-    case Hmem: (SSAVS.mem v (SSAFull.lvs_program p)) => /= .
+    case Hmem: (SSAVS.mem v (SSALite.lvs_program p)) => /= .
     - elim: p Hmem => /=.
       + done.
-      + move=> hd tl IH Hmem. case: (SSAFull.VSLemmas.mem_union1 Hmem) =>
+      + move=> hd tl IH Hmem. case: (SSALite.VSLemmas.mem_union1 Hmem) =>
                               {Hmem} Hmem.
         * rewrite /ssa_var_unchanged_instr Hmem. done.
         * rewrite (IH Hmem). by case: (ssa_var_unchanged_instr v hd).
     - move/negP/idP: Hmem => Hmem. elim: p Hmem => /=.
       + done.
-      + move=> hd tl IH Hmem. move: (SSAFull.VSLemmas.not_mem_union1 Hmem) =>
+      + move=> hd tl IH Hmem. move: (SSALite.VSLemmas.not_mem_union1 Hmem) =>
                               {Hmem} [Hmem1 Hmem2]. move: (IH Hmem2) => Hun.
         rewrite ssa_var_unchanged_instr_not_mem Hmem1 Hun. done.
   Qed.
@@ -3000,7 +2850,7 @@ Section MakeSSA.
     move=> H.
     apply: (SSAVS.for_all_1 (ssa_unchanged_instr_var_compat i)).
     move=> v Hin.
-    apply: H; apply/SSAFull.VSLemmas.memP; assumption.
+    apply: H; apply/SSALite.VSLemmas.memP; assumption.
   Qed.
 
   Lemma ssa_unchanged_program_global vs p :
@@ -3010,7 +2860,7 @@ Section MakeSSA.
     move=> H.
     apply: (SSAVS.for_all_1 (ssa_unchanged_program_var_compat p)).
     move=> v Hin.
-    apply: H; apply/SSAFull.VSLemmas.memP; assumption.
+    apply: H; apply/SSALite.VSLemmas.memP; assumption.
   Qed.
 
   Lemma ssa_unchanged_instr_local vs i :
@@ -3019,7 +2869,7 @@ Section MakeSSA.
   Proof.
     move=> H v Hmem.
     apply: (SSAVS.for_all_2 (ssa_unchanged_instr_var_compat i) H).
-    apply/SSAFull.VSLemmas.memP; assumption.
+    apply/SSALite.VSLemmas.memP; assumption.
   Qed.
 
   Lemma ssa_unchanged_program_local vs p :
@@ -3162,7 +3012,7 @@ Section MakeSSA.
   Proof.
     move=> Hun.
     apply: (ssa_unchanged_instr_mem Hun).
-    apply: SSAFull.VSLemmas.mem_singleton2.
+    apply: SSALite.VSLemmas.mem_singleton2.
     exact: eqxx.
   Qed.
 
@@ -3172,7 +3022,7 @@ Section MakeSSA.
   Proof.
     move=> Hun.
     apply: (ssa_unchanged_program_mem Hun).
-    apply: SSAFull.VSLemmas.mem_singleton2.
+    apply: SSALite.VSLemmas.mem_singleton2.
     exact: eqxx.
   Qed.
 
@@ -3182,7 +3032,7 @@ Section MakeSSA.
   Proof.
     move=> Hun.
     apply: ssa_unchanged_instr_global => x Hmem.
-    move: (SSAFull.VSLemmas.mem_singleton1 Hmem) => Heq.
+    move: (SSALite.VSLemmas.mem_singleton1 Hmem) => Heq.
     rewrite (eqP Heq); assumption.
   Qed.
 
@@ -3192,7 +3042,7 @@ Section MakeSSA.
   Proof.
     move=> Hun.
     apply: ssa_unchanged_program_global => x Hmem.
-    move: (SSAFull.VSLemmas.mem_singleton1 Hmem) => Heq.
+    move: (SSALite.VSLemmas.mem_singleton1 Hmem) => Heq.
     rewrite (eqP Heq); assumption.
   Qed.
 
@@ -3220,9 +3070,9 @@ Section MakeSSA.
     move: (ssa_unchanged_instr_local Hun) => {Hun} Hun.
     split; apply: ssa_unchanged_instr_global => v Hmem.
     - apply: Hun.
-      exact: SSAFull.VSLemmas.mem_union2.
+      exact: SSALite.VSLemmas.mem_union2.
     - apply: Hun.
-      exact: SSAFull.VSLemmas.mem_union3.
+      exact: SSALite.VSLemmas.mem_union3.
   Qed.
 
   Lemma ssa_unchanged_program_union1 s1 s2 p :
@@ -3233,9 +3083,9 @@ Section MakeSSA.
     move: (ssa_unchanged_program_local Hun) => {Hun} Hun.
     split; apply: ssa_unchanged_program_global => v Hmem.
     - apply: Hun.
-      exact: SSAFull.VSLemmas.mem_union2.
+      exact: SSALite.VSLemmas.mem_union2.
     - apply: Hun.
-      exact: SSAFull.VSLemmas.mem_union3.
+      exact: SSALite.VSLemmas.mem_union3.
   Qed.
 
   Lemma ssa_unchanged_instr_union2 s1 s2 i :
@@ -3244,7 +3094,7 @@ Section MakeSSA.
   Proof.
     move=> Hun1 Hun2.
     apply: ssa_unchanged_instr_global => x Hmem.
-    move: (SSAFull.VSLemmas.mem_union1 Hmem); case => {Hmem} Hmem.
+    move: (SSALite.VSLemmas.mem_union1 Hmem); case => {Hmem} Hmem.
     - exact: (ssa_unchanged_instr_mem Hun1 Hmem).
     - exact: (ssa_unchanged_instr_mem Hun2 Hmem).
   Qed.
@@ -3255,7 +3105,7 @@ Section MakeSSA.
   Proof.
     move=> Hun1 Hun2.
     apply: ssa_unchanged_program_global => x Hmem.
-    move: (SSAFull.VSLemmas.mem_union1 Hmem); case => {Hmem} Hmem.
+    move: (SSALite.VSLemmas.mem_union1 Hmem); case => {Hmem} Hmem.
     - exact: (ssa_unchanged_program_mem Hun1 Hmem).
     - exact: (ssa_unchanged_program_mem Hun2 Hmem).
   Qed.
@@ -3289,7 +3139,7 @@ Section MakeSSA.
     move: (ssa_unchanged_instr_local Hun) => {Hun} Hun.
     apply: ssa_unchanged_instr_global.
     move=> v Hmem; apply: Hun.
-    exact: (SSAFull.VSLemmas.mem_subset Hmem Hsub).
+    exact: (SSALite.VSLemmas.mem_subset Hmem Hsub).
   Qed.
 
   Lemma ssa_unchanged_program_subset vs1 vs2 p :
@@ -3301,7 +3151,7 @@ Section MakeSSA.
     move: (ssa_unchanged_program_local Hun) => {Hun} Hun.
     apply: ssa_unchanged_program_global.
     move=> v Hmem; apply: Hun.
-    exact: (SSAFull.VSLemmas.mem_subset Hmem Hsub).
+    exact: (SSALite.VSLemmas.mem_subset Hmem Hsub).
   Qed.
 
   Lemma ssa_unchanged_instr_add1 v s p :
@@ -3310,10 +3160,10 @@ Section MakeSSA.
   Proof.
     move=> H; split.
     - apply: (ssa_unchanged_instr_mem H).
-      apply: SSAFull.VSLemmas.mem_add2.
+      apply: SSALite.VSLemmas.mem_add2.
       exact: SSAVS.E.eq_refl.
     - apply: (ssa_unchanged_instr_subset H).
-      exact: (SSAFull.VSLemmas.subset_add _ (SSAFull.VSLemmas.subset_refl s)).
+      exact: (SSALite.VSLemmas.subset_add _ (SSALite.VSLemmas.subset_refl s)).
   Qed.
 
   Lemma ssa_unchanged_instr_add2 v s p :
@@ -3322,7 +3172,7 @@ Section MakeSSA.
   Proof.
     move=> [H1 H2].
     apply: ssa_unchanged_instr_global => x Hmem.
-    case: (SSAFull.VSLemmas.mem_add1 Hmem) => {Hmem}.
+    case: (SSALite.VSLemmas.mem_add1 Hmem) => {Hmem}.
     - move=> Heq. by rewrite (eqP Heq).
     - move=> Hmem. exact: (ssa_unchanged_instr_mem H2 Hmem).
   Qed.
@@ -3346,9 +3196,9 @@ Section MakeSSA.
     ssa_vars_unchanged_instr s2 p.
   Proof.
     move=> Hadd H1 H2. apply: ssa_unchanged_instr_global => x Hmem.
-    move/SSAFull.VSLemmas.memP: Hmem. move/(Hadd x). case=> Hin.
+    move/SSALite.VSLemmas.memP: Hmem. move/(Hadd x). case=> Hin.
     - rewrite -(eqP Hin). assumption.
-    - move/SSAFull.VSLemmas.memP: Hin => Hmem.
+    - move/SSALite.VSLemmas.memP: Hin => Hmem.
       exact: (ssa_unchanged_instr_mem H2 Hmem).
   Qed.
 
@@ -3358,10 +3208,10 @@ Section MakeSSA.
   Proof.
     move=> H; split.
     - apply: (ssa_unchanged_program_mem H).
-      apply: SSAFull.VSLemmas.mem_add2.
+      apply: SSALite.VSLemmas.mem_add2.
       exact: SSAVS.E.eq_refl.
     - apply: (ssa_unchanged_program_subset H).
-      exact: (SSAFull.VSLemmas.subset_add _ (SSAFull.VSLemmas.subset_refl s)).
+      exact: (SSALite.VSLemmas.subset_add _ (SSALite.VSLemmas.subset_refl s)).
   Qed.
 
   Lemma ssa_unchanged_program_add2 v s p :
@@ -3370,7 +3220,7 @@ Section MakeSSA.
   Proof.
     move=> [H1 H2].
     apply: ssa_unchanged_program_global => x Hmem.
-    case: (SSAFull.VSLemmas.mem_add1 Hmem) => {Hmem}.
+    case: (SSALite.VSLemmas.mem_add1 Hmem) => {Hmem}.
     - move=> Heq.
         by rewrite (eqP Heq).
     - move=> Hmem.
@@ -3396,9 +3246,9 @@ Section MakeSSA.
     ssa_vars_unchanged_program s2 p.
   Proof.
     move=> Hadd H1 H2. apply: ssa_unchanged_program_global => x Hmem.
-    move/SSAFull.VSLemmas.memP: Hmem. move/(Hadd x). case=> Hin.
+    move/SSALite.VSLemmas.memP: Hmem. move/(Hadd x). case=> Hin.
     - rewrite -(eqP Hin). assumption.
-    - move/SSAFull.VSLemmas.memP: Hin => Hmem.
+    - move/SSALite.VSLemmas.memP: Hin => Hmem.
       exact: (ssa_unchanged_program_mem H2 Hmem).
   Qed.
 
@@ -3417,30 +3267,30 @@ Section MakeSSA.
 
   Lemma ssa_unchanged_instr_disjoint_lvs vs i :
     ssa_vars_unchanged_instr vs i =
-    SSAFull.VSLemmas.disjoint vs (SSAFull.lvs_instr i) .
+    SSALite.VSLemmas.disjoint vs (SSALite.lvs_instr i) .
   Proof.
-    case Hdisj: (SSAFull.VSLemmas.disjoint vs (SSAFull.lvs_instr i)) .
+    case Hdisj: (SSALite.VSLemmas.disjoint vs (SSALite.lvs_instr i)) .
     - apply: ssa_unchanged_instr_global => v Hmem .
-      exact: (SSAFull.VSLemmas.mem_disjoint1 Hdisj Hmem) .
+      exact: (SSALite.VSLemmas.mem_disjoint1 Hdisj Hmem) .
     - apply/negP => Hunch. move/negP: Hdisj; apply .
       move: (ssa_unchanged_instr_local Hunch) => {Hunch} Hunch .
-      exact: (SSAFull.VSLemmas.mem_disjoint3 Hunch) .
+      exact: (SSALite.VSLemmas.mem_disjoint3 Hunch) .
   Qed .
 
   Lemma ssa_unchanged_program_disjoint_lvs vs p :
     ssa_vars_unchanged_program vs p =
-    SSAFull.VSLemmas.disjoint vs (SSAFull.lvs_program p) .
+    SSALite.VSLemmas.disjoint vs (SSALite.lvs_program p) .
   Proof.
-    case Hdisj: (SSAFull.VSLemmas.disjoint vs (SSAFull.lvs_program p)) .
+    case Hdisj: (SSALite.VSLemmas.disjoint vs (SSALite.lvs_program p)) .
     - elim: p vs Hdisj => /=.
       + move=> vs _. exact: ssa_unchanged_program_empty.
-      + move=> hd tl IH vs Hdisj. rewrite SSAFull.VSLemmas.disjoint_union in Hdisj.
+      + move=> hd tl IH vs Hdisj. rewrite SSALite.VSLemmas.disjoint_union in Hdisj.
         move/andP: Hdisj => [Hdisjhd Hdisjtl]. apply: ssa_unchanged_program_cons2.
         * rewrite ssa_unchanged_instr_disjoint_lvs. exact: Hdisjhd.
         * exact: (IH _ Hdisjtl).
     - apply/negP => Hunch. move/negP: Hdisj; apply.
       move: (ssa_unchanged_program_local Hunch) => {Hunch} Hunch.
-      apply: SSAFull.VSLemmas.mem_disjoint3. move=> x Hmem.
+      apply: SSALite.VSLemmas.mem_disjoint3. move=> x Hmem.
       move: (Hunch x Hmem). rewrite ssa_var_unchanged_program_not_mem. done.
   Qed.
 
@@ -3456,31 +3306,424 @@ Section MakeSSA.
     ssa_vars_unchanged_program vs2 p.
   Proof. by move=> ->. Qed.
 
-  Lemma ssa_unchanged_instr_assert vs e:
-    ssa_vars_unchanged_instr vs (SSAFull.Iassert e).
+
+  Lemma ssa_var_unchanged_eqn_instr v i :
+    ssa_var_unchanged_instr v (SSALite.eqn_instr i) = ssa_var_unchanged_instr v i.
+  Proof. case: i => //=. by case. Qed.
+
+  Lemma ssa_var_unchanged_rng_instr v i :
+    ssa_var_unchanged_instr v (SSALite.rng_instr i) = ssa_var_unchanged_instr v i.
+  Proof. case: i => //=. by case. Qed.
+
+  Lemma ssa_unchanged_eqn_instr_var i v :
+    ssa_unchanged_instr_var (SSALite.eqn_instr i) v = ssa_unchanged_instr_var i v.
+  Proof. case: i => //=. by case. Qed.
+
+  Lemma ssa_unchanged_rng_instr_var i v :
+    ssa_unchanged_instr_var (SSALite.rng_instr i) v = ssa_unchanged_instr_var i v.
+  Proof. case: i => //=. by case. Qed.
+
+  Lemma ssa_vars_unchanged_eqn_instr vs i :
+    ssa_vars_unchanged_instr vs (SSALite.eqn_instr i) = ssa_vars_unchanged_instr vs i.
+  Proof. case: i => //=. by case. Qed.
+
+  Lemma ssa_vars_unchanged_rng_instr vs i :
+    ssa_vars_unchanged_instr vs (SSALite.rng_instr i) = ssa_vars_unchanged_instr vs i.
+  Proof. case: i => //=. by case. Qed.
+
+  Lemma ssa_var_unchanged_eqn_program v p :
+    ssa_var_unchanged_program v (SSALite.eqn_program p) = ssa_var_unchanged_program v p.
+  Proof. elim: p => [| i p IH] //=. by rewrite ssa_var_unchanged_eqn_instr IH. Qed.
+
+  Lemma ssa_var_unchanged_rng_program v p :
+    ssa_var_unchanged_program v (SSALite.rng_program p) = ssa_var_unchanged_program v p.
+  Proof. elim: p => [| i p IH] //=. by rewrite ssa_var_unchanged_rng_instr IH. Qed.
+
+  Lemma ssa_unchanged_eqn_program_var p v :
+    ssa_unchanged_program_var (SSALite.eqn_program p) v = ssa_unchanged_program_var p v.
+  Proof. elim: p => [| i p IH] //=. by rewrite ssa_var_unchanged_eqn_instr IH. Qed.
+
+  Lemma ssa_unchanged_rng_program_var p v :
+    ssa_unchanged_program_var (SSALite.rng_program p) v = ssa_unchanged_program_var p v.
+  Proof. elim: p => [| i p IH] //=. by rewrite ssa_var_unchanged_rng_instr IH. Qed.
+
+  Lemma ssa_vars_unchanged_eqn_program vs p :
+    ssa_vars_unchanged_program vs (SSALite.eqn_program p) =
+    ssa_vars_unchanged_program vs p.
   Proof.
-    rewrite ssa_unchanged_instr_disjoint_lvs /=.
-    exact: SSAFull.VSLemmas.disjoint_empty_r.
+    elim: p => [| i p IH] //=.
+      by rewrite !ssa_unchanged_program_cons ssa_vars_unchanged_eqn_instr IH.
   Qed.
 
-  Lemma ssa_unchanged_instr_assume vs e:
-    ssa_vars_unchanged_instr vs (SSAFull.Iassume e).
+  Lemma ssa_vars_unchanged_rng_program vs p :
+    ssa_vars_unchanged_program vs (SSALite.rng_program p) =
+    ssa_vars_unchanged_program vs p.
   Proof.
-    rewrite ssa_unchanged_instr_disjoint_lvs /=.
-    exact: SSAFull.VSLemmas.disjoint_empty_r.
+    elim: p => [| i p IH] //=.
+      by rewrite !ssa_unchanged_program_cons ssa_vars_unchanged_rng_instr IH.
   Qed.
 
-  Lemma ssa_unchanged_instr_cut vs e:
-    ssa_vars_unchanged_instr vs (SSAFull.Icut e).
+  Lemma ssa_single_assignment_eqn p :
+    ssa_single_assignment p -> ssa_single_assignment (SSALite.eqn_program p).
   Proof.
-    rewrite ssa_unchanged_instr_disjoint_lvs /=.
-    exact: SSAFull.VSLemmas.disjoint_empty_r.
+    elim: p => [| i p IHp] //=. move=> /andP [Hun_ip Hssa_p]. rewrite (IHp Hssa_p) andbT.
+    rewrite ssa_vars_unchanged_eqn_program.
+    exact: (ssa_unchanged_program_subset Hun_ip (SSALite.eqn_lvs_instr_subset i)).
+  Qed.
+
+  Lemma ssa_single_assignment_rng p :
+    ssa_single_assignment p -> ssa_single_assignment (SSALite.rng_program p).
+  Proof.
+    elim: p => [| i p IHp] //=. move=> /andP [Hun_ip Hssa_p]. rewrite (IHp Hssa_p) andbT.
+    rewrite ssa_vars_unchanged_rng_program.
+    exact: (ssa_unchanged_program_subset Hun_ip (SSALite.rng_lvs_instr_subset i)).
+  Qed.
+
+  Lemma well_formed_ssa_eqn_spec s :
+    well_formed_ssa_spec s -> well_formed_ssa_espec (SSALite.espec_of_spec s).
+  Proof.
+    rewrite /well_formed_ssa_spec /well_formed_ssa_espec.
+    move=> /andP [/andP [Hwf Hunch] Hssa].
+    by rewrite (SSALite.well_formed_eqn_spec Hwf) Hunch Hssa.
+  Qed.
+
+  Lemma well_formed_ssa_rng_spec s :
+    well_formed_ssa_spec s -> well_formed_ssa_rspec (SSALite.rspec_of_spec s).
+  Proof.
+    rewrite /well_formed_ssa_spec /well_formed_ssa_rspec.
+    move=> /andP [/andP [Hwf Hunch] Hssa].
+    by rewrite (SSALite.well_formed_rng_spec Hwf)
+               (ssa_single_assignment_rng Hssa) ssa_vars_unchanged_rng_program Hunch.
+  Qed.
+
+  Lemma well_formed_ssa_espec_eand E f p e1 e2 :
+    well_formed_ssa_espec
+      {| SSALite.esinputs := E; SSALite.espre := f; SSALite.esprog := p; SSALite.espost := Eand e1 e2 |} <->
+      well_formed_ssa_espec
+        {| SSALite.esinputs := E; SSALite.espre := f; SSALite.esprog := p; SSALite.espost := e1 |} /\
+        well_formed_ssa_espec
+          {| SSALite.esinputs := E; SSALite.espre := f; SSALite.esprog := p; SSALite.espost := e2 |}.
+  Proof.
+    rewrite /well_formed_ssa_espec /=. split.
+    - move=> /andP [/andP [Hwf Hun] Hssa]. move/SSALite.well_formed_espec_eand: Hwf => [Hwf1 Hwf2].
+      by rewrite Hwf1 Hwf2 Hun Hssa.
+    - move=> [/andP [/andP [Hwf1 Hun] Hssa] /andP [/andP [Hwf2 _] _]].
+      rewrite Hun Hssa !andbT. apply/SSALite.well_formed_espec_eand. tauto.
+  Qed.
+
+  Lemma well_formed_ssa_rspec_rand E f p e1 e2 :
+    well_formed_ssa_rspec
+      {| SSALite.rsinputs := E; SSALite.rspre := f; SSALite.rsprog := p; SSALite.rspost := Rand e1 e2 |} <->
+      well_formed_ssa_rspec
+        {| SSALite.rsinputs := E; SSALite.rspre := f; SSALite.rsprog := p; SSALite.rspost := e1 |} /\
+        well_formed_ssa_rspec
+          {| SSALite.rsinputs := E; SSALite.rspre := f; SSALite.rsprog := p; SSALite.rspost := e2 |}.
+  Proof.
+    rewrite /well_formed_ssa_rspec /=. split.
+    - move=> /andP [/andP [Hwf Hun] Hssa]. move/SSALite.well_formed_rspec_rand: Hwf => [Hwf1 Hwf2].
+      by rewrite Hwf1 Hwf2 Hun Hssa.
+    - move=> [/andP [/andP [Hwf1 Hun] Hssa] /andP [/andP [Hwf2 _] _]].
+      rewrite Hun Hssa !andbT. apply/SSALite.well_formed_rspec_rand. tauto.
+  Qed.
+
+  Lemma ssa_vars_unchanged_program_split_espec s t :
+    In t (SSALite.split_espec s) ->
+    ssa_vars_unchanged_program (SSALite.vars_env (SSALite.esinputs s)) (SSALite.esprog s) ->
+    ssa_vars_unchanged_program (SSALite.vars_env (SSALite.esinputs t)) (SSALite.esprog t).
+  Proof.
+    case: s => [E f p g] /= Hin. rewrite (SSALite.split_espec_esinputs Hin) /=.
+    rewrite (SSALite.split_espec_esprog Hin) /=. by apply.
+  Qed.
+
+  Lemma ssa_vars_unchanged_program_split_rspec s t :
+    In t (SSALite.split_rspec s) ->
+    ssa_vars_unchanged_program (SSALite.vars_env (SSALite.rsinputs s)) (SSALite.rsprog s) ->
+    ssa_vars_unchanged_program (SSALite.vars_env (SSALite.rsinputs t)) (SSALite.rsprog t).
+  Proof.
+    case: s => [E f p g] /= Hin. rewrite (SSALite.split_rspec_rsinputs Hin) /=.
+    rewrite (SSALite.split_rspec_rsprog Hin) /=. by apply.
+  Qed.
+
+  Lemma split_espec_ssa_vars_unchanged_program s :
+    (forall t, In t (SSALite.split_espec s) ->
+               ssa_vars_unchanged_program (SSALite.vars_env (SSALite.esinputs t)) (SSALite.esprog t)) <->
+    ssa_vars_unchanged_program (SSALite.vars_env (SSALite.esinputs s)) (SSALite.esprog s).
+  Proof.
+    case: s => [E f p g] /=. rewrite /SSALite.split_espec tmap_map /=. split.
+    - elim: g => //=.
+      + move=> H. apply: (H (SSALite.mkEspec E f p SSALite.etrue)). by left.
+      + move=> e1 e2 H. apply: (H (SSALite.mkEspec E f p (Eeq e1 e2))). by left.
+      + move=> e1 e2 ms H. apply: (H (SSALite.mkEspec E f p (Eeqmod e1 e2 ms))). by left.
+      + move=> e1 IH1 e2 IH2. rewrite map_cat => H. apply: IH1 => t Hint.
+        apply: H. apply: in_cat_l. assumption.
+    - elim: g => //=.
+      + move=> Hun t [] //. move=> <- /=. assumption.
+      + move=> e1 e2 Hun t [] //. move=> <- /=. assumption.
+      + move=> e1 e2 ms Hun t [] //. move=> <- /=. assumption.
+      + move=> e1 IH1 e2 IH2 Hun t Hin. rewrite map_cat in Hin. case: (in_cat Hin) => {}Hin.
+        * exact: (IH1 Hun _ Hin).
+        * exact: (IH2 Hun _ Hin).
+  Qed.
+
+  Lemma split_rspec_ssa_vars_unchanged_program s :
+    (forall t, In t (SSALite.split_rspec s) ->
+               ssa_vars_unchanged_program (SSALite.vars_env (SSALite.rsinputs t)) (SSALite.rsprog t)) <->
+    ssa_vars_unchanged_program (SSALite.vars_env (SSALite.rsinputs s)) (SSALite.rsprog s).
+  Proof.
+    case: s => [E f p g] /=. rewrite /SSALite.split_rspec tmap_map /=. split.
+    - elim: g => //=.
+      + move=> H. apply: (H (SSALite.mkRspec E f p SSALite.rtrue)). by left.
+      + move=> n e1 e2 H. apply: (H (SSALite.mkRspec E f p (Req n e1 e2))). by left.
+      + move=> n op e1 e2 H. apply: (H (SSALite.mkRspec E f p (Rcmp n op e1 e2))). by left.
+      + move=> e IH H. apply: (H (SSALite.mkRspec E f p (Rneg e))). by left.
+      + move=> e1 IH1 e2 IH2. rewrite map_cat => H. apply: IH1 => t Hint.
+        apply: H. apply: in_cat_l. assumption.
+      + move=> e1 IH1 e2 IH2 H. apply: (H (SSALite.mkRspec E f p (Ror e1 e2))). by left.
+    - elim: g => //=.
+      + move=> Hun t [] //. move=> <- /=. assumption.
+      + move=> n e1 e2 Hun t [] //. move=> <- /=. assumption.
+      + move=> n op e1 e2 Hun t [] //. move=> <- /=. assumption.
+      + move=> e IH Hun t [] //. move=> <- /=. assumption.
+      + move=> e1 IH1 e2 IH2 Hun t Hin. rewrite map_cat in Hin. case: (in_cat Hin) => {}Hin.
+        * exact: (IH1 Hun _ Hin).
+        * exact: (IH2 Hun _ Hin).
+      + move=> e1 IH1 e2 IH2 Hun t [] //. move=> <- /=. assumption.
+  Qed.
+
+  Lemma ssa_single_assignment_split_espec s t :
+    In t (SSALite.split_espec s) -> ssa_single_assignment (SSALite.esprog s) ->
+    ssa_single_assignment (SSALite.esprog t).
+  Proof.
+    rewrite /SSALite.split_espec tmap_map. case: s => [E f p g] /=. elim: g => //=.
+    - case; [move=> ?; subst; simpl | done]. by apply.
+    - move=> e1 e2 []; [move=> ?; subst; simpl | done]. by apply.
+    - move=> e1 e2 ms []; [move=> ?; subst; simpl | done]. by apply.
+    - move=> e1 IH1 e2 IH2. rewrite map_cat => H. case: (in_cat H) => {}H.
+      + exact: (IH1 H).
+      + exact: (IH2 H).
+  Qed.
+
+  Lemma ssa_single_assignment_split_rspec s t :
+    In t (SSALite.split_rspec s) -> ssa_single_assignment (SSALite.rsprog s) ->
+    ssa_single_assignment (SSALite.rsprog t).
+  Proof.
+    rewrite /SSALite.split_rspec tmap_map. case: s => [E f p g] /=. elim: g => //=.
+    - case; [move=> ?; subst; simpl | done]. by apply.
+    - move=> n e1 e2 []; [move=> ?; subst; simpl | done]. by apply.
+    - move=> n op e1 e2 []; [move=> ?; subst; simpl | done]. by apply.
+    - move=> e IH []; [move=> ?; subst; simpl | done]. by apply.
+    - move=> e1 IH1 e2 IH2. rewrite map_cat => H. case: (in_cat H) => {}H.
+      + exact: (IH1 H).
+      + exact: (IH2 H).
+    - move=> e1 IH1 r2 IH2 []; [move=> ?; subst; simpl | done]. by apply.
+  Qed.
+
+  Lemma split_espec_ssa_single_assignment s :
+    (forall t, In t (SSALite.split_espec s) -> ssa_single_assignment (SSALite.esprog t)) <->
+    ssa_single_assignment (SSALite.esprog s).
+  Proof.
+    rewrite /SSALite.split_espec tmap_map. case: s => [E f p g] /=. split.
+    - elim: g => //=.
+      + move=> H. apply: (H (SSALite.mkEspec E f p SSALite.etrue)).
+        left; reflexivity.
+      + move=> e1 e2 H. apply: (H (SSALite.mkEspec E f p (Eeq e1 e2))).
+        left; reflexivity.
+      + move=> e1 e2 ms H. apply: (H (SSALite.mkEspec E f p (Eeqmod e1 e2 ms))).
+        left; reflexivity.
+      + move=> e1 IH1 e2 IH2 H. apply: IH1 => t Hin. apply: H. rewrite map_cat.
+        apply: in_cat_l. assumption.
+    - elim: g => //=.
+      + move=> Hssa t [] //. move=> <- /=. assumption.
+      + move=> e1 e2 Hssa t [] //. move=> <- /=. assumption.
+      + move=> e1 e2 ms Hssa t [] //. move=> <- /=. assumption.
+      + move=> e1 IH1 e2 IH2 Hssa t Hin. rewrite map_cat in Hin. case: (in_cat Hin) => {}Hin.
+        * exact: (IH1 Hssa _ Hin).
+        * exact: (IH2 Hssa _ Hin).
+  Qed.
+
+  Lemma split_rspec_ssa_single_assignment s :
+    (forall t, In t (SSALite.split_rspec s) -> ssa_single_assignment (SSALite.rsprog t)) <->
+    ssa_single_assignment (SSALite.rsprog s).
+  Proof.
+    rewrite /SSALite.split_rspec tmap_map. case: s => [E f p g] /=. split.
+    - elim: g => //=.
+      + move=> H. apply: (H (SSALite.mkRspec E f p SSALite.rtrue)).
+        left; reflexivity.
+      + move=> n e1 e2 H. apply: (H (SSALite.mkRspec E f p (Req n e1 e2))).
+        left; reflexivity.
+      + move=> n op e1 e2 H. apply: (H (SSALite.mkRspec E f p (Rcmp n op e1 e2))).
+        left; reflexivity.
+      + move=> e IH H. apply: (H (SSALite.mkRspec E f p (Rneg e))).
+        left; reflexivity.
+      + move=> e1 IH1 e2 IH2 H. apply: IH1 => t Hin. apply: H. rewrite map_cat.
+        apply: in_cat_l. assumption.
+      + move=> e1 IH1 e2 IH2 H. apply: (H (SSALite.mkRspec E f p (Ror e1 e2))).
+        left; reflexivity.
+    - elim: g => //=.
+      + move=> Hssa t [] //. move=> <- /=. assumption.
+      + move=> n e1 e2 Hssa t [] //. move=> <- /=. assumption.
+      + move=> n op e1 e2 Hssa t [] //. move=> <- /=. assumption.
+      + move=> e IH Hssa t [] //. move=> <- /=. assumption.
+      + move=> e1 IH1 e2 IH2 Hssa t Hin. rewrite map_cat in Hin. case: (in_cat Hin) => {}Hin.
+        * exact: (IH1 Hssa _ Hin).
+        * exact: (IH2 Hssa _ Hin).
+      + move=> e1 IH1 e2 IH2 Hssa t [] //. move=> <- /=. assumption.
+  Qed.
+
+  Lemma well_formed_ssa_split_espec s t :
+    List.In t (SSALite.split_espec s) -> well_formed_ssa_espec s -> well_formed_ssa_espec t.
+  Proof.
+    rewrite /well_formed_ssa_espec. move=> Hin /andP [/andP [Hwf Hun] Hssa].
+    by rewrite (ssa_vars_unchanged_program_split_espec Hin Hun)
+         (ssa_single_assignment_split_espec Hin Hssa)
+         (SSALite.well_formed_espec_split_espec Hin Hwf).
+  Qed.
+
+  Lemma well_formed_ssa_split_rspec s t :
+    List.In t (SSALite.split_rspec s) -> well_formed_ssa_rspec s -> well_formed_ssa_rspec t.
+  Proof.
+    rewrite /well_formed_ssa_rspec. move=> Hin /andP [/andP [Hwf Hun] Hssa].
+    by rewrite (ssa_vars_unchanged_program_split_rspec Hin Hun)
+         (ssa_single_assignment_split_rspec Hin Hssa)
+         (SSALite.well_formed_rspec_split_rspec Hin Hwf).
+  Qed.
+
+  Lemma split_espec_well_formed_ssa s :
+    (forall t, List.In t (SSALite.split_espec s) -> well_formed_ssa_espec t) <->
+    well_formed_ssa_espec s.
+  Proof.
+    case: s => [E f p g] /=. split.
+    - elim: g => //=.
+      + move=> H. apply: (H (SSALite.mkEspec E f p SSALite.etrue)). left; reflexivity.
+      + move=> e1 e2 H. apply: (H (SSALite.mkEspec E f p (Eeq e1 e2))). left; reflexivity.
+      + move=> e1 e2 ms H. apply: (H (SSALite.mkEspec E f p (Eeqmod e1 e2 ms))). left; reflexivity.
+      + move=> e1 IH1 e2 IH2 H. apply/well_formed_ssa_espec_eand. split.
+        * apply: IH1 => t Hin. apply: H. rewrite SSALite.split_espec_eand.
+          apply: in_cat_l. assumption.
+        * apply: IH2 => t Hin. apply: H. rewrite SSALite.split_espec_eand.
+          apply: in_cat_r. assumption.
+    - elim: g => //=.
+      + move=> Hwf t [] //. move=> <-. assumption.
+      + move=> e1 e2 Hwf t [] //. move=> <-. assumption.
+      + move=> e1 e2 ms Hwf t [] //. move=> <-. assumption.
+      + move=> e1 IH1 e2 IH2 /well_formed_ssa_espec_eand [Hwf1 Hwf2] t Hin.
+        rewrite SSALite.split_espec_eand in Hin. case: (in_cat Hin) => {}Hin.
+        * exact: (IH1 Hwf1 _ Hin).
+        * exact: (IH2 Hwf2 _ Hin).
+  Qed.
+
+  Lemma split_rspec_well_formed_ssa s :
+    (forall t, List.In t (SSALite.split_rspec s) -> well_formed_ssa_rspec t) <->
+    well_formed_ssa_rspec s.
+  Proof.
+    case: s => [E f p g] /=. split.
+    - elim: g => //=.
+      + move=> H. apply: (H (SSALite.mkRspec E f p SSALite.rtrue)). left; reflexivity.
+      + move=> n e1 e2 H. apply: (H (SSALite.mkRspec E f p (Req n e1 e2))). left; reflexivity.
+      + move=> n op e1 e2 H. apply: (H (SSALite.mkRspec E f p (Rcmp n op e1 e2))). left; reflexivity.
+      + move=> e IH H. apply: (H (SSALite.mkRspec E f p (Rneg e))). left; reflexivity.
+      + move=> e1 IH1 e2 IH2 H. apply/well_formed_ssa_rspec_rand. split.
+        * apply: IH1 => t Hin. apply: H. rewrite SSALite.split_rspec_rand.
+          apply: in_cat_l. assumption.
+        * apply: IH2 => t Hin. apply: H. rewrite SSALite.split_rspec_rand.
+          apply: in_cat_r. assumption.
+      + move=> e1 IH1 e2 IH2 H. apply: (H (SSALite.mkRspec E f p (Ror e1 e2))). left; reflexivity.
+    - elim: g => //=.
+      + move=> Hwf t [] //. move=> <-. assumption.
+      + move=> n e1 e2 Hwf t [] //. move=> <-. assumption.
+      + move=> n op e1 e2 Hwf t [] //. move=> <-. assumption.
+      + move=> e IH Hwf t [] //. move=> <-. assumption.
+      + move=> e1 IH1 e2 IH2 /well_formed_ssa_rspec_rand [Hwf1 Hwf2] t Hin.
+        rewrite SSALite.split_rspec_rand in Hin. case: (in_cat Hin) => {}Hin.
+        * exact: (IH1 Hwf1 _ Hin).
+        * exact: (IH2 Hwf2 _ Hin).
+      + move=> e1 IH1 e2 IH2 Hwf t [] //. move=> <-. assumption.
+  Qed.
+
+  Lemma ssa_unchanged_program_slice_einstr vs vs' i i' :
+    ssa_vars_unchanged_instr vs i -> SSALite.slice_einstr vs' i = Some i' ->
+    ssa_vars_unchanged_instr vs i'.
+  Proof.
+    case: i => //=; intros; case_if; case_option; subst; simpl; try assumption.
+    case: b H H0 => [e r] /=. move=> Hun [] ?; subst.
+    rewrite ssa_unchanged_instr_disjoint_lvs /=. exact: SSALite.VSLemmas.disjoint_empty_r.
+  Qed.
+
+  Lemma ssa_unchanged_program_slice_rinstr vs vs' i i' :
+    ssa_vars_unchanged_instr vs i -> SSALite.slice_rinstr vs' i = Some i' ->
+    ssa_vars_unchanged_instr vs i'.
+  Proof.
+    case: i => //=; intros; case_if; case_option; subst; simpl; try assumption.
+    case: b H H0 => [e r] /=. move=> Hun [] ?; subst.
+    rewrite ssa_unchanged_instr_disjoint_lvs /=. exact: SSALite.VSLemmas.disjoint_empty_r.
+  Qed.
+
+  Lemma ssa_unchanged_program_slice_eprogram vs vs' p :
+    ssa_vars_unchanged_program vs p -> ssa_vars_unchanged_program vs (SSALite.slice_eprogram vs' p).
+  Proof.
+    elim: p => [| i p IH] //=. rewrite ssa_unchanged_program_cons. move/andP=> [Huni Hunp].
+    case Hs: (SSALite.slice_einstr vs' i) => //=.
+    - rewrite ssa_unchanged_program_cons (ssa_unchanged_program_slice_einstr Huni Hs).
+      exact: (IH Hunp).
+    - exact: (IH Hunp).
+  Qed.
+
+  Lemma ssa_unchanged_program_slice_rprogram vs vs' p :
+    ssa_vars_unchanged_program vs p -> ssa_vars_unchanged_program vs (SSALite.slice_rprogram vs' p).
+  Proof.
+    elim: p => [| i p IH] //=. rewrite ssa_unchanged_program_cons. move/andP=> [Huni Hunp].
+    case Hs: (SSALite.slice_rinstr vs' i) => //=.
+    - rewrite ssa_unchanged_program_cons (ssa_unchanged_program_slice_rinstr Huni Hs).
+      exact: (IH Hunp).
+    - exact: (IH Hunp).
+  Qed.
+
+  Lemma ssa_single_assignment_slice_eprogram vs p :
+    ssa_single_assignment p -> ssa_single_assignment (SSALite.slice_eprogram vs p).
+  Proof.
+    elim: p => [| i p IH] //=. move/andP => [Hun Hssa].
+    case Hs: (SSALite.slice_einstr vs i) => //=.
+    - move: (ssa_unchanged_program_slice_eprogram vs Hun) => {}Hun.
+      rewrite (ssa_unchanged_program_subset Hun) /=.
+      + exact: (IH Hssa).
+      + rewrite (SSALite.slice_einstr_lvs_equal Hs). exact: SSAVS.Lemmas.subset_refl.
+    - exact: (IH Hssa).
+  Qed.
+
+  Lemma ssa_single_assignment_slice_rprogram vs p :
+    ssa_single_assignment p -> ssa_single_assignment (SSALite.slice_rprogram vs p).
+  Proof.
+    elim: p => [| i p IH] //=. move/andP => [Hun Hssa].
+    case Hs: (SSALite.slice_rinstr vs i) => //=.
+    - move: (ssa_unchanged_program_slice_rprogram vs Hun) => {}Hun.
+      rewrite (ssa_unchanged_program_subset Hun) /=.
+      + exact: (IH Hssa).
+      + rewrite (SSALite.slice_rinstr_lvs_equal Hs). exact: SSAVS.Lemmas.subset_refl.
+    - exact: (IH Hssa).
+  Qed.
+
+  Lemma well_formed_ssa_espec_slice_espec s :
+    well_formed_ssa_espec s -> well_formed_ssa_espec (SSALite.slice_espec o s).
+  Proof.
+    rewrite /well_formed_ssa_espec. move/andP=> [/andP [Hwf Hun] Hssa].
+    rewrite (SSALite.well_formed_espec_slice_espec o Hwf) /=.
+    rewrite (ssa_unchanged_program_slice_eprogram _ Hun) /=.
+    exact: (ssa_single_assignment_slice_eprogram _ Hssa).
+  Qed.
+
+  Lemma well_formed_ssa_rspec_slice_rspec s :
+    well_formed_ssa_rspec s -> well_formed_ssa_rspec (SSALite.slice_rspec o s).
+  Proof.
+    rewrite /well_formed_ssa_rspec. move/andP=> [/andP [Hwf Hun] Hssa].
+    rewrite (SSALite.well_formed_rspec_slice_rspec o Hwf) /=.
+    rewrite (ssa_unchanged_program_slice_rprogram _ Hun) /=.
+    exact: (ssa_single_assignment_slice_rprogram _ Hssa).
   Qed.
 
 
   Lemma ssa_unchanged_instr_eval_singleton v te s1 s2 i :
     ssa_vars_unchanged_instr (SSAVS.singleton v) i ->
-    SSAFull.eval_instr te i (OK s1) (OK s2) ->
+    SSALite.eval_instr te i s1 s2 ->
     SSAStore.acc v s1 = SSAStore.acc v s2.
   Proof.
     move=> Hun Hei.
@@ -3490,17 +3733,17 @@ Section MakeSSA.
 
   Lemma ssa_unchanged_instr_acc2z v te s1 s2 i :
     ssa_vars_unchanged_instr (SSAVS.singleton v) i ->
-    SSAFull.eval_instr te i (OK s1) (OK s2) ->
-    SSAFull.acc2z te v s1 = SSAFull.acc2z te v s2.
+    SSALite.eval_instr te i s1 s2 ->
+    SSALite.acc2z te v s1 = SSALite.acc2z te v s2.
   Proof.
-    move=> Hun Hei. rewrite /SSAFull.acc2z.
+    move=> Hun Hei. rewrite /SSALite.acc2z.
     rewrite (ssa_unchanged_instr_eval_singleton Hun Hei). reflexivity.
   Qed.
 
   Lemma ssa_unchanged_instr_eval_atom a te s1 s2 i :
-    ssa_vars_unchanged_instr (SSAFull.vars_atom a) i ->
-    SSAFull.eval_instr te i (OK s1) (OK s2) ->
-    SSAFull.eval_atom a s1 = SSAFull.eval_atom a s2.
+    ssa_vars_unchanged_instr (SSALite.vars_atom a) i ->
+    SSALite.eval_instr te i s1 s2 ->
+    SSALite.eval_atom a s1 = SSALite.eval_atom a s2.
   Proof.
     case: a => /=.
     - move=> v. exact: ssa_unchanged_instr_eval_singleton.
@@ -3508,9 +3751,9 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_unchanged_instr_eval_eexp e te s1 s2 i :
-    ssa_vars_unchanged_instr (SSAFull.vars_eexp e) i ->
-    SSAFull.eval_instr te i (OK s1) (OK s2) ->
-    SSAFull.eval_eexp e te s1 = SSAFull.eval_eexp e te s2.
+    ssa_vars_unchanged_instr (SSALite.vars_eexp e) i ->
+    SSALite.eval_instr te i s1 s2 ->
+    SSALite.eval_eexp e te s1 = SSALite.eval_eexp e te s2.
   Proof.
     elim: e => /=.
     - move=> a Hun Hei. exact: (ssa_unchanged_instr_acc2z Hun Hei).
@@ -3523,18 +3766,18 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_unchanged_instr_eval_eexps es te s1 s2 i :
-    ssa_vars_unchanged_instr (SSAFull.vars_eexps es) i ->
-    SSAFull.eval_instr te i (OK s1) (OK s2) ->
-    SSAFull.eval_eexps es te s1 = SSAFull.eval_eexps es te s2.
+    ssa_vars_unchanged_instr (SSALite.vars_eexps es) i ->
+    SSALite.eval_instr te i s1 s2 ->
+    SSALite.eval_eexps es te s1 = SSALite.eval_eexps es te s2.
   Proof.
     elim: es => [| e es IH] //=. rewrite ssa_unchanged_instr_union => /andP [Hun1 Hun2] Hev.
     rewrite (ssa_unchanged_instr_eval_eexp Hun1 Hev) (IH Hun2 Hev). reflexivity.
   Qed.
 
   Lemma ssa_unchanged_instr_eval_rexp e te s1 s2 i :
-    ssa_vars_unchanged_instr (SSAFull.vars_rexp e) i ->
-    SSAFull.eval_instr te i (OK s1) (OK s2) ->
-    SSAFull.eval_rexp e s1 = SSAFull.eval_rexp e s2.
+    ssa_vars_unchanged_instr (SSALite.vars_rexp e) i ->
+    SSALite.eval_instr te i s1 s2 ->
+    SSALite.eval_rexp e s1 = SSALite.eval_rexp e s2.
   Proof.
     elim: e => /=.
     - move=> a. exact: ssa_unchanged_instr_eval_singleton.
@@ -3550,7 +3793,7 @@ Section MakeSSA.
 
   Lemma ssa_unchanged_program_eval_singleton v te s1 s2 p :
     ssa_vars_unchanged_program (SSAVS.singleton v) p ->
-    SSAFull.eval_program te p (OK s1) (OK s2) ->
+    SSALite.eval_program te p s1 s2 ->
     SSAStore.acc v s1 = SSAStore.acc v s2.
   Proof.
     move=> Hun Hep.
@@ -3560,17 +3803,17 @@ Section MakeSSA.
 
   Lemma ssa_unchanged_program_acc2z v te s1 s2 p :
     ssa_vars_unchanged_program (SSAVS.singleton v) p ->
-    SSAFull.eval_program te p (OK s1) (OK s2) ->
-    SSAFull.acc2z te v s1 = SSAFull.acc2z te v s2.
+    SSALite.eval_program te p s1 s2 ->
+    SSALite.acc2z te v s1 = SSALite.acc2z te v s2.
   Proof.
-    move=> Hun Hep. rewrite /SSAFull.acc2z.
+    move=> Hun Hep. rewrite /SSALite.acc2z.
     rewrite (ssa_unchanged_program_eval_singleton Hun Hep). reflexivity.
   Qed.
 
   Lemma ssa_unchanged_program_eval_atom a te s1 s2 p :
-    ssa_vars_unchanged_program (SSAFull.vars_atom a) p ->
-    SSAFull.eval_program te p (OK s1) (OK s2) ->
-    SSAFull.eval_atom a s1 = SSAFull.eval_atom a s2.
+    ssa_vars_unchanged_program (SSALite.vars_atom a) p ->
+    SSALite.eval_program te p s1 s2 ->
+    SSALite.eval_atom a s1 = SSALite.eval_atom a s2.
   Proof.
     case: a => /=.
     - move=> v. exact: ssa_unchanged_program_eval_singleton.
@@ -3578,9 +3821,9 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_unchanged_program_eval_eexp e te s1 s2 p :
-    ssa_vars_unchanged_program (SSAFull.vars_eexp e) p ->
-    SSAFull.eval_program te p (OK s1) (OK s2) ->
-    SSAFull.eval_eexp e te s1 = SSAFull.eval_eexp e te s2.
+    ssa_vars_unchanged_program (SSALite.vars_eexp e) p ->
+    SSALite.eval_program te p s1 s2 ->
+    SSALite.eval_eexp e te s1 = SSALite.eval_eexp e te s2.
   Proof.
     elim: e => /=.
     - move=> a Hun Hep. exact: (ssa_unchanged_program_acc2z Hun Hep).
@@ -3593,18 +3836,18 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_unchanged_program_eval_eexps es te s1 s2 p :
-    ssa_vars_unchanged_program (SSAFull.vars_eexps es) p ->
-    SSAFull.eval_program te p (OK s1) (OK s2) ->
-    SSAFull.eval_eexps es te s1 = SSAFull.eval_eexps es te s2.
+    ssa_vars_unchanged_program (SSALite.vars_eexps es) p ->
+    SSALite.eval_program te p s1 s2 ->
+    SSALite.eval_eexps es te s1 = SSALite.eval_eexps es te s2.
   Proof.
     elim: es => [| e es IH] //=. rewrite ssa_unchanged_program_union => /andP [Hun1 Hun2] Hev.
     rewrite (ssa_unchanged_program_eval_eexp Hun1 Hev) (IH Hun2 Hev). reflexivity.
   Qed.
 
   Lemma ssa_unchanged_program_eval_rexp e te s1 s2 p :
-    ssa_vars_unchanged_program (SSAFull.vars_rexp e) p ->
-    SSAFull.eval_program te p (OK s1) (OK s2) ->
-    SSAFull.eval_rexp e s1 = SSAFull.eval_rexp e s2.
+    ssa_vars_unchanged_program (SSALite.vars_rexp e) p ->
+    SSALite.eval_program te p s1 s2 ->
+    SSALite.eval_rexp e s1 = SSALite.eval_rexp e s2.
   Proof.
     elim: e => /=.
     - move=> a Hun Hep.
@@ -3622,9 +3865,9 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_unchanged_instr_eval_ebexp e te s1 s2 i :
-    ssa_vars_unchanged_instr (SSAFull.vars_ebexp e) i ->
-    SSAFull.eval_instr te i (OK s1) (OK s2) ->
-    SSAFull.eval_ebexp e te s1 <-> SSAFull.eval_ebexp e te s2.
+    ssa_vars_unchanged_instr (SSALite.vars_ebexp e) i ->
+    SSALite.eval_instr te i s1 s2 ->
+    SSALite.eval_ebexp e te s1 <-> SSALite.eval_ebexp e te s2.
   Proof.
     elim: e => /=.
     - done.
@@ -3647,9 +3890,9 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_unchanged_instr_eval_rbexp e te s1 s2 i :
-    ssa_vars_unchanged_instr (SSAFull.vars_rbexp e) i ->
-    SSAFull.eval_instr te i (OK s1) (OK s2) ->
-    SSAFull.eval_rbexp e s1 <-> SSAFull.eval_rbexp e s2.
+    ssa_vars_unchanged_instr (SSALite.vars_rbexp e) i ->
+    SSALite.eval_instr te i s1 s2 ->
+    SSALite.eval_rbexp e s1 <-> SSALite.eval_rbexp e s2.
   Proof.
     elim: e => /=.
     - done.
@@ -3671,9 +3914,9 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_unchanged_instr_eval_bexp e te s1 s2 i :
-    ssa_vars_unchanged_instr (SSAFull.vars_bexp e) i ->
-    SSAFull.eval_instr te i (OK s1) (OK s2) ->
-    SSAFull.eval_bexp e te s1 <-> SSAFull.eval_bexp e te s2.
+    ssa_vars_unchanged_instr (SSALite.vars_bexp e) i ->
+    SSALite.eval_instr te i s1 s2 ->
+    SSALite.eval_bexp e te s1 <-> SSALite.eval_bexp e te s2.
   Proof.
     move=> Hun Hei. move: (ssa_unchanged_instr_union1 Hun) => {Hun} [Hun1 Hun2].
     split; move => [H1 H2].
@@ -3684,9 +3927,9 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_unchanged_program_eval_ebexp e te s1 s2 p :
-    ssa_vars_unchanged_program (SSAFull.vars_ebexp e) p ->
-    SSAFull.eval_program te p (OK s1) (OK s2) ->
-    SSAFull.eval_ebexp e te s1 <-> SSAFull.eval_ebexp e te s2.
+    ssa_vars_unchanged_program (SSALite.vars_ebexp e) p ->
+    SSALite.eval_program te p s1 s2 ->
+    SSALite.eval_ebexp e te s1 <-> SSALite.eval_ebexp e te s2.
   Proof.
     elim: e => /=.
     - done.
@@ -3709,27 +3952,27 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_unchanged_program_eval_ebexp1 te e s1 s2 p :
-    ssa_vars_unchanged_program (SSAFull.vars_ebexp e) p ->
-    SSAFull.eval_program te p (OK s1) (OK s2) ->
-    SSAFull.eval_ebexp e te s1 -> SSAFull.eval_ebexp e te s2.
+    ssa_vars_unchanged_program (SSALite.vars_ebexp e) p ->
+    SSALite.eval_program te p s1 s2 ->
+    SSALite.eval_ebexp e te s1 -> SSALite.eval_ebexp e te s2.
   Proof.
     move=> Hun Hep He.
     exact: (proj1 (ssa_unchanged_program_eval_ebexp Hun Hep) He).
   Qed.
 
   Lemma ssa_unchanged_program_eval_ebexp2 e te s1 s2 p :
-    ssa_vars_unchanged_program (SSAFull.vars_ebexp e) p ->
-    SSAFull.eval_program te p (OK s1) (OK s2) ->
-    SSAFull.eval_ebexp e te s2 -> SSAFull.eval_ebexp e te s1.
+    ssa_vars_unchanged_program (SSALite.vars_ebexp e) p ->
+    SSALite.eval_program te p s1 s2 ->
+    SSALite.eval_ebexp e te s2 -> SSALite.eval_ebexp e te s1.
   Proof.
     move=> Hun Hep He.
     exact: (proj2 (ssa_unchanged_program_eval_ebexp Hun Hep) He).
   Qed.
 
   Lemma ssa_unchanged_program_eval_rbexp e te s1 s2 p :
-    ssa_vars_unchanged_program (SSAFull.vars_rbexp e) p ->
-    SSAFull.eval_program te p (OK s1) (OK s2) ->
-    SSAFull.eval_rbexp e s1 <-> SSAFull.eval_rbexp e s2.
+    ssa_vars_unchanged_program (SSALite.vars_rbexp e) p ->
+    SSALite.eval_program te p s1 s2 ->
+    SSALite.eval_rbexp e s1 <-> SSALite.eval_rbexp e s2.
   Proof.
     elim: e => /=.
     - done.
@@ -3751,27 +3994,27 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_unchanged_program_eval_rbexp1 e te s1 s2 p :
-    ssa_vars_unchanged_program (SSAFull.vars_rbexp e) p ->
-    SSAFull.eval_program te p (OK s1) (OK s2) ->
-    SSAFull.eval_rbexp e s1 -> SSAFull.eval_rbexp e s2.
+    ssa_vars_unchanged_program (SSALite.vars_rbexp e) p ->
+    SSALite.eval_program te p s1 s2 ->
+    SSALite.eval_rbexp e s1 -> SSALite.eval_rbexp e s2.
   Proof.
     move=> Hun Hep He.
     exact: (proj1 (ssa_unchanged_program_eval_rbexp Hun Hep) He).
   Qed.
 
   Lemma ssa_unchanged_program_eval_rbexp2 e te s1 s2 p :
-    ssa_vars_unchanged_program (SSAFull.vars_rbexp e) p ->
-    SSAFull.eval_program te p (OK s1) (OK s2) ->
-    SSAFull.eval_rbexp e s2 -> SSAFull.eval_rbexp e s1.
+    ssa_vars_unchanged_program (SSALite.vars_rbexp e) p ->
+    SSALite.eval_program te p s1 s2 ->
+    SSALite.eval_rbexp e s2 -> SSALite.eval_rbexp e s1.
   Proof.
     move=> Hun Hep He.
     exact: (proj2 (ssa_unchanged_program_eval_rbexp Hun Hep) He).
   Qed.
 
   Lemma ssa_unchanged_program_eval_bexp e te s1 s2 p :
-    ssa_vars_unchanged_program (SSAFull.vars_bexp e) p ->
-    SSAFull.eval_program te p (OK s1) (OK s2) ->
-    SSAFull.eval_bexp e te s1 <-> SSAFull.eval_bexp e te s2.
+    ssa_vars_unchanged_program (SSALite.vars_bexp e) p ->
+    SSALite.eval_program te p s1 s2 ->
+    SSALite.eval_bexp e te s1 <-> SSALite.eval_bexp e te s2.
   Proof.
     move=> Hun Hep. move: (ssa_unchanged_program_union1 Hun) => {Hun} [Hun1 Hun2].
     split; move=> [H1 H2].
@@ -3782,9 +4025,9 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_unchanged_program_eval_bexp1 e te s1 s2 p :
-    ssa_vars_unchanged_program (SSAFull.vars_bexp e) p ->
-    SSAFull.eval_program te p (OK s1) (OK s2) ->
-    SSAFull.eval_bexp e te s1 -> SSAFull.eval_bexp e te s2.
+    ssa_vars_unchanged_program (SSALite.vars_bexp e) p ->
+    SSALite.eval_program te p s1 s2 ->
+    SSALite.eval_bexp e te s1 -> SSALite.eval_bexp e te s2.
   Proof.
     move=> Hunch Hp He.
     move: (ssa_unchanged_program_eval_bexp Hunch Hp) => [H1 H2].
@@ -3792,9 +4035,9 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_unchanged_program_eval_bexp2 e te s1 s2 p :
-    ssa_vars_unchanged_program (SSAFull.vars_bexp e) p ->
-    SSAFull.eval_program te p (OK s1) (OK s2) ->
-    SSAFull.eval_bexp e te s2 -> SSAFull.eval_bexp e te s1.
+    ssa_vars_unchanged_program (SSALite.vars_bexp e) p ->
+    SSALite.eval_program te p s1 s2 ->
+    SSALite.eval_bexp e te s2 -> SSALite.eval_bexp e te s1.
   Proof.
     move=> Hunch Hp He.
     move: (ssa_unchanged_program_eval_bexp Hunch Hp) => [H1 H2].
@@ -3803,14 +4046,14 @@ Section MakeSSA.
 
   Lemma ssa_single_assignment_cons1 i p :
     ssa_single_assignment (i::p) ->
-    (ssa_vars_unchanged_program (SSAFull.lvs_instr i) p) /\
+    (ssa_vars_unchanged_program (SSALite.lvs_instr i) p) /\
     (ssa_single_assignment p).
   Proof.
     move=> H; apply/andP; exact: H.
   Qed.
 
   Lemma ssa_single_assignment_cons2 i p :
-    (ssa_vars_unchanged_program (SSAFull.lvs_instr i) p) ->
+    (ssa_vars_unchanged_program (SSALite.lvs_instr i) p) ->
     (ssa_single_assignment p) ->
     ssa_single_assignment (i::p).
   Proof.
@@ -3819,9 +4062,9 @@ Section MakeSSA.
 
   Lemma ssa_single_assignment_cons i p :
     ssa_single_assignment (i::p) =
-    (ssa_vars_unchanged_program (SSAFull.lvs_instr i) p) && (ssa_single_assignment p).
+    (ssa_vars_unchanged_program (SSALite.lvs_instr i) p) && (ssa_single_assignment p).
   Proof.
-    case H: ((ssa_vars_unchanged_program (SSAFull.lvs_instr i) p) &&
+    case H: ((ssa_vars_unchanged_program (SSALite.lvs_instr i) p) &&
              (ssa_single_assignment p)).
     - move/andP: H=> [H1 H2]. exact: ssa_single_assignment_cons2.
     - apply/negP=> Hcons. move/idP/negP: H. rewrite negb_andb. case/orP=> H.
@@ -3831,7 +4074,7 @@ Section MakeSSA.
 
   Lemma ssa_single_assignment_rcons p i :
     ssa_single_assignment (rcons p i) =
-      ssa_single_assignment p && ssa_vars_unchanged_instr (SSAFull.lvs_program p) i.
+      ssa_single_assignment p && ssa_vars_unchanged_instr (SSALite.lvs_program p) i.
   Proof.
     elim: p i => [| i p IH] j //=.
     - by rewrite ssa_unchanged_program_empty ssa_unchanged_instr_empty.
@@ -3846,13 +4089,13 @@ Section MakeSSA.
 
   Lemma ssa_single_assignment_rcons2 p i :
     ssa_single_assignment (rcons p i) ->
-  ssa_vars_unchanged_instr (SSAFull.lvs_program p) i.
+  ssa_vars_unchanged_instr (SSALite.lvs_program p) i.
   Proof. rewrite ssa_single_assignment_rcons. by move/andP => [? ?]. Qed.
 
   Lemma ssa_single_assignment_cat1 p1 p2 :
     ssa_single_assignment (p1 ++ p2) ->
     ssa_single_assignment p1 /\ ssa_single_assignment p2 /\
-    (ssa_vars_unchanged_program (SSAFull.lvs_program p1) p2).
+    (ssa_vars_unchanged_program (SSALite.lvs_program p1) p2).
   Proof.
     elim: p1 => /=.
     - move=> Hp2; repeat split. exact: Hp2.
@@ -3867,7 +4110,7 @@ Section MakeSSA.
 
   Lemma ssa_single_assignment_cat2 p1 p2 :
     ssa_single_assignment p1 -> ssa_single_assignment p2 ->
-    (ssa_vars_unchanged_program (SSAFull.lvs_program p1) p2) ->
+    (ssa_vars_unchanged_program (SSALite.lvs_program p1) p2) ->
     ssa_single_assignment (p1 ++ p2).
   Proof.
     elim: p1 => /=.
@@ -3877,65 +4120,75 @@ Section MakeSSA.
       + apply: ssa_unchanged_program_cat2.
         * exact: Hun1.
         * apply: (ssa_unchanged_program_subset Hun12).
-          apply: SSAFull.VSLemmas.subset_union1. exact: SSAFull.VSLemmas.subset_refl.
+          apply: SSALite.VSLemmas.subset_union1. exact: SSALite.VSLemmas.subset_refl.
       + apply: (IH Hssa1 Hssa2). apply: (ssa_unchanged_program_subset Hun12).
-        apply: SSAFull.VSLemmas.subset_union2. exact: SSAFull.VSLemmas.subset_refl.
+        apply: SSALite.VSLemmas.subset_union2. exact: SSALite.VSLemmas.subset_refl.
   Qed.
 
   Lemma ssa_single_assignment_cat p1 p2 :
     ssa_single_assignment (p1 ++ p2) =
     (ssa_single_assignment p1 && ssa_single_assignment p2 &&
-     (ssa_vars_unchanged_program (SSAFull.lvs_program p1) p2)).
+     (ssa_vars_unchanged_program (SSALite.lvs_program p1) p2)).
   Proof.
     case H: (ssa_single_assignment p1 && ssa_single_assignment p2 &&
-             ssa_vars_unchanged_program (SSAFull.lvs_program p1) p2).
+             ssa_vars_unchanged_program (SSALite.lvs_program p1) p2).
     - move/andP: H=> [/andP [H1 H2] H3]. by apply: ssa_single_assignment_cat2.
     - apply/negP=> Hcat. move/idP/negP: H.
       by move: (ssa_single_assignment_cat1 Hcat) => [-> [-> ->]].
   Qed.
 
+  Lemma ssa_single_assignment_rng_program p :
+    ssa_single_assignment p -> ssa_single_assignment (SSALite.rng_program p).
+  Proof.
+    elim: p => [| i p IH] Hssa //=. rewrite ssa_single_assignment_cons in Hssa.
+    move/andP: Hssa => [Hun Hssa]. rewrite (IH Hssa) andbT.
+    rewrite -ssa_vars_unchanged_rng_program in Hun.
+    apply : (ssa_unchanged_program_subset Hun).
+    exact: SSALite.rng_lvs_instr_subset.
+  Qed.
+
 
   Lemma ssa_unchanged_instr_succ_typenv_submap E i :
-    ssa_vars_unchanged_instr (SSAFull.vars_env E) i ->
-    SSAFull.TELemmas.submap E (SSAFull.instr_succ_typenv i E).
+    ssa_vars_unchanged_instr (SSALite.vars_env E) i ->
+    SSALite.TELemmas.submap E (SSALite.instr_succ_typenv i E).
   Proof.
     (case: i => //=; intros);
       repeat
         (match goal with
          | H : is_true (ssa_vars_unchanged_instr _ _) |- _ =>
            rewrite ssa_unchanged_instr_disjoint_lvs /= in H
-         | H : is_true (SSAFull.VSLemmas.disjoint _ (SSAVS.singleton _)) |- _ =>
-           rewrite SSAFull.VSLemmas.disjoint_singleton in H
-         | H : is_true (SSAFull.VSLemmas.disjoint _ (SSAVS.add _ _)) |- _ =>
+         | H : is_true (SSALite.VSLemmas.disjoint _ (SSAVS.singleton _)) |- _ =>
+           rewrite SSALite.VSLemmas.disjoint_singleton in H
+         | H : is_true (SSALite.VSLemmas.disjoint _ (SSAVS.add _ _)) |- _ =>
            let H1 := fresh in
            let H2 := fresh in
-           rewrite SSAFull.VSLemmas.disjoint_add in H; move/andP: H => [H1 H2]
-         | H : context c [SSAVS.mem _ (SSAFull.vars_env _)] |- _ =>
-           rewrite -SSAFull.vars_env_mem in H
+           rewrite SSALite.VSLemmas.disjoint_add in H; move/andP: H => [H1 H2]
+         | H : context c [SSAVS.mem _ (SSALite.vars_env _)] |- _ =>
+           rewrite -SSALite.vars_env_mem in H
          | H : is_true (~~ SSATE.mem _ _) |- _ =>
            let H1 := fresh in
-           move: (SSAFull.TELemmas.not_mem_find_none H) => {H} H1
+           move: (SSALite.TELemmas.not_mem_find_none H) => {H} H1
          | H : SSATE.find ?v ?E = None |-
-           SSAFull.TELemmas.submap ?E (SSATE.add ?v _ _) =>
-           apply: (SSAFull.TELemmas.submap_none_add _ _ H)
-         | |- SSAFull.TELemmas.submap ?E ?E =>
-           exact: SSAFull.TELemmas.submap_refl
+           SSALite.TELemmas.submap ?E (SSATE.add ?v _ _) =>
+           apply: (SSALite.TELemmas.submap_none_add _ _ H)
+         | |- SSALite.TELemmas.submap ?E ?E =>
+           exact: SSALite.TELemmas.submap_refl
          end
         ).
   Qed.
 
   Lemma ssa_unchanged_program_succ_typenv_submap E p :
-    ssa_vars_unchanged_program (SSAFull.vars_env E) p ->
+    ssa_vars_unchanged_program (SSALite.vars_env E) p ->
     ssa_single_assignment p ->
-    SSAFull.TELemmas.submap E (SSAFull.program_succ_typenv p E).
+    SSALite.TELemmas.submap E (SSALite.program_succ_typenv p E).
   Proof.
     elim: p E => [| i p IH] E Hunch Hssa /=.
-    - exact: SSAFull.TELemmas.submap_refl.
+    - exact: SSALite.TELemmas.submap_refl.
     - rewrite ssa_unchanged_program_cons in Hunch. move/andP: Hunch => [Hi Hp].
       move: (ssa_single_assignment_cons1 Hssa) => [Hssa_i Hssa_p].
-      apply: (@SSAFull.TELemmas.submap_trans _ (SSAFull.instr_succ_typenv i E)).
+      apply: (@SSALite.TELemmas.submap_trans _ (SSALite.instr_succ_typenv i E)).
       + apply: ssa_unchanged_instr_succ_typenv_submap. exact: Hi.
-      + apply: (IH _ _ Hssa_p). move: (SSAFull.vars_env_instr_succ_typenv i E) => Heq.
+      + apply: (IH _ _ Hssa_p). move: (SSALite.vars_env_instr_succ_typenv i E) => Heq.
         move: (SSAVS.Lemmas.P.equal_sym Heq) => {Heq} Heq.
         apply: (ssa_unchanged_program_replace Heq).
         rewrite ssa_unchanged_program_union Hp Hssa_i. done.
@@ -3944,16 +4197,16 @@ Section MakeSSA.
 
   Lemma vtyp_unchanged_instr_succ_typenv E i v :
     ssa_vars_unchanged_instr (SSAVS.singleton v) i ->
-    SSATE.vtyp v (SSAFull.instr_succ_typenv i E) = SSATE.vtyp v E.
+    SSATE.vtyp v (SSALite.instr_succ_typenv i E) = SSATE.vtyp v E.
   Proof.
-    move=> Hun. rewrite SSAFull.vtyp_instr_succ_typenv_not_mem_lvs; first reflexivity.
+    move=> Hun. rewrite SSALite.vtyp_instr_succ_typenv_not_mem_lvs; first reflexivity.
     rewrite ssa_unchanged_instr_singleton in Hun.
     rewrite ssa_var_unchanged_instr_not_mem in Hun. assumption.
   Qed.
 
   Lemma vtyp_unchanged_program_succ_typenv E p v :
     ssa_vars_unchanged_program (SSAVS.singleton v) p ->
-    SSATE.vtyp v (SSAFull.program_succ_typenv p E) = SSATE.vtyp v E.
+    SSATE.vtyp v (SSALite.program_succ_typenv p E) = SSATE.vtyp v E.
   Proof.
     elim: p E => [| i p IH] E //=.
     move=> Hun. rewrite (IH _ (proj2 (ssa_unchanged_program_cons1 Hun))).
@@ -3962,7 +4215,7 @@ Section MakeSSA.
 
   Lemma vsize_unchanged_instr_succ_typenv E i v :
     ssa_vars_unchanged_instr (SSAVS.singleton v) i ->
-    SSATE.vsize v (SSAFull.instr_succ_typenv i E) = SSATE.vsize v E.
+    SSATE.vsize v (SSALite.instr_succ_typenv i E) = SSATE.vsize v E.
   Proof.
     move=> Hun. rewrite /SSATE.vsize. rewrite (vtyp_unchanged_instr_succ_typenv _ Hun).
     reflexivity.
@@ -3970,25 +4223,25 @@ Section MakeSSA.
 
   Lemma vsize_unchanged_program_succ_typenv E p v :
     ssa_vars_unchanged_program (SSAVS.singleton v) p ->
-    SSATE.vsize v (SSAFull.program_succ_typenv p E) = SSATE.vsize v E.
+    SSATE.vsize v (SSALite.program_succ_typenv p E) = SSATE.vsize v E.
   Proof.
     move=> Hun. rewrite /SSATE.vsize. rewrite (vtyp_unchanged_program_succ_typenv _ Hun).
     reflexivity.
   Qed.
 
   Lemma atyp_unchanged_instr_succ_typenv E i a :
-    ssa_vars_unchanged_instr (SSAFull.vars_atom a) i ->
-    SSAFull.atyp a (SSAFull.instr_succ_typenv i E) = SSAFull.atyp a E.
+    ssa_vars_unchanged_instr (SSALite.vars_atom a) i ->
+    SSALite.atyp a (SSALite.instr_succ_typenv i E) = SSALite.atyp a E.
   Proof.
     case: a => //=. move=> v Hun.
-    rewrite SSAFull.vtyp_instr_succ_typenv_not_mem_lvs; first reflexivity.
+    rewrite SSALite.vtyp_instr_succ_typenv_not_mem_lvs; first reflexivity.
     rewrite ssa_unchanged_instr_singleton in Hun.
     rewrite ssa_var_unchanged_instr_not_mem in Hun. assumption.
   Qed.
 
   Lemma atyp_unchanged_program_succ_typenv E p a :
-    ssa_vars_unchanged_program (SSAFull.vars_atom a) p ->
-    SSAFull.atyp a (SSAFull.program_succ_typenv p E) = SSAFull.atyp a E.
+    ssa_vars_unchanged_program (SSALite.vars_atom a) p ->
+    SSALite.atyp a (SSALite.program_succ_typenv p E) = SSALite.atyp a E.
   Proof.
     elim: p E => [| i p IH] E //=.
     move=> Hun. rewrite (IH _ (proj2 (ssa_unchanged_program_cons1 Hun))).
@@ -3996,32 +4249,32 @@ Section MakeSSA.
   Qed.
 
   Lemma asize_unchanged_instr_succ_typenv E i a :
-    ssa_vars_unchanged_instr (SSAFull.vars_atom a) i ->
-    SSAFull.asize a (SSAFull.instr_succ_typenv i E) = SSAFull.asize a E.
+    ssa_vars_unchanged_instr (SSALite.vars_atom a) i ->
+    SSALite.asize a (SSALite.instr_succ_typenv i E) = SSALite.asize a E.
   Proof.
-    rewrite /SSAFull.asize => Hun. rewrite (atyp_unchanged_instr_succ_typenv _ Hun).
+    rewrite /SSALite.asize => Hun. rewrite (atyp_unchanged_instr_succ_typenv _ Hun).
     reflexivity.
   Qed.
 
   Lemma asize_unchanged_program_succ_typenv E p a :
-    ssa_vars_unchanged_program (SSAFull.vars_atom a) p ->
-    SSAFull.asize a (SSAFull.program_succ_typenv p E) = SSAFull.asize a E.
+    ssa_vars_unchanged_program (SSALite.vars_atom a) p ->
+    SSALite.asize a (SSALite.program_succ_typenv p E) = SSALite.asize a E.
   Proof.
-    rewrite /SSAFull.asize => Hun. rewrite (atyp_unchanged_program_succ_typenv _ Hun).
+    rewrite /SSALite.asize => Hun. rewrite (atyp_unchanged_program_succ_typenv _ Hun).
     reflexivity.
   Qed.
 
   Lemma well_sized_atom_unchanged_instr_succ_typenv E i a :
-    ssa_vars_unchanged_instr (SSAFull.vars_atom a) i ->
-    SSAFull.well_sized_atom (SSAFull.instr_succ_typenv i E) a = SSAFull.well_sized_atom E a.
+    ssa_vars_unchanged_instr (SSALite.vars_atom a) i ->
+    SSALite.well_sized_atom (SSALite.instr_succ_typenv i E) a = SSALite.well_sized_atom E a.
   Proof.
-    rewrite /SSAFull.well_sized_atom => Hun. rewrite (atyp_unchanged_instr_succ_typenv _ Hun).
+    rewrite /SSALite.well_sized_atom => Hun. rewrite (atyp_unchanged_instr_succ_typenv _ Hun).
     rewrite (asize_unchanged_instr_succ_typenv _ Hun). reflexivity.
   Qed.
 
   Lemma well_sized_atom_unchanged_program_succ_typenv E p a :
-    ssa_vars_unchanged_program (SSAFull.vars_atom a) p ->
-    SSAFull.well_sized_atom (SSAFull.program_succ_typenv p E) a = SSAFull.well_sized_atom E a.
+    ssa_vars_unchanged_program (SSALite.vars_atom a) p ->
+    SSALite.well_sized_atom (SSALite.program_succ_typenv p E) a = SSALite.well_sized_atom E a.
   Proof.
     elim: p E => [| i p IH] E //=. move=> Hun.
     rewrite (IH _ (proj2 (ssa_unchanged_program_cons1 Hun))).
@@ -4030,17 +4283,17 @@ Section MakeSSA.
   Qed.
 
   Lemma well_typed_atom_unchanged_instr_succ_typenv E i a :
-    ssa_vars_unchanged_instr (SSAFull.vars_atom a) i ->
-    SSAFull.well_typed_atom (SSAFull.instr_succ_typenv i E) a = SSAFull.well_typed_atom E a.
+    ssa_vars_unchanged_instr (SSALite.vars_atom a) i ->
+    SSALite.well_typed_atom (SSALite.instr_succ_typenv i E) a = SSALite.well_typed_atom E a.
   Proof.
-    rewrite /SSAFull.well_typed_atom. move=> Hun.
+    rewrite /SSALite.well_typed_atom. move=> Hun.
     rewrite (well_sized_atom_unchanged_instr_succ_typenv _ Hun) => {Hun}.
     reflexivity.
   Qed.
 
   Lemma well_typed_atom_unchanged_program_succ_typenv E p a :
-    ssa_vars_unchanged_program (SSAFull.vars_atom a) p ->
-    SSAFull.well_typed_atom (SSAFull.program_succ_typenv p E) a = SSAFull.well_typed_atom E a.
+    ssa_vars_unchanged_program (SSALite.vars_atom a) p ->
+    SSALite.well_typed_atom (SSALite.program_succ_typenv p E) a = SSALite.well_typed_atom E a.
   Proof.
     elim: p E => [| i p IH] E //=. move=> Hun.
     rewrite (IH _ (proj2 (ssa_unchanged_program_cons1 Hun))).
@@ -4050,33 +4303,33 @@ Section MakeSSA.
 
   Lemma is_defined_unchanged_instr_succ_typenv E i v :
     ssa_vars_unchanged_instr (SSAVS.singleton v) i ->
-    SSAFull.is_defined v (SSAFull.instr_succ_typenv i E) = SSAFull.is_defined v E.
+    SSALite.is_defined v (SSALite.instr_succ_typenv i E) = SSALite.is_defined v E.
   Proof.
     (case: i => //=); intros;
       by repeat match goal with
                 | H : is_true (ssa_vars_unchanged_instr _ _) |- _ =>
                     rewrite ssa_unchanged_instr_disjoint_lvs /= in H
-                | H : is_true (SSAFull.VSLemmas.disjoint _ (SSAVS.singleton _)) |- _ =>
-                    rewrite SSAFull.VSLemmas.disjoint_singleton in H
-                | H : is_true (SSAFull.VSLemmas.disjoint _ (SSAVS.add _ _)) |- _ =>
+                | H : is_true (SSALite.VSLemmas.disjoint _ (SSAVS.singleton _)) |- _ =>
+                    rewrite SSALite.VSLemmas.disjoint_singleton in H
+                | H : is_true (SSALite.VSLemmas.disjoint _ (SSAVS.add _ _)) |- _ =>
                     let H1 := fresh in
                     let H2 := fresh in
-                    rewrite SSAFull.VSLemmas.disjoint_add in H; move/andP: H => [H1 H2]
+                    rewrite SSALite.VSLemmas.disjoint_add in H; move/andP: H => [H1 H2]
                 | H : is_true (~~ SSAVS.mem _ (SSAVS.singleton _)) |- _ =>
-                    move: (SSAFull.VSLemmas.not_mem_singleton1 H) => {H} /negP H
+                    move: (SSALite.VSLemmas.not_mem_singleton1 H) => {H} /negP H
                 | H : is_true (?t != ?v) |-
-                    context [SSAFull.is_defined ?v (SSATE.add ?t _ _)] =>
+                    context [SSALite.is_defined ?v (SSATE.add ?t _ _)] =>
                     rewrite eq_sym in H
                 | H : is_true (?v != ?t) |-
-                    context [SSAFull.is_defined ?v (SSATE.add ?t _ _)] =>
-                    rewrite (SSAFull.is_defined_add_neq _ _ H)
+                    context [SSALite.is_defined ?v (SSATE.add ?t _ _)] =>
+                    rewrite (SSALite.is_defined_add_neq _ _ H)
                 | |- ?e = ?e => reflexivity
                 end.
   Qed.
 
   Lemma is_defined_unchanged_program_succ_typenv E p v :
     ssa_vars_unchanged_program (SSAVS.singleton v) p ->
-    SSAFull.is_defined v (SSAFull.program_succ_typenv p E) = SSAFull.is_defined v E.
+    SSALite.is_defined v (SSALite.program_succ_typenv p E) = SSALite.is_defined v E.
   Proof.
     elim: p E => [| i p IH] E //=. move=> Hun.
     rewrite (IH _ (proj2 (ssa_unchanged_program_cons1 Hun))).
@@ -4086,12 +4339,12 @@ Section MakeSSA.
 
   Lemma are_defined_unchanged_instr_succ_typenv E i vs :
     ssa_vars_unchanged_instr vs i ->
-    SSAFull.are_defined vs (SSAFull.instr_succ_typenv i E) = SSAFull.are_defined vs E.
+    SSALite.are_defined vs (SSALite.instr_succ_typenv i E) = SSALite.are_defined vs E.
   Proof.
     move: vs. apply: SSAVS.Lemmas.P.set_induction.
-    - move=> vs Hemp Hun. rewrite !(SSAFull.are_defined_Empty _ Hemp). reflexivity.
+    - move=> vs Hemp Hun. rewrite !(SSALite.are_defined_Empty _ Hemp). reflexivity.
     - move=> s1 s2 IH x Hnotin Hadd Hun.
-      rewrite !(SSAFull.are_defined_Addl _ Hadd).
+      rewrite !(SSALite.are_defined_Addl _ Hadd).
       rewrite (is_defined_unchanged_instr_succ_typenv).
       + rewrite (IH (proj2 (ssa_unchanged_instr_Add1 Hadd Hun))).
         reflexivity.
@@ -4101,7 +4354,7 @@ Section MakeSSA.
 
   Lemma are_defined_unchanged_program_succ_typenv E p vs :
     ssa_vars_unchanged_program vs p ->
-    SSAFull.are_defined vs (SSAFull.program_succ_typenv p E) = SSAFull.are_defined vs E.
+    SSALite.are_defined vs (SSALite.program_succ_typenv p E) = SSALite.are_defined vs E.
   Proof.
     elim: p E => [| i p IH] E //=. move=> Hun.
     rewrite (IH _ (proj2 (ssa_unchanged_program_cons1 Hun))).
@@ -4110,16 +4363,16 @@ Section MakeSSA.
   Qed.
 
   Lemma size_of_rexp_unchanged_instr_succ_typenv E i e :
-    ssa_vars_unchanged_instr (SSAFull.vars_rexp e) i ->
-    SSAFull.size_of_rexp e (SSAFull.instr_succ_typenv i E) = SSAFull.size_of_rexp e E.
+    ssa_vars_unchanged_instr (SSALite.vars_rexp e) i ->
+    SSALite.size_of_rexp e (SSALite.instr_succ_typenv i E) = SSALite.size_of_rexp e E.
   Proof.
     elim: e => //=. move=> v Hun.
     exact: (vsize_unchanged_instr_succ_typenv _ Hun).
   Qed.
 
   Lemma size_of_rexp_unchanged_program_succ_typenv E p e :
-    ssa_vars_unchanged_program (SSAFull.vars_rexp e) p ->
-    SSAFull.size_of_rexp e (SSAFull.program_succ_typenv p E) = SSAFull.size_of_rexp e E.
+    ssa_vars_unchanged_program (SSALite.vars_rexp e) p ->
+    SSALite.size_of_rexp e (SSALite.program_succ_typenv p E) = SSALite.size_of_rexp e E.
   Proof.
     elim: e => //=. move=> v Hun.
     exact: (vsize_unchanged_program_succ_typenv _ Hun).
@@ -4150,65 +4403,65 @@ Section MakeSSA.
                move: (ssa_unchanged_program_union1 H) => {H} [H1 H2]
            (**)
            | Hun : is_true (ssa_vars_unchanged_instr (SSAVS.singleton ?v) ?i) |-
-               context [SSATE.vtyp ?v (SSAFull.instr_succ_typenv ?i _)] =>
+               context [SSATE.vtyp ?v (SSALite.instr_succ_typenv ?i _)] =>
                rewrite (vtyp_unchanged_instr_succ_typenv _ Hun)
            | Hun : is_true (ssa_vars_unchanged_instr (SSAVS.singleton ?v) ?i) |-
-               context [SSATE.vsize ?v (SSAFull.instr_succ_typenv ?i _)] =>
+               context [SSATE.vsize ?v (SSALite.instr_succ_typenv ?i _)] =>
                rewrite (vsize_unchanged_instr_succ_typenv _ Hun)
-           | Hun : is_true (ssa_vars_unchanged_instr (SSAFull.vars_atom ?a) ?i) |-
-               context [SSAFull.atyp ?a (SSAFull.instr_succ_typenv ?i _)] =>
+           | Hun : is_true (ssa_vars_unchanged_instr (SSALite.vars_atom ?a) ?i) |-
+               context [SSALite.atyp ?a (SSALite.instr_succ_typenv ?i _)] =>
                rewrite (atyp_unchanged_instr_succ_typenv _ Hun)
-           | Hun : is_true (ssa_vars_unchanged_instr (SSAFull.vars_atom ?a) ?i) |-
-               context [SSAFull.asize ?a (SSAFull.instr_succ_typenv ?i _)] =>
+           | Hun : is_true (ssa_vars_unchanged_instr (SSALite.vars_atom ?a) ?i) |-
+               context [SSALite.asize ?a (SSALite.instr_succ_typenv ?i _)] =>
                rewrite (asize_unchanged_instr_succ_typenv _ Hun)
-           | Hun : is_true (ssa_vars_unchanged_instr (SSAFull.vars_atom ?a) ?i) |-
-               context [SSAFull.well_sized_atom (SSAFull.instr_succ_typenv ?i _) ?a] =>
+           | Hun : is_true (ssa_vars_unchanged_instr (SSALite.vars_atom ?a) ?i) |-
+               context [SSALite.well_sized_atom (SSALite.instr_succ_typenv ?i _) ?a] =>
                rewrite (well_sized_atom_unchanged_instr_succ_typenv _ Hun)
-           | Hun : is_true (ssa_vars_unchanged_instr (SSAFull.vars_atom ?a) ?i) |-
-               context [SSAFull.well_typed_atom (SSAFull.instr_succ_typenv ?i _) ?a] =>
+           | Hun : is_true (ssa_vars_unchanged_instr (SSALite.vars_atom ?a) ?i) |-
+               context [SSALite.well_typed_atom (SSALite.instr_succ_typenv ?i _) ?a] =>
                rewrite (well_typed_atom_unchanged_instr_succ_typenv _ Hun)
-           | Hun : is_true (ssa_vars_unchanged_instr (SSAFull.vars_rexp ?e) ?i) |-
-               context [SSAFull.size_of_rexp ?e (SSAFull.instr_succ_typenv ?i _)] =>
+           | Hun : is_true (ssa_vars_unchanged_instr (SSALite.vars_rexp ?e) ?i) |-
+               context [SSALite.size_of_rexp ?e (SSALite.instr_succ_typenv ?i _)] =>
                rewrite (size_of_rexp_unchanged_instr_succ_typenv _ Hun)
            | Hun : is_true (ssa_vars_unchanged_instr (SSAVS.singleton ?v) ?i) |-
-               context [SSAFull.is_defined ?v (SSAFull.instr_succ_typenv ?i _)] =>
+               context [SSALite.is_defined ?v (SSALite.instr_succ_typenv ?i _)] =>
                rewrite (is_defined_unchanged_instr_succ_typenv _ Hun)
            | Hun : is_true (ssa_vars_unchanged_instr ?vs ?i) |-
-               context [SSAFull.are_defined ?vs (SSAFull.instr_succ_typenv ?i _)] =>
+               context [SSALite.are_defined ?vs (SSALite.instr_succ_typenv ?i _)] =>
                rewrite (are_defined_unchanged_instr_succ_typenv _ Hun)
            (**)
            | Hun : is_true (ssa_vars_unchanged_program (SSAVS.singleton ?v) ?i) |-
-               context [SSATE.vtyp ?v (SSAFull.program_succ_typenv ?i _)] =>
+               context [SSATE.vtyp ?v (SSALite.program_succ_typenv ?i _)] =>
                rewrite (vtyp_unchanged_program_succ_typenv _ Hun)
            | Hun : is_true (ssa_vars_unchanged_program (SSAVS.singleton ?v) ?i) |-
-               context [SSATE.vsize ?v (SSAFull.program_succ_typenv ?i _)] =>
+               context [SSATE.vsize ?v (SSALite.program_succ_typenv ?i _)] =>
                rewrite (vsize_unchanged_program_succ_typenv _ Hun)
-           | Hun : is_true (ssa_vars_unchanged_program (SSAFull.vars_atom ?a) ?i) |-
-               context [SSAFull.atyp ?a (SSAFull.program_succ_typenv ?i _)] =>
+           | Hun : is_true (ssa_vars_unchanged_program (SSALite.vars_atom ?a) ?i) |-
+               context [SSALite.atyp ?a (SSALite.program_succ_typenv ?i _)] =>
                rewrite (atyp_unchanged_program_succ_typenv _ Hun)
-           | Hun : is_true (ssa_vars_unchanged_program (SSAFull.vars_atom ?a) ?i) |-
-               context [SSAFull.asize ?a (SSAFull.program_succ_typenv ?i _)] =>
+           | Hun : is_true (ssa_vars_unchanged_program (SSALite.vars_atom ?a) ?i) |-
+               context [SSALite.asize ?a (SSALite.program_succ_typenv ?i _)] =>
                rewrite (asize_unchanged_program_succ_typenv _ Hun)
-           | Hun : is_true (ssa_vars_unchanged_program (SSAFull.vars_atom ?a) ?i) |-
-               context [SSAFull.well_sized_atom (SSAFull.program_succ_typenv ?i _) ?a] =>
+           | Hun : is_true (ssa_vars_unchanged_program (SSALite.vars_atom ?a) ?i) |-
+               context [SSALite.well_sized_atom (SSALite.program_succ_typenv ?i _) ?a] =>
                rewrite (well_sized_atom_unchanged_program_succ_typenv _ Hun)
-           | Hun : is_true (ssa_vars_unchanged_program (SSAFull.vars_atom ?a) ?i) |-
-               context [SSAFull.well_typed_atom (SSAFull.program_succ_typenv ?i _) ?a] =>
+           | Hun : is_true (ssa_vars_unchanged_program (SSALite.vars_atom ?a) ?i) |-
+               context [SSALite.well_typed_atom (SSALite.program_succ_typenv ?i _) ?a] =>
                rewrite (well_typed_atom_unchanged_program_succ_typenv _ Hun)
-           | Hun : is_true (ssa_vars_unchanged_program (SSAFull.vars_rexp ?e) ?i) |-
-               context [SSAFull.size_of_rexp ?e (SSAFull.program_succ_typenv ?i _)] =>
+           | Hun : is_true (ssa_vars_unchanged_program (SSALite.vars_rexp ?e) ?i) |-
+               context [SSALite.size_of_rexp ?e (SSALite.program_succ_typenv ?i _)] =>
                rewrite (size_of_rexp_unchanged_program_succ_typenv _ Hun)
            | Hun : is_true (ssa_vars_unchanged_program (SSAVS.singleton ?v) ?i) |-
-               context [SSAFull.is_defined ?v (SSAFull.program_succ_typenv ?i _)] =>
+               context [SSALite.is_defined ?v (SSALite.program_succ_typenv ?i _)] =>
                rewrite (is_defined_unchanged_program_succ_typenv _ Hun)
            | Hun : is_true (ssa_vars_unchanged_program ?vs ?i) |-
-               context [SSAFull.are_defined ?vs (SSAFull.program_succ_typenv ?i _)] =>
+               context [SSALite.are_defined ?vs (SSALite.program_succ_typenv ?i _)] =>
                rewrite (are_defined_unchanged_program_succ_typenv _ Hun)
            end.
 
   Lemma well_typed_eexp_unchanged_instr_succ_typenv E i e :
-    ssa_vars_unchanged_instr (SSAFull.vars_eexp e) i ->
-    SSAFull.well_typed_eexp (SSAFull.instr_succ_typenv i E) e = SSAFull.well_typed_eexp E e.
+    ssa_vars_unchanged_instr (SSALite.vars_eexp e) i ->
+    SSALite.well_typed_eexp (SSALite.instr_succ_typenv i E) e = SSALite.well_typed_eexp E e.
   Proof.
     elim: e => //=. move=> _ e1 IH1 e2 IH2.
     rewrite ssa_unchanged_instr_union. move/andP=> [Hun1 Hun2].
@@ -4216,8 +4469,8 @@ Section MakeSSA.
   Qed.
 
   Lemma well_typed_eexp_unchanged_program_succ_typenv E p e :
-    ssa_vars_unchanged_program (SSAFull.vars_eexp e) p ->
-    SSAFull.well_typed_eexp (SSAFull.program_succ_typenv p E) e = SSAFull.well_typed_eexp E e.
+    ssa_vars_unchanged_program (SSALite.vars_eexp e) p ->
+    SSALite.well_typed_eexp (SSALite.program_succ_typenv p E) e = SSALite.well_typed_eexp E e.
   Proof.
     elim: e => //=. move=> _ e1 IH1 e2 IH2.
     rewrite ssa_unchanged_program_union. move/andP=> [Hun1 Hun2].
@@ -4225,8 +4478,8 @@ Section MakeSSA.
   Qed.
 
   Lemma well_typed_eexps_unchanged_instr_succ_typenv E i es :
-    ssa_vars_unchanged_instr (SSAFull.vars_eexps es) i ->
-    SSAFull.well_typed_eexps (SSAFull.instr_succ_typenv i E) es = SSAFull.well_typed_eexps E es.
+    ssa_vars_unchanged_instr (SSALite.vars_eexps es) i ->
+    SSALite.well_typed_eexps (SSALite.instr_succ_typenv i E) es = SSALite.well_typed_eexps E es.
   Proof.
     elim: es => [| e es IH] //=. rewrite ssa_unchanged_instr_union.
     move/andP=> [Hune Hunes]. rewrite (well_typed_eexp_unchanged_instr_succ_typenv _ Hune) (IH Hunes).
@@ -4234,8 +4487,8 @@ Section MakeSSA.
   Qed.
 
   Lemma well_typed_eexps_unchanged_program_succ_typenv E p es :
-    ssa_vars_unchanged_program (SSAFull.vars_eexps es) p ->
-    SSAFull.well_typed_eexps (SSAFull.program_succ_typenv p E) es = SSAFull.well_typed_eexps E es.
+    ssa_vars_unchanged_program (SSALite.vars_eexps es) p ->
+    SSALite.well_typed_eexps (SSALite.program_succ_typenv p E) es = SSALite.well_typed_eexps E es.
   Proof.
     elim: es => [| e es IH] //=. rewrite ssa_unchanged_program_union.
     move/andP=> [Hune Hunes]. rewrite (well_typed_eexp_unchanged_program_succ_typenv _ Hune) (IH Hunes).
@@ -4243,8 +4496,8 @@ Section MakeSSA.
   Qed.
 
   Lemma well_typed_rexp_unchanged_instr_succ_typenv E i e :
-    ssa_vars_unchanged_instr (SSAFull.vars_rexp e) i ->
-    SSAFull.well_typed_rexp (SSAFull.instr_succ_typenv i E) e = SSAFull.well_typed_rexp E e.
+    ssa_vars_unchanged_instr (SSALite.vars_rexp e) i ->
+    SSALite.well_typed_rexp (SSALite.instr_succ_typenv i E) e = SSALite.well_typed_rexp E e.
   Proof.
     elim: e => //=; intros; wf_unchanged_succ_typenv0.
     - reflexivity.
@@ -4255,8 +4508,8 @@ Section MakeSSA.
   Qed.
 
   Lemma well_typed_rexp_unchanged_program_succ_typenv E p e :
-    ssa_vars_unchanged_program (SSAFull.vars_rexp e) p ->
-    SSAFull.well_typed_rexp (SSAFull.program_succ_typenv p E) e = SSAFull.well_typed_rexp E e.
+    ssa_vars_unchanged_program (SSALite.vars_rexp e) p ->
+    SSALite.well_typed_rexp (SSALite.program_succ_typenv p E) e = SSALite.well_typed_rexp E e.
   Proof.
     elim: e => //=; intros; wf_unchanged_succ_typenv0.
     - reflexivity.
@@ -4267,81 +4520,81 @@ Section MakeSSA.
   Qed.
 
   Ltac wf_unchanged_succ_typenv1 :=
-    repeat (progress wf_unchanged_succ_typenv0
+    repeat ((progress wf_unchanged_succ_typenv0)
             || match goal with
-               | Hun : is_true (ssa_vars_unchanged_instr (SSAFull.vars_eexp ?e) ?i) |-
-                   context [SSAFull.well_typed_eexp (SSAFull.instr_succ_typenv ?i _) ?e] =>
+               | Hun : is_true (ssa_vars_unchanged_instr (SSALite.vars_eexp ?e) ?i) |-
+                   context [SSALite.well_typed_eexp (SSALite.instr_succ_typenv ?i _) ?e] =>
                    rewrite (well_typed_eexp_unchanged_instr_succ_typenv _ Hun)
-               | Hun : is_true (ssa_vars_unchanged_instr (SSAFull.vars_eexps ?e) ?i) |-
-                   context [SSAFull.well_typed_eexps (SSAFull.instr_succ_typenv ?i _) ?e] =>
+               | Hun : is_true (ssa_vars_unchanged_instr (SSALite.vars_eexps ?e) ?i) |-
+                   context [SSALite.well_typed_eexps (SSALite.instr_succ_typenv ?i _) ?e] =>
                    rewrite (well_typed_eexps_unchanged_instr_succ_typenv _ Hun)
-               | Hun : is_true (ssa_vars_unchanged_instr (SSAFull.vars_rexp ?e) ?i) |-
-                   context [SSAFull.well_typed_rexp (SSAFull.instr_succ_typenv ?i _) ?e] =>
+               | Hun : is_true (ssa_vars_unchanged_instr (SSALite.vars_rexp ?e) ?i) |-
+                   context [SSALite.well_typed_rexp (SSALite.instr_succ_typenv ?i _) ?e] =>
                    rewrite (well_typed_rexp_unchanged_instr_succ_typenv _ Hun)
                (**)
-               | Hun : is_true (ssa_vars_unchanged_program (SSAFull.vars_eexp ?e) ?i) |-
-                   context [SSAFull.well_typed_eexp (SSAFull.program_succ_typenv ?i _) ?e] =>
+               | Hun : is_true (ssa_vars_unchanged_program (SSALite.vars_eexp ?e) ?i) |-
+                   context [SSALite.well_typed_eexp (SSALite.program_succ_typenv ?i _) ?e] =>
                    rewrite (well_typed_eexp_unchanged_program_succ_typenv _ Hun)
-               | Hun : is_true (ssa_vars_unchanged_program (SSAFull.vars_eexps ?e) ?i) |-
-                   context [SSAFull.well_typed_eexps (SSAFull.program_succ_typenv ?i _) ?e] =>
+               | Hun : is_true (ssa_vars_unchanged_program (SSALite.vars_eexps ?e) ?i) |-
+                   context [SSALite.well_typed_eexps (SSALite.program_succ_typenv ?i _) ?e] =>
                    rewrite (well_typed_eexps_unchanged_program_succ_typenv _ Hun)
-               | Hun : is_true (ssa_vars_unchanged_program (SSAFull.vars_rexp ?e) ?i) |-
-                   context [SSAFull.well_typed_rexp (SSAFull.program_succ_typenv ?i _) ?e] =>
+               | Hun : is_true (ssa_vars_unchanged_program (SSALite.vars_rexp ?e) ?i) |-
+                   context [SSALite.well_typed_rexp (SSALite.program_succ_typenv ?i _) ?e] =>
                    rewrite (well_typed_rexp_unchanged_program_succ_typenv _ Hun)
                end
            ).
 
   Lemma well_typed_ebexp_unchanged_instr_succ_typenv E i e :
-    ssa_vars_unchanged_instr (SSAFull.vars_ebexp e) i ->
-    SSAFull.well_typed_ebexp (SSAFull.instr_succ_typenv i E) e = SSAFull.well_typed_ebexp E e.
+    ssa_vars_unchanged_instr (SSALite.vars_ebexp e) i ->
+    SSALite.well_typed_ebexp (SSALite.instr_succ_typenv i E) e = SSALite.well_typed_ebexp E e.
   Proof.
     elim: e => //=; intros; wf_unchanged_succ_typenv1; try reflexivity.
     rewrite (H H2) (H0 H3). reflexivity.
   Qed.
 
   Lemma well_typed_ebexp_unchanged_program_succ_typenv E p e :
-    ssa_vars_unchanged_program (SSAFull.vars_ebexp e) p ->
-    SSAFull.well_typed_ebexp (SSAFull.program_succ_typenv p E) e = SSAFull.well_typed_ebexp E e.
+    ssa_vars_unchanged_program (SSALite.vars_ebexp e) p ->
+    SSALite.well_typed_ebexp (SSALite.program_succ_typenv p E) e = SSALite.well_typed_ebexp E e.
   Proof.
     elim: e => //=; intros; wf_unchanged_succ_typenv1; try reflexivity.
     rewrite (H H2) (H0 H3). reflexivity.
   Qed.
 
   Lemma well_typed_rbexp_unchanged_instr_succ_typenv E i e :
-    ssa_vars_unchanged_instr (SSAFull.vars_rbexp e) i ->
-    SSAFull.well_typed_rbexp (SSAFull.instr_succ_typenv i E) e = SSAFull.well_typed_rbexp E e.
+    ssa_vars_unchanged_instr (SSALite.vars_rbexp e) i ->
+    SSALite.well_typed_rbexp (SSALite.instr_succ_typenv i E) e = SSALite.well_typed_rbexp E e.
   Proof.
     elim: e => //=; intros; wf_unchanged_succ_typenv1; try reflexivity.
     all: rewrite (H H2) (H0 H3); reflexivity.
   Qed.
 
   Lemma well_typed_rbexp_unchanged_program_succ_typenv E p e :
-    ssa_vars_unchanged_program (SSAFull.vars_rbexp e) p ->
-    SSAFull.well_typed_rbexp (SSAFull.program_succ_typenv p E) e = SSAFull.well_typed_rbexp E e.
+    ssa_vars_unchanged_program (SSALite.vars_rbexp e) p ->
+    SSALite.well_typed_rbexp (SSALite.program_succ_typenv p E) e = SSALite.well_typed_rbexp E e.
   Proof.
     elim: e => //=; intros; wf_unchanged_succ_typenv1; try reflexivity.
     all: rewrite (H H2) (H0 H3); reflexivity.
   Qed.
 
   Lemma well_typed_bexp_unchanged_instr_succ_typenv E i e :
-    ssa_vars_unchanged_instr (SSAFull.vars_bexp e) i ->
-    SSAFull.well_typed_bexp (SSAFull.instr_succ_typenv i E) e = SSAFull.well_typed_bexp E e.
+    ssa_vars_unchanged_instr (SSALite.vars_bexp e) i ->
+    SSALite.well_typed_bexp (SSALite.instr_succ_typenv i E) e = SSALite.well_typed_bexp E e.
   Proof.
-    case: e => [e r]. rewrite /SSAFull.vars_bexp /=.
+    case: e => [e r]. rewrite /SSALite.vars_bexp /=.
     rewrite ssa_unchanged_instr_union => /andP [Hune Hunr].
-    rewrite /SSAFull.well_typed_bexp /=.
+    rewrite /SSALite.well_typed_bexp /=.
     rewrite (well_typed_ebexp_unchanged_instr_succ_typenv _ Hune)
             (well_typed_rbexp_unchanged_instr_succ_typenv _ Hunr).
     reflexivity.
   Qed.
 
   Lemma well_typed_bexp_unchanged_program_succ_typenv E p e :
-    ssa_vars_unchanged_program (SSAFull.vars_bexp e) p ->
-    SSAFull.well_typed_bexp (SSAFull.program_succ_typenv p E) e = SSAFull.well_typed_bexp E e.
+    ssa_vars_unchanged_program (SSALite.vars_bexp e) p ->
+    SSALite.well_typed_bexp (SSALite.program_succ_typenv p E) e = SSALite.well_typed_bexp E e.
   Proof.
-    case: e => [e r]. rewrite /SSAFull.vars_bexp /=.
+    case: e => [e r]. rewrite /SSALite.vars_bexp /=.
     rewrite ssa_unchanged_program_union => /andP [Hune Hunr].
-    rewrite /SSAFull.well_typed_bexp /=.
+    rewrite /SSALite.well_typed_bexp /=.
     rewrite (well_typed_ebexp_unchanged_program_succ_typenv _ Hune)
             (well_typed_rbexp_unchanged_program_succ_typenv _ Hunr).
     reflexivity.
@@ -4351,91 +4604,91 @@ Section MakeSSA.
     repeat ((progress wf_unchanged_succ_typenv0)
             || (progress wf_unchanged_succ_typenv1)
             || match goal with
-               | Hun : is_true (ssa_vars_unchanged_instr (SSAFull.vars_ebexp ?e) ?i) |-
-                   context [SSAFull.well_typed_ebexp (SSAFull.instr_succ_typenv ?i _) ?e] =>
+               | Hun : is_true (ssa_vars_unchanged_instr (SSALite.vars_ebexp ?e) ?i) |-
+                   context [SSALite.well_typed_ebexp (SSALite.instr_succ_typenv ?i _) ?e] =>
                    rewrite (well_typed_ebexp_unchanged_instr_succ_typenv _ Hun)
-               | Hun : is_true (ssa_vars_unchanged_instr (SSAFull.vars_rbexp ?e) ?i) |-
-                   context [SSAFull.well_typed_rbexp (SSAFull.instr_succ_typenv ?i _) ?e] =>
+               | Hun : is_true (ssa_vars_unchanged_instr (SSALite.vars_rbexp ?e) ?i) |-
+                   context [SSALite.well_typed_rbexp (SSALite.instr_succ_typenv ?i _) ?e] =>
                    rewrite (well_typed_rbexp_unchanged_instr_succ_typenv _ Hun)
-               | Hun : is_true (ssa_vars_unchanged_instr (SSAFull.vars_bexp ?e) ?i) |-
-                   context [SSAFull.well_typed_bexp (SSAFull.instr_succ_typenv ?i _) ?e] =>
+               | Hun : is_true (ssa_vars_unchanged_instr (SSALite.vars_bexp ?e) ?i) |-
+                   context [SSALite.well_typed_bexp (SSALite.instr_succ_typenv ?i _) ?e] =>
                    rewrite (well_typed_bexp_unchanged_instr_succ_typenv _ Hun)
                (**)
-               | Hun : is_true (ssa_vars_unchanged_program (SSAFull.vars_ebexp ?e) ?i) |-
-                   context [SSAFull.well_typed_ebexp (SSAFull.program_succ_typenv ?i _) ?e] =>
+               | Hun : is_true (ssa_vars_unchanged_program (SSALite.vars_ebexp ?e) ?i) |-
+                   context [SSALite.well_typed_ebexp (SSALite.program_succ_typenv ?i _) ?e] =>
                    rewrite (well_typed_ebexp_unchanged_program_succ_typenv _ Hun)
-               | Hun : is_true (ssa_vars_unchanged_program (SSAFull.vars_rbexp ?e) ?i) |-
-                   context [SSAFull.well_typed_rbexp (SSAFull.program_succ_typenv ?i _) ?e] =>
+               | Hun : is_true (ssa_vars_unchanged_program (SSALite.vars_rbexp ?e) ?i) |-
+                   context [SSALite.well_typed_rbexp (SSALite.program_succ_typenv ?i _) ?e] =>
                    rewrite (well_typed_rbexp_unchanged_program_succ_typenv _ Hun)
-               | Hun : is_true (ssa_vars_unchanged_program (SSAFull.vars_bexp ?e) ?i) |-
-                   context [SSAFull.well_typed_bexp (SSAFull.program_succ_typenv ?i _) ?e] =>
+               | Hun : is_true (ssa_vars_unchanged_program (SSALite.vars_bexp ?e) ?i) |-
+                   context [SSALite.well_typed_bexp (SSALite.program_succ_typenv ?i _) ?e] =>
                    rewrite (well_typed_bexp_unchanged_program_succ_typenv _ Hun)
                end
            ).
 
   Lemma well_typed_instr_unchanged_instr_succ_typenv E i j :
-    ssa_vars_unchanged_instr (SSAFull.rvs_instr j) i ->
-    SSAFull.well_typed_instr (SSAFull.instr_succ_typenv i E) j = SSAFull.well_typed_instr E j.
+    ssa_vars_unchanged_instr (SSALite.rvs_instr j) i ->
+    SSALite.well_typed_instr (SSALite.instr_succ_typenv i E) j = SSALite.well_typed_instr E j.
   Proof.
     (case: j => //=); intros; by wf_unchanged_succ_typenv2.
   Qed.
 
   Lemma well_typed_instr_unchanged_program_succ_typenv E p j :
-    ssa_vars_unchanged_program (SSAFull.rvs_instr j) p ->
-    SSAFull.well_typed_instr (SSAFull.program_succ_typenv p E) j = SSAFull.well_typed_instr E j.
+    ssa_vars_unchanged_program (SSALite.rvs_instr j) p ->
+    SSALite.well_typed_instr (SSALite.program_succ_typenv p E) j = SSALite.well_typed_instr E j.
   Proof.
     (case: j => //=); intros; by wf_unchanged_succ_typenv2.
   Qed.
 
   Lemma well_defined_instr_unchanged_instr_succ_typenv E i j :
-    ssa_vars_unchanged_instr (SSAFull.rvs_instr j) i ->
-    SSAFull.well_defined_instr (SSAFull.instr_succ_typenv i E) j = SSAFull.well_defined_instr E j.
+    ssa_vars_unchanged_instr (SSALite.rvs_instr j) i ->
+    SSALite.well_defined_instr (SSALite.instr_succ_typenv i E) j = SSALite.well_defined_instr E j.
   Proof.
     (case: j => //=); intros; by wf_unchanged_succ_typenv2.
   Qed.
 
   Lemma well_defined_instr_unchanged_program_succ_typenv E p j :
-    ssa_vars_unchanged_program (SSAFull.rvs_instr j) p ->
-    SSAFull.well_defined_instr (SSAFull.program_succ_typenv p E) j = SSAFull.well_defined_instr E j.
+    ssa_vars_unchanged_program (SSALite.rvs_instr j) p ->
+    SSALite.well_defined_instr (SSALite.program_succ_typenv p E) j = SSALite.well_defined_instr E j.
   Proof.
     (case: j => //=); intros; by wf_unchanged_succ_typenv2.
   Qed.
 
   Lemma well_formed_instr_unchanged_instr_succ_typenv E i j :
-    ssa_vars_unchanged_instr (SSAFull.rvs_instr j) i ->
-    SSAFull.well_formed_instr (SSAFull.instr_succ_typenv i E) j = SSAFull.well_formed_instr E j.
+    ssa_vars_unchanged_instr (SSALite.rvs_instr j) i ->
+    SSALite.well_formed_instr (SSALite.instr_succ_typenv i E) j = SSALite.well_formed_instr E j.
   Proof.
-    rewrite /SSAFull.well_formed_instr. move=> Hun.
+    rewrite /SSALite.well_formed_instr. move=> Hun.
     rewrite (well_defined_instr_unchanged_instr_succ_typenv _ Hun)
             (well_typed_instr_unchanged_instr_succ_typenv _ Hun).
     reflexivity.
   Qed.
 
   Lemma well_formed_instr_unchanged_program_succ_typenv E p j :
-    ssa_vars_unchanged_program (SSAFull.rvs_instr j) p ->
-    SSAFull.well_formed_instr (SSAFull.program_succ_typenv p E) j = SSAFull.well_formed_instr E j.
+    ssa_vars_unchanged_program (SSALite.rvs_instr j) p ->
+    SSALite.well_formed_instr (SSALite.program_succ_typenv p E) j = SSALite.well_formed_instr E j.
   Proof.
-    rewrite /SSAFull.well_formed_instr. move=> Hun.
+    rewrite /SSALite.well_formed_instr. move=> Hun.
     rewrite (well_defined_instr_unchanged_program_succ_typenv _ Hun)
             (well_typed_instr_unchanged_program_succ_typenv _ Hun).
     reflexivity.
   Qed.
 
   Lemma well_formed_program_unchanged_instr_succ_typenv E i p :
-    ssa_vars_unchanged_instr (SSAFull.inputs_program p) i ->
-    SSAFull.well_formed_program (SSAFull.instr_succ_typenv i E) p = SSAFull.well_formed_program E p.
+    ssa_vars_unchanged_instr (SSALite.inputs_program p) i ->
+    SSALite.well_formed_program (SSALite.instr_succ_typenv i E) p = SSALite.well_formed_program E p.
   Proof.
-    move=> Hun. apply: SSAFull.agree_well_formed_program.
-    apply: SSAFull.agree_instr_succ_typenv_l1. rewrite -ssa_unchanged_instr_disjoint_lvs.
+    move=> Hun. apply: SSALite.agree_well_formed_program.
+    apply: SSALite.agree_instr_succ_typenv_l1. rewrite -ssa_unchanged_instr_disjoint_lvs.
     assumption.
   Qed.
 
   Lemma well_formed_program_unchanged_program_succ_typenv E p1 p2 :
-    ssa_vars_unchanged_program (SSAFull.inputs_program p2) p1 ->
-    SSAFull.well_formed_program (SSAFull.program_succ_typenv p1 E) p2 = SSAFull.well_formed_program E p2.
+    ssa_vars_unchanged_program (SSALite.inputs_program p2) p1 ->
+    SSALite.well_formed_program (SSALite.program_succ_typenv p1 E) p2 = SSALite.well_formed_program E p2.
   Proof.
-    move=> Hun. apply: SSAFull.agree_well_formed_program.
-    apply: SSAFull.agree_program_succ_typenv_l1. rewrite -ssa_unchanged_program_disjoint_lvs.
+    move=> Hun. apply: SSALite.agree_well_formed_program.
+    apply: SSALite.agree_program_succ_typenv_l1. rewrite -ssa_unchanged_program_disjoint_lvs.
     assumption.
   Qed.
 
@@ -4447,50 +4700,50 @@ Section MakeSSA.
 
   Lemma well_formed_ssa_vars_unchanged_hd te hd tl :
     well_formed_ssa_program te (hd::tl) ->
-    ssa_vars_unchanged_program (SSAFull.vars_instr hd) tl.
+    ssa_vars_unchanged_program (SSALite.vars_instr hd) tl.
   Proof.
     move => /andP [/andP [Hwf Huc] Hssa].
     apply: (@ssa_unchanged_program_replace
-              (SSAVS.union (SSAFull.lvs_instr hd) (SSAFull.rvs_instr hd))).
-    - rewrite -SSAFull.vars_instr_split.
+              (SSAVS.union (SSALite.lvs_instr hd) (SSALite.rvs_instr hd))).
+    - rewrite -SSALite.vars_instr_split.
       reflexivity.
     - apply: ssa_unchanged_program_union2.
       + move/andP: Hssa => [Hssa1 Hssa2].
         exact: Hssa1.
-      + apply: (@ssa_unchanged_program_subset _ (SSAFull.vars_env te)).
+      + apply: (@ssa_unchanged_program_subset _ (SSALite.vars_env te)).
         * exact: (ssa_unchanged_program_tl Huc).
-          apply SSAFull.well_formed_instr_subset_rvs.
-          exact: (SSAFull.well_formed_program_cons1 Hwf).
+          apply SSALite.well_formed_instr_subset_rvs.
+          exact: (SSALite.well_formed_program_cons1 Hwf).
   Qed.
 
   Lemma well_formed_ssa_vars_disjoint_hd E i p :
     well_formed_ssa_program E (i::p) ->
-    SSAVS.Lemmas.disjoint (SSAFull.lvs_instr i) (SSAFull.rvs_instr i).
+    SSAVS.Lemmas.disjoint (SSALite.lvs_instr i) (SSALite.rvs_instr i).
   Proof.
     move=> /andP [/andP [Hwf Hun] Hssa].
-    move: (SSAFull.well_formed_program_cons1 Hwf) => {}Hwf.
-    move: (SSAFull.well_formed_instr_subset_rvs Hwf) => {Hwf} Hsub.
+    move: (SSALite.well_formed_program_cons1 Hwf) => {}Hwf.
+    move: (SSALite.well_formed_instr_subset_rvs Hwf) => {Hwf} Hsub.
     move: (ssa_unchanged_program_hd Hun). rewrite ssa_unchanged_instr_disjoint_lvs => Hdisj.
-    rewrite SSAVS.Lemmas.disjoint_sym. exact: (SSAFull.VSLemmas.disjoint_subset_l Hdisj Hsub).
+    rewrite SSAVS.Lemmas.disjoint_sym. exact: (SSALite.VSLemmas.disjoint_subset_l Hdisj Hsub).
   Qed.
 
   Lemma well_formed_ssa_lvs_unchanged_hd E i p :
     well_formed_ssa_program E (i::p) ->
-    ssa_vars_unchanged_instr (SSAFull.rvs_instr i) i.
+    ssa_vars_unchanged_instr (SSALite.rvs_instr i) i.
   Proof.
     move=> Hwf. move: (well_formed_ssa_vars_disjoint_hd Hwf) => Hdisj.
-    rewrite ssa_unchanged_instr_disjoint_lvs. rewrite SSAFull.VSLemmas.disjoint_sym.
+    rewrite ssa_unchanged_instr_disjoint_lvs. rewrite SSALite.VSLemmas.disjoint_sym.
     assumption.
   Qed.
 
   Lemma well_formed_ssa_well_formed E p :
-    well_formed_ssa_program E p -> SSAFull.well_formed_program E p.
+    well_formed_ssa_program E p -> SSALite.well_formed_program E p.
   Proof.
     move/andP=> [/andP [H1 H2] H3]. assumption.
   Qed.
 
   Lemma well_formed_ssa_unchanged E p :
-    well_formed_ssa_program E p -> ssa_vars_unchanged_program (SSAFull.vars_env E) p.
+    well_formed_ssa_program E p -> ssa_vars_unchanged_program (SSALite.vars_env E) p.
   Proof.
     move/andP=> [/andP [H1 H2] H3]. assumption.
   Qed.
@@ -4502,24 +4755,24 @@ Section MakeSSA.
   Qed.
 
   Lemma well_formed_ssa_hd E hd tl :
-    well_formed_ssa_program E (hd::tl) -> SSAFull.well_formed_instr E hd.
+    well_formed_ssa_program E (hd::tl) -> SSALite.well_formed_instr E hd.
   Proof.
-    move/andP=> [/andP [H _] _]. rewrite SSAFull.well_formed_program_cons in H.
+    move/andP=> [/andP [H _] _]. rewrite SSALite.well_formed_program_cons in H.
     by move/andP: H => [-> _].
   Qed.
 
   Lemma well_formed_ssa_tl te hd tl :
     well_formed_ssa_program te (hd::tl) ->
-    well_formed_ssa_program (SSAFull.instr_succ_typenv hd te) tl.
+    well_formed_ssa_program (SSALite.instr_succ_typenv hd te) tl.
   Proof.
     move=> Hwfssa.
     move: (Hwfssa) => /andP [/andP [Hwf Huc] Hssa].
     apply/andP; split; first (apply/andP; split).
-    - exact: (SSAFull.well_formed_program_cons2 Hwf).
+    - exact: (SSALite.well_formed_program_cons2 Hwf).
     - rewrite /ssa_vars_unchanged_program.
       apply (SSAVS.for_all_1 (ssa_unchanged_program_var_compat tl)).
       move=> x.
-      rewrite SSAFull.vars_env_instr_succ_typenv.
+      rewrite SSALite.vars_env_instr_succ_typenv.
       move=> Hin.
       move: (ssa_unchanged_program_tl Huc) => H1.
       move/andP: Hssa => [H2 _].
@@ -4532,14 +4785,14 @@ Section MakeSSA.
 
   Lemma well_formed_ssa_unchanged_env E p :
     well_formed_ssa_program E p ->
-    ssa_vars_unchanged_program (SSAFull.vars_env E) p.
+    ssa_vars_unchanged_program (SSALite.vars_env E) p.
   Proof. move/andP=> [/andP [_ H] _]. assumption. Qed.
 
   Lemma well_formed_ssa_rcons1 E p i :
     well_formed_ssa_program E (rcons p i) ->
     well_formed_ssa_program E p /\
-    SSAFull.well_formed_instr (SSAFull.program_succ_typenv p E) i /\
-    ssa_vars_unchanged_instr (SSAVS.union (SSAFull.vars_env E) (SSAFull.vars_program p)) i.
+    SSALite.well_formed_instr (SSALite.program_succ_typenv p E) i /\
+    ssa_vars_unchanged_instr (SSAVS.union (SSALite.vars_env E) (SSALite.vars_program p)) i.
   Proof.
     elim: p E i => [| i p IH] E l //=.
     - rewrite {1}/well_formed_ssa_program /=.
@@ -4549,11 +4802,11 @@ Section MakeSSA.
       + assumption.
       + apply: (ssa_unchanged_instr_replace
                   (SSAVS.Lemmas.P.equal_sym
-                     (SSAVS.Lemmas.union_emptyr (SSAFull.vars_env E)))).
+                     (SSAVS.Lemmas.union_emptyr (SSALite.vars_env E)))).
         exact: (ssa_unchanged_program_hd Hun_El).
     - move=> Hssa. move: (well_formed_ssa_tl Hssa) => Hwf_ssa_pl.
       move: Hssa. rewrite /well_formed_ssa_program.
-      rewrite SSAFull.well_formed_program_cons.
+      rewrite SSALite.well_formed_program_cons.
       rewrite ssa_unchanged_program_cons ssa_single_assignment_cons.
       move=> /andP [/andP [/andP [Hwf_Ei Hwf_iEpl] /andP [Hun_Ei Hun_Epl]]
                      /andP [Hun_ipl Hssa_pl]].
@@ -4565,32 +4818,32 @@ Section MakeSSA.
       move: (IH _ _ Hwf_ssa_pl) => [Hwf_ssa_iEp [Hwf_l Hun_l]].
       move: Hwf_ssa_iEp.
       rewrite {1}/well_formed_ssa_program.
-      rewrite SSAFull.well_formed_program_cons.
+      rewrite SSALite.well_formed_program_cons.
       rewrite ssa_unchanged_program_cons ssa_single_assignment_cons.
       move=> /andP [/andP [Hwf_iEp Hun_iEp] Hssa_p].
 
       repeat split.
       + rewrite Hwf_Ei Hwf_iEp /=. rewrite Hun_Ei Hun_Ep /=.
         rewrite Hun_ip Hssa_p /=. exact: is_true_true.
-      + rewrite SSAFull.well_formed_program_rcons in Hwf_iEpl.
+      + rewrite SSALite.well_formed_program_rcons in Hwf_iEpl.
         move/andP: Hwf_iEpl => [_ Hwf_piEl]. exact: Hwf_piEl.
       + rewrite !ssa_unchanged_instr_union.
         rewrite Hun_El /=. rewrite ssa_unchanged_instr_union in Hun_l.
         move/andP: Hun_l=> [Hun_iEl Hun_pl]. rewrite Hun_pl andbT.
-        have Hsubset: (SSAVS.subset (SSAFull.vars_instr i)
-                                    (SSAFull.vars_env (SSAFull.instr_succ_typenv i E))).
-        { rewrite SSAFull.vars_env_instr_succ_typenv. rewrite SSAFull.vars_instr_split.
+        have Hsubset: (SSAVS.subset (SSALite.vars_instr i)
+                                    (SSALite.vars_env (SSALite.instr_succ_typenv i E))).
+        { rewrite SSALite.vars_env_instr_succ_typenv. rewrite SSALite.vars_instr_split.
           apply: SSAVS.Lemmas.subset_union3.
           - apply: SSAVS.Lemmas.subset_union2. exact: SSAVS.Lemmas.subset_refl.
           - apply: SSAVS.Lemmas.subset_union1.
-            exact: (SSAFull.well_formed_instr_subset_rvs Hwf_Ei). }
+            exact: (SSALite.well_formed_instr_subset_rvs Hwf_Ei). }
         apply: (ssa_unchanged_instr_subset _ Hsubset). exact: Hun_iEl.
   Qed.
 
   Lemma well_formed_ssa_rcons2 E p i :
     well_formed_ssa_program E p ->
-    SSAFull.well_formed_instr (SSAFull.program_succ_typenv p E) i ->
-    ssa_vars_unchanged_instr (SSAVS.union (SSAFull.vars_env E) (SSAFull.vars_program p)) i ->
+    SSALite.well_formed_instr (SSALite.program_succ_typenv p E) i ->
+    ssa_vars_unchanged_instr (SSAVS.union (SSALite.vars_env E) (SSALite.vars_program p)) i ->
     well_formed_ssa_program E (rcons p i).
   Proof.
     elim: p E i => [| hd tl IH] E i //=.
@@ -4604,11 +4857,11 @@ Section MakeSSA.
       rewrite ssa_unchanged_instr_union. rewrite Hun_tli andbT.
       move=> H.
       have Hun: (ssa_vars_unchanged_instr
-                   (SSAFull.vars_env (SSAFull.instr_succ_typenv hd E)) i).
+                   (SSALite.vars_env (SSALite.instr_succ_typenv hd E)) i).
       { apply: (ssa_unchanged_instr_replace
-                  (SSAVS.Lemmas.P.equal_sym (SSAFull.vars_env_instr_succ_typenv hd E))).
+                  (SSAVS.Lemmas.P.equal_sym (SSALite.vars_env_instr_succ_typenv hd E))).
         rewrite ssa_unchanged_instr_union. rewrite Hun_Ei /=.
-        apply: (ssa_unchanged_instr_subset _ (SSAFull.lvs_instr_subset hd)).
+        apply: (ssa_unchanged_instr_subset _ (SSALite.lvs_instr_subset hd)).
         exact: Hun_hdi. }
       move: (H Hun) => {Hun H Hun_tli}. move: Hwf_p.
       rewrite /well_formed_ssa_program /=. rewrite !ssa_unchanged_program_cons.
@@ -4618,20 +4871,20 @@ Section MakeSSA.
       rewrite Hwf_Ehd Hwf_tli Hun_Ehd Hssa_tli !andbT /=.
       rewrite !ssa_unchanged_program_rcons. rewrite Hun_Etl Hun_Ei /=.
       rewrite Hun_hdtl /=.
-      apply: (ssa_unchanged_instr_subset _ (SSAFull.lvs_instr_subset hd)).
+      apply: (ssa_unchanged_instr_subset _ (SSALite.lvs_instr_subset hd)).
       exact: Hun_hdi.
   Qed.
 
   Lemma well_formed_ssa_rcons E p i :
     well_formed_ssa_program E (rcons p i) =
     well_formed_ssa_program E p &&
-    SSAFull.well_formed_instr (SSAFull.program_succ_typenv p E) i &&
-    ssa_vars_unchanged_instr (SSAVS.union (SSAFull.vars_env E) (SSAFull.vars_program p)) i.
+    SSALite.well_formed_instr (SSALite.program_succ_typenv p E) i &&
+    ssa_vars_unchanged_instr (SSAVS.union (SSALite.vars_env E) (SSALite.vars_program p)) i.
   Proof.
     case H: (well_formed_ssa_program E p &&
-             SSAFull.well_formed_instr (SSAFull.program_succ_typenv p E) i &&
+             SSALite.well_formed_instr (SSALite.program_succ_typenv p E) i &&
              ssa_vars_unchanged_instr
-               (SSAVS.union (SSAFull.vars_env E) (SSAFull.vars_program p)) i).
+               (SSAVS.union (SSALite.vars_env E) (SSALite.vars_program p)) i).
     - move/andP: H=> [/andP [H1 H2] H3]. exact: (well_formed_ssa_rcons2 H1 H2 H3).
     - apply/negP=> Hwf. move/negP: H; apply.
       move: (well_formed_ssa_rcons1 Hwf) => [H1 [H2 H3]]. by rewrite H1 H2 H3.
@@ -4644,17 +4897,17 @@ Section MakeSSA.
 
   Lemma well_formed_ssa_rcons_last E p i :
     well_formed_ssa_program E (rcons p i) ->
-    SSAFull.well_formed_instr (SSAFull.program_succ_typenv p E) i.
+    SSALite.well_formed_instr (SSALite.program_succ_typenv p E) i.
   Proof. rewrite well_formed_ssa_rcons. by move/andP=> [/andP [? ?] ?]. Qed.
 
   Lemma well_formed_ssa_rcons_unchanged E p i :
     well_formed_ssa_program E (rcons p i) ->
-    ssa_vars_unchanged_instr (SSAVS.union (SSAFull.vars_env E) (SSAFull.vars_program p)) i.
+    ssa_vars_unchanged_instr (SSAVS.union (SSALite.vars_env E) (SSALite.vars_program p)) i.
   Proof. rewrite well_formed_ssa_rcons. by move/andP=> [/andP [? ?] ?]. Qed.
 
   Lemma well_formed_ssa_rcons_env_unchanged_last E p i :
     well_formed_ssa_program E (rcons p i) ->
-    ssa_vars_unchanged_instr (SSAFull.vars_env E) i.
+    ssa_vars_unchanged_instr (SSALite.vars_env E) i.
   Proof.
     move/andP=> [/andP [_ H] _]. rewrite ssa_unchanged_program_rcons in H.
     by move/andP: H => [? ?].
@@ -4662,11 +4915,11 @@ Section MakeSSA.
 
   Lemma well_formed_ssa_rcons_vars_prefix_unchanged E p i :
     well_formed_ssa_program E (rcons p i) ->
-    ssa_vars_unchanged_instr (SSAFull.vars_program p) i.
+    ssa_vars_unchanged_instr (SSALite.vars_program p) i.
   Proof.
     move/andP=> [/andP [H1 H2] H3].
     apply: (ssa_unchanged_instr_subset
-              _ (SSAFull.well_formed_program_vars_subset (SSAFull.well_formed_program_rcons1 H1))).
+              _ (SSALite.well_formed_program_vars_subset (SSALite.well_formed_program_rcons1 H1))).
     rewrite ssa_unchanged_instr_union.
     rewrite (ssa_unchanged_program_rcons2 H2) /=.
     exact: (ssa_single_assignment_rcons2 H3).
@@ -4676,18 +4929,18 @@ Section MakeSSA.
     well_formed_ssa_program E (p1 ++ p2) -> well_formed_ssa_program E p1.
   Proof.
     rewrite /well_formed_ssa_program. move/andP=> [/andP [Hwf HunE] Hssa].
-    rewrite (SSAFull.well_formed_program_cat1 Hwf) /=.
+    rewrite (SSALite.well_formed_program_cat1 Hwf) /=.
     rewrite (proj1 (ssa_unchanged_program_cat1 HunE)) /=.
     exact: (proj1 (ssa_single_assignment_cat1 Hssa)).
   Qed.
 
   Lemma well_formed_ssa_cat2 E p1 p2 :
     well_formed_ssa_program E (p1 ++ p2) ->
-    well_formed_ssa_program (SSAFull.program_succ_typenv p1 E) p2.
+    well_formed_ssa_program (SSALite.program_succ_typenv p1 E) p2.
   Proof.
     rewrite /well_formed_ssa_program. move/andP=> [/andP [Hwf HunE] Hssa].
-    rewrite (SSAFull.well_formed_program_cat2 Hwf) /=.
-    rewrite SSAFull.vars_env_program_succ_typenv ssa_unchanged_program_union.
+    rewrite (SSALite.well_formed_program_cat2 Hwf) /=.
+    rewrite SSALite.vars_env_program_succ_typenv ssa_unchanged_program_union.
     rewrite (proj2 (ssa_unchanged_program_cat1 HunE)) /=.
     move: (ssa_single_assignment_cat1 Hssa) => [_ [Hssa2 Hun2]].
     by rewrite Hssa2 Hun2.
@@ -4695,7 +4948,7 @@ Section MakeSSA.
 
   Lemma well_formed_ssa_submap E p :
     well_formed_ssa_program E p ->
-    SSATE.Lemmas.submap E (SSAFull.program_succ_typenv p E).
+    SSATE.Lemmas.submap E (SSALite.program_succ_typenv p E).
   Proof.
     elim: p E => [| i p IH] E //=.
     - move=> _. exact: SSATE.Lemmas.submap_refl.
@@ -4705,35 +4958,51 @@ Section MakeSSA.
   Qed.
 
   Lemma well_formed_instr_rvs_unchanged_instr te i i' :
-    SSAFull.well_formed_instr te i -> ssa_vars_unchanged_instr (SSAFull.vars_env te) i' ->
-    ssa_vars_unchanged_instr (SSAFull.rvs_instr i) i'.
+    SSALite.well_formed_instr te i -> ssa_vars_unchanged_instr (SSALite.vars_env te) i' ->
+    ssa_vars_unchanged_instr (SSALite.rvs_instr i) i'.
   Proof.
     move=> Hwell Hun. apply: (ssa_unchanged_instr_subset Hun).
-    exact: SSAFull.well_formed_instr_subset_rvs.
+    exact: SSALite.well_formed_instr_subset_rvs.
   Qed.
 
   Lemma well_formed_instr_rvs_unchanged_program te i p :
-    SSAFull.well_formed_instr te i -> ssa_vars_unchanged_program (SSAFull.vars_env te) p ->
-    ssa_vars_unchanged_program (SSAFull.rvs_instr i) p.
+    SSALite.well_formed_instr te i -> ssa_vars_unchanged_program (SSALite.vars_env te) p ->
+    ssa_vars_unchanged_program (SSALite.rvs_instr i) p.
   Proof.
     move=> Hwell Hun. apply: (ssa_unchanged_program_subset Hun).
-    exact: SSAFull.well_formed_instr_subset_rvs.
+    exact: SSALite.well_formed_instr_subset_rvs.
   Qed.
 
   Lemma well_formed_ssa_spec_well_formed s :
-    well_formed_ssa_spec s -> SSAFull.well_formed_spec s.
+    well_formed_ssa_spec s -> SSALite.well_formed_spec s.
   Proof. by move/andP => [/andP [H1 H2] H3]. Qed.
 
   Lemma well_formed_ssa_spec_pre s :
     well_formed_ssa_spec s ->
-    SSAFull.well_formed_bexp (SSAFull.sinputs s) (SSAFull.spre s).
+    SSALite.well_formed_bexp (SSALite.sinputs s) (SSALite.spre s).
   Proof.
-    move=> Hwf. exact: (SSAFull.well_formed_spec_pre (well_formed_ssa_spec_well_formed Hwf)).
+    move=> Hwf. exact: (SSALite.well_formed_spec_pre (well_formed_ssa_spec_well_formed Hwf)).
   Qed.
 
   Corollary well_formed_ssa_spec_program s :
     well_formed_ssa_spec s ->
-    well_formed_ssa_program (SSAFull.sinputs s) (SSAFull.sprog s).
+    well_formed_ssa_program (SSALite.sinputs s) (SSALite.sprog s).
+  Proof.
+    move=> /andP [/andP [/andP [/andP [/andP Hpre Hwell] Hprog] Hvs] Hssa].
+      by rewrite /well_formed_ssa_program Hwell Hvs Hssa.
+  Qed.
+
+  Corollary well_formed_ssa_espec_program s :
+    well_formed_ssa_espec s ->
+    well_formed_ssa_program (SSALite.esinputs s) (SSALite.esprog s).
+  Proof.
+    move=> /andP [/andP [/andP [/andP [/andP Hpre Hwell] Hprog] Hvs] Hssa].
+      by rewrite /well_formed_ssa_program Hwell Hvs Hssa.
+  Qed.
+
+  Corollary well_formed_ssa_rspec_program s :
+    well_formed_ssa_rspec s ->
+    well_formed_ssa_program (SSALite.rsinputs s) (SSALite.rsprog s).
   Proof.
     move=> /andP [/andP [/andP [/andP [/andP Hpre Hwell] Hprog] Hvs] Hssa].
       by rewrite /well_formed_ssa_program Hwell Hvs Hssa.
@@ -4741,51 +5010,69 @@ Section MakeSSA.
 
   Lemma well_formed_ssa_spec_post s :
     well_formed_ssa_spec s ->
-    SSAFull.well_formed_bexp (SSAFull.program_succ_typenv (SSAFull.sprog s) (SSAFull.sinputs s)) (SSAFull.spost s).
+    SSALite.well_formed_bexp (SSALite.program_succ_typenv (SSALite.sprog s) (SSALite.sinputs s)) (SSALite.spost s).
   Proof.
-    move=> Hwf. exact: (SSAFull.well_formed_spec_post (well_formed_ssa_spec_well_formed Hwf)).
+    move=> Hwf. exact: (SSALite.well_formed_spec_post (well_formed_ssa_spec_well_formed Hwf)).
   Qed.
 
   Lemma well_formed_ssa_spec_final_pre s :
     well_formed_ssa_spec s ->
-    SSAFull.well_formed_bexp (SSAFull.program_succ_typenv (SSAFull.sprog s) (SSAFull.sinputs s)) (SSAFull.spre s).
+    SSALite.well_formed_bexp (SSALite.program_succ_typenv (SSALite.sprog s) (SSALite.sinputs s)) (SSALite.spre s).
   Proof.
     move => /andP [/andP [/andP [/andP [Hf Hp] Hg] Hun] Hssa].
-    apply: (SSAFull.well_formed_bexp_submap (ssa_unchanged_program_succ_typenv_submap Hun Hssa)).
+    apply: (SSALite.well_formed_bexp_submap (ssa_unchanged_program_succ_typenv_submap Hun Hssa)).
+    exact: Hf.
+  Qed.
+
+  Lemma well_formed_ssa_espec_final_pre s :
+    well_formed_ssa_espec s ->
+    SSALite.well_formed_bexp (SSALite.program_succ_typenv (SSALite.esprog s) (SSALite.esinputs s)) (SSALite.espre s).
+  Proof.
+    move => /andP [/andP [/andP [/andP [Hf Hp] Hg] Hun] Hssa].
+    apply: (SSALite.well_formed_bexp_submap (ssa_unchanged_program_succ_typenv_submap Hun Hssa)).
+    exact: Hf.
+  Qed.
+
+  Lemma well_formed_ssa_rspec_final_pre s :
+    well_formed_ssa_rspec s ->
+    SSALite.well_formed_rbexp (SSALite.program_succ_typenv (SSALite.rsprog s) (SSALite.rsinputs s)) (SSALite.rspre s).
+  Proof.
+    move => /andP [/andP [/andP [/andP [Hf Hp] Hg] Hun] Hssa].
+    apply: (SSALite.well_formed_rbexp_submap (ssa_unchanged_program_succ_typenv_submap Hun Hssa)).
     exact: Hf.
   Qed.
 
   Lemma well_formed_ssa_spec_env_unchanged s :
-    well_formed_ssa_spec s -> ssa_vars_unchanged_program (SSAFull.vars_env (SSAFull.sinputs s)) (SSAFull.sprog s).
+    well_formed_ssa_spec s -> ssa_vars_unchanged_program (SSALite.vars_env (SSALite.sinputs s)) (SSALite.sprog s).
   Proof. by move/andP=> [/andP [H1 H2] H3]. Qed.
 
   Lemma well_formed_ssa_spec_single_assignment s :
-    well_formed_ssa_spec s -> ssa_single_assignment (SSAFull.sprog s).
+    well_formed_ssa_spec s -> ssa_single_assignment (SSALite.sprog s).
   Proof. by move/andP=> [/andP [H1 H2] H3]. Qed.
 
   Corollary well_formed_ssa_spec_pre_unchanged s :
     well_formed_ssa_spec s ->
-    ssa_vars_unchanged_program (SSAFull.vars_bexp (SSAFull.spre s)) (SSAFull.sprog s).
+    ssa_vars_unchanged_program (SSALite.vars_bexp (SSALite.spre s)) (SSALite.sprog s).
   Proof.
     move=> /andP [/andP [/andP [/andP [/andP [Hwd Hwt] Hp] Hg] Hun] Hssa].
     eapply ssa_unchanged_program_subset.
     - exact: Hun.
-    - by rewrite -SSAFull.are_defined_subset_env.
+    - by rewrite -SSALite.are_defined_subset_env.
   Qed.
 
   Corollary well_formed_ssa_spec_post_subset s :
     well_formed_ssa_spec s ->
-    SSAVS.subset (SSAFull.vars_bexp (SSAFull.spost s))
-                 (SSAFull.vars_env (SSAFull.program_succ_typenv (SSAFull.sprog s) (SSAFull.sinputs s))).
+    SSAVS.subset (SSALite.vars_bexp (SSALite.spost s))
+                 (SSALite.vars_env (SSALite.program_succ_typenv (SSALite.sprog s) (SSALite.sinputs s))).
   Proof.
     move=> /andP [/andP [/andP [/andP [ /andP [Hwd Hwt] Hp] /andP [Hwd2 Hwt2]] Hun] Hssa].
-      by rewrite -SSAFull.are_defined_subset_env.
+      by rewrite -SSALite.are_defined_subset_env.
   Qed.
 
 
   Section EnvUnchanged.
 
-    Import SSAFull.
+    Import SSALite.
 
     Definition env_unchanged_instr (E : SSATE.env) (i : instr) : bool :=
       match i with
@@ -4827,8 +5114,6 @@ Section MakeSSA.
       | Icast v t a
       | Ivpc v t a => SSATE.vtyp v E == t
       | Ijoin v ah al => SSATE.vtyp v E == double_typ (atyp ah E)
-      | Icut e
-      | Iassert e
       | Iassume e => true
       end.
 
@@ -5081,7 +5366,6 @@ Section MakeSSA.
           | |- is_true true => exact: is_true_true
           end.
     Qed.
-
     Lemma ssa_unchanged_instr_atom_disjoint a i :
       ssa_vars_unchanged_instr (vars_atom a) i = VSLemmas.disjoint (vars_atom a) (lvs_instr i).
     Proof.
@@ -5241,7 +5525,7 @@ Section MakeSSA.
 
   Section InstrMemProgram.
 
-    Import SSAFull.
+    Import SSALite.
 
     Lemma well_formed_ssa_mem_well_formed_instr E p i :
       well_formed_ssa_program E p -> (i \in p) ->
@@ -5293,20 +5577,18 @@ Section MakeSSA.
 
   Section ReEval.
 
-    Import SSAFull.
+    Import SSALite.
 
     Lemma well_formed_ssa_reeval_hd E i p s1 s2 :
       well_formed_ssa_program E (i::p) ->
       eval_program E (i::p) s1 s2 ->
       eval_instr E i s2 s2.
     Proof.
-      case: s1; last by (move=> _ Hev; rewrite (eval_program_err Hev); exact: Eerr).
-      move=> s1. case: s2; last by (move=> _ _; exact: Eerr). move=> s2.
       (case: i => //=); intros;
        try by repeat match goal with
-             | H : eval_program _ (_::_) (OK ?s1) (OK ?s2) |- _ =>
+             | H : eval_program _ (_::_) ?s1 ?s2 |- _ =>
                  inversion_clear H
-             | H1 : eval_instr _ _ (OK _) ?s, H2 : eval_instrs _ _ ?s _ |- _ =>
+             | H1 : eval_instr _ _ _ ?s, H2 : eval_instrs _ _ ?s _ |- _ =>
                  inversion_clear H1 in H2
              | |- eval_instr _ _ _ _ => eval_instr_intro
              | Hwf : is_true (well_formed_ssa_program _ (_::_)) |- _ =>
@@ -5338,7 +5620,7 @@ Section MakeSSA.
                  let Hun2 := fresh "Hun" in
                  move: (ssa_unchanged_program_add1 Hun) => {Hun} [Hun1 Hun2]
              (* introduce `Store.acc t t1 = SSAStore.acc t s2` *)
-             | Hev : eval_instrs (instr_succ_typenv ?i ?E) ?p (OK ?t1) (OK ?s2),
+             | Hev : eval_instrs (instr_succ_typenv ?i ?E) ?p ?t1 ?s2,
                  Hun : is_true (ssa_unchanged_program_var ?p ?t) |- _ =>
                  let Heva := fresh "Heva" in
                  (move: (ssa_unchanged_program_eval_singleton (ssa_unchanged_program_singleton2 Hun) Hev)) => {Hun} Heva
@@ -5364,7 +5646,7 @@ Section MakeSSA.
                      Heva : context [eval_atom ?a ?s1] |- _ =>
                  rewrite -(Upd2_disjoint_eval_atom Hupd Hdisj1 Hdisj2) in Heva
              (* From `eval_atom a t1` to `eval_atom a s2` *)
-             | Hev : eval_instrs (instr_succ_typenv _ ?E) ?p (OK ?t1) (OK ?s2),
+             | Hev : eval_instrs (instr_succ_typenv _ ?E) ?p ?t1 ?s2,
                  Hun : is_true (ssa_vars_unchanged_program (vars_atom ?a) ?p),
                    Heva : context [eval_atom ?a ?t1] |- _ =>
                  rewrite (ssa_unchanged_program_eval_atom Hun Hev) in Heva
@@ -5382,16 +5664,6 @@ Section MakeSSA.
         move: (well_formed_ssa_vars_unchanged_hd H) => /= Hun.
         rewrite (ssa_unchanged_program_eval_singleton Hun H2).
         exact: SSAStore.Upd_acc_idem.
-      - (* Icut *)
-        inversion_clear H0. inversion_clear H1 in H2.
-        + apply: EIcutOK; first reflexivity. rewrite H0 in H3.
-          exact: (ssa_unchanged_program_eval_bexp1 (well_formed_ssa_vars_unchanged_hd H) H2 H3).
-        + by elim: (eval_program_err_ok H2).
-      - (* Iassert *)
-        inversion_clear H0. inversion_clear H1 in H2.
-        + apply: EIassertOK; first reflexivity. rewrite H0 in H3.
-          exact: (ssa_unchanged_program_eval_bexp1 (well_formed_ssa_vars_unchanged_hd H) H2 H3).
-        + by elim: (eval_program_err_ok H2).
       - (* Iassume *)
         inversion_clear H0. inversion_clear H1 in H2.
         apply: EIassume; first reflexivity. rewrite H0 in H3.
@@ -5406,123 +5678,97 @@ Section MakeSSA.
              state_equal s2 s3]
      *)
 
-    Ltac intro_hyps n :=
-      match n with
-      | O => idtac
-      | S ?m => intro; intro_hyps m
-      end.
-
-    Ltac found_error_state :=
-      let rec found_error_state_rec lv :=
-        ltac:(match goal with
-              | H : eval_program _ _ (ERR SSAStore.t) _ |- _ =>
-                  (move: (eval_program_err H) => ?); subst; (move: H); (found_error_state_rec constr:((lv+1)%nat))
-              | H : eval_instr _ _ (ERR SSAStore.t) _ |- _ =>
-                  (move: (eval_instr_err H) => ?); subst; (move: H); (found_error_state_rec constr:((lv+1)%nat))
-              | |- _ => let n := eval compute in lv in
-                          intro_hyps n
-              end) in
-      found_error_state_rec constr:(O%nat).
-
     Lemma well_formed_ssa_reeval_hd_equal E i p s1 s2 s3 :
       ~~ (is_nondet i) ->
       well_formed_ssa_program E (i::p) ->
       eval_program E (i::p) s1 s2 ->
       eval_instr E i s2 s3 ->
-      state_equal s2 s3.
+      SSAStore.Equal s2 s3.
     Proof.
-      case: s1; last by intros; found_error_state; reflexivity.
-      case: s2; last by intros; found_error_state; reflexivity.
-      case: s3.
-      - move=> s1 s2 s3 Hn Hwfip Hevip Hevi.
-        move: (eval_program_cons_ok Hevip) => {Hevip} [s4 [Hevi' Hevp]].
-        (case: i Hn Hwfip Hevi Hevi' Hevp); intros; try discriminate; clear Hn;
-          by repeat
-               match goal with
-               | H : ?e |- ?e => assumption
-               | H : eval_instr _ _ _ _ |- _ => inversion_clear H; simpl in *
-               | H : SSAStore.Upd ?t _ ?s2 ?s1 |- SSAStore.Equal ?s2 ?s1 =>
-                   apply: (@SSAStore.Upd_acc_equal t s2)
-               | H : SSAStore.Upd2 ?t0 _ ?t _ ?s2 ?s1 |- SSAStore.Equal ?s2 ?s1 =>
-                   apply: (@SSAStore.Upd2_acc_equal t0 t s2)
-               | Hwf : is_true (well_formed_ssa_program _ (_::_)) |- _ =>
-                   let Hun := fresh "Hun" in
-                   let Hdisj := fresh "Hdisj" in
-                   (move: (well_formed_ssa_vars_unchanged_hd Hwf)
-                            (well_formed_ssa_vars_disjoint_hd Hwf) => /= Hun Hdisj);
-                   (move: (well_formed_ssa_hd Hwf) => {}Hwf)
-               | Hwf : is_true (well_formed_instr ?E ?i) |- _ =>
-                   rewrite /well_formed_instr /= in Hwf
-               | Hdisj : is_true (SSAVS.Lemmas.disjoint _ (SSAVS.union _ _)) |- _ =>
-                   rewrite SSAVS.Lemmas.disjoint_union_r in Hdisj
-               | Hdisj : is_true (SSAVS.Lemmas.disjoint (SSAVS.add _ _) _) |- _ =>
-                   rewrite SSAVS.Lemmas.disjoint_add_l in Hdisj
-               | Hmem : is_true (~~ SSAVS.mem _ _) |- _ =>
-                   rewrite -SSAVS.Lemmas.disjoint_singleton_l in Hmem
-               | Hun : is_true (ssa_vars_unchanged_program (SSAVS.union _ _) _) |- _ =>
-                   rewrite ssa_unchanged_program_union in Hun
-               | H : is_true (_ && _) |- _ =>
-                   let H1 := fresh in
-                   let H2 := fresh in
-                   move/andP: H => [H1 H2]
-               | H : _ /\ _ |- _ =>
-                   let H1 := fresh in
-                   let H2 := fresh in
-                   move: H => [H1 H2]
-               | Hun : is_true (ssa_vars_unchanged_program (SSAVS.add _ _) _) |- _ =>
-                   let Hun1 := fresh "Hun" in
-                   let Hun2 := fresh "Hun" in
-                   move: (ssa_unchanged_program_add1 Hun) => {Hun} [Hun1 Hun2]
-               (* Contradiction case *)
-               | Hupd : SSAStore.Upd ?t _ ?s3 ?s4,
-                   Hevp : eval_program _ ?p (OK ?s4) (OK ?s2),
-                     Hdisj : is_true (SSAVS.Lemmas.disjoint (SSAVS.singleton ?t) (vars_atom ?a)),
-                       Hun : is_true (ssa_vars_unchanged_program (vars_atom ?a) ?p),
-                         Heva : context [eval_atom ?a ?s3] |- _ =>
-                   rewrite -(Upd_disjoint_eval_atom Hupd Hdisj) in Heva; clear Hdisj;
-                   rewrite (ssa_unchanged_program_eval_atom Hun Hevp) in Heva
-               | Heva : is_true (?e), Hevna : is_true (~~ ?e) |- _ =>
-                   rewrite Heva in Hevna; discriminate
-               (* Another contradiction case *)
-               | H1 : is_true (is_unsigned ?t),
-                   H2 : is_true (is_signed ?t) |- _ =>
-                   rewrite -not_unsigned_is_signed H1 in H2; discriminate
-               (* From `SSAStore.acc t s2` to `SSAStore.acc t s3`  *)
-               | Hun : is_true (ssa_unchanged_program_var ?p ?t),
-                   Hevp : eval_program _ ?p (OK ?s4) (OK ?s2) |-
-                   context [SSAStore.acc ?t ?s2] =>
-                   rewrite -(acc_unchanged_program Hun Hevp)
-               (* From `SSAStore.acc t s4` to `eval_atom _ s3`*)
-               | H : SSAStore.Upd ?t _ ?s3 ?s4 |-
-                   context [SSAStore.acc ?t ?s4] =>
-                   rewrite (SSAStore.acc_Upd_eq (eqxx _) H)
-               | Hupd : SSAStore.Upd2 ?t0 _ ?t _ ?s1 ?t2,
-                   Hne : is_true (?t != ?t0) |-
-                   context [SSAStore.acc ?t ?t2] =>
-                   rewrite (SSAStore.acc_Upd2_eq2 (eqxx t) Hupd);
-                   rewrite eq_sym in Hne;
-                   rewrite (SSAStore.acc_Upd2_eq1 (eqxx t0) Hne Hupd)
-               (* From `eval_atom a s1` to `eval_atom a t1`  *)
-               | Hupd : SSAStore.Upd ?t _ ?s1 ?t1,
-                   Hdisj : is_true (SSAVS.Lemmas.disjoint (SSAVS.singleton ?t) (vars_atom ?a))
-                 |- context [eval_atom ?a ?s1] =>
-                   rewrite -(Upd_disjoint_eval_atom Hupd Hdisj); clear Hdisj
-               | Hupd : SSAStore.Upd2 ?t0 _ ?t _ ?s1 ?t1,
-                   Hdisj1 : is_true (SSAVS.Lemmas.disjoint (SSAVS.singleton ?t0) (vars_atom ?a)),
-                     Hdisj2 : is_true (SSAVS.Lemmas.disjoint (SSAVS.singleton ?t) (vars_atom ?a)) |-
-                   context [eval_atom ?a ?s1] =>
-                   rewrite -(Upd2_disjoint_eval_atom Hupd Hdisj1 Hdisj2); clear Hdisj1 Hdisj2
-               (* From `eval_atom a t1` to `eval_atom a s2` *)
-               | Hev : eval_program _ ?p (OK ?t1) (OK ?s2),
-                   Hun : is_true (ssa_vars_unchanged_program (vars_atom ?a) ?p)
-                 |- context [eval_atom ?a ?t1] =>
-                   rewrite (ssa_unchanged_program_eval_atom Hun Hev)
-               end.
-      - move=> s1 s2 Hn Hwfip Hevip Hevi. move: (eval_instr_ok_err Hevi) => [e [Hi He]].
-        move: (eval_program_cons_ok Hevip) => [s3 [Hevi' Hevp]].
-        move: (well_formed_ssa_vars_unchanged_hd Hwfip) => /= Hun.
-        (case: Hi => ?); subst; inversion_clear Hevi'; rewrite H in H0;
-        move: (ssa_unchanged_program_eval_bexp1 Hun Hevp H0); exact: He.
+      move=> Hn Hwfip Hevip Hevi.
+      move: (eval_program_cons_exists Hevip) => {Hevip} [s4 [Hevi' Hevp]].
+      (case: i Hn Hwfip Hevi Hevi' Hevp); intros; try discriminate; clear Hn;
+        by repeat
+             match goal with
+             | H : ?e |- ?e => assumption
+             | H : eval_instr _ _ _ _ |- _ => inversion_clear H; simpl in *
+             | H : SSAStore.Upd ?t _ ?s2 ?s1 |- SSAStore.Equal ?s2 ?s1 =>
+                 apply: (@SSAStore.Upd_acc_equal t s2)
+             | H : SSAStore.Upd2 ?t0 _ ?t _ ?s2 ?s1 |- SSAStore.Equal ?s2 ?s1 =>
+                 apply: (@SSAStore.Upd2_acc_equal t0 t s2)
+             | Hwf : is_true (well_formed_ssa_program _ (_::_)) |- _ =>
+                 let Hun := fresh "Hun" in
+                 let Hdisj := fresh "Hdisj" in
+                 (move: (well_formed_ssa_vars_unchanged_hd Hwf)
+                          (well_formed_ssa_vars_disjoint_hd Hwf) => /= Hun Hdisj);
+                 (move: (well_formed_ssa_hd Hwf) => {}Hwf)
+             | Hwf : is_true (well_formed_instr ?E ?i) |- _ =>
+                 rewrite /well_formed_instr /= in Hwf
+             | Hdisj : is_true (SSAVS.Lemmas.disjoint _ (SSAVS.union _ _)) |- _ =>
+                 rewrite SSAVS.Lemmas.disjoint_union_r in Hdisj
+             | Hdisj : is_true (SSAVS.Lemmas.disjoint (SSAVS.add _ _) _) |- _ =>
+                 rewrite SSAVS.Lemmas.disjoint_add_l in Hdisj
+             | Hmem : is_true (~~ SSAVS.mem _ _) |- _ =>
+                 rewrite -SSAVS.Lemmas.disjoint_singleton_l in Hmem
+             | Hun : is_true (ssa_vars_unchanged_program (SSAVS.union _ _) _) |- _ =>
+                 rewrite ssa_unchanged_program_union in Hun
+             | H : is_true (_ && _) |- _ =>
+                 let H1 := fresh in
+                 let H2 := fresh in
+                 move/andP: H => [H1 H2]
+             | H : _ /\ _ |- _ =>
+                 let H1 := fresh in
+                 let H2 := fresh in
+                 move: H => [H1 H2]
+             | Hun : is_true (ssa_vars_unchanged_program (SSAVS.add _ _) _) |- _ =>
+                 let Hun1 := fresh "Hun" in
+                 let Hun2 := fresh "Hun" in
+                 move: (ssa_unchanged_program_add1 Hun) => {Hun} [Hun1 Hun2]
+             (* Contradiction case *)
+             | Hupd : SSAStore.Upd ?t _ ?s3 ?s4,
+                 Hevp : eval_program _ ?p ?s4 ?s2,
+                   Hdisj : is_true (SSAVS.Lemmas.disjoint (SSAVS.singleton ?t) (vars_atom ?a)),
+                     Hun : is_true (ssa_vars_unchanged_program (vars_atom ?a) ?p),
+                       Heva : context [eval_atom ?a ?s3] |- _ =>
+                 rewrite -(Upd_disjoint_eval_atom Hupd Hdisj) in Heva; clear Hdisj;
+                 rewrite (ssa_unchanged_program_eval_atom Hun Hevp) in Heva
+             | Heva : is_true (?e), Hevna : is_true (~~ ?e) |- _ =>
+                 rewrite Heva in Hevna; discriminate
+             (* Another contradiction case *)
+             | H1 : is_true (is_unsigned ?t),
+                 H2 : is_true (is_signed ?t) |- _ =>
+                 rewrite -not_unsigned_is_signed H1 in H2; discriminate
+             (* From `SSAStore.acc t s2` to `SSAStore.acc t s3`  *)
+             | Hun : is_true (ssa_unchanged_program_var ?p ?t),
+                 Hevp : eval_program _ ?p ?s4 ?s2 |-
+                 context [SSAStore.acc ?t ?s2] =>
+                 rewrite -(acc_unchanged_program Hun Hevp)
+             (* From `SSAStore.acc t s4` to `eval_atom _ s3`*)
+             | H : SSAStore.Upd ?t _ ?s3 ?s4 |-
+                 context [SSAStore.acc ?t ?s4] =>
+                 rewrite (SSAStore.acc_Upd_eq (eqxx _) H)
+             | Hupd : SSAStore.Upd2 ?t0 _ ?t _ ?s1 ?t2,
+                 Hne : is_true (?t != ?t0) |-
+                 context [SSAStore.acc ?t ?t2] =>
+                 rewrite (SSAStore.acc_Upd2_eq2 (eqxx t) Hupd);
+                 rewrite eq_sym in Hne;
+                 rewrite (SSAStore.acc_Upd2_eq1 (eqxx t0) Hne Hupd)
+             (* From `eval_atom a s1` to `eval_atom a t1`  *)
+             | Hupd : SSAStore.Upd ?t _ ?s1 ?t1,
+                 Hdisj : is_true (SSAVS.Lemmas.disjoint (SSAVS.singleton ?t) (vars_atom ?a))
+               |- context [eval_atom ?a ?s1] =>
+                 rewrite -(Upd_disjoint_eval_atom Hupd Hdisj); clear Hdisj
+             | Hupd : SSAStore.Upd2 ?t0 _ ?t _ ?s1 ?t1,
+                 Hdisj1 : is_true (SSAVS.Lemmas.disjoint (SSAVS.singleton ?t0) (vars_atom ?a)),
+                   Hdisj2 : is_true (SSAVS.Lemmas.disjoint (SSAVS.singleton ?t) (vars_atom ?a)) |-
+                 context [eval_atom ?a ?s1] =>
+                 rewrite -(Upd2_disjoint_eval_atom Hupd Hdisj1 Hdisj2); clear Hdisj1 Hdisj2
+             (* From `eval_atom a t1` to `eval_atom a s2` *)
+             | Hev : eval_program _ ?p ?t1 ?s2,
+                 Hun : is_true (ssa_vars_unchanged_program (vars_atom ?a) ?p)
+               |- context [eval_atom ?a ?t1] =>
+                 rewrite (ssa_unchanged_program_eval_atom Hun Hev)
+             end.
     Qed.
 
     Lemma well_formed_ssa_reeval_hd_succ_typenv E i p s1 s2 :
@@ -5541,7 +5787,7 @@ Section MakeSSA.
       well_formed_ssa_program E (i::p) ->
       eval_program E (i::p) s1 s2 ->
       eval_instr (program_succ_typenv (i::p) E) i s2 s3 ->
-      state_equal s2 s3.
+      SSAStore.Equal s2 s3.
     Proof.
       move=> Hn Hwfip Hevip Hevi. apply: (well_formed_ssa_reeval_hd_equal Hn Hwfip Hevip).
       move: Hwfip => /andP [/andP [Hwfip HunEip] Hssaip].
@@ -5568,7 +5814,7 @@ Section MakeSSA.
       (i \in p) ->
       ~~ is_nondet i ->
       eval_instr (program_succ_typenv p E) i s2 s3 ->
-      state_equal s2 s3.
+      SSAStore.Equal s2 s3.
     Proof.
       elim: p E i s1 s2 => [| i p IH] E j s1 s2 //=.
       move=> Hwfip Hevip Hin Hn. rewrite in_cons in Hin. case/orP: Hin => Hin.
@@ -5595,7 +5841,7 @@ Section MakeSSA.
       eval_program E p s1 s2 ->
       (forall i, i \in ins -> i \in p /\ ~~ is_nondet i) ->
       eval_program (program_succ_typenv p E) ins s2 s3 ->
-      state_equal s2 s3.
+      SSAStore.Equal s2 s3.
     Proof.
       elim: ins => [| i ins IH] //=.
       - move=> Hwf Hev Hall Hevins. inversion_clear Hevins. assumption.
@@ -5637,7 +5883,7 @@ Section MakeSSA.
       let Hv := fresh in
       let Hi := fresh in
       (apply/negP => /= Hmem);
-      (move: (SSAFull.VSLemmas.mem_singleton1 Hmem) => {Hmem} Heq);
+      (move: (SSALite.VSLemmas.mem_singleton1 Hmem) => {Hmem} Heq);
       (move/eqP: Heq => [Hv Hi]);
       rewrite Hv Hi in H;
       exact: (get_upd_index_leF H)
@@ -5650,12 +5896,12 @@ Section MakeSSA.
       let Hv := fresh in
       let Hi := fresh in
       (apply/negP => /= Hmem);
-      (move: (SSAFull.VSLemmas.mem_add1 Hmem); case => {Hmem} Hmem);
+      (move: (SSALite.VSLemmas.mem_add1 Hmem); case => {Hmem} Hmem);
       [ (move/eqP: Hmem => [Hv Hi]); rewrite Hv Hi in H;
         apply: (@get_upd_index_leF (upd_index v2 m) v1);
         apply: (Nleq_trans H); exact: get_upd_index_le
       |
-      (move: (SSAFull.VSLemmas.mem_singleton1 Hmem) => {Hmem} Hmem);
+      (move: (SSALite.VSLemmas.mem_singleton1 Hmem) => {Hmem} Hmem);
       (move/eqP: Hmem => [Hv Hi]); rewrite Hv Hi in H;
       exact: (@get_upd_index_leF m v2)
       ]
@@ -5732,43 +5978,43 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_vars_are_defined_singleton m te t:
-    DSLFull.are_defined (VS.singleton t) te <->
-    SSAFull.are_defined (SSAVS.singleton (ssa_var m t)) (ssa_typenv m te).
+    DSLLite.are_defined (VS.singleton t) te <->
+    SSALite.are_defined (SSAVS.singleton (ssa_var m t)) (ssa_typenv m te).
   Proof.
-    rewrite /DSLFull.are_defined /SSAFull.are_defined /=; split; move=> H.
-    - rewrite (SSAVS.for_all_1 (SSAFull.are_defined_compat (ssa_typenv m te))).
+    rewrite /DSLLite.are_defined /SSALite.are_defined /=; split; move=> H.
+    - rewrite (SSAVS.for_all_1 (SSALite.are_defined_compat (ssa_typenv m te))).
       + done.
-      + move: (VS.for_all_2 (DSLFull.are_defined_compat te) H) => {H} H.
+      + move: (VS.for_all_2 (DSLLite.are_defined_compat te) H) => {H} H.
         intros x Hin.
         move: (Hin) => Heq.
-        rewrite -> SSAFull.VSLemmas.singleton_iff in Heq.
+        rewrite -> SSALite.VSLemmas.singleton_iff in Heq.
         rewrite - Heq.
-        move: (DSLFull.VSLemmas.P.Dec.FSetDecideTestCases.test_In_singleton t) => Hsingle.
+        move: (DSLLite.VSLemmas.P.Dec.FSetDecideTestCases.test_In_singleton t) => Hsingle.
         move: (H t Hsingle) => Ht.
         move/idP: Ht => Ht.
         apply/idP.
-        rewrite /SSAFull.is_defined.
+        rewrite /SSALite.is_defined.
         rewrite -ssa_typenv_mem.
         exact: Ht.
-    - rewrite (VS.for_all_1 (DSLFull.are_defined_compat te)).
+    - rewrite (VS.for_all_1 (DSLLite.are_defined_compat te)).
       + done.
-      + move: (SSAVS.for_all_2 (SSAFull.are_defined_compat (ssa_typenv m te)) H) => {H} H.
+      + move: (SSAVS.for_all_2 (SSALite.are_defined_compat (ssa_typenv m te)) H) => {H} H.
         intros x Hin.
         move: (Hin) => Heq.
-        rewrite -> DSLFull.VSLemmas.singleton_iff in Heq.
+        rewrite -> DSLLite.VSLemmas.singleton_iff in Heq.
         rewrite - Heq.
-        move: (SSAFull.VSLemmas.P.Dec.FSetDecideTestCases.test_In_singleton (ssa_var m t)) => Hsingle.
+        move: (SSALite.VSLemmas.P.Dec.FSetDecideTestCases.test_In_singleton (ssa_var m t)) => Hsingle.
         move: (H _ Hsingle) => Ht.
         move/idP: Ht => Ht.
         apply/idP.
-        rewrite /DSLFull.is_defined.
+        rewrite /DSLLite.is_defined.
         rewrite (ssa_typenv_mem m).
         exact: Ht.
   Qed.
 
   Lemma ssa_vars_are_defined_atom m a te:
-    DSLFull.are_defined (DSLFull.vars_atom a) te <->
-    SSAFull.are_defined (SSAFull.vars_atom (ssa_atom m a)) (ssa_typenv m te).
+    DSLLite.are_defined (DSLLite.vars_atom a) te <->
+    SSALite.are_defined (SSALite.vars_atom (ssa_atom m a)) (ssa_typenv m te).
   Proof.
     split.
     - elim: a m te; rewrite /=; intros.
@@ -5780,51 +6026,51 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_vars_are_defined_eexp m e te:
-    DSLFull.are_defined (DSLFull.vars_eexp e) te <->
-    SSAFull.are_defined (SSAFull.vars_eexp (ssa_eexp m e)) (ssa_typenv m te).
+    DSLLite.are_defined (DSLLite.vars_eexp e) te <->
+    SSALite.are_defined (SSALite.vars_eexp (ssa_eexp m e)) (ssa_typenv m te).
   Proof.
     split; elim: e m te; intros; rewrite /= in H *.
     - by rewrite -> (ssa_vars_are_defined_singleton m) in H.
     - done.
     - apply H. by rewrite /= in H0.
-    - rewrite /= DSLFull.are_defined_union in H1.
+    - rewrite /= DSLLite.are_defined_union in H1.
       move/andP: H1 => [H1_1 H1_2].
-      rewrite SSAFull.are_defined_union. apply/andP; split.
+      rewrite SSALite.are_defined_union. apply/andP; split.
       + exact: (H _ _ H1_1).
       + exact: (H0 _ _ H1_2).
     - exact: (H _ _ H0).
     - by rewrite <- (ssa_vars_are_defined_singleton) in H.
     - done.
     - apply H with m. by rewrite /= in H0.
-    - rewrite /= SSAFull.are_defined_union in H1.
+    - rewrite /= SSALite.are_defined_union in H1.
       move/andP: H1 => [H1_1 H1_2].
-      rewrite DSLFull.are_defined_union. apply/andP; split.
+      rewrite DSLLite.are_defined_union. apply/andP; split.
       + exact: (H _ _ H1_1).
       + exact: (H0 _ _ H1_2).
     - exact: (H _ _ H0).
   Qed.
 
   Lemma ssa_vars_are_defined_eexps m es te:
-    DSLFull.are_defined (DSLFull.vars_eexps es) te <->
-    SSAFull.are_defined (SSAFull.vars_eexps (ssa_eexps m es)) (ssa_typenv m te).
+    DSLLite.are_defined (DSLLite.vars_eexps es) te <->
+    SSALite.are_defined (SSALite.vars_eexps (ssa_eexps m es)) (ssa_typenv m te).
   Proof.
-    elim: es => [| e es [IH1 IH2]] //=. rewrite DSLFull.are_defined_union.
-    rewrite SSAFull.are_defined_union. split=> /andP [H1 H2].
+    elim: es => [| e es [IH1 IH2]] //=. rewrite DSLLite.are_defined_union.
+    rewrite SSALite.are_defined_union. split=> /andP [H1 H2].
     - rewrite (IH1 H2) andbT. apply/ssa_vars_are_defined_eexp. exact: H1.
     - rewrite (IH2 H2) andbT. apply/ssa_vars_are_defined_eexp. exact: H1.
   Qed.
 
   Lemma ssa_vars_are_defined_rexp m r te:
-    DSLFull.are_defined (DSLFull.vars_rexp r) te <->
-    SSAFull.are_defined (SSAFull.vars_rexp (ssa_rexp m r)) (ssa_typenv m te).
+    DSLLite.are_defined (DSLLite.vars_rexp r) te <->
+    SSALite.are_defined (SSALite.vars_rexp (ssa_rexp m r)) (ssa_typenv m te).
   Proof.
     split; elim: r m te; intros; rewrite /= in H *.
     - by rewrite -> (ssa_vars_are_defined_singleton m) in H.
     - done.
     - apply H. by rewrite /= in H0.
-    - rewrite /= DSLFull.are_defined_union in H1.
+    - rewrite /= DSLLite.are_defined_union in H1.
       move/andP: H1 => [H1_1 H1_2].
-      rewrite SSAFull.are_defined_union. apply/andP; split.
+      rewrite SSALite.are_defined_union. apply/andP; split.
       + exact: (H _ _ H1_1).
       + exact: (H0 _ _ H1_2).
     - apply H. by rewrite /= in H0.
@@ -5832,9 +6078,9 @@ Section MakeSSA.
     - by rewrite <- (ssa_vars_are_defined_singleton) in H.
     - done.
     - apply H with m. by rewrite /= in H0.
-    - rewrite /= SSAFull.are_defined_union in H1.
+    - rewrite /= SSALite.are_defined_union in H1.
       move/andP: H1 => [H1_1 H1_2].
-      rewrite DSLFull.are_defined_union. apply/andP; split.
+      rewrite DSLLite.are_defined_union. apply/andP; split.
       + exact: (H _ _ H1_1).
       + exact: (H0 _ _ H1_2).
     - apply H with m. by rewrite /= in H0.
@@ -5842,85 +6088,85 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_vars_are_defined_ebexp m e te:
-    DSLFull.are_defined (DSLFull.vars_ebexp e) te <->
-    SSAFull.are_defined (SSAFull.vars_ebexp (ssa_ebexp m e)) (ssa_typenv m te).
+    DSLLite.are_defined (DSLLite.vars_ebexp e) te <->
+    SSALite.are_defined (SSALite.vars_ebexp (ssa_ebexp m e)) (ssa_typenv m te).
   Proof.
     split; elim: e m te; intros; rewrite /= in H *.
     - done.
-    - rewrite DSLFull.are_defined_union in H; move/andP: H => [He He0].
-      rewrite SSAFull.are_defined_union; apply/andP; split; by apply ssa_vars_are_defined_eexp.
-    - rewrite DSLFull.are_defined_union in H; move/andP: H => [He H].
-      rewrite DSLFull.are_defined_union in H; move/andP: H => [He0 He1].
-      rewrite SSAFull.are_defined_union; apply/andP; split; first by apply ssa_vars_are_defined_eexp.
-      rewrite SSAFull.are_defined_union; apply/andP; split; first by apply ssa_vars_are_defined_eexp.
+    - rewrite DSLLite.are_defined_union in H; move/andP: H => [He He0].
+      rewrite SSALite.are_defined_union; apply/andP; split; by apply ssa_vars_are_defined_eexp.
+    - rewrite DSLLite.are_defined_union in H; move/andP: H => [He H].
+      rewrite DSLLite.are_defined_union in H; move/andP: H => [He0 He1].
+      rewrite SSALite.are_defined_union; apply/andP; split; first by apply ssa_vars_are_defined_eexp.
+      rewrite SSALite.are_defined_union; apply/andP; split; first by apply ssa_vars_are_defined_eexp.
       by apply/ssa_vars_are_defined_eexps.
-    - rewrite SSAFull.are_defined_union; apply/andP; rewrite /= in H1;
-        rewrite DSLFull.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply H|apply H0].
+    - rewrite SSALite.are_defined_union; apply/andP; rewrite /= in H1;
+        rewrite DSLLite.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply H|apply H0].
     - done.
-    - rewrite SSAFull.are_defined_union in H; move/andP: H => [He He0].
-      rewrite DSLFull.are_defined_union; apply/andP; split; by apply (ssa_vars_are_defined_eexp m).
-    - rewrite SSAFull.are_defined_union in H; move/andP: H => [He H].
-      rewrite SSAFull.are_defined_union in H; move/andP: H => [He0 He1].
-      rewrite DSLFull.are_defined_union; apply/andP; split; first by apply (ssa_vars_are_defined_eexp m).
-      rewrite DSLFull.are_defined_union; apply/andP; split; first by apply (ssa_vars_are_defined_eexp m).
+    - rewrite SSALite.are_defined_union in H; move/andP: H => [He He0].
+      rewrite DSLLite.are_defined_union; apply/andP; split; by apply (ssa_vars_are_defined_eexp m).
+    - rewrite SSALite.are_defined_union in H; move/andP: H => [He H].
+      rewrite SSALite.are_defined_union in H; move/andP: H => [He0 He1].
+      rewrite DSLLite.are_defined_union; apply/andP; split; first by apply (ssa_vars_are_defined_eexp m).
+      rewrite DSLLite.are_defined_union; apply/andP; split; first by apply (ssa_vars_are_defined_eexp m).
       apply/ssa_vars_are_defined_eexps. exact: He1.
-    - rewrite DSLFull.are_defined_union; apply/andP; rewrite /= in H1;
-        rewrite SSAFull.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply (H m) |apply (H0 m)].
+    - rewrite DSLLite.are_defined_union; apply/andP; rewrite /= in H1;
+        rewrite SSALite.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply (H m) |apply (H0 m)].
   Qed.
 
   Lemma ssa_vars_are_defined_rbexp m r te:
-    DSLFull.are_defined (DSLFull.vars_rbexp r) te <->
-    SSAFull.are_defined (SSAFull.vars_rbexp (ssa_rbexp m r)) (ssa_typenv m te).
+    DSLLite.are_defined (DSLLite.vars_rbexp r) te <->
+    SSALite.are_defined (SSALite.vars_rbexp (ssa_rbexp m r)) (ssa_typenv m te).
   Proof.
     split; elim: r m te; intros; rewrite /= in H *.
     - done.
-    - rewrite DSLFull.are_defined_union in H; move/andP: H => [He He0].
-      rewrite SSAFull.are_defined_union; apply/andP; split; by apply ssa_vars_are_defined_rexp.
-    - rewrite DSLFull.are_defined_union in H; move/andP: H => [He H].
-      rewrite SSAFull.are_defined_union; apply/andP; split; by apply ssa_vars_are_defined_rexp.
+    - rewrite DSLLite.are_defined_union in H; move/andP: H => [He He0].
+      rewrite SSALite.are_defined_union; apply/andP; split; by apply ssa_vars_are_defined_rexp.
+    - rewrite DSLLite.are_defined_union in H; move/andP: H => [He H].
+      rewrite SSALite.are_defined_union; apply/andP; split; by apply ssa_vars_are_defined_rexp.
     - apply H; rewrite /= in H0; done.
-    - rewrite SSAFull.are_defined_union; apply/andP; rewrite /= in H1;
-        rewrite DSLFull.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply H|apply H0].
-    - rewrite SSAFull.are_defined_union; apply/andP; rewrite /= in H1;
-        rewrite DSLFull.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply H|apply H0].
+    - rewrite SSALite.are_defined_union; apply/andP; rewrite /= in H1;
+        rewrite DSLLite.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply H|apply H0].
+    - rewrite SSALite.are_defined_union; apply/andP; rewrite /= in H1;
+        rewrite DSLLite.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply H|apply H0].
     - done.
-    - rewrite SSAFull.are_defined_union in H; move/andP: H => [He He0].
-      rewrite DSLFull.are_defined_union; apply/andP; split; by apply (ssa_vars_are_defined_rexp m).
-    - rewrite SSAFull.are_defined_union in H; move/andP: H => [He H].
-      rewrite DSLFull.are_defined_union; apply/andP; split; by apply (ssa_vars_are_defined_rexp m).
+    - rewrite SSALite.are_defined_union in H; move/andP: H => [He He0].
+      rewrite DSLLite.are_defined_union; apply/andP; split; by apply (ssa_vars_are_defined_rexp m).
+    - rewrite SSALite.are_defined_union in H; move/andP: H => [He H].
+      rewrite DSLLite.are_defined_union; apply/andP; split; by apply (ssa_vars_are_defined_rexp m).
     - apply (H m); rewrite /= in H0; done.
-    - rewrite DSLFull.are_defined_union; apply/andP; rewrite /= in H1;
-        rewrite SSAFull.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply (H m)|apply (H0 m)].
-    - rewrite DSLFull.are_defined_union; apply/andP; rewrite /= in H1;
-        rewrite SSAFull.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply (H m)|apply (H0 m)].
+    - rewrite DSLLite.are_defined_union; apply/andP; rewrite /= in H1;
+        rewrite SSALite.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply (H m)|apply (H0 m)].
+    - rewrite DSLLite.are_defined_union; apply/andP; rewrite /= in H1;
+        rewrite SSALite.are_defined_union in H1; move/andP: H1 => [H1_1 H1_2]; split; by [apply (H m)|apply (H0 m)].
   Qed.
 
   Lemma ssa_vars_are_defined_bexp m b te:
-    DSLFull.are_defined (DSLFull.vars_bexp b) te <->
-    SSAFull.are_defined (SSAFull.vars_bexp (ssa_bexp m b)) (ssa_typenv m te).
+    DSLLite.are_defined (DSLLite.vars_bexp b) te <->
+    SSALite.are_defined (SSALite.vars_bexp (ssa_bexp m b)) (ssa_typenv m te).
   Proof.
     elim: b m te; split; intros.
-    - rewrite /DSLFull.vars_bexp /= in H.
-      rewrite DSLFull.are_defined_union in H; move/andP: H => [He Hr].
-      rewrite /SSAFull.vars_bexp /=.
-      rewrite SSAFull.are_defined_union; apply/andP; split.
+    - rewrite /DSLLite.vars_bexp /= in H.
+      rewrite DSLLite.are_defined_union in H; move/andP: H => [He Hr].
+      rewrite /SSALite.vars_bexp /=.
+      rewrite SSALite.are_defined_union; apply/andP; split.
       + by apply ssa_vars_are_defined_ebexp.
       + by apply ssa_vars_are_defined_rbexp.
-    - rewrite /SSAFull.vars_bexp /= in H.
-      rewrite SSAFull.are_defined_union in H; move/andP: H => [He Hr].
-      rewrite /DSLFull.vars_bexp /=.
-      rewrite DSLFull.are_defined_union; apply/andP; split.
+    - rewrite /SSALite.vars_bexp /= in H.
+      rewrite SSALite.are_defined_union in H; move/andP: H => [He Hr].
+      rewrite /DSLLite.vars_bexp /=.
+      rewrite DSLLite.are_defined_union; apply/andP; split.
       + by apply (ssa_vars_are_defined_ebexp m).
       + by apply (ssa_vars_are_defined_rbexp m).
   Qed.
 
   Lemma ssa_instr_well_defined te m1 m2 i si :
-    DSLFull.well_formed_instr te i ->
+    DSLLite.well_formed_instr te i ->
     ssa_instr m1 i = (m2, si) ->
-    SSAFull.well_defined_instr (ssa_typenv m1 te) si.
+    SSALite.well_defined_instr (ssa_typenv m1 te) si.
   Proof.
-    rewrite /DSLFull.well_formed_instr.
-    rewrite /DSLFull.well_defined_instr /SSAFull.well_defined_instr.
+    rewrite /DSLLite.well_formed_instr.
+    rewrite /DSLLite.well_defined_instr /SSALite.well_defined_instr.
     case: i => /=; intros;
                  (let rec tac :=
                       match goal with
@@ -5930,9 +6176,9 @@ Section MakeSSA.
                         let H2 := fresh in
                         move/andP: H => [H1 H2]; tac
                       | |- is_true (_ && _) => apply/andP; split; tac
-                      | H : is_true (VS.subset (DSLFull.vars_atom ?a) ?vs)
+                      | H : is_true (VS.subset (DSLLite.vars_atom ?a) ?vs)
                         |- is_true (SSAVS.subset
-                                      (SSAFull.vars_atom (ssa_atom ?m ?a))
+                                      (SSALite.vars_atom (ssa_atom ?m ?a))
                                       (ssa_vars ?m ?vs)) =>
                         rewrite ssa_vars_atom_subset; assumption
                       | H : is_true (?v1 != ?v2)
@@ -5942,22 +6188,20 @@ Section MakeSSA.
                       | H : is_true (VS.mem ?v ?vs) |-
                         is_true (SSAVS.mem (ssa_var ?m ?v) (ssa_vars ?m ?vs)) =>
                         rewrite ssa_vars_mem1; exact: H
-                      | H: is_true (DSLFull.are_defined (DSLFull.vars_atom ?a) ?te)
-                        |- is_true (SSAFull.are_defined (SSAFull.vars_atom (ssa_atom ?m ?a))
+                      | H: is_true (DSLLite.are_defined (DSLLite.vars_atom ?a) ?te)
+                        |- is_true (SSALite.are_defined (SSALite.vars_atom (ssa_atom ?m ?a))
                                                     (ssa_typenv ?m ?te)) => rewrite -ssa_vars_are_defined_atom; exact: H
                       | |- is_true(true) => done
                       | |- ?e => progress (auto)
                       | |- ?e => idtac
                       end in tac) .
-      - by apply ssa_vars_are_defined_bexp.
-      - by apply ssa_vars_are_defined_bexp.
-      - by apply ssa_vars_are_defined_bexp.
+      by apply ssa_vars_are_defined_bexp.
   Qed.
 
 
   Lemma ssa_well_typed_eexp m te e:
-    DSLFull.well_typed_eexp te e <->
-    SSAFull.well_typed_eexp (ssa_typenv m te) (ssa_eexp m e).
+    DSLLite.well_typed_eexp te e <->
+    SSALite.well_typed_eexp (ssa_typenv m te) (ssa_eexp m e).
   Proof.
     split; elim: e m te; intros; rewrite /=.
     - done.
@@ -5977,8 +6221,8 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_well_typed_eexps m te es:
-    DSLFull.well_typed_eexps te es <->
-    SSAFull.well_typed_eexps (ssa_typenv m te) (ssa_eexps m es).
+    DSLLite.well_typed_eexps te es <->
+    SSALite.well_typed_eexps (ssa_typenv m te) (ssa_eexps m es).
   Proof.
     elim: es => [| e es [IH1 IH2]] //=. split => /andP [H1 H2].
     - rewrite (IH1 H2) andbT. apply/ssa_well_typed_eexp. exact: H1.
@@ -5986,15 +6230,15 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_typenv_size_rexp m te r:
-    DSLFull.size_of_rexp r te = SSAFull.size_of_rexp (ssa_rexp m r) (ssa_typenv m te).
+    DSLLite.size_of_rexp r te = SSALite.size_of_rexp (ssa_rexp m r) (ssa_typenv m te).
   Proof.
     elim: r te m; intros; rewrite /=; try reflexivity.
     exact: ssa_typenv_size.
   Qed.
 
   Lemma ssa_well_typed_rexp m te e:
-    DSLFull.well_typed_rexp te e <->
-    SSAFull.well_typed_rexp (ssa_typenv m te) (ssa_rexp m e).
+    DSLLite.well_typed_rexp te e <->
+    SSALite.well_typed_rexp (ssa_typenv m te) (ssa_rexp m e).
   Proof.
     split; elim: e m te; intros; rewrite /=.
     - rewrite /= in H. rewrite -ssa_typenv_size. assumption.
@@ -6034,8 +6278,8 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_well_typed_ebexp m te e:
-    DSLFull.well_typed_ebexp te e <->
-    SSAFull.well_typed_ebexp (ssa_typenv m te) (ssa_ebexp m e).
+    DSLLite.well_typed_ebexp te e <->
+    SSALite.well_typed_ebexp (ssa_typenv m te) (ssa_ebexp m e).
   Proof.
     split; elim: e m te; intros; rewrite /=; rewrite /= in H;
       split_andb_hyps; split_andb_goal.
@@ -6058,8 +6302,8 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_well_typed_rbexp m te e:
-    DSLFull.well_typed_rbexp te e <->
-    SSAFull.well_typed_rbexp (ssa_typenv m te) (ssa_rbexp m e).
+    DSLLite.well_typed_rbexp te e <->
+    SSALite.well_typed_rbexp (ssa_typenv m te) (ssa_rbexp m e).
   Proof.
     split; elim: e m te; intros; rewrite /=; rewrite /= in H;
       split_andb_hyps; split_andb_goal => //=.
@@ -6092,50 +6336,50 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_well_typed_bexp m te b:
-    DSLFull.well_typed_bexp te b <->
-    SSAFull.well_typed_bexp (ssa_typenv m te) (ssa_bexp m b).
+    DSLLite.well_typed_bexp te b <->
+    SSALite.well_typed_bexp (ssa_typenv m te) (ssa_bexp m b).
   Proof.
     elim: b m te; split; intros.
-    - rewrite /DSLFull.well_typed_bexp /= in H.
-      rewrite /SSAFull.well_typed_bexp /=.
+    - rewrite /DSLLite.well_typed_bexp /= in H.
+      rewrite /SSALite.well_typed_bexp /=.
       split_andb_hyps; split_andb_goal.
       + by apply ssa_well_typed_ebexp.
       + by apply ssa_well_typed_rbexp.
-    - rewrite /SSAFull.well_typed_bexp /= in H.
-      rewrite /DSLFull.well_typed_bexp /=.
+    - rewrite /SSALite.well_typed_bexp /= in H.
+      rewrite /DSLLite.well_typed_bexp /=.
       split_andb_hyps; split_andb_goal.
       + by apply (ssa_well_typed_ebexp m).
       + by apply (ssa_well_typed_rbexp m).
   Qed.
 
   Lemma ssa_size_matched_atom m a :
-    DSLFull.size_matched_atom a =
-    SSAFull.size_matched_atom (ssa_atom m a).
+    DSLLite.size_matched_atom a =
+    SSALite.size_matched_atom (ssa_atom m a).
   Proof. by case: a. Qed.
 
   Lemma ssa_well_sized_atom m E a :
-    DSLFull.well_sized_atom E a =
-    SSAFull.well_sized_atom (ssa_typenv m E) (ssa_atom m a).
+    DSLLite.well_sized_atom E a =
+    SSALite.well_sized_atom (ssa_typenv m E) (ssa_atom m a).
   Proof.
-    rewrite /DSLFull.well_sized_atom /SSAFull.well_sized_atom.
+    rewrite /DSLLite.well_sized_atom /SSALite.well_sized_atom.
     rewrite -ssa_atom_asize -ssa_atom_atyp. reflexivity.
   Qed.
 
   Lemma ssa_well_typed_atom m E a :
-    DSLFull.well_typed_atom E a =
-    SSAFull.well_typed_atom (ssa_typenv m E) (ssa_atom m a).
+    DSLLite.well_typed_atom E a =
+    SSALite.well_typed_atom (ssa_typenv m E) (ssa_atom m a).
   Proof.
-    rewrite /DSLFull.well_typed_atom /SSAFull.well_typed_atom.
+    rewrite /DSLLite.well_typed_atom /SSALite.well_typed_atom.
     rewrite -ssa_size_matched_atom -ssa_well_sized_atom. reflexivity.
   Qed.
 
   Lemma ssa_instr_well_typed te m1 m2 i si :
-    DSLFull.well_formed_instr te i ->
+    DSLLite.well_formed_instr te i ->
     ssa_instr m1 i = (m2, si) ->
-    SSAFull.well_typed_instr (ssa_typenv m1 te) si.
+    SSALite.well_typed_instr (ssa_typenv m1 te) si.
   Proof.
-    rewrite /DSLFull.well_formed_instr /DSLFull.well_defined_instr
-            /DSLFull.well_typed_instr /SSAFull.well_typed_instr.
+    rewrite /DSLLite.well_formed_instr /DSLLite.well_defined_instr
+            /DSLLite.well_typed_instr /SSALite.well_typed_instr.
     (case: i => /=; intros);
       (let rec tac :=
            match goal with
@@ -6145,9 +6389,9 @@ Section MakeSSA.
              let H2 := fresh in
              move/andP: H => [H1 H2]; tac
            | |- is_true (_ && _) => apply/andP; split; tac
-           | H : is_true (VS.subset (DSLFull.vars_atom ?a) ?vs)
+           | H : is_true (VS.subset (DSLLite.vars_atom ?a) ?vs)
              |- is_true (SSAVS.subset
-                           (SSAFull.vars_atom (ssa_atom ?m ?a))
+                           (SSALite.vars_atom (ssa_atom ?m ?a))
                            (ssa_vars ?m ?vs)) =>
              rewrite ssa_vars_atom_subset; assumption
            | H : is_true (?v1 != ?v2)
@@ -6157,43 +6401,41 @@ Section MakeSSA.
            | H : is_true (VS.mem ?v ?vs) |-
              is_true (SSAVS.mem (ssa_var ?m ?v) (ssa_vars ?m ?vs)) =>
              rewrite ssa_vars_mem1; exact: H
-           | |- context [SSAFull.atyp (ssa_atom ?m ?a) (ssa_typenv ?m ?te)]
+           | |- context [SSALite.atyp (ssa_atom ?m ?a) (ssa_typenv ?m ?te)]
              => rewrite -ssa_atom_atyp; tac
-           | H: is_true (DSLFull.are_defined (DSLFull.vars_atom ?a) ?te)
-             |- is_true (SSAFull.are_defined (SSAFull.vars_atom (ssa_atom ?m ?a))
+           | H: is_true (DSLLite.are_defined (DSLLite.vars_atom ?a) ?te)
+             |- is_true (SSALite.are_defined (SSALite.vars_atom (ssa_atom ?m ?a))
                                          (ssa_typenv ?m ?te)) =>
              rewrite -ssa_vars_are_defined_atom; exact: H
            | H : is_true (?v1 != ?v2)
              |- is_true (ssa_var (upd_index ?v1 (upd_index ?v2 ?m)) ?v1 !=
                                  ssa_var (upd_index ?v2 ?m) ?v2) =>
              exact: (pair_neq1 _ _ H)
-           | |- is_true (SSAFull.well_typed_atom _ _) =>
+           | |- is_true (SSALite.well_typed_atom _ _) =>
              rewrite -ssa_well_typed_atom; tac
-           | |- context f [SSAFull.asize (ssa_atom ?m ?a) (ssa_typenv ?m ?E)%N] =>
+           | |- context f [SSALite.asize (ssa_atom ?m ?a) (ssa_typenv ?m ?E)%N] =>
              rewrite -(ssa_atom_asize m a E); tac
            | |- is_true(true) => done
            | |- ?e => progress (auto)
            | |- ?e => idtac
            end in tac) .
-    - by apply ssa_well_typed_bexp.
-    - by apply ssa_well_typed_bexp.
-    - by apply ssa_well_typed_bexp.
+      by apply ssa_well_typed_bexp.
   Qed.
 
   Lemma ssa_instr_well_formed te m1 m2 i si :
-    DSLFull.well_formed_instr te i ->
+    DSLLite.well_formed_instr te i ->
     ssa_instr m1 i = (m2, si) ->
-    SSAFull.well_formed_instr (ssa_typenv m1 te) si.
+    SSALite.well_formed_instr (ssa_typenv m1 te) si.
   Proof.
     move=> Hwf Hsi.
-    rewrite /SSAFull.well_formed_instr.
+    rewrite /SSALite.well_formed_instr.
       by rewrite (ssa_instr_well_defined Hwf Hsi) (ssa_instr_well_typed Hwf Hsi).
   Qed.
 
   Lemma ssa_program_well_formed1 te m1 m2 p sp :
-    DSLFull.well_formed_program te p ->
+    DSLLite.well_formed_program te p ->
     ssa_program m1 p = (m2, sp) ->
-    SSAFull.well_formed_program (ssa_typenv m1 te) sp.
+    SSALite.well_formed_program (ssa_typenv m1 te) sp.
   Proof.
     elim: p te m1 m2 sp.
     - move=> te m1 m2 sp.
@@ -6212,11 +6454,11 @@ Section MakeSSA.
       + exact: (ssa_instr_well_formed Hwf_hd H_hd).
       + move: (IH _ _ _ _ Hwf_tl H_tl) => HIH.
         move: (@ssa_instr_succ_typenv_submap _ _ _ _ te H_hd) => Hsub.
-        exact: (SSAFull.well_formed_program_submap HIH Hsub).
+        exact: (SSALite.well_formed_program_submap HIH Hsub).
   Qed.
 
   Lemma ssa_typenv_mem_index m te v i:
-    SSAVS.mem (v, i) (SSAFull.vars_env (ssa_typenv m te)) ->
+    SSAVS.mem (v, i) (SSALite.vars_env (ssa_typenv m te)) ->
     i = get_index v m.
   Proof.
     rewrite ssa_vars_env_comm.
@@ -6229,7 +6471,7 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_typenv_mem_le v i m te:
-    SSAVS.mem (v, i) (SSAFull.vars_env (ssa_typenv m te)) ->
+    SSAVS.mem (v, i) (SSALite.vars_env (ssa_typenv m te)) ->
     i <=? get_index v m.
   Proof.
     move=> Hmem.
@@ -6238,7 +6480,7 @@ Section MakeSSA.
   Qed.
 
   Theorem ssa_program_well_formed te m1 m2 p sp :
-    DSLFull.well_formed_program te p ->
+    DSLLite.well_formed_program te p ->
     ssa_program m1 p = (m2, sp) ->
     well_formed_ssa_program (ssa_typenv m1 te) sp.
   Proof.
@@ -6259,38 +6501,38 @@ Section MakeSSA.
     get_index v m = i.
   Proof.
     move=> Hmem.
-    move: (SSAFull.VSLemmas.mem_singleton1 Hmem) => /eqP [] <- <-.
+    move: (SSALite.VSLemmas.mem_singleton1 Hmem) => /eqP [] <- <-.
     reflexivity.
   Qed.
 
   Lemma ssa_atom_var_index m a v i :
-    SSAVS.mem (v, i) (SSAFull.vars_atom (ssa_atom m a)) ->
+    SSAVS.mem (v, i) (SSALite.vars_atom (ssa_atom m a)) ->
     get_index v m = i.
   Proof.
     case: a => /=.
     - move=> x. exact: ssa_singleton_var_index.
     - move=> _ _ H.
-      rewrite SSAFull.VSLemmas.mem_empty in H.
+      rewrite SSALite.VSLemmas.mem_empty in H.
       discriminate.
   Qed.
 
-  Lemma ssa_eexp_var_index m (e : DSLFull.eexp) v i :
-    SSAVS.mem (v, i) (SSAFull.vars_eexp (ssa_eexp m e)) ->
+  Lemma ssa_eexp_var_index m (e : DSLLite.eexp) v i :
+    SSAVS.mem (v, i) (SSALite.vars_eexp (ssa_eexp m e)) ->
     get_index v m = i.
   Proof.
     elim: e m v i => /=.
     - move=> a m x i Hmem. exact: (ssa_singleton_var_index Hmem).
-    - move=> c m v i H. rewrite SSAFull.VSLemmas.mem_empty in H. discriminate.
+    - move=> c m v i H. rewrite SSALite.VSLemmas.mem_empty in H. discriminate.
     - move=> op e IH m v i Hmem. exact: IH.
     - move=> op e1 IH1 e2 IH2 m v i Hmem.
-      case: (SSAFull.VSLemmas.mem_union1 Hmem) => {Hmem} Hmem.
+      case: (SSALite.VSLemmas.mem_union1 Hmem) => {Hmem} Hmem.
       + exact: IH1.
       + exact: IH2.
     - move=> e IH n m v i Hmem. exact: (IH _ _ _ Hmem).
   Qed.
 
-  Lemma ssa_eexps_var_index m (es : seq DSLFull.eexp) v i :
-    SSAVS.mem (v, i) (SSAFull.vars_eexps (ssa_eexps m es)) ->
+  Lemma ssa_eexps_var_index m (es : seq DSLLite.eexp) v i :
+    SSAVS.mem (v, i) (SSALite.vars_eexps (ssa_eexps m es)) ->
     get_index v m = i.
   Proof.
     elim: es => [| e es IH] //=. rewrite SSAVS.S.Lemmas.union_b. case/orP => Hmem.
@@ -6298,16 +6540,16 @@ Section MakeSSA.
     - exact: (IH Hmem).
   Qed.
 
-  Lemma ssa_rexp_var_index m (e : DSLFull.rexp) v i :
-    SSAVS.mem (v, i) (SSAFull.vars_rexp (ssa_rexp m e)) ->
+  Lemma ssa_rexp_var_index m (e : DSLLite.rexp) v i :
+    SSAVS.mem (v, i) (SSALite.vars_rexp (ssa_rexp m e)) ->
     get_index v m = i.
   Proof.
     elim: e m v i => /=.
     - move=> a m x i Hmem. exact: (ssa_singleton_var_index Hmem).
-    - move=> w c m v i H. rewrite SSAFull.VSLemmas.mem_empty in H. discriminate.
+    - move=> w c m v i H. rewrite SSALite.VSLemmas.mem_empty in H. discriminate.
     - move=> w1 op e1 IH1 m v i Hmem. exact: IH1.
     - move=> w op e1 IH1 e2 IH2 m v i Hmem.
-      case: (SSAFull.VSLemmas.mem_union1 Hmem) => {Hmem} Hmem.
+      case: (SSALite.VSLemmas.mem_union1 Hmem) => {Hmem} Hmem.
       + exact: IH1.
       + exact: IH2.
     - move=> w e IH p m v i Hmem. exact: IH.
@@ -6315,68 +6557,68 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_ebexp_var_index m e v i :
-    SSAVS.mem (v, i) (SSAFull.vars_ebexp (ssa_ebexp m e)) ->
+    SSAVS.mem (v, i) (SSALite.vars_ebexp (ssa_ebexp m e)) ->
     get_index v m = i.
   Proof.
     elim: e m v i => /=.
     - move=> m v i Hmem.
       discriminate.
     - move=> e1 e2 m v i Hmem.
-      rewrite SSAFull.VSLemmas.union_b in Hmem.
+      rewrite SSALite.VSLemmas.union_b in Hmem.
       move/orP: Hmem; case=> Hmem;
                                apply: (ssa_eexp_var_index Hmem); reflexivity.
     - move=> e1 e2 p m v i Hmem.
-      rewrite !SSAFull.VSLemmas.union_b in Hmem.
+      rewrite !SSALite.VSLemmas.union_b in Hmem.
       repeat (move/orP: Hmem; case=> Hmem);
         exact: (ssa_eexp_var_index Hmem) || exact: (ssa_eexps_var_index Hmem).
     - move=> e1 IH1 e2 IH2 m v i Hmem.
-      rewrite SSAFull.VSLemmas.union_b in Hmem.
+      rewrite SSALite.VSLemmas.union_b in Hmem.
       move/orP: Hmem; case=> Hmem.
       + exact: IH1.
       + exact: IH2.
   Qed.
 
   Lemma ssa_rbexp_var_index m e v i :
-    SSAVS.mem (v, i) (SSAFull.vars_rbexp (ssa_rbexp m e)) ->
+    SSAVS.mem (v, i) (SSALite.vars_rbexp (ssa_rbexp m e)) ->
     get_index v m = i.
   Proof.
     elim: e m v i => /=.
     - move=> m v i Hmem.
       discriminate.
     - move=> w e1 e2 m v i Hmem.
-      rewrite SSAFull.VSLemmas.union_b in Hmem.
+      rewrite SSALite.VSLemmas.union_b in Hmem.
       move/orP: Hmem; case=> Hmem;
                                apply: (ssa_rexp_var_index Hmem); reflexivity.
     - move=> w op e1 e2 m v i Hmem.
-      rewrite SSAFull.VSLemmas.union_b in Hmem.
+      rewrite SSALite.VSLemmas.union_b in Hmem.
       move/orP: Hmem; case=> Hmem;
                                apply: (ssa_rexp_var_index Hmem); reflexivity.
     - move=> e IH m v i Hmem.
       exact: IH.
     - move=> e1 IH1 e2 IH2 m v i Hmem.
-      rewrite SSAFull.VSLemmas.union_b in Hmem.
+      rewrite SSALite.VSLemmas.union_b in Hmem.
       move/orP: Hmem; case=> Hmem.
       + exact: IH1.
       + exact: IH2.
     - move=> e1 IH1 e2 IH2 m v i Hmem.
-      rewrite SSAFull.VSLemmas.union_b in Hmem.
+      rewrite SSALite.VSLemmas.union_b in Hmem.
       move/orP: Hmem; case=> Hmem.
       + exact: IH1.
       + exact: IH2.
   Qed.
 
   Lemma ssa_bexp_var_index m e v i :
-    SSAVS.mem (v, i) (SSAFull.vars_bexp (ssa_bexp m e)) ->
+    SSAVS.mem (v, i) (SSALite.vars_bexp (ssa_bexp m e)) ->
     get_index v m = i.
   Proof.
-    move=> Hmem. case: (SSAFull.VSLemmas.mem_union1 Hmem) => {Hmem} Hmem.
+    move=> Hmem. case: (SSALite.VSLemmas.mem_union1 Hmem) => {Hmem} Hmem.
     - exact: (ssa_ebexp_var_index Hmem).
     - exact: (ssa_rbexp_var_index Hmem).
   Qed.
 
   Lemma ssa_spec_in_pre_unchanged s v :
-    SSAVS.mem v (SSAFull.vars_bexp (SSAFull.spre (ssa_spec s))) ->
-    ssa_var_unchanged_program v (SSAFull.sprog (ssa_spec s)).
+    SSAVS.mem v (SSALite.vars_bexp (SSALite.spre (ssa_spec s))) ->
+    ssa_var_unchanged_program v (SSALite.sprog (ssa_spec s)).
   Proof.
     move: (ssa_spec_unfold s) => [m [Hinputs [Hpre [Hprog Hpost]]]].
     move=> Hmem.
@@ -6390,7 +6632,7 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_spec_unchanged_pre s :
-    ssa_vars_unchanged_program (SSAFull.vars_bexp (SSAFull.spre (ssa_spec s))) (SSAFull.sprog (ssa_spec s)).
+    ssa_vars_unchanged_program (SSALite.vars_bexp (SSALite.spre (ssa_spec s))) (SSALite.sprog (ssa_spec s)).
   Proof.
     move: (ssa_spec_unfold s) => [m [Hinput [Hpre [Hprog Hpost]]]].
     destruct s as [f p g]; rewrite /= in Hpre Hprog Hpost *.
@@ -6399,8 +6641,8 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_spec_well_formed_sub1 s:
-    DSLFull.well_formed_bexp (DSLFull.sinputs s) (DSLFull.spre s) ->
-    SSAFull.well_formed_bexp (SSAFull.sinputs (ssa_spec s)) (SSAFull.spre (ssa_spec s)).
+    DSLLite.well_formed_bexp (DSLLite.sinputs s) (DSLLite.spre s) ->
+    SSALite.well_formed_bexp (SSALite.sinputs (ssa_spec s)) (SSALite.spre (ssa_spec s)).
   Proof.
     move: (ssa_spec_unfold s) => [m [Hinput [Hpre [Hprog Hpost]]]].
     rewrite Hinput Hpre.
@@ -6413,11 +6655,11 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_program_well_defined m1 m2 p sp e te:
-    DSLFull.well_formed_program te p ->
-    DSLFull.well_formed_bexp (DSLFull.program_succ_typenv p te) e ->
+    DSLLite.well_formed_program te p ->
+    DSLLite.well_formed_bexp (DSLLite.program_succ_typenv p te) e ->
     ssa_program m1 p = (m2, sp) ->
-    SSAFull.are_defined (SSAFull.vars_bexp (ssa_bexp m2 e))
-                    (SSAFull.program_succ_typenv sp (ssa_typenv m1 te)).
+    SSALite.are_defined (SSALite.vars_bexp (ssa_bexp m2 e))
+                    (SSALite.program_succ_typenv sp (ssa_typenv m1 te)).
   Proof.
     elim: p m1 m2 sp e te.
     - rewrite /=.
@@ -6432,19 +6674,19 @@ Section MakeSSA.
       move=> /andP [Hwf_hd Hwf_tl] Hwf_bexp [<- <-].
       rewrite /=.
       move: (IH _ _ _ _ _ Hwf_tl Hwf_bexp Hsp_tl).
-      apply SSAFull.are_defined_submap.
-      apply SSAFull.submap_program_succ_typenv.
+      apply SSALite.are_defined_submap.
+      apply SSALite.submap_program_succ_typenv.
       move: (ssa_program_well_formed Hwf_tl Hsp_tl) => /andP [/andP [Hwell Hvs] Hsingle].
       exact: Hwell.
       exact: ssa_instr_succ_typenv_submap.
   Qed.
 
   Lemma ssa_program_well_typed m1 m2 p sp te e:
-    DSLFull.well_formed_program te p ->
-    DSLFull.well_formed_bexp (DSLFull.program_succ_typenv p te) e ->
+    DSLLite.well_formed_program te p ->
+    DSLLite.well_formed_bexp (DSLLite.program_succ_typenv p te) e ->
     ssa_program m1 p = (m2, sp) ->
-    SSAFull.well_typed_bexp
-      (SSAFull.program_succ_typenv sp (ssa_typenv m1 te))
+    SSALite.well_typed_bexp
+      (SSALite.program_succ_typenv sp (ssa_typenv m1 te))
       (ssa_bexp m2 e).
   Proof.
     elim: p m1 m2 sp e te.
@@ -6460,8 +6702,8 @@ Section MakeSSA.
       move=> /andP [Hwf_hd Hwf_tl] Hwf_bexp [<- <-].
       rewrite /=.
       move: (IH _ _ _ _ _ Hwf_tl Hwf_bexp Hsp_tl).
-      apply SSAFull.well_typed_bexp_submap.
-      apply SSAFull.submap_program_succ_typenv.
+      apply SSALite.well_typed_bexp_submap.
+      apply SSALite.submap_program_succ_typenv.
       move: (ssa_program_well_formed Hwf_tl Hsp_tl) => /andP [/andP [Hwell Hvs] Hsingle].
       exact: Hwell.
       exact: ssa_instr_succ_typenv_submap.
@@ -6469,12 +6711,12 @@ Section MakeSSA.
   Qed.
 
   Lemma ssa_spec_well_formed_sub2 s m' sp:
-    DSLFull.well_formed_program (DSLFull.sinputs s) (DSLFull.sprog s) ->
-    DSLFull.well_formed_bexp (DSLFull.program_succ_typenv (DSLFull.sprog s) (DSLFull.sinputs s)) (DSLFull.spost s) ->
-    ssa_program empty_vmap (DSLFull.sprog s) = (m', sp) ->
-    SSAFull.well_formed_bexp (SSAFull.program_succ_typenv (SSAFull.sprog (ssa_spec s))
-                                                  (SSAFull.sinputs (ssa_spec s)))
-                         (SSAFull.spost (ssa_spec s)).
+    DSLLite.well_formed_program (DSLLite.sinputs s) (DSLLite.sprog s) ->
+    DSLLite.well_formed_bexp (DSLLite.program_succ_typenv (DSLLite.sprog s) (DSLLite.sinputs s)) (DSLLite.spost s) ->
+    ssa_program empty_vmap (DSLLite.sprog s) = (m', sp) ->
+    SSALite.well_formed_bexp (SSALite.program_succ_typenv (SSALite.sprog (ssa_spec s))
+                                                  (SSALite.sinputs (ssa_spec s)))
+                         (SSALite.spost (ssa_spec s)).
   Proof.
     move=> Hwellprog.
     move: (ssa_spec_unfold s) => [m [Hinput [Hpre [Hprog Hpost]]]].
@@ -6489,7 +6731,7 @@ Section MakeSSA.
   Qed.
 
   Theorem ssa_spec_well_formed s :
-    DSLFull.well_formed_spec s ->
+    DSLLite.well_formed_spec s ->
     well_formed_ssa_spec (ssa_spec s).
   Proof.
     move=> /andP [/andP [Hsubpre Hwellprog] Hsubpost].
@@ -6509,7 +6751,7 @@ End MakeSSA.
 
 Section SSAStoreEq.
 
-  Import SSAFull.
+  Import SSALite.
 
   Ltac split_disjoint :=
     match goal with
@@ -6561,7 +6803,7 @@ Section SSAStoreEq.
     end.
 
   Lemma bvs_eqi_eval_instr E i s1 s2 :
-    ssa_vars_unchanged_instr (vars_env E) i -> eval_instr E i (OK s1) (OK s2) ->
+    ssa_vars_unchanged_instr (vars_env E) i -> eval_instr E i s1 s2 ->
     bvs_eqi E s1 s2.
   Proof.
     (case: i => /=);
@@ -6569,23 +6811,33 @@ Section SSAStoreEq.
                  eval_instr_elim; decide_eqi).
   Qed.
 
+  Lemma bvs_eqi_eval_rng_instr E i s1 s2 :
+    ssa_vars_unchanged_instr (vars_env E) i ->
+    eval_instr E (rng_instr i) s1 s2 ->
+    bvs_eqi E s1 s2.
+  Proof.
+    (case: i => /=);
+      try (move=> *; ssa_vars_unchanged_instr_to_mem;
+                  eval_instr_elim; by decide_eqi).
+    case => e r /=. move=> Hun Hei. eval_instr_elim. by decide_eqi.
+  Qed.
+
   Lemma bvs_eqi_eval_program E p s1 s2 :
     ssa_vars_unchanged_program (vars_env E) p ->
-    ssa_single_assignment p -> eval_program E p (OK s1) (OK s2) ->
+    ssa_single_assignment p -> eval_program E p s1 s2 ->
     bvs_eqi E s1 s2.
   Proof.
     elim: p E s1 s2 => [| i P IH] E s1 s2 /=.
-    - move=>_ _ Hev; inversion_clear Hev; simpl in *; by decide_eqi.
+    - move=>_ _ Hev; inversion_clear Hev; by decide_eqi.
     - rewrite ssa_unchanged_program_cons => /andP [Hun_i Hun_p] /andP [Hssa_i Hssa_p]
-                                             Hev.
-      move: (eval_program_cons_ok Hev) => [t [Hevi Hevp]].
+                                             Hev. inversion_clear Hev.
       have Hun_succ: (ssa_vars_unchanged_program (vars_env (instr_succ_typenv i E)) P).
       { apply: (ssa_unchanged_program_replace
                   (SSAVS.Lemmas.P.equal_sym (vars_env_instr_succ_typenv i E))).
           by rewrite ssa_unchanged_program_union Hun_p Hssa_i. }
-      move: (IH (instr_succ_typenv i E) t s2 Hun_succ Hssa_p Hevp) => Heqi_p.
+      move: (IH (instr_succ_typenv i E) t s2 Hun_succ Hssa_p H0) => Heqi_p.
       move=> x Hx. rewrite -(Heqi_p x (mem_instr_succ_typenv i Hx)).
-      move: (bvs_eqi_eval_instr Hun_i Hevi) => Heqi_i. exact: (Heqi_i x Hx).
+      move: (bvs_eqi_eval_instr Hun_i H) => Heqi_i. exact: (Heqi_i x Hx).
   Qed.
 
 End SSAStoreEq.

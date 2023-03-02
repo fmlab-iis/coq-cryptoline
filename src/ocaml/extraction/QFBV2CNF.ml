@@ -40,7 +40,8 @@ let bexp_is_not_true = function
 let filter_not_true es =
   tfilter QFBV.bexp_eqType (Obj.magic bexp_is_not_true) es
 
-(** val bb_rngred_algsnd : options -> SSA.SSA.rspec -> QFBV.QFBV.bexp list **)
+(** val bb_rngred_algsnd :
+    options -> SSALite.SSALite.rspec -> QFBV.QFBV.bexp list **)
 
 let bb_rngred_algsnd o s =
   Obj.magic filter_not_true

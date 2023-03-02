@@ -6,11 +6,11 @@
 From Coq Require Import Arith List OrderedType.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun prime.
 From ssrlib Require Import Var Tactics Seqs.
-From Cryptoline Require Import Options DSL SSA SSA2ZSSA.
+From Cryptoline Require Import Options DSLLite SSALite SSA2ZSSA.
 From BitBlasting Require Import State QFBV Typ TypEnv.
 From nbits Require Import NBits.
 
-Import QFBV SSA.
+Import QFBV SSALite.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -19,7 +19,7 @@ Import Prenex Implicits.
 
 Section VarsRspecs.
 
-  Import SSA.
+  Import SSALite.
 
   Fixpoint vars_rspecs (rs : seq rspec) : SSAVS.t :=
     match rs with
@@ -111,7 +111,7 @@ Section ForceConformDiff.
   Proof.
     move=> Hag Hco x Hmemx. case Hmemxvs: (SSAVS.mem x vs).
     - rewrite (force_conform_diff_in _ _ Hmemxvs). move: (Hag _ Hmemxvs) => Hfind.
-      rewrite -(SSA.TELemmas.find_same_vsize Hfind). rewrite Hco; first reflexivity.
+      rewrite -(SSALite.TELemmas.find_same_vsize Hfind). rewrite Hco; first reflexivity.
       rewrite SSATE.Lemmas.mem_find_b Hfind. by move: (SSATE.Lemmas.mem_find_some Hmemx) => [y ->].
     - move/idP/negP: Hmemxvs => Hmemxvs. rewrite (force_conform_diff_notin _ Hmemx Hmemxvs).
       rewrite size_zeros. reflexivity.
@@ -180,7 +180,7 @@ Lemma agree_exp_size E1 E2 e :
   exp_size e E1 = exp_size e E2.
 Proof.
   elim: e => //=.
-  - move=> x H. apply: SSA.TELemmas.find_same_vsize. apply: (H x).
+  - move=> x H. apply: SSALite.TELemmas.find_same_vsize. apply: (H x).
     apply: SSAVS.Lemmas.mem_singleton2. reflexivity.
   - move=> op e IH Hag. rewrite (IH Hag). reflexivity.
   - move=> op e1 IH1 e2 IH2 /MA.agree_union_set [Hag1 Hag2].
@@ -509,7 +509,7 @@ Section Rspec2QFBV.
 
   (** Conversion from rbexp to QFBV.bexp *)
 
-  Fixpoint exp_rexp (e : SSA.rexp) : QFBV.exp :=
+  Fixpoint exp_rexp (e : SSALite.rexp) : QFBV.exp :=
     match e with
     | Rvar v => qfbv_var v
     | Rconst _ n => QFBV.Econst n
@@ -534,7 +534,7 @@ Section Rspec2QFBV.
     | Rsext _ e n => qfbv_sext n (exp_rexp e)
     end.
 
-  Fixpoint bexp_rbexp (e : SSA.rbexp) : QFBV.bexp :=
+  Fixpoint bexp_rbexp (e : SSALite.rbexp) : QFBV.bexp :=
     match e with
     | Rtrue => qfbv_true
     | Req _ e1 e2 =>
@@ -570,7 +570,7 @@ Section Rspec2QFBV.
     QFBV.eval_exp (qfbv_const w n) s = from_nat w n.
   Proof. reflexivity. Qed.
 
-  Lemma eval_exp_rexp (e : SSA.rexp) s:
+  Lemma eval_exp_rexp (e : SSALite.rexp) s:
     QFBV.eval_exp (exp_rexp e) s = eval_rexp e s.
     elim: e => w /=.
     - reflexivity.
@@ -605,28 +605,28 @@ Section Rspec2QFBV.
     | Aconst ty n => QFBV.Econst n
     end.
 
-  Definition bexp_instr (E : SSATE.env) (i : SSA.instr) : QFBV.bexp :=
+  Definition bexp_instr (E : SSATE.env) (i : SSALite.instr) : QFBV.bexp :=
     match i with
     (* Inondet (v, t): v = a nondeterministic value of type t *)
-    | SSA.Inondet _ _
+    | SSALite.Inondet _ _
     (* Inop: do nothing *)
-    | SSA.Inop => QFBV.Btrue
+    | SSALite.Inop => QFBV.Btrue
     (* Imov (v, a): v = a *)
-    | SSA.Imov v a =>
+    | SSALite.Imov v a =>
         qfbv_eq (qfbv_var v) (qfbv_atom a)
     (* Icmov (v, c, a1, a2): if c then v = a1 else v = a2 *)
-    | SSA.Icmov v c a1 a2 =>
+    | SSALite.Icmov v c a1 a2 =>
         let 'qec := qfbv_eq (qfbv_const 1 1) (qfbv_atom c) in
         let 'qe1 := qfbv_atom a1 in
         let 'qe2 := qfbv_atom a2 in
         qfbv_eq (qfbv_var v) (QFBV.Eite qec qe1 qe2)
     (* Iadd (v, a1, a2): v = a1 + a2, overflow is forbidden *)
-    | SSA.Iadd v a1 a2 =>
+    | SSALite.Iadd v a1 a2 =>
         let 'qe1 := qfbv_atom a1 in
         let 'qe2 := qfbv_atom a2 in
         qfbv_eq (qfbv_var v) (qfbv_add qe1 qe2)
     (* Iadds (c, v, a1, a2): v = a1 + a2, c = carry flag *)
-    | SSA.Iadds c v a1 a2 =>
+    | SSALite.Iadds c v a1 a2 =>
         let 'a_size := asize a1 E in
         let 'qe1ext := qfbv_zext 1 (qfbv_atom a1) in
         let 'qe2ext := qfbv_zext 1 (qfbv_atom a2) in
@@ -635,7 +635,7 @@ Section Rspec2QFBV.
           (qfbv_eq (qfbv_var c) (qfbv_high 1 qerext))
           (qfbv_eq (qfbv_var v) (qfbv_low a_size qerext))
     (* Iadc (v, a1, a2, y): v = a1 + a2 + y, overflow is forbidden *)
-    | SSA.Iadc v a1 a2 y =>
+    | SSALite.Iadc v a1 a2 y =>
         let 'a_size := asize a1 E in
         let 'qe1ext := qfbv_zext 1 (qfbv_atom a1) in
         let 'qe2ext := qfbv_zext 1 (qfbv_atom a2) in
@@ -643,7 +643,7 @@ Section Rspec2QFBV.
         qfbv_eq (qfbv_var v)
           (qfbv_low a_size (qfbv_add (qfbv_add qe1ext qe2ext) qeyext))
     (* Iadcs (c, v, a1, a2, y): v = a1 + a2 + y, c = carry flag *)
-    | SSA.Iadcs c v a1 a2 y =>
+    | SSALite.Iadcs c v a1 a2 y =>
         let 'a_size := asize a1 E in
         let 'qe1ext := qfbv_zext 1 (qfbv_atom a1) in
         let 'qe2ext := qfbv_zext 1 (qfbv_atom a2) in
@@ -652,12 +652,12 @@ Section Rspec2QFBV.
         qfbv_conj (qfbv_eq (qfbv_var c) (qfbv_high 1 qerext))
           (qfbv_eq (qfbv_var v) (qfbv_low a_size qerext))
     (* Isub (v, a1, a2): v = a1 - a2, overflow is forbidden *)
-    | SSA.Isub v a1 a2 =>
+    | SSALite.Isub v a1 a2 =>
         let 'qe1 := qfbv_atom a1 in
         let 'qe2 := qfbv_atom a2 in
         qfbv_eq (qfbv_var v) (qfbv_sub qe1 qe2)
     (* Isubb (b, v, a1, a2): v = a1 - a2, b = borrow flag *)
-    | SSA.Isubb b v a1 a2 =>
+    | SSALite.Isubb b v a1 a2 =>
         let 'a_size := asize a1 E in
         let 'qe1ext := qfbv_zext 1 (qfbv_atom a1) in
         let 'qe2ext := qfbv_zext 1 (qfbv_atom a2) in
@@ -666,7 +666,7 @@ Section Rspec2QFBV.
           (qfbv_eq (qfbv_var v)
              (qfbv_low a_size qerext))
     (* Isubc (c, v, a1, a2): v = a1 + not(a2) + 1, c = carry flag *)
-    | SSA.Isubc c v a1 a2 =>
+    | SSALite.Isubc c v a1 a2 =>
         let 'a_size := asize a1 E in
         let 'qe1ext := qfbv_zext 1 (qfbv_atom a1) in
         let 'qe2notext := qfbv_zext 1 (qfbv_not (qfbv_atom a2)) in
@@ -677,7 +677,7 @@ Section Rspec2QFBV.
           (qfbv_eq (qfbv_var v)
              (qfbv_low a_size qerext))
     (* Isbb (v, a1, a2, y): v = a1 - a2 - y *)
-    | SSA.Isbb v a1 a2 y =>
+    | SSALite.Isbb v a1 a2 y =>
         let 'a_size := asize a1 E in
         let 'qe1ext := qfbv_zext 1 (qfbv_atom a1) in
         let 'qe2ext := qfbv_zext 1 (qfbv_atom a2) in
@@ -685,7 +685,7 @@ Section Rspec2QFBV.
         qfbv_eq (qfbv_var v)
           (qfbv_low a_size (qfbv_sub (qfbv_sub qe1ext qe2ext) qeyext))
     (* Isbbs (b, v, a1, a2, y): v = a1 - a2 - y, b = borrow flag *)
-    | SSA.Isbbs b v a1 a2 y =>
+    | SSALite.Isbbs b v a1 a2 y =>
         let 'a_size := asize a1 E in
         let 'qe1ext := qfbv_zext 1 (qfbv_atom a1) in
         let 'qe2ext := qfbv_zext 1 (qfbv_atom a2) in
@@ -694,7 +694,7 @@ Section Rspec2QFBV.
         qfbv_conj (qfbv_eq (qfbv_var b) (qfbv_high 1 qerext))
           (qfbv_eq (qfbv_var v) (qfbv_low a_size qerext))
     (* Isbc (v, a1, a2, y): v = a1 + not(a2) + y *)
-    | SSA.Isbc v a1 a2 y =>
+    | SSALite.Isbc v a1 a2 y =>
         let 'a_size := asize a1 E in
         let 'qe1ext := qfbv_zext 1 (qfbv_atom a1) in
         let 'qe2notext := qfbv_zext 1 (qfbv_not (qfbv_atom a2)) in
@@ -702,7 +702,7 @@ Section Rspec2QFBV.
         qfbv_eq (qfbv_var v)
           (qfbv_low a_size (qfbv_add (qfbv_add qe1ext qe2notext) qeyext))
     (* Isbcs (c, v, a1, a2, y): v = a1 + not(a2) + y, c = carry flag *)
-    | SSA.Isbcs c v a1 a2 y =>
+    | SSALite.Isbcs c v a1 a2 y =>
         let 'a_size := asize a1 E in
         let 'qe1ext := qfbv_zext 1 (qfbv_atom a1) in
         let 'qe2notext := qfbv_zext 1 (qfbv_not (qfbv_atom a2)) in
@@ -711,13 +711,13 @@ Section Rspec2QFBV.
         qfbv_conj (qfbv_eq (qfbv_var c) (qfbv_high 1 qerext))
           (qfbv_eq (qfbv_var v) (qfbv_low a_size qerext))
     (* Imul (v, a1, a2): v = a1 * a2, overflow is forbidden *)
-    | SSA.Imul v a1 a2 =>
+    | SSALite.Imul v a1 a2 =>
         let 'qe1 := qfbv_atom a1 in
         let 'qe2 := qfbv_atom a2 in
         qfbv_eq (qfbv_var v) (qfbv_mul qe1 qe2)
     (* Imull (vh, vl, a1, a2): vh and vl are respectively the high part and
      the low part of the full multiplication a1 * a2 *)
-    | SSA.Imull vh vl a1 a2 =>
+    | SSALite.Imull vh vl a1 a2 =>
         let 'a1_size := asize a1 E in
         let 'a2_size := asize a2 E in
         let 'qe1ext :=
@@ -733,7 +733,7 @@ Section Rspec2QFBV.
              (qfbv_low a2_size qerext))
     (* Iumulj (v, a1, a2): v = the full multiplication of a1 * a2, which is equivalent
      to Iumull (vh, vl, a1, a2); Join (r, vh, vl) *)
-    | SSA.Imulj v a1 a2 =>
+    | SSALite.Imulj v a1 a2 =>
         let 'a_size := asize a1 E  in
         let 'qe1ext :=
           if Typ.is_unsigned (atyp a1 E) then qfbv_zext a_size (qfbv_atom a1)
@@ -745,20 +745,20 @@ Section Rspec2QFBV.
         qfbv_eq (qfbv_var v) qerext
     (* Ishl (v, a, n): v = a * 2^n, overflow is forbidden *)
     (* need a better size for NBitsDef.from_nat *)
-    | SSA.Ishl v a n =>
+    | SSALite.Ishl v a n =>
         let a_size := asize a E in
         let 'qea := qfbv_atom a in
         let 'qen := qfbv_const a_size n in
         qfbv_eq (qfbv_var v) (qfbv_shl qea qen)
     (* Ijoin (v, ah, al): v = ah * 2^w + al where w is the bit-width of al *)
-    | SSA.Ijoin v ah al =>
+    | SSALite.Ijoin v ah al =>
         let 'qeh := qfbv_atom ah in
         let 'qel := qfbv_atom al in
         qfbv_eq (qfbv_var v) (qfbv_concat qeh qel)
     (* Isplit (vh, vl, a, n): vh is the high (w - n) bits (signed extended to w bits)
      of a and vl is the low n bits (zero extended to w bits) of a where w is the
      bit-width of a *)
-    | SSA.Isplit vh vl a n =>
+    | SSALite.Isplit vh vl a n =>
         let 'a_size := asize a E in
         let 'qen := qfbv_const a_size n in
         let 'qeamn := qfbv_const a_size (a_size - n) in
@@ -773,7 +773,7 @@ Section Rspec2QFBV.
                        (qfbv_ashr qea qen))
             (qfbv_eq (qfbv_var vl) qel)
     (* Icshl (vh, vl, a1, a2, n) *)
-    | SSA.Icshl vh vl a1 a2 n =>
+    | SSALite.Icshl vh vl a1 a2 n =>
         let 'a1_size := asize a1 E in
         let 'a2_size := asize a2 E in
         let 'qe1 := qfbv_atom a1 in
@@ -784,23 +784,23 @@ Section Rspec2QFBV.
         qfbv_conj (qfbv_eq (qfbv_var vh) qeh)
           (qfbv_eq (qfbv_var vl) (qfbv_lshr qel (qfbv_const a2_size n)))
     (* Inot (v, t, a): v = not(a), the one's complement of a, v is of type t *)
-    | SSA.Inot v t a =>
+    | SSALite.Inot v t a =>
         let 'qea := qfbv_atom a in
         qfbv_eq (qfbv_var v) (qfbv_not qea)
     (* Iand (v, t, a1, a2): v = the bitwise AND of a1 and a2, v is of type t *)
-    | SSA.Iand v t a1 a2 =>
+    | SSALite.Iand v t a1 a2 =>
         let 'qe1 := qfbv_atom a1 in
         let 'qe2 := qfbv_atom a2 in
         let 'qer := qfbv_and qe1 qe2 in
         qfbv_eq (qfbv_var v) qer
     (* Ior (v, t, a1, a2): v = the bitwise OR of a1 and a2, v is of type t *)
-    | SSA.Ior v t a1 a2 =>
+    | SSALite.Ior v t a1 a2 =>
         let 'qe1 := qfbv_atom a1 in
         let 'qe2 := qfbv_atom a2 in
         let 'qer := qfbv_or qe1 qe2 in
         qfbv_eq (qfbv_var v) qer
     (* Ixor (v, t, a1, a2): v = the bitwise XOR of a1 and a2, v is of type t *)
-    | SSA.Ixor v t a1 a2 =>
+    | SSALite.Ixor v t a1 a2 =>
         let 'qe1 := qfbv_atom a1 in
         let 'qe2 := qfbv_atom a2 in
         let 'qer := qfbv_xor qe1 qe2 in
@@ -809,8 +809,8 @@ Section Rspec2QFBV.
     (* == Type conversions == *)
     (* Icast (v, t, a): v = the value of a represented by the type t of v *)
     (* Ivpc (v, t, a): v = a, value preserved casting to type t *)
-    | SSA.Icast v t a
-    | SSA.Ivpc v t a =>
+    | SSALite.Icast v t a
+    | SSALite.Ivpc v t a =>
         let 'a_typ := atyp a E in
         let 'a_size := Typ.sizeof_typ a_typ in
         let 't_size := Typ.sizeof_typ t in
@@ -825,7 +825,7 @@ Section Rspec2QFBV.
               else if t_size < a_size then qfbv_low t_size qea
                    else qfbv_sext (t_size - a_size) qea))
     (* Specifications *)
-    | SSA.Iassume (_, rbexp) => bexp_rbexp rbexp
+    | SSALite.Iassume (_, rbexp) => bexp_rbexp rbexp
     end.
 
   Fixpoint bexp_program E (p : program) : seq QFBV.bexp :=
@@ -963,7 +963,7 @@ Section Rspec2QFBV.
   Proof.
     case: i => //=; try (move=> *; are_defined_dec).
     match goal with
-    | b : SSA.bexp, H : is_true (are_defined (SSA.vars_bexp ?b) _)
+    | b : SSALite.bexp, H : is_true (are_defined (SSALite.vars_bexp ?b) _)
       |- context f [let (_, _) := ?b in _] =>
         case: b H => eb rb H
     end.
@@ -1044,7 +1044,7 @@ Section Rspec2QFBV.
   Qed.
 
   Lemma eval_vars_unchanged_program_bexp_instr E i p s1 s2 :
-    SSA.ssa_vars_unchanged_program (SSA.vars_instr i) p ->
+    SSALite.ssa_vars_unchanged_program (SSALite.vars_instr i) p ->
     eval_program E p s1 s2 ->
     QFBV.eval_bexp (bexp_instr E i) s1 ->
     QFBV.eval_bexp (bexp_instr E i) s2.
@@ -2450,7 +2450,7 @@ Section Rspec2QFBV.
   Qed.
 
   Lemma eval_bexp_instr_Iassume E s :
-    forall b : SSA.bexp,
+    forall b : SSALite.bexp,
       is_rng_instr (Iassume b) ->
       well_formed_instr E (Iassume b) ->
       SSAStore.conform s E ->
@@ -2912,7 +2912,7 @@ Section RngredSplitLeftAssoc.
     try SSAVS.Lemmas.dp_subset.
 
   Lemma vars_rngred_rspec_split_la s :
-    SSAVS.subset (vars_bexps (rngred_rspec_split_la s)) (SSA.vars_rspec s).
+    SSAVS.subset (vars_bexps (rngred_rspec_split_la s)) (SSALite.vars_rspec s).
   Proof.
     case: s => [E f p g]. rewrite /rngred_rspec_split_la /vars_rspec /=.
     move: (vars_bexp_program E p) => ?. elim: g => //=.
@@ -3173,7 +3173,7 @@ Section RngredSlicing.
   Import QFBV.
 
   Definition rngred_rspec_slice_split_la (s : rspec) : seq QFBV.bexp :=
-    rngred_rspec_split_las (tmap (slice_rspec o) (SSA.split_rspec s)).
+    rngred_rspec_split_las (tmap (slice_rspec o) (SSALite.split_rspec s)).
 
   Definition valid_rngred_rspec_slice_split_la (s : rspec) :=
     let fE := program_succ_typenv (rsprog s) (rsinputs s) in
@@ -3181,7 +3181,7 @@ Section RngredSlicing.
 
   Lemma vars_rngred_rspec_slice_split_la s :
     SSAVS.subset (QFBV.vars_bexps (rngred_rspec_slice_split_la s))
-                 (SSA.vars_rspec s).
+                 (SSALite.vars_rspec s).
   Proof.
     rewrite /rngred_rspec_slice_split_la.
     apply: (SSAVS.Lemmas.subset_trans (vars_rngred_rspec_split_las (tmap (slice_rspec o) (split_rspec s)))).
@@ -4585,8 +4585,8 @@ Section AlgsndSplitVarying.
 
   Fixpoint bexp_program_algsnd_split_full_checker_rec
            bexp_f
-           (rs : seq (SSATE.env * seq SSA.instr * seq QFBV.bexp *
-                      SSA.instr * SSA.program * QFBV.bexp)) :=
+           (rs : seq (SSATE.env * seq SSALite.instr * seq QFBV.bexp *
+                      SSALite.instr * SSALite.program * QFBV.bexp)) :=
     match rs with
     | [::] => True
     | r::rs =>
@@ -5395,7 +5395,7 @@ Section AlgsndSplitFixedFinal.
     move/andP=> [/andP [/andP [Hwf_Ei Hwf_iEp]
                          /andP [Hun_Ei Hun_Ep]] /andP [Hun_ip Hssa_p]].
     move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsub_EiE.
-    have Hsub_iEpiE: SSA.TELemmas.submap
+    have Hsub_iEpiE: SSALite.TELemmas.submap
                        (instr_succ_typenv i E)
                        (program_succ_typenv p (instr_succ_typenv i E)).
     { apply: (ssa_unchanged_program_succ_typenv_submap _ Hssa_p).
@@ -5452,7 +5452,7 @@ Section AlgsndSplitFixedFinal.
     move/andP=> [/andP [/andP [Hwf_Ei Hwf_iEp]
                          /andP [Hun_Ei Hun_Ep]] /andP [Hun_ip Hssa_p]].
     move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsub_EiE.
-    have Hsub_iEpiE: SSA.TELemmas.submap
+    have Hsub_iEpiE: SSALite.TELemmas.submap
                        (instr_succ_typenv i E)
                        (program_succ_typenv p (instr_succ_typenv i E)).
     { apply: (ssa_unchanged_program_succ_typenv_submap _ Hssa_p).
@@ -5489,7 +5489,7 @@ Section AlgsndSplitFixedFinal.
     move/andP=> [/andP [/andP [Hwf_Ei Hwf_iEp]
                          /andP [Hun_Ei Hun_Ep]] /andP [Hun_ip Hssa_p]].
     move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsub_EiE.
-    have Hsub_iEpiE: SSA.TELemmas.submap
+    have Hsub_iEpiE: SSALite.TELemmas.submap
                        (instr_succ_typenv i E)
                        (program_succ_typenv p (instr_succ_typenv i E)).
     { apply: (ssa_unchanged_program_succ_typenv_submap _ Hssa_p).
@@ -5594,7 +5594,7 @@ Section AlgsndSplitFixedFinal.
     move/andP=> [/andP [/andP [Hwf_Ei Hwf_iEp]
                          /andP [Hun_Ei Hun_Ep]] /andP [Hun_ip Hssa_p]].
     move: (ssa_unchanged_instr_succ_typenv_submap Hun_Ei) => Hsub_EiE.
-    have Hsub_iEpiE: SSA.TELemmas.submap
+    have Hsub_iEpiE: SSALite.TELemmas.submap
                        (instr_succ_typenv i E)
                        (program_succ_typenv p (instr_succ_typenv i E)).
     { apply: (ssa_unchanged_program_succ_typenv_submap _ Hssa_p).
@@ -5894,7 +5894,7 @@ Section AlgsndSplitFixedFinal.
     well_formed_bexps (qfbv_spec_algsnd s) fE.
   Proof.
     move => fE Hwf. apply: qfbv_spec_algsnd_rec_well_formed.
-    - apply: well_formed_bexp_rbexp. exact: (SSA.well_formed_ssa_rspec_final_pre Hwf).
+    - apply: well_formed_bexp_rbexp. exact: (SSALite.well_formed_ssa_rspec_final_pre Hwf).
     - move: (well_formed_ssa_rspec_program Hwf) => Hssa. move=> pres safe Hin. split.
       + move: (bexp_program_algsnd_split_fixed_final_pre_es_well_formed Hssa Hin).
         rewrite qfbv_conjs_well_formed. by apply.
@@ -6057,7 +6057,7 @@ Section AlgsndSplitFixedFinalLeftAssoc.
     well_formed_bexps (qfbv_spec_algsnd_la s) fE.
   Proof.
     move => fE Hwf. apply: qfbv_spec_algsnd_la_rec_well_formed.
-    - apply: well_formed_bexp_rbexp. exact: (SSA.well_formed_ssa_rspec_final_pre Hwf).
+    - apply: well_formed_bexp_rbexp. exact: (SSALite.well_formed_ssa_rspec_final_pre Hwf).
     - move: (well_formed_ssa_rspec_program Hwf) => Hssa. move=> pres safe Hin. split.
       + move: (bexp_program_algsnd_split_fixed_final_pre_es_well_formed Hssa Hin).
         rewrite qfbv_conjs_well_formed. by apply.
@@ -6179,16 +6179,16 @@ Section AlgsndSliceSplitFixedFinalLeftAssoc.
     eval_bexp (bexp_rbexp r) s -> eval_bexp (bexp_rbexp (slice_rbexp vs r)) s.
   Proof.
     elim: r => //=.
-    - move=> n e1 e2 Hev. by case Hs: (SSA.VSLemmas.disjoint vs (vars_rexp e1) &&
-                                         SSA.VSLemmas.disjoint vs (vars_rexp e2)).
-    - move=> n op e1 e2. by case Hs: (SSA.VSLemmas.disjoint vs (vars_rexp e1) &&
-                                        SSA.VSLemmas.disjoint vs (vars_rexp e2)).
-    - move=> e IH Hev. by case Hs: (SSA.VSLemmas.disjoint vs (vars_rbexp e)).
+    - move=> n e1 e2 Hev. by case Hs: (SSALite.VSLemmas.disjoint vs (vars_rexp e1) &&
+                                         SSALite.VSLemmas.disjoint vs (vars_rexp e2)).
+    - move=> n op e1 e2. by case Hs: (SSALite.VSLemmas.disjoint vs (vars_rexp e1) &&
+                                        SSALite.VSLemmas.disjoint vs (vars_rexp e2)).
+    - move=> e IH Hev. by case Hs: (SSALite.VSLemmas.disjoint vs (vars_rbexp e)).
     - move=> e1 IH1 e2 IH2 /andP [H1 H2]. move: (IH1 H1) (IH2 H2) => {}IH1 {}IH2.
       (case Hs1: (slice_rbexp vs e1) IH1); (case Hs2: (slice_rbexp vs e2) IH2 => //=); intros;
         by rewrite IH1 IH2.
-    - move=> e1 IH1 e2 IH2. by case: (SSA.VSLemmas.disjoint vs (vars_rbexp e1) &&
-                                        SSA.VSLemmas.disjoint vs (vars_rbexp e2)).
+    - move=> e1 IH1 e2 IH2. by case: (SSALite.VSLemmas.disjoint vs (vars_rbexp e1) &&
+                                        SSALite.VSLemmas.disjoint vs (vars_rbexp e2)).
   Qed.
 
   Lemma slice_instr_eval_bexp fE vs i i' s :
@@ -6243,7 +6243,7 @@ Section AlgsndSliceSplitFixedFinalLeftAssoc.
     rewrite !valid_bexps_cons. move=> [Hvi Hvp].
     have Hdefpre: are_defined (lvs_program pre) (program_succ_typenv p (instr_succ_typenv i E)).
     { move: Hdef. apply: are_defined_subset. rewrite lvs_program_cat.
-      exact: SSA.VSLemmas.union_subset_1. }
+      exact: SSALite.VSLemmas.union_subset_1. }
     have Hunpre: env_unchanged_program (program_succ_typenv p (instr_succ_typenv i E)) pre.
     { move: Hun. rewrite env_unchanged_program_cat. move/andP => [Hun _]. exact: Hun. }
     split.
@@ -6278,18 +6278,18 @@ Section AlgsndSliceSplitFixedFinalLeftAssoc.
     well_formed_bexp (bexp_rbexp (slice_rbexp vs e)) E.
   Proof.
     elim: e => //=.
-    - move=> n e1 e2. by case: (SSA.VSLemmas.disjoint vs (vars_rexp e1) &&
-                                  SSA.VSLemmas.disjoint vs (vars_rexp e2)).
-    - move=> n op e1 e2. by case: (SSA.VSLemmas.disjoint vs (vars_rexp e1) &&
-                                     SSA.VSLemmas.disjoint vs (vars_rexp e2)).
-    - move=> e IH. by case: (SSA.VSLemmas.disjoint vs (vars_rbexp e)).
+    - move=> n e1 e2. by case: (SSALite.VSLemmas.disjoint vs (vars_rexp e1) &&
+                                  SSALite.VSLemmas.disjoint vs (vars_rexp e2)).
+    - move=> n op e1 e2. by case: (SSALite.VSLemmas.disjoint vs (vars_rexp e1) &&
+                                     SSALite.VSLemmas.disjoint vs (vars_rexp e2)).
+    - move=> e IH. by case: (SSALite.VSLemmas.disjoint vs (vars_rbexp e)).
     - move=> e1 IH1 e2 IH2 /andP [Hwf1 Hwf2]. move: (IH1 Hwf1) (IH2 Hwf2).
       case: (slice_rbexp vs e1); (case: (slice_rbexp vs e2) => //=); intros;
         by repeat match goal with
              | H : is_true ?e |- context c [?e] => rewrite H /=
              end.
-    - move=> e1 IH1 e2 IH2. by case: (SSA.VSLemmas.disjoint vs (vars_rbexp e1) &&
-                                        SSA.VSLemmas.disjoint vs (vars_rbexp e2)).
+    - move=> e1 IH1 e2 IH2. by case: (SSALite.VSLemmas.disjoint vs (vars_rbexp e1) &&
+                                        SSALite.VSLemmas.disjoint vs (vars_rbexp e2)).
   Qed.
 
   Lemma well_formed_bexp_slice_rinstr fE vs i i' :
@@ -6346,7 +6346,7 @@ Section AlgsndSliceSplitFixedFinalLeftAssoc.
 
     have Hdefpre: are_defined (lvs_program pre) (program_succ_typenv p (instr_succ_typenv i E)).
     { move: Hdef. apply: are_defined_subset. rewrite lvs_program_cat.
-      exact: SSA.VSLemmas.union_subset_1. }
+      exact: SSALite.VSLemmas.union_subset_1. }
     have H: (well_formed_bexps
                (algsnd_slice_la_rec (program_succ_typenv p (instr_succ_typenv i E)) (rcons pre i) f p)
                (program_succ_typenv p (instr_succ_typenv i E))).

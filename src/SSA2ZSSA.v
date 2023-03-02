@@ -7,7 +7,7 @@ From Coq Require Import Classes.Morphisms List ZArith.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From ssrlib Require Import Var Types SsrOrder Nats ZAriths Store Tactics FMaps Seqs.
 From BitBlasting Require Import State Typ TypEnv.
-From Cryptoline Require Import Options DSL SSA ZSSA.
+From Cryptoline Require Import Options DSLLite SSALite ZSSA.
 From nbits Require Import NBits.
 
 Set Implicit Arguments.
@@ -51,7 +51,7 @@ Ltac case_svar_notin :=
 
 Section GenSvar.
 
-  Import SSA.
+  Import SSALite.
 
   Definition max_svar (vs : SSAVS.t) : VarOrder.t :=
     match SSAVS.max_elt vs with
@@ -96,7 +96,7 @@ End GenSvar.
 
 Section AlgebraicSoundnessConditions.
 
-  Import SSA.
+  Import SSALite.
 
   Definition uaddB_algsnd bs1 bs2 : bool := ~~ carry_addB bs1 bs2.
 
@@ -545,7 +545,7 @@ End AlgebraicSoundnessConditions.
 
 Section AlgebraicReduction.
 
-  Import SSA ZSSA.
+  Import SSALite ZSSA.
 
   Variable o : options.
 
@@ -567,10 +567,10 @@ Section AlgebraicReduction.
     | Aconst ty bs => econst (bv2z ty bs)
     end.
 
-  Definition algred_assign (v : ssavar) (e : SSA.eexp) := eeq (evar v) e.
-  Definition algred_join (e h l : SSA.eexp) (p : nat) :=
+  Definition algred_assign (v : ssavar) (e : SSALite.eexp) := eeq (evar v) e.
+  Definition algred_join (e h l : SSALite.eexp) (p : nat) :=
     eeq (eadd l (emul2p h (Z.of_nat p))) e.
-  Definition algred_split (vh vl : ssavar) (e : SSA.eexp) (p : nat) :=
+  Definition algred_split (vh vl : ssavar) (e : SSALite.eexp) (p : nat) :=
     algred_join e (evar vh) (evar vl) p.
   Definition algred_is_carry (c : ssavar) :=
     eeq (emul (evar c) (esub (evar c) (econst 1)))
@@ -927,7 +927,7 @@ Section AlgebraicReduction.
           => [[g_tl ztl] Htl]. dcase (algred_instr te avn g i) => [[g_hd0 zhd0] Hhd0].
     dcase (algred_program (instr_succ_typenv i te) avn g_hd0 p) => [[g_tl0 ztl0] Htl0].
     rewrite algred_eqn_instr Hhd0 in Hhd. case: Hhd => ? ?; subst.
-    rewrite IH SSA.eqn_instr_succ_typenv Htl0 in Htl. case: Htl => ? ?; subst.
+    rewrite IH SSALite.eqn_instr_succ_typenv Htl0 in Htl. case: Htl => ? ?; subst.
     reflexivity.
   Qed.
 
@@ -1194,7 +1194,7 @@ Section SplitSpec.
 
   Arguments Z.sub m n : simpl nomatch.
 
-  Import SSA.
+  Import SSALite.
 
   Ltac split_disjoint :=
     match goal with
@@ -3132,9 +3132,9 @@ Section SplitSpec.
       end.
 
   Lemma fresh_var_spec_espec v s :
-    fresh_var_spec v s -> fresh_var_espec v (SSA.espec_of_spec s).
+    fresh_var_spec v s -> fresh_var_espec v (SSALite.espec_of_spec s).
   Proof.
-    case: s => E f p g. rewrite /fresh_var_spec /fresh_var_espec /SSA.espec_of_spec /=.
+    case: s => E f p g. rewrite /fresh_var_spec /fresh_var_espec /SSALite.espec_of_spec /=.
     move=> ?; by mytac.
   Qed.
 
@@ -3143,7 +3143,7 @@ Section SplitSpec.
     ssa_spec_algsnd (rspec_of_spec s) ->
     fresh_var_espec avn (espec_of_spec s) ->
     ZSSA.valid_rep (algred_espec o avn (espec_of_spec s)) ->
-    valid_espec (SSA.espec_of_spec s).
+    valid_espec (SSALite.espec_of_spec s).
   Proof.
     destruct s as [E f p g] => /=. rewrite /well_formed_ssa_spec /algred_espec /=.
     rewrite /well_formed_spec /=.
@@ -3159,12 +3159,12 @@ Section SplitSpec.
     move: (svar_notin_subset (vars_ebexp_subset f) Hni1) => Hni_eqn_f.
     move: Hni3 => /= Hni_eqn_g.
 
-    move: (SSA.well_formed_eqn_bexp Hwf_f) => Hwf_ef.
+    move: (SSALite.well_formed_eqn_bexp Hwf_f) => Hwf_ef.
     move/andP: Hwf_ef => [Hdef_ef Hwt_ef].
     rewrite are_defined_subset_env in Hdef_ef.
-    move: (SSA.ssa_unchanged_program_subset Hunch Hdef_ef) => Hunch_ef.
+    move: (SSALite.ssa_unchanged_program_subset Hunch Hdef_ef) => Hunch_ef.
     rewrite -ssa_vars_unchanged_eqn_program in Hunch_ef.
-    move: (SSA.ssa_unchanged_program_eval_ebexp1
+    move: (SSALite.ssa_unchanged_program_eval_ebexp1
              Hunch_ef (eval_eqn_program Hprog) Hpre_eqn) => Heval_ef.
     move: (@algred_upd_avars_eval_ebexp
              E
@@ -3172,7 +3172,7 @@ Section SplitSpec.
     move: (ssa_unchanged_program_succ_typenv_submap Hunch Hssa) => Hsubmap.
     move/andP: Hwf_f => [Hdef_f Hwt_f]. rewrite are_defined_union in Hdef_f.
     move/andP: Hdef_f => [Hdef_eqn_f Hdef_rng_f].
-    move: (@SSA.submap_eval_ebexp _ _ _ bs2 Hsubmap Hdef_eqn_f).
+    move: (@SSALite.submap_eval_ebexp _ _ _ bs2 Hsubmap Hdef_eqn_f).
     rewrite -eqn_program_succ_typenv => H.
     move/H/Hiff: Heval_ef => {H} Hzf.
 
@@ -3523,7 +3523,7 @@ Section SplitSpec.
     case: b H H0 H4 => [e r] /=. case=> ?; subst. rewrite /vars_bexp /=.
     move/svar_notin_union => [Hnotin_e Hnotin_r]. move=> H. rewrite /= in H1 H2.
     case: H2 => ? ?; subst. apply: (store_pvareq_eval_zbexp _ H6).
-    - rewrite SSA.vars_eands_split_eand.
+    - rewrite SSALite.vars_eands_split_eand.
       exact: (svar_notin_subset (slice_ebexp_vars_subset vs e) Hnotin_e).
     - apply/ZSSA.eval_zbexp_eands_split_eand. move/ZSSA.eval_zbexp_eands_split_eand: H.
       exact: ZSSA.slice_zbexp_eval.
@@ -3538,7 +3538,7 @@ Section SplitSpec.
     elim: e => //=.
     - move=> [] v gv Hnew Heq Hacc. case Hv: (avn == v).
       + move/eqP: Hv => ?; subst. apply: Hacc.
-        move: (Hnew (v, gv) (SSA.VSLemmas.mem_singleton2 (eqxx (v, gv)))).
+        move: (Hnew (v, gv) (SSALite.VSLemmas.mem_singleton2 (eqxx (v, gv)))).
         rewrite /avars_newer_than_var /=. rewrite eqxx /=. case; first discriminate.
         by apply.
       + move/idP/negP: Hv => Hv. apply: Heq. exact: Hv.
@@ -3631,7 +3631,7 @@ Section SplitSpec.
     - move=> _ _ Hag [] ? ? [] ? ? Hev [] ? ? ?; subst. move=> Heq.
       split; [assumption | done].
     - move=> /svar_notin_union [Hnotin_i Hnotin_p]. dcase (slice_einstr vs i); case.
-      + move=> i' Hsi /=. rewrite SSA.VSLemmas.subset_union6 => /andP [Hsub_i Hsub_p].
+      + move=> i' Hsi /=. rewrite SSALite.VSLemmas.subset_union6 => /andP [Hsub_i Hsub_p].
         move/MA.agree_union_set => [Hag_i Hag_p].
         dcase (algred_instr o E1 avn g1 i') => [[g_hd1 zhd1] Hhd1].
         dcase (algred_program o (instr_succ_typenv i' E1) avn g_hd1 (slice_eprogram vs p))

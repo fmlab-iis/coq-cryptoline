@@ -20,4 +20,4 @@ val bexp_is_not_true : QFBV.QFBV.bexp -> bool
 
 val filter_not_true : Equality.sort list -> Equality.sort list
 
-val bb_rngred_algsnd : options -> SSA.SSA.rspec -> QFBV.QFBV.bexp list
+val bb_rngred_algsnd : options -> SSALite.SSALite.rspec -> QFBV.QFBV.bexp list

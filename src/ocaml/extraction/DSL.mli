@@ -7,7 +7,6 @@ open FMaps
 open FSets
 open NBitsDef
 open NBitsOp
-open Options0
 open Seqs
 open Store
 open String0
@@ -1224,6 +1223,14 @@ module MakeDSL :
 
   val asize : atom -> TE.env -> int
 
+  val atom_eqn : atom -> atom -> bool
+
+  val atom_eqP : atom -> atom -> reflect
+
+  val atom_eqMixin : atom Equality.mixin_of
+
+  val atom_eqType : Equality.coq_type
+
   type instr =
   | Imov of V.t * atom
   | Ishl of V.t * atom * int
@@ -1253,6 +1260,8 @@ module MakeDSL :
   | Icast of V.t * typ * atom
   | Ivpc of V.t * typ * atom
   | Ijoin of V.t * atom * atom
+  | Icut of bexp
+  | Iassert of bexp
   | Iassume of bexp
 
   val instr_rect :
@@ -1270,7 +1279,7 @@ module MakeDSL :
     'a1) -> (V.t -> typ -> atom -> atom -> 'a1) -> (V.t -> typ -> atom ->
     atom -> 'a1) -> (V.t -> typ -> atom -> atom -> 'a1) -> (V.t -> typ ->
     atom -> 'a1) -> (V.t -> typ -> atom -> 'a1) -> (V.t -> atom -> atom ->
-    'a1) -> (bexp -> 'a1) -> instr -> 'a1
+    'a1) -> (bexp -> 'a1) -> (bexp -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1
 
   val instr_rec :
     (V.t -> atom -> 'a1) -> (V.t -> atom -> int -> 'a1) -> (V.t -> V.t ->
@@ -1287,7 +1296,7 @@ module MakeDSL :
     'a1) -> (V.t -> typ -> atom -> atom -> 'a1) -> (V.t -> typ -> atom ->
     atom -> 'a1) -> (V.t -> typ -> atom -> atom -> 'a1) -> (V.t -> typ ->
     atom -> 'a1) -> (V.t -> typ -> atom -> 'a1) -> (V.t -> atom -> atom ->
-    'a1) -> (bexp -> 'a1) -> instr -> 'a1
+    'a1) -> (bexp -> 'a1) -> (bexp -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1
 
   type program = instr list
 
@@ -1313,14 +1322,6 @@ module MakeDSL :
 
   val rvs_program : program -> VS.t
 
-  val eqn_instr : instr -> instr
-
-  val rng_instr : instr -> instr
-
-  val eqn_program : program -> program
-
-  val rng_program : program -> program
-
   type spec = { sinputs : TE.env; spre : bexp; sprog : program; spost : bexp }
 
   val sinputs : spec -> TE.env
@@ -1331,37 +1332,7 @@ module MakeDSL :
 
   val spost : spec -> bexp
 
-  type espec = { esinputs : TE.env; espre : bexp; esprog : program;
-                 espost : ebexp }
-
-  val esinputs : espec -> TE.env
-
-  val espre : espec -> bexp
-
-  val esprog : espec -> program
-
-  val espost : espec -> ebexp
-
-  type rspec = { rsinputs : TE.env; rspre : rbexp; rsprog : program;
-                 rspost : rbexp }
-
-  val rsinputs : rspec -> TE.env
-
-  val rspre : rspec -> rbexp
-
-  val rsprog : rspec -> program
-
-  val rspost : rspec -> rbexp
-
-  val espec_of_spec : spec -> espec
-
-  val rspec_of_spec : spec -> rspec
-
   val vars_spec : spec -> VS.t
-
-  val vars_espec : espec -> VS.t
-
-  val vars_rspec : rspec -> VS.t
 
   val string_of_eunop : eunop -> char list
 
@@ -1385,6 +1356,8 @@ module MakeDSL :
 
   val string_of_bexp : bexp -> char list
 
+  val string_of_typ : typ -> char list
+
   val string_of_var_with_typ : (V.t * typ) -> char list
 
   val string_of_vars : VS.t -> char list
@@ -1400,16 +1373,6 @@ module MakeDSL :
   val string_of_typenv : TE.env -> char list
 
   val string_of_spec : spec -> char list
-
-  val string_of_espec : espec -> char list
-
-  val string_of_rspec : rspec -> char list
-
-  val is_rng_instr : instr -> bool
-
-  val is_rng_program : program -> bool
-
-  val is_rng_rspec : rspec -> bool
 
   val bv2z : typ -> bits -> coq_Z
 
@@ -2107,10 +2070,6 @@ module MakeDSL :
 
   val well_formed_spec : spec -> bool
 
-  val well_formed_espec : espec -> bool
-
-  val well_formed_rspec : rspec -> bool
-
   val defmemP : V.t -> TE.env -> reflect
 
   val memdefP : TE.key -> typ TE.t -> reflect
@@ -2123,15 +2082,15 @@ module MakeDSL :
 
   val is_nondet : instr -> bool
 
+  val is_cut : instr -> bool
+
+  val is_assert : instr -> bool
+
   val is_assume : instr -> bool
 
   val force_conform_vars : TE.env -> V.t list -> S.t -> S.t
 
   val force_conform : TE.env -> TE.env -> S.t -> S.t
-
-  val split_espec : espec -> espec list
-
-  val split_rspec : rspec -> rspec list
 
   module TSEQM :
    sig
@@ -3605,114 +3564,34 @@ module MakeDSL :
      end
    end
 
-  val depvars_ebexp : VS.t -> ebexp -> VS.t
+  val cut_spec_rec :
+    instr list -> TE.env -> bexp -> instr list -> bexp -> spec list
 
-  val depvars_rexp : VS.t -> rexp -> VS.t
+  val cut_spec : spec -> spec list
 
-  val depvars_rbexp : VS.t -> DSLRaw.rbexp -> VS.t
+  val compose_spec : spec -> spec -> spec
 
-  val depvars_einstr : options -> VS.t -> instr -> VS.t
+  val program_has_no_cut : program -> bool
 
-  val depvars_rinstr : options -> VS.t -> instr -> VS.t
+  val spec_has_no_cut : spec -> bool
 
-  val depvars_eprogram : options -> VS.t -> instr list -> VS.t
+  val cut_asserts_rec :
+    instr list -> TE.env -> bexp -> instr list -> bexp -> spec list
 
-  val depvars_rprogram : options -> VS.t -> instr list -> VS.t
+  val cut_asserts : spec -> spec list
 
-  val depvars_epre_eprogram : options -> VS.t -> ebexp -> instr list -> VS.t
+  val program_has_no_assert : program -> bool
 
-  val depvars_rpre_rprogram :
-    options -> VS.t -> DSLRaw.rbexp -> instr list -> VS.t
+  val spec_has_no_assert : spec -> bool
 
-  val evsize : ebexp -> program -> VS.t -> int
+  val extract_asserts_rec :
+    instr list -> TE.env -> bexp -> instr list -> spec list
 
-  val rvsize : rbexp -> program -> VS.t -> int
+  val extract_asserts : spec -> spec list
 
-  val depvars_epre_eprogram_sat_F :
-    options -> ebexp -> program -> (VS.t -> VS.t) -> VS.t -> VS.t
+  val remove_asserts_program : program -> program
 
-  val depvars_epre_eprogram_sat_terminate :
-    options -> ebexp -> program -> VS.t -> VS.t
-
-  val depvars_epre_eprogram_sat : options -> ebexp -> program -> VS.t -> VS.t
-
-  type coq_R_depvars_epre_eprogram_sat =
-  | R_depvars_epre_eprogram_sat_0 of VS.t * VS.t
-     * coq_R_depvars_epre_eprogram_sat
-  | R_depvars_epre_eprogram_sat_1 of VS.t
-
-  val coq_R_depvars_epre_eprogram_sat_rect :
-    options -> ebexp -> program -> (VS.t -> __ -> VS.t ->
-    coq_R_depvars_epre_eprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1) ->
-    VS.t -> VS.t -> coq_R_depvars_epre_eprogram_sat -> 'a1
-
-  val coq_R_depvars_epre_eprogram_sat_rec :
-    options -> ebexp -> program -> (VS.t -> __ -> VS.t ->
-    coq_R_depvars_epre_eprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1) ->
-    VS.t -> VS.t -> coq_R_depvars_epre_eprogram_sat -> 'a1
-
-  val depvars_epre_eprogram_sat_rect :
-    options -> ebexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t -> __
-    -> 'a1) -> VS.t -> 'a1
-
-  val depvars_epre_eprogram_sat_rec :
-    options -> ebexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t -> __
-    -> 'a1) -> VS.t -> 'a1
-
-  val coq_R_depvars_epre_eprogram_sat_correct :
-    options -> ebexp -> program -> VS.t -> VS.t ->
-    coq_R_depvars_epre_eprogram_sat
-
-  val depvars_rpre_rprogram_sat_F :
-    options -> rbexp -> program -> (VS.t -> VS.t) -> VS.t -> VS.t
-
-  val depvars_rpre_rprogram_sat_terminate :
-    options -> rbexp -> program -> VS.t -> VS.t
-
-  val depvars_rpre_rprogram_sat : options -> rbexp -> program -> VS.t -> VS.t
-
-  type coq_R_depvars_rpre_rprogram_sat =
-  | R_depvars_rpre_rprogram_sat_0 of VS.t * VS.t
-     * coq_R_depvars_rpre_rprogram_sat
-  | R_depvars_rpre_rprogram_sat_1 of VS.t
-
-  val coq_R_depvars_rpre_rprogram_sat_rect :
-    options -> rbexp -> program -> (VS.t -> __ -> VS.t ->
-    coq_R_depvars_rpre_rprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1) ->
-    VS.t -> VS.t -> coq_R_depvars_rpre_rprogram_sat -> 'a1
-
-  val coq_R_depvars_rpre_rprogram_sat_rec :
-    options -> rbexp -> program -> (VS.t -> __ -> VS.t ->
-    coq_R_depvars_rpre_rprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1) ->
-    VS.t -> VS.t -> coq_R_depvars_rpre_rprogram_sat -> 'a1
-
-  val depvars_rpre_rprogram_sat_rect :
-    options -> rbexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t -> __
-    -> 'a1) -> VS.t -> 'a1
-
-  val depvars_rpre_rprogram_sat_rec :
-    options -> rbexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t -> __
-    -> 'a1) -> VS.t -> 'a1
-
-  val coq_R_depvars_rpre_rprogram_sat_correct :
-    options -> rbexp -> program -> VS.t -> VS.t ->
-    coq_R_depvars_rpre_rprogram_sat
-
-  val slice_ebexp : VS.t -> DSLRaw.ebexp -> DSLRaw.ebexp
-
-  val slice_rbexp : VS.t -> DSLRaw.rbexp -> DSLRaw.rbexp
-
-  val slice_einstr : VS.t -> instr -> instr option
-
-  val slice_rinstr : VS.t -> instr -> instr option
-
-  val slice_eprogram : VS.t -> instr list -> instr list
-
-  val slice_rprogram : VS.t -> instr list -> instr list
-
-  val slice_espec : options -> espec -> espec
-
-  val slice_rspec : options -> rspec -> rspec
+  val remove_asserts : spec -> spec
  end
 
 module DSL :
@@ -4568,6 +4447,14 @@ module DSL :
 
   val asize : atom -> TypEnv.TE.env -> int
 
+  val atom_eqn : atom -> atom -> bool
+
+  val atom_eqP : atom -> atom -> reflect
+
+  val atom_eqMixin : atom Equality.mixin_of
+
+  val atom_eqType : Equality.coq_type
+
   type instr =
   | Imov of VarOrder.t * atom
   | Ishl of VarOrder.t * atom * int
@@ -4597,6 +4484,8 @@ module DSL :
   | Icast of VarOrder.t * typ * atom
   | Ivpc of VarOrder.t * typ * atom
   | Ijoin of VarOrder.t * atom * atom
+  | Icut of bexp
+  | Iassert of bexp
   | Iassume of bexp
 
   val instr_rect :
@@ -4617,7 +4506,8 @@ module DSL :
     (VarOrder.t -> typ -> atom -> atom -> 'a1) -> (VarOrder.t -> typ -> atom
     -> atom -> 'a1) -> (VarOrder.t -> typ -> atom -> atom -> 'a1) ->
     (VarOrder.t -> typ -> atom -> 'a1) -> (VarOrder.t -> typ -> atom -> 'a1)
-    -> (VarOrder.t -> atom -> atom -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1
+    -> (VarOrder.t -> atom -> atom -> 'a1) -> (bexp -> 'a1) -> (bexp -> 'a1)
+    -> (bexp -> 'a1) -> instr -> 'a1
 
   val instr_rec :
     (VarOrder.t -> atom -> 'a1) -> (VarOrder.t -> atom -> int -> 'a1) ->
@@ -4637,7 +4527,8 @@ module DSL :
     (VarOrder.t -> typ -> atom -> atom -> 'a1) -> (VarOrder.t -> typ -> atom
     -> atom -> 'a1) -> (VarOrder.t -> typ -> atom -> atom -> 'a1) ->
     (VarOrder.t -> typ -> atom -> 'a1) -> (VarOrder.t -> typ -> atom -> 'a1)
-    -> (VarOrder.t -> atom -> atom -> 'a1) -> (bexp -> 'a1) -> instr -> 'a1
+    -> (VarOrder.t -> atom -> atom -> 'a1) -> (bexp -> 'a1) -> (bexp -> 'a1)
+    -> (bexp -> 'a1) -> instr -> 'a1
 
   type program = instr list
 
@@ -4663,14 +4554,6 @@ module DSL :
 
   val rvs_program : program -> VS.t
 
-  val eqn_instr : instr -> instr
-
-  val rng_instr : instr -> instr
-
-  val eqn_program : program -> program
-
-  val rng_program : program -> program
-
   type spec = { sinputs : TypEnv.TE.env; spre : bexp; sprog : program;
                 spost : bexp }
 
@@ -4682,37 +4565,7 @@ module DSL :
 
   val spost : spec -> bexp
 
-  type espec = { esinputs : TypEnv.TE.env; espre : bexp; esprog : program;
-                 espost : ebexp }
-
-  val esinputs : espec -> TypEnv.TE.env
-
-  val espre : espec -> bexp
-
-  val esprog : espec -> program
-
-  val espost : espec -> ebexp
-
-  type rspec = { rsinputs : TypEnv.TE.env; rspre : rbexp; rsprog : program;
-                 rspost : rbexp }
-
-  val rsinputs : rspec -> TypEnv.TE.env
-
-  val rspre : rspec -> rbexp
-
-  val rsprog : rspec -> program
-
-  val rspost : rspec -> rbexp
-
-  val espec_of_spec : spec -> espec
-
-  val rspec_of_spec : spec -> rspec
-
   val vars_spec : spec -> VS.t
-
-  val vars_espec : espec -> VS.t
-
-  val vars_rspec : rspec -> VS.t
 
   val string_of_eunop : eunop -> char list
 
@@ -4736,6 +4589,8 @@ module DSL :
 
   val string_of_bexp : bexp -> char list
 
+  val string_of_typ : typ -> char list
+
   val string_of_var_with_typ : (VarOrder.t * typ) -> char list
 
   val string_of_vars : VS.t -> char list
@@ -4751,16 +4606,6 @@ module DSL :
   val string_of_typenv : TypEnv.TE.env -> char list
 
   val string_of_spec : spec -> char list
-
-  val string_of_espec : espec -> char list
-
-  val string_of_rspec : rspec -> char list
-
-  val is_rng_instr : instr -> bool
-
-  val is_rng_program : program -> bool
-
-  val is_rng_rspec : rspec -> bool
 
   val bv2z : typ -> bits -> coq_Z
 
@@ -5503,10 +5348,6 @@ module DSL :
 
   val well_formed_spec : spec -> bool
 
-  val well_formed_espec : espec -> bool
-
-  val well_formed_rspec : rspec -> bool
-
   val defmemP : VarOrder.t -> TypEnv.TE.env -> reflect
 
   val memdefP : TypEnv.TE.key -> typ TypEnv.TE.t -> reflect
@@ -5519,6 +5360,10 @@ module DSL :
 
   val is_nondet : instr -> bool
 
+  val is_cut : instr -> bool
+
+  val is_assert : instr -> bool
+
   val is_assume : instr -> bool
 
   val force_conform_vars :
@@ -5526,10 +5371,6 @@ module DSL :
 
   val force_conform :
     TypEnv.TE.env -> TypEnv.TE.env -> State.Store.t -> State.Store.t
-
-  val split_espec : espec -> espec list
-
-  val split_rspec : rspec -> rspec list
 
   module TSEQM :
    sig
@@ -7103,112 +6944,32 @@ module DSL :
      end
    end
 
-  val depvars_ebexp : VS.t -> ebexp -> VS.t
+  val cut_spec_rec :
+    instr list -> TypEnv.TE.env -> bexp -> instr list -> bexp -> spec list
 
-  val depvars_rexp : VS.t -> rexp -> VS.t
+  val cut_spec : spec -> spec list
 
-  val depvars_rbexp : VS.t -> DSLRaw.rbexp -> VS.t
+  val compose_spec : spec -> spec -> spec
 
-  val depvars_einstr : options -> VS.t -> instr -> VS.t
+  val program_has_no_cut : program -> bool
 
-  val depvars_rinstr : options -> VS.t -> instr -> VS.t
+  val spec_has_no_cut : spec -> bool
 
-  val depvars_eprogram : options -> VS.t -> instr list -> VS.t
+  val cut_asserts_rec :
+    instr list -> TypEnv.TE.env -> bexp -> instr list -> bexp -> spec list
 
-  val depvars_rprogram : options -> VS.t -> instr list -> VS.t
+  val cut_asserts : spec -> spec list
 
-  val depvars_epre_eprogram : options -> VS.t -> ebexp -> instr list -> VS.t
+  val program_has_no_assert : program -> bool
 
-  val depvars_rpre_rprogram :
-    options -> VS.t -> DSLRaw.rbexp -> instr list -> VS.t
+  val spec_has_no_assert : spec -> bool
 
-  val evsize : ebexp -> program -> VS.t -> int
+  val extract_asserts_rec :
+    instr list -> TypEnv.TE.env -> bexp -> instr list -> spec list
 
-  val rvsize : rbexp -> program -> VS.t -> int
+  val extract_asserts : spec -> spec list
 
-  val depvars_epre_eprogram_sat_F :
-    options -> ebexp -> program -> (VS.t -> VS.t) -> VS.t -> VS.t
+  val remove_asserts_program : program -> program
 
-  val depvars_epre_eprogram_sat_terminate :
-    options -> ebexp -> program -> VS.t -> VS.t
-
-  val depvars_epre_eprogram_sat : options -> ebexp -> program -> VS.t -> VS.t
-
-  type coq_R_depvars_epre_eprogram_sat =
-  | R_depvars_epre_eprogram_sat_0 of VS.t * VS.t
-     * coq_R_depvars_epre_eprogram_sat
-  | R_depvars_epre_eprogram_sat_1 of VS.t
-
-  val coq_R_depvars_epre_eprogram_sat_rect :
-    options -> ebexp -> program -> (VS.t -> __ -> VS.t ->
-    coq_R_depvars_epre_eprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1) ->
-    VS.t -> VS.t -> coq_R_depvars_epre_eprogram_sat -> 'a1
-
-  val coq_R_depvars_epre_eprogram_sat_rec :
-    options -> ebexp -> program -> (VS.t -> __ -> VS.t ->
-    coq_R_depvars_epre_eprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1) ->
-    VS.t -> VS.t -> coq_R_depvars_epre_eprogram_sat -> 'a1
-
-  val depvars_epre_eprogram_sat_rect :
-    options -> ebexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t -> __
-    -> 'a1) -> VS.t -> 'a1
-
-  val depvars_epre_eprogram_sat_rec :
-    options -> ebexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t -> __
-    -> 'a1) -> VS.t -> 'a1
-
-  val coq_R_depvars_epre_eprogram_sat_correct :
-    options -> ebexp -> program -> VS.t -> VS.t ->
-    coq_R_depvars_epre_eprogram_sat
-
-  val depvars_rpre_rprogram_sat_F :
-    options -> rbexp -> program -> (VS.t -> VS.t) -> VS.t -> VS.t
-
-  val depvars_rpre_rprogram_sat_terminate :
-    options -> rbexp -> program -> VS.t -> VS.t
-
-  val depvars_rpre_rprogram_sat : options -> rbexp -> program -> VS.t -> VS.t
-
-  type coq_R_depvars_rpre_rprogram_sat =
-  | R_depvars_rpre_rprogram_sat_0 of VS.t * VS.t
-     * coq_R_depvars_rpre_rprogram_sat
-  | R_depvars_rpre_rprogram_sat_1 of VS.t
-
-  val coq_R_depvars_rpre_rprogram_sat_rect :
-    options -> rbexp -> program -> (VS.t -> __ -> VS.t ->
-    coq_R_depvars_rpre_rprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1) ->
-    VS.t -> VS.t -> coq_R_depvars_rpre_rprogram_sat -> 'a1
-
-  val coq_R_depvars_rpre_rprogram_sat_rec :
-    options -> rbexp -> program -> (VS.t -> __ -> VS.t ->
-    coq_R_depvars_rpre_rprogram_sat -> 'a1 -> 'a1) -> (VS.t -> __ -> 'a1) ->
-    VS.t -> VS.t -> coq_R_depvars_rpre_rprogram_sat -> 'a1
-
-  val depvars_rpre_rprogram_sat_rect :
-    options -> rbexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t -> __
-    -> 'a1) -> VS.t -> 'a1
-
-  val depvars_rpre_rprogram_sat_rec :
-    options -> rbexp -> program -> (VS.t -> __ -> 'a1 -> 'a1) -> (VS.t -> __
-    -> 'a1) -> VS.t -> 'a1
-
-  val coq_R_depvars_rpre_rprogram_sat_correct :
-    options -> rbexp -> program -> VS.t -> VS.t ->
-    coq_R_depvars_rpre_rprogram_sat
-
-  val slice_ebexp : VS.t -> DSLRaw.ebexp -> DSLRaw.ebexp
-
-  val slice_rbexp : VS.t -> DSLRaw.rbexp -> DSLRaw.rbexp
-
-  val slice_einstr : VS.t -> instr -> instr option
-
-  val slice_rinstr : VS.t -> instr -> instr option
-
-  val slice_eprogram : VS.t -> instr list -> instr list
-
-  val slice_rprogram : VS.t -> instr list -> instr list
-
-  val slice_espec : options -> espec -> espec
-
-  val slice_rspec : options -> rspec -> rspec
+  val remove_asserts : spec -> spec
  end

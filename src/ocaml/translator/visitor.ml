@@ -178,12 +178,12 @@ let visit_instr m g i =
   | Ast.Cryptoline.Imov (v, a) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_a') = visit_atom m' g' a in
-     (m'', g'', [Extraction.DSLFull.DSLFull.Imov (coq_v', coq_a')])
+     (m'', g'', [Extraction.DSL.DSL.Imov (coq_v', coq_a')])
   | Ast.Cryptoline.Ishl (v, a, n) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_a') = visit_atom m' g' a in
      let nz = visit_int_atom n in
-     (m'', g'', [Extraction.DSLFull.DSLFull.Ishl (coq_v', coq_a', Z.to_int nz)])
+     (m'', g'', [Extraction.DSL.DSL.Ishl (coq_v', coq_a', Z.to_int nz)])
   | Ast.Cryptoline.Ishls _ -> failwith "shls is unsupported by CoqCryptoLine"
   | Ast.Cryptoline.Ishr _ -> failwith "shr is unsupported by CoqCryptoLine"
   | Ast.Cryptoline.Ishrs _ -> failwith "shrs is unsupported by CoqCryptoLine"
@@ -194,165 +194,165 @@ let visit_instr m g i =
      let (m'', g'', coq_vl') = visit_var m' g' vl in
      let (m''', g''', coq_a1') = visit_atom m'' g'' a1 in
      let (m'''', g'''', coq_a2') = visit_atom m''' g''' a2 in
-     (m'''', g'''', [Extraction.DSLFull.DSLFull.Icshl (coq_vh', coq_vl', coq_a1', coq_a2', Z.to_int n)])
+     (m'''', g'''', [Extraction.DSL.DSL.Icshl (coq_vh', coq_vl', coq_a1', coq_a2', Z.to_int n)])
   | Ast.Cryptoline.Icshr _ -> failwith "cshr is unsupported by CoqCryptoLine"
   | Ast.Cryptoline.Icshrs _ -> failwith "cshrs is unsupported by CoqCryptoLine"
   | Ast.Cryptoline.Irol _ -> failwith "rol is unsupported by CoqCryptoLine"
   | Ast.Cryptoline.Iror _ -> failwith "ror is unsupported by CoqCryptoLine"
   | Ast.Cryptoline.Inondet v ->
      let (m', g', coq_v') = visit_var m g v in
-     (m', g', [Extraction.DSLFull.DSLFull.Inondet (coq_v', visit_typ v.vtyp)])
+     (m', g', [Extraction.DSL.DSL.Inondet (coq_v', visit_typ v.vtyp)])
   | Ast.Cryptoline.Icmov (v, c, a1, a2) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_c') = visit_atom m' g' c in
      let (m''', g''', coq_a1') = visit_atom m'' g'' a1 in
      let (m'''', g'''', coq_a2') = visit_atom m''' g''' a2 in
-     (m'''', g'''', [Extraction.DSLFull.DSLFull.Icmov (coq_v', coq_c', coq_a1', coq_a2')])
+     (m'''', g'''', [Extraction.DSL.DSL.Icmov (coq_v', coq_c', coq_a1', coq_a2')])
   | Ast.Cryptoline.Inop ->
-     (m, g, [Extraction.DSLFull.DSLFull.Inop])
+     (m, g, [Extraction.DSL.DSL.Inop])
   | Ast.Cryptoline.Inot (v, a) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_a') = visit_atom m' g' a in
-     (m'', g'', [Extraction.DSLFull.DSLFull.Inot (coq_v', visit_typ v.vtyp, coq_a')])
+     (m'', g'', [Extraction.DSL.DSL.Inot (coq_v', visit_typ v.vtyp, coq_a')])
   | Ast.Cryptoline.Iadd (v, a1, a2) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_a1') = visit_atom m' g' a1 in
      let (m''', g''', coq_a2') = visit_atom m'' g'' a2 in
-     (m''', g''', [Extraction.DSLFull.DSLFull.Iadd (coq_v', coq_a1', coq_a2')])
+     (m''', g''', [Extraction.DSL.DSL.Iadd (coq_v', coq_a1', coq_a2')])
   | Ast.Cryptoline.Iadds (c, v, a1, a2) ->
      let (m', g', coq_c') = visit_var m g c in
      let (m'', g'', coq_v') = visit_var m' g' v in
      let (m''', g''', coq_a1') = visit_atom m'' g'' a1 in
      let (m'''', g'''', coq_a2') = visit_atom m''' g''' a2 in
-     (m'''', g'''', [Extraction.DSLFull.DSLFull.Iadds (coq_c', coq_v', coq_a1', coq_a2')])
+     (m'''', g'''', [Extraction.DSL.DSL.Iadds (coq_c', coq_v', coq_a1', coq_a2')])
   | Ast.Cryptoline.Iadc (v, a1, a2, y) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_a1') = visit_atom m' g' a1 in
      let (m''', g''', coq_a2') = visit_atom m'' g'' a2 in
      let (m'''', g'''', coq_y') = visit_atom m''' g''' y in
-     (m'''', g'''', [Extraction.DSLFull.DSLFull.Iadc (coq_v', coq_a1', coq_a2', coq_y')])
+     (m'''', g'''', [Extraction.DSL.DSL.Iadc (coq_v', coq_a1', coq_a2', coq_y')])
   | Ast.Cryptoline.Iadcs (c, v, a1, a2, y) ->
      let (m', g', coq_c') = visit_var m g c in
      let (m'', g'', coq_v') = visit_var m' g' v in
      let (m''', g''', coq_a1') = visit_atom m'' g'' a1 in
      let (m'''', g'''', coq_a2') = visit_atom m''' g''' a2 in
      let (m''''', g''''', coq_y') = visit_atom m'''' g'''' y in
-     (m''''', g''''', [Extraction.DSLFull.DSLFull.Iadcs (coq_c', coq_v', coq_a1', coq_a2', coq_y')])
+     (m''''', g''''', [Extraction.DSL.DSL.Iadcs (coq_c', coq_v', coq_a1', coq_a2', coq_y')])
   | Ast.Cryptoline.Isub (v, a1, a2) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_a1') = visit_atom m' g' a1 in
      let (m''', g''', coq_a2') = visit_atom m'' g'' a2 in
-     (m''', g''', [Extraction.DSLFull.DSLFull.Isub (coq_v', coq_a1', coq_a2')])
+     (m''', g''', [Extraction.DSL.DSL.Isub (coq_v', coq_a1', coq_a2')])
   | Ast.Cryptoline.Isubc (c, v, a1, a2) ->
      let (m', g', coq_c') = visit_var m g c in
      let (m'', g'', coq_v') = visit_var m' g' v in
      let (m''', g''', coq_a1') = visit_atom m'' g'' a1 in
      let (m'''', g'''', coq_a2') = visit_atom m''' g''' a2 in
-     (m'''', g'''', [Extraction.DSLFull.DSLFull.Isubc (coq_c', coq_v', coq_a1', coq_a2')])
+     (m'''', g'''', [Extraction.DSL.DSL.Isubc (coq_c', coq_v', coq_a1', coq_a2')])
   | Ast.Cryptoline.Isubb (c, v, a1, a2) ->
      let (m', g', coq_c') = visit_var m g c in
      let (m'', g'', coq_v') = visit_var m' g' v in
      let (m''', g''', coq_a1') = visit_atom m'' g'' a1 in
      let (m'''', g'''', coq_a2') = visit_atom m''' g''' a2 in
-     (m'''', g'''', [Extraction.DSLFull.DSLFull.Isubb (coq_c', coq_v', coq_a1', coq_a2')])
+     (m'''', g'''', [Extraction.DSL.DSL.Isubb (coq_c', coq_v', coq_a1', coq_a2')])
   | Ast.Cryptoline.Isbc (v, a1, a2, y) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_a1') = visit_atom m' g' a1 in
      let (m''', g''', coq_a2') = visit_atom m'' g'' a2 in
      let (m'''', g'''', coq_y') = visit_atom m''' g''' y in
-     (m'''', g'''', [Extraction.DSLFull.DSLFull.Isbc (coq_v', coq_a1', coq_a2', coq_y')])
+     (m'''', g'''', [Extraction.DSL.DSL.Isbc (coq_v', coq_a1', coq_a2', coq_y')])
   | Ast.Cryptoline.Isbcs (c, v, a1, a2, y) ->
      let (m', g', coq_c') = visit_var m g c in
      let (m'', g'', coq_v') = visit_var m' g' v in
      let (m''', g''', coq_a1') = visit_atom m'' g'' a1 in
      let (m'''', g'''', coq_a2') = visit_atom m''' g''' a2 in
      let (m''''', g''''', coq_y') = visit_atom m'''' g'''' y in
-     (m''''', g''''', [Extraction.DSLFull.DSLFull.Isbcs (coq_c', coq_v', coq_a1', coq_a2', coq_y')])
+     (m''''', g''''', [Extraction.DSL.DSL.Isbcs (coq_c', coq_v', coq_a1', coq_a2', coq_y')])
   | Ast.Cryptoline.Isbb (v, a1, a2, y) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_a1') = visit_atom m' g' a1 in
      let (m''', g''', coq_a2') = visit_atom m'' g'' a2 in
      let (m'''', g'''', coq_y') = visit_atom m''' g''' y in
-     (m'''', g'''', [Extraction.DSLFull.DSLFull.Isbb (coq_v', coq_a1', coq_a2', coq_y')])
+     (m'''', g'''', [Extraction.DSL.DSL.Isbb (coq_v', coq_a1', coq_a2', coq_y')])
   | Ast.Cryptoline.Isbbs (c, v, a1, a2, y) ->
      let (m', g', coq_c') = visit_var m g c in
      let (m'', g'', coq_v') = visit_var m' g' v in
      let (m''', g''', coq_a1') = visit_atom m'' g'' a1 in
      let (m'''', g'''', coq_a2') = visit_atom m''' g''' a2 in
      let (m''''', g''''', coq_y') = visit_atom m'''' g'''' y in
-     (m''''', g''''', [Extraction.DSLFull.DSLFull.Isbbs (coq_c', coq_v', coq_a1', coq_a2', coq_y')])
+     (m''''', g''''', [Extraction.DSL.DSL.Isbbs (coq_c', coq_v', coq_a1', coq_a2', coq_y')])
   | Ast.Cryptoline.Imul (v, a1, a2) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_a1') = visit_atom m' g' a1 in
      let (m''', g''', coq_a2') = visit_atom m'' g'' a2 in
-     (m''', g''', [Extraction.DSLFull.DSLFull.Imul (coq_v', coq_a1', coq_a2')])
+     (m''', g''', [Extraction.DSL.DSL.Imul (coq_v', coq_a1', coq_a2')])
   | Ast.Cryptoline.Imuls (_c, _v, _a1, _a2) -> failwith "muls is unsupported by CoqCryptoLine"
   | Ast.Cryptoline.Imull (vh, vl, a1, a2) ->
      let (m', g', coq_vh') = visit_var m g vh in
      let (m'', g'', coq_vl') = visit_var m' g' vl in
      let (m''', g''', coq_a1') = visit_atom m'' g'' a1 in
      let (m'''', g'''', coq_a2') = visit_atom m''' g''' a2 in
-     (m'''', g'''', [Extraction.DSLFull.DSLFull.Imull (coq_vh', coq_vl', coq_a1', coq_a2')])
+     (m'''', g'''', [Extraction.DSL.DSL.Imull (coq_vh', coq_vl', coq_a1', coq_a2')])
   | Ast.Cryptoline.Imulj (v, a1, a2) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_a1') = visit_atom m' g' a1 in
      let (m''', g''', coq_a2') = visit_atom m'' g'' a2 in
-     (m''', g''', [Extraction.DSLFull.DSLFull.Imulj (coq_v', coq_a1', coq_a2')])
+     (m''', g''', [Extraction.DSL.DSL.Imulj (coq_v', coq_a1', coq_a2')])
   | Ast.Cryptoline.Isplit (vh, vl, a, n) ->
      let (m', g', coq_vh') = visit_var m g vh in
      let (m'', g'', coq_vl') = visit_var m' g' vl in
      let (m''', g''', coq_a') = visit_atom m'' g'' a in
-     (m''', g''', [Extraction.DSLFull.DSLFull.Isplit (coq_vh', coq_vl', coq_a', Z.to_int n)])
+     (m''', g''', [Extraction.DSL.DSL.Isplit (coq_vh', coq_vl', coq_a', Z.to_int n)])
   | Ast.Cryptoline.Ispl _ -> failwith "spl is unsupported by CoqCryptoLine"
   (* Instructions that cannot be translated to polynomials *)
   | Ast.Cryptoline.Iand (v, a1, a2) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_a1') = visit_atom m' g' a1 in
      let (m''', g''', coq_a2') = visit_atom m'' g'' a2 in
-     (m''', g''', [Extraction.DSLFull.DSLFull.Iand (coq_v', visit_typ v.vtyp, coq_a1', coq_a2')])
+     (m''', g''', [Extraction.DSL.DSL.Iand (coq_v', visit_typ v.vtyp, coq_a1', coq_a2')])
   | Ast.Cryptoline.Ior (v, a1, a2) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_a1') = visit_atom m' g' a1 in
      let (m''', g''', coq_a2') = visit_atom m'' g'' a2 in
-     (m''', g''', [Extraction.DSLFull.DSLFull.Ior (coq_v', visit_typ v.vtyp, coq_a1', coq_a2')])
+     (m''', g''', [Extraction.DSL.DSL.Ior (coq_v', visit_typ v.vtyp, coq_a1', coq_a2')])
   | Ast.Cryptoline.Ixor (v, a1, a2) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_a1') = visit_atom m' g' a1 in
      let (m''', g''', coq_a2') = visit_atom m'' g'' a2 in
-     (m''', g''', [Extraction.DSLFull.DSLFull.Ixor (coq_v', visit_typ v.vtyp, coq_a1', coq_a2')])
+     (m''', g''', [Extraction.DSL.DSL.Ixor (coq_v', visit_typ v.vtyp, coq_a1', coq_a2')])
   (* Type conversions *)
   | Ast.Cryptoline.Icast (_, v, a) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_a') = visit_atom m' g' a in
-     (m'', g'', [Extraction.DSLFull.DSLFull.Icast (coq_v', visit_typ v.vtyp, coq_a')])
+     (m'', g'', [Extraction.DSL.DSL.Icast (coq_v', visit_typ v.vtyp, coq_a')])
   | Ast.Cryptoline.Ivpc (v, a) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_a') = visit_atom m' g' a in
-     (m'', g'', [Extraction.DSLFull.DSLFull.Ivpc (coq_v', visit_typ v.vtyp, coq_a')])
+     (m'', g'', [Extraction.DSL.DSL.Ivpc (coq_v', visit_typ v.vtyp, coq_a')])
   | Ast.Cryptoline.Ijoin (v, ah, al) ->
      let (m', g', coq_v') = visit_var m g v in
      let (m'', g'', coq_ah') = visit_atom m' g' ah in
      let (m''', g''', coq_al') = visit_atom m'' g'' al in
-     (m''', g''', [Extraction.DSLFull.DSLFull.Ijoin (coq_v', coq_ah', coq_al')])
+     (m''', g''', [Extraction.DSL.DSL.Ijoin (coq_v', coq_ah', coq_al')])
   (* Specifications *)
   | Ast.Cryptoline.Iassert e ->
      let (m', g', coq_e') = visit_bexp_prove_with m g e in
-     (m', g', [Extraction.DSLFull.DSLFull.Iassume coq_e'])
+     (m', g', [Extraction.DSL.DSL.Iassume coq_e'])
   | Ast.Cryptoline.Iassume e ->
      let (m', g', coq_e') = visit_bexp m g e in
-     (m', g', [Extraction.DSLFull.DSLFull.Iassume coq_e'])
+     (m', g', [Extraction.DSL.DSL.Iassume coq_e'])
   | Ast.Cryptoline.Icut e ->
      let (m', g', coq_e') = visit_bexp_prove_with m g e in
-     (m', g', [Extraction.DSLFull.DSLFull.Icut coq_e'])
+     (m', g', [Extraction.DSL.DSL.Icut coq_e'])
   | Ast.Cryptoline.Ighost (vs, e) ->
      let (m', g', coq_nondets_rev) =
        Ast.Cryptoline.VS.fold (
            fun v (m, g, coq_nondets_rev) ->
            let (m', g', coq_v') = visit_var m g v in
-           (m', g', (Extraction.DSLFull.DSLFull.Inondet (coq_v', visit_typ v.vtyp))::coq_nondets_rev)
+           (m', g', (Extraction.DSL.DSL.Inondet (coq_v', visit_typ v.vtyp))::coq_nondets_rev)
          ) vs (m, g, []) in
      let (m'', g'', coq_e') = visit_bexp m' g' e in
-     (m'', g'', List.rev (Extraction.DSLFull.DSLFull.Iassume coq_e'::coq_nondets_rev))
+     (m'', g'', List.rev (Extraction.DSL.DSL.Iassume coq_e'::coq_nondets_rev))
 
 let visit_program m g p =
   let helper (m, g, rev_res) i =
@@ -373,8 +373,8 @@ let visit_spec vs s =
   let (m', g', coq_spre') = visit_bexp m0 g0 s.Ast.Cryptoline.spre in
   let (m'', g'', coq_sprog') = visit_program m' g' s.Ast.Cryptoline.sprog in
   let (_, _, coq_spost') = visit_bexp_prove_with m'' g'' s.Ast.Cryptoline.spost in
-  { Extraction.DSLFull.DSLFull.sinputs = te';
-    Extraction.DSLFull.DSLFull.spre = coq_spre';
-    Extraction.DSLFull.DSLFull.sprog = coq_sprog';
-    Extraction.DSLFull.DSLFull.spost = coq_spost'
+  { Extraction.DSL.DSL.sinputs = te';
+    Extraction.DSL.DSL.spre = coq_spre';
+    Extraction.DSL.DSL.sprog = coq_sprog';
+    Extraction.DSL.DSL.spost = coq_spost'
   }

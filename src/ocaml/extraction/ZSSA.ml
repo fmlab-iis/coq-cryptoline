@@ -5,21 +5,21 @@ module ZSSA =
   (** val string_of_zexp : eexp -> char list **)
 
   let string_of_zexp =
-    SSA.SSA.string_of_eexp
+    SSALite.SSALite.string_of_eexp
 
   (** val string_of_zexps : char list -> eexp list -> char list **)
 
   let string_of_zexps =
-    SSA.SSA.string_of_eexps
+    SSALite.SSALite.string_of_eexps
 
-  type rep = { premise : SSA.SSA.ebexp; conseq : SSA.SSA.ebexp }
+  type rep = { premise : SSALite.SSALite.ebexp; conseq : SSALite.SSALite.ebexp }
 
-  (** val premise : rep -> SSA.SSA.ebexp **)
+  (** val premise : rep -> SSALite.SSALite.ebexp **)
 
   let premise r =
     r.premise
 
-  (** val conseq : rep -> SSA.SSA.ebexp **)
+  (** val conseq : rep -> SSALite.SSALite.ebexp **)
 
   let conseq r =
     r.conseq

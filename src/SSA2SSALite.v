@@ -4,7 +4,7 @@ From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
 From ssrlib Require Import Var SsrOrder FMaps ZAriths Tactics Lists FSets Seqs Strings.
-From Cryptoline Require Import Options DSLRaw DSLFull SSAFull.
+From Cryptoline Require Import Options DSLRaw SSA.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -15,7 +15,7 @@ Import Prenex Implicits.
 
 Section VarSubst.
 
-  Import SSAFull.
+  Import SSA.
 
   Definition eexp_of_atom (a : atom) : eexp :=
     match a with
@@ -75,7 +75,7 @@ Section VarSubst.
   Definition subst_bexp p r e :=
     (subst_ebexp p (eexp_of_atom r) (fst e), subst_rbexp p (rexp_of_atom r) (snd e)).
 
-  Definition subst_atom p r (a : SSAFull.atom) :=
+  Definition subst_atom p r (a : SSA.atom) :=
     match a with
     | Avar v => if v == p then r else a
     | Aconst _ _ => a
@@ -123,7 +123,7 @@ End VarSubst.
 
 Section Extra.
 
-  Import SSAFull.
+  Import SSA.
 
   (* well_formed_ssa_spec - cut_spec *)
 
@@ -511,7 +511,7 @@ End Extra.
 
 Section RewriteMov.
 
-  Import SSAFull.
+  Import SSA.
 
   Definition rewrite_mov (s : spec) : spec := s.
 
@@ -545,17 +545,17 @@ End RewriteMov.
 
 (* Convert SSAFull without Iassert and Icut statements to SSA *)
 
-From Cryptoline Require SSA.
+From Cryptoline Require SSALite.
 
 Section SSA2Lite.
 
+  Import SSALite.
   Import SSA.
-  Import SSAFull.
 
 
   (* Programs containing neither cut nor assert statements *)
 
-  Definition program_is_lite (p : SSAFull.program) : bool :=
+  Definition program_is_lite (p : SSA.program) : bool :=
     program_has_no_cut p && program_has_no_assert p.
 
   Lemma program_is_lite_cons i p :
@@ -616,7 +616,7 @@ Section SSA2Lite.
   Qed.
 
   Lemma program_is_lite_split p :
-    program_is_lite p = (SSAFull.program_has_no_cut p) && (program_has_no_assert p).
+    program_is_lite p = (SSA.program_has_no_cut p) && (program_has_no_assert p).
   Proof. reflexivity. Qed.
 
 
@@ -678,49 +678,49 @@ Section SSA2Lite.
 
   (* Conversion from SSAFull to SSA *)
 
-  Definition ssa2lite_instr (i : SSAFull.instr) : SSA.instr :=
+  Definition ssa2lite_instr (i : SSA.instr) : SSALite.instr :=
     match i with
-    | Imov v a => SSA.Imov v a
-    | Ishl v a n => SSA.Ishl v a n
-    | Icshl v1 v2 a1 a2 n => SSA.Icshl v1 v2 a1 a2 n
-    | Inondet v t => SSA.Inondet v t
-    | Icmov v c a1 a2 => SSA.Icmov v c a1 a2
-    | Inop => SSA.Inop
-    | Inot v t a => SSA.Inot v t a
-    | Iadd v a1 a2 => SSA.Iadd v a1 a2
-    | Iadds c v a1 a2 => SSA.Iadds c v a1 a2
-    | Iadc v a1 a2 y => SSA.Iadc v a1 a2 y
-    | Iadcs c v a1 a2 y => SSA.Iadcs c v a1 a2 y
-    | Isub v a1 a2 => SSA.Isub v a1 a2
-    | Isubc c v a1 a2 => SSA.Isubc c v a1 a2
-    | Isubb c v a1 a2 => SSA.Isubb c v a1 a2
-    | Isbc v a1 a2 y => SSA.Isbc v a1 a2 y
-    | Isbcs c v a1 a2 y => SSA.Isbcs c v a1 a2 y
-    | Isbb v a1 a2 y => SSA.Isbb v a1 a2 y
-    | Isbbs c v a1 a2 y => SSA.Isbbs c v a1 a2 y
-    | Imul v a1 a2 => SSA.Imul v a1 a2
-    | Imull vh vl a1 a2 => SSA.Imull vh vl a1 a2
-    | Imulj v a1 a2 => SSA.Imulj v a1 a2
-    | Isplit vh vl a n => SSA.Isplit vh vl a n
-    | Iand v t a1 a2 => SSA.Iand v t a1 a2
-    | Ior v t a1 a2 => SSA.Ior v t a1 a2
-    | Ixor v t a1 a2 => SSA.Ixor v t a1 a2
-    | Icast v t a => SSA.Icast v t a
-    | Ivpc v t a => SSA.Ivpc v t a
-    | Ijoin v ah al => SSA.Ijoin v ah al
-    | Icut e => SSA.Inop
-    | Iassert e => SSA.Inop
-    | Iassume e => SSA.Iassume e
+    | Imov v a => SSALite.Imov v a
+    | Ishl v a n => SSALite.Ishl v a n
+    | Icshl v1 v2 a1 a2 n => SSALite.Icshl v1 v2 a1 a2 n
+    | Inondet v t => SSALite.Inondet v t
+    | Icmov v c a1 a2 => SSALite.Icmov v c a1 a2
+    | Inop => SSALite.Inop
+    | Inot v t a => SSALite.Inot v t a
+    | Iadd v a1 a2 => SSALite.Iadd v a1 a2
+    | Iadds c v a1 a2 => SSALite.Iadds c v a1 a2
+    | Iadc v a1 a2 y => SSALite.Iadc v a1 a2 y
+    | Iadcs c v a1 a2 y => SSALite.Iadcs c v a1 a2 y
+    | Isub v a1 a2 => SSALite.Isub v a1 a2
+    | Isubc c v a1 a2 => SSALite.Isubc c v a1 a2
+    | Isubb c v a1 a2 => SSALite.Isubb c v a1 a2
+    | Isbc v a1 a2 y => SSALite.Isbc v a1 a2 y
+    | Isbcs c v a1 a2 y => SSALite.Isbcs c v a1 a2 y
+    | Isbb v a1 a2 y => SSALite.Isbb v a1 a2 y
+    | Isbbs c v a1 a2 y => SSALite.Isbbs c v a1 a2 y
+    | Imul v a1 a2 => SSALite.Imul v a1 a2
+    | Imull vh vl a1 a2 => SSALite.Imull vh vl a1 a2
+    | Imulj v a1 a2 => SSALite.Imulj v a1 a2
+    | Isplit vh vl a n => SSALite.Isplit vh vl a n
+    | Iand v t a1 a2 => SSALite.Iand v t a1 a2
+    | Ior v t a1 a2 => SSALite.Ior v t a1 a2
+    | Ixor v t a1 a2 => SSALite.Ixor v t a1 a2
+    | Icast v t a => SSALite.Icast v t a
+    | Ivpc v t a => SSALite.Ivpc v t a
+    | Ijoin v ah al => SSALite.Ijoin v ah al
+    | Icut e => SSALite.Inop
+    | Iassert e => SSALite.Inop
+    | Iassume e => SSALite.Iassume e
     end.
 
-  Definition ssa2lite_program (p : SSAFull.program) : SSA.program :=
+  Definition ssa2lite_program (p : SSA.program) : SSALite.program :=
     tmap ssa2lite_instr p.
 
-  Definition ssa2lite_spec (s : SSAFull.spec) : SSA.spec :=
-    {| SSA.sinputs := sinputs s;
-       SSA.spre := spre s;
-       SSA.sprog := ssa2lite_program (sprog s);
-       SSA.spost := spost s |}.
+  Definition ssa2lite_spec (s : SSA.spec) : SSALite.spec :=
+    {| SSALite.sinputs := sinputs s;
+       SSALite.spre := spre s;
+       SSALite.sprog := ssa2lite_program (sprog s);
+       SSALite.spost := spost s |}.
 
 
   Lemma ssa2lite_program_cons i p :
@@ -742,24 +742,24 @@ Section SSA2Lite.
   Qed.
 
   Lemma ssa2lite_instr_lvs i :
-    SSAVS.Equal (SSA.lvs_instr (ssa2lite_instr i)) (lvs_instr i).
+    SSAVS.Equal (SSALite.lvs_instr (ssa2lite_instr i)) (lvs_instr i).
   Proof. by case: i => //=. Qed.
 
   Lemma ssa2lite_instr_vars_subset i :
-    SSAVS.subset (SSA.vars_instr (ssa2lite_instr i)) (vars_instr i).
+    SSAVS.subset (SSALite.vars_instr (ssa2lite_instr i)) (vars_instr i).
   Proof. case: i => //=; intros; exact: VSLemmas.subset_refl. Qed.
 
   Lemma ssa2lite_program_vars_subset p :
-    SSAVS.subset (SSA.vars_program (ssa2lite_program p)) (vars_program p).
+    SSAVS.subset (SSALite.vars_program (ssa2lite_program p)) (vars_program p).
   Proof.
     elim: p => [| i p IH] //=. rewrite ssa2lite_program_cons /=.
     exact: (VSLemmas.union_subsets (ssa2lite_instr_vars_subset i) IH).
   Qed.
 
   Lemma ssa2lite_spec_vars_subset s :
-    SSAVS.subset (SSA.vars_spec (ssa2lite_spec s)) (vars_spec s).
+    SSAVS.subset (SSALite.vars_spec (ssa2lite_spec s)) (vars_spec s).
   Proof.
-    rewrite /ssa2lite_spec /SSA.vars_spec /vars_spec. case: s => E f p g /=.
+    rewrite /ssa2lite_spec /SSALite.vars_spec /vars_spec. case: s => E f p g /=.
     apply: (VSLemmas.union_subsets (VSLemmas.subset_refl _)).
     apply: (VSLemmas.union_subsets _ (VSLemmas.subset_refl _)).
     exact: (ssa2lite_program_vars_subset p).
@@ -767,7 +767,7 @@ Section SSA2Lite.
 
   Lemma ssa2lite_instr_vars_equal E i :
     well_formed_instr E i ->
-    SSAVS.Equal (SSAVS.union (vars_env E) (SSA.vars_instr (ssa2lite_instr i)))
+    SSAVS.Equal (SSAVS.union (vars_env E) (SSALite.vars_instr (ssa2lite_instr i)))
                 (SSAVS.union (vars_env E) (vars_instr i)).
   Proof.
     case: i => //=.
@@ -781,7 +781,7 @@ Section SSA2Lite.
 
   Lemma ssa2lite_program_vars_equal E p :
     well_formed_program E p ->
-    SSAVS.Equal (SSAVS.union (vars_env E) (SSA.vars_program (ssa2lite_program p)))
+    SSAVS.Equal (SSAVS.union (vars_env E) (SSALite.vars_program (ssa2lite_program p)))
                 (SSAVS.union (vars_env E) (vars_program p)).
   Proof.
     elim: p E => [| i p IH] E //=. move/andP=> [Hwfi Hwfp].
@@ -796,8 +796,8 @@ Section SSA2Lite.
     have ->:
          SSAVS.Equal
          (SSAVS.union (vars_instr i)
-                      (SSAVS.union (SSAVS.union (vars_env E) (lvs_instr i)) (SSA.vars_program (ssa2lite_program p))))
-         (SSAVS.union (SSAVS.union (vars_env E) (vars_instr i)) (SSA.vars_program (ssa2lite_program p))).
+                      (SSAVS.union (SSAVS.union (vars_env E) (lvs_instr i)) (SSALite.vars_program (ssa2lite_program p))))
+         (SSAVS.union (SSAVS.union (vars_env E) (vars_instr i)) (SSALite.vars_program (ssa2lite_program p))).
     { rewrite vars_instr_split. by VSLemmas.dp_Equal. }
     rewrite -VSLemmas.P.union_assoc. rewrite (ssa2lite_instr_vars_equal Hwfi).
     reflexivity.
@@ -805,19 +805,19 @@ Section SSA2Lite.
 
   Lemma ssa2lite_spec_vars_equal s :
     well_formed_spec s ->
-    SSAVS.Equal (SSAVS.union (vars_env (SSA.sinputs (ssa2lite_spec s))) (SSA.vars_spec (ssa2lite_spec s)))
+    SSAVS.Equal (SSAVS.union (vars_env (SSALite.sinputs (ssa2lite_spec s))) (SSALite.vars_spec (ssa2lite_spec s)))
                 (SSAVS.union (vars_env (sinputs s)) (vars_spec s)).
   Proof.
-    case: s => E f p g /=. rewrite /well_formed_spec /ssa2lite_spec /SSA.vars_spec /vars_spec /=.
+    case: s => E f p g /=. rewrite /well_formed_spec /ssa2lite_spec /SSALite.vars_spec /vars_spec /=.
     move=> /andP [/andP [_ Hwfp] _].
     have ->:
          SSAVS.Equal
          (SSAVS.union (vars_env E)
-                      (SSAVS.union (SSA.vars_bexp f)
-                                   (SSAVS.union (SSA.vars_program (ssa2lite_program p)) (SSA.vars_bexp g))))
-         (SSAVS.union (SSA.vars_bexp f)
-                      (SSAVS.union (SSA.vars_bexp g)
-                                   (SSAVS.union (vars_env E) (SSA.vars_program (ssa2lite_program p)))))
+                      (SSAVS.union (SSALite.vars_bexp f)
+                                   (SSAVS.union (SSALite.vars_program (ssa2lite_program p)) (SSALite.vars_bexp g))))
+         (SSAVS.union (SSALite.vars_bexp f)
+                      (SSAVS.union (SSALite.vars_bexp g)
+                                   (SSAVS.union (vars_env E) (SSALite.vars_program (ssa2lite_program p)))))
       by VSLemmas.dp_Equal.
     rewrite (ssa2lite_program_vars_equal Hwfp).
     have ->:
@@ -832,19 +832,19 @@ Section SSA2Lite.
   (* Typing environments *)
 
   Lemma ssa2lite_instr_succ_typenv E i :
-    SSA.instr_succ_typenv (ssa2lite_instr i) E = instr_succ_typenv i E.
+    SSALite.instr_succ_typenv (ssa2lite_instr i) E = instr_succ_typenv i E.
   Proof. by case: i. Qed.
 
   Lemma ssa2lite_program_succ_typenv E p :
-    SSA.program_succ_typenv (ssa2lite_program p) E = program_succ_typenv p E.
+    SSALite.program_succ_typenv (ssa2lite_program p) E = program_succ_typenv p E.
   Proof.
     elim: p E => [| i p IH] E //=. rewrite ssa2lite_program_cons /=.
     rewrite ssa2lite_instr_succ_typenv. exact: IH.
   Qed.
 
   Lemma ssa2lite_spec_succ_typenv s :
-    SSA.program_succ_typenv (SSA.sprog (ssa2lite_spec s)) (SSA.sinputs (ssa2lite_spec s))
-    = SSAFull.program_succ_typenv (SSAFull.sprog s) (SSAFull.sinputs s).
+    SSALite.program_succ_typenv (SSALite.sprog (ssa2lite_spec s)) (SSALite.sinputs (ssa2lite_spec s))
+    = SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s).
   Proof. case: s => E f p g. exact: ssa2lite_program_succ_typenv. Qed.
 
 
@@ -852,15 +852,15 @@ Section SSA2Lite.
 
   Lemma ssa2lite_instr_sound E i s1 s2 :
     ~~ is_cut i && ~~ is_assert i ->
-    SSA.eval_instr E (ssa2lite_instr i) s1 s2 ->
+    SSALite.eval_instr E (ssa2lite_instr i) s1 s2 ->
     eval_instr E i (OK s1) (OK s2).
   Proof.
-    (case: i => //=); intros; SSA.eval_instr_elim;
+    (case: i => //=); intros; SSALite.eval_instr_elim;
     repeat match goal with
-           | H : context [SSA.atyp] |- _ =>
-               change SSA.atyp with atyp in H
-           | H : context [SSA.eval_atom] |- _ =>
-               change SSA.eval_atom with eval_atom in H
+           | H : context [SSALite.atyp] |- _ =>
+               change SSALite.atyp with atyp in H
+           | H : context [SSALite.eval_atom] |- _ =>
+               change SSALite.eval_atom with eval_atom in H
            end; try (eval_instr_intro; assumption).
     apply: (EInondet _ H1). assumption.
   Qed.
@@ -868,21 +868,21 @@ Section SSA2Lite.
   Lemma ssa2lite_instr_complete E i s1 s2 :
     ~~ is_cut i && ~~ is_assert i ->
     eval_instr E i (OK s1) (OK s2) ->
-    SSA.eval_instr E (ssa2lite_instr i) s1 s2.
+    SSALite.eval_instr E (ssa2lite_instr i) s1 s2.
   Proof.
     (case: i => //=); intros; eval_instr_elim;
     repeat match goal with
            | H : context [atyp] |- _ =>
-               change atyp with SSA.atyp in H
+               change atyp with SSALite.atyp in H
            | H : context [eval_atom] |- _ =>
-               change eval_atom with SSA.eval_atom in H
-           end; try (SSA.eval_instr_intro; assumption).
-    apply: (SSA.EInondet _ H1). assumption.
+               change eval_atom with SSALite.eval_atom in H
+           end; try (SSALite.eval_instr_intro; assumption).
+    apply: (SSALite.EInondet _ H1). assumption.
   Qed.
 
   Lemma ssa2lite_instr_eval E i s1 s2 :
     ~~ is_cut i && ~~ is_assert i ->
-    SSA.eval_instr E (ssa2lite_instr i) s1 s2 <->
+    SSALite.eval_instr E (ssa2lite_instr i) s1 s2 <->
       eval_instr E i (OK s1) (OK s2).
   Proof.
     by intuition auto using ssa2lite_instr_sound, ssa2lite_instr_complete.
@@ -890,7 +890,7 @@ Section SSA2Lite.
 
   Lemma ssa2lite_program_sound E p s1 s2 :
     program_is_lite p ->
-    SSA.eval_program E (ssa2lite_program p) s1 s2 ->
+    SSALite.eval_program E (ssa2lite_program p) s1 s2 ->
     eval_program E p (OK s1) (OK s2).
   Proof.
     elim: p E s1 s2 => [| i p IH] E s1 s2 //=.
@@ -903,23 +903,23 @@ Section SSA2Lite.
   Lemma ssa2lite_program_complete E p s1 s2 :
     program_is_lite p ->
     eval_program E p (OK s1) (OK s2) ->
-    SSA.eval_program E (ssa2lite_program p) s1 s2.
+    SSALite.eval_program E (ssa2lite_program p) s1 s2.
   Proof.
     elim: p E s1 s2 => [| i p IH] E s1 s2 //=.
-    - move=> _. inversion_clear 1. apply: SSA.Enil. simpl; assumption.
+    - move=> _. inversion_clear 1. apply: SSALite.Enil. simpl; assumption.
     - rewrite program_is_lite_cons ssa2lite_program_cons. move/andP=> /= [Hi Hp] Hevip.
       move: (program_is_lite_eval_program_cons_ok Hi Hp Hevip) => [s3 [Hevi Hevp]].
-      apply: (SSA.Econs (ssa2lite_instr_complete Hi Hevi)).
+      apply: (SSALite.Econs (ssa2lite_instr_complete Hi Hevi)).
       rewrite ssa2lite_instr_succ_typenv. exact: (IH _ _ _ Hp Hevp).
   Qed.
 
   Lemma ssa2lite_spec_sound s :
     spec_is_lite s ->
-    SSA.valid_spec (ssa2lite_spec s) ->
-    SSAFull.valid_spec s.
+    SSALite.valid_spec (ssa2lite_spec s) ->
+    SSA.valid_spec s.
   Proof.
     case: s => E f p g /=.
-    rewrite /SSA.valid_spec /valid_spec /valid_spec_ok /valid_spec_err
+    rewrite /SSALite.valid_spec /valid_spec /valid_spec_ok /valid_spec_err
             /ssa2lite_spec /=.
     move=> Hnca Hv. rewrite ssa2lite_program_succ_typenv in Hv. split.
     - move=> s1 s2 Hco Hevf Hevp. apply: (Hv _ _ Hco Hevf).
@@ -930,10 +930,10 @@ Section SSA2Lite.
 
   Lemma ssa2lite_spec_complete s :
     spec_is_lite s ->
-    SSAFull.valid_spec s ->
-    SSA.valid_spec (ssa2lite_spec s).
+    SSA.valid_spec s ->
+    SSALite.valid_spec (ssa2lite_spec s).
   Proof.
-    case: s => E f p g /=. rewrite /SSA.valid_spec /valid_spec /valid_spec_ok /valid_spec_err
+    case: s => E f p g /=. rewrite /SSALite.valid_spec /valid_spec /valid_spec_ok /valid_spec_err
                                    /ssa2lite_spec /=.
     move=> Hnca [Hvok Hverr]. rewrite ssa2lite_program_succ_typenv.
     move=> s1 s2 Hco Hevf Hevp. apply: (Hvok _ _ Hco Hevf).
@@ -945,12 +945,12 @@ Section SSA2Lite.
 
   Lemma ssa2lite_instr_well_formed E i :
     ~~ is_cut i && ~~ is_assert i ->
-    SSA.well_formed_instr E (ssa2lite_instr i) = SSAFull.well_formed_instr E i.
+    SSALite.well_formed_instr E (ssa2lite_instr i) = SSA.well_formed_instr E i.
   Proof. by case: i => //=. Qed.
 
   Lemma ssa2lite_program_well_formed E p :
     program_is_lite p ->
-    SSA.well_formed_program E (ssa2lite_program p) = SSAFull.well_formed_program E p.
+    SSALite.well_formed_program E (ssa2lite_program p) = SSA.well_formed_program E p.
   Proof.
     elim: p E => [| i p IH] E //=. rewrite program_is_lite_cons => /andP [Hncai Hncap].
     rewrite ssa2lite_program_cons /=. rewrite (ssa2lite_instr_well_formed _ Hncai).
@@ -958,22 +958,22 @@ Section SSA2Lite.
   Qed.
 
   Lemma ssa2lite_instr_unchanged vs i :
-    SSA.ssa_vars_unchanged_instr vs (ssa2lite_instr i) =
-      SSAFull.ssa_vars_unchanged_instr vs i.
+    SSALite.ssa_vars_unchanged_instr vs (ssa2lite_instr i) =
+      SSA.ssa_vars_unchanged_instr vs i.
   Proof. by case: i => //=. Qed.
 
   Lemma ssa2lite_program_unchanged vs p :
-    SSA.ssa_vars_unchanged_program vs (ssa2lite_program p) =
-      SSAFull.ssa_vars_unchanged_program vs p.
+    SSALite.ssa_vars_unchanged_program vs (ssa2lite_program p) =
+      SSA.ssa_vars_unchanged_program vs p.
   Proof.
     elim: p => [| i p IH] //=.
     rewrite ssa2lite_program_cons.
-    rewrite SSAFull.ssa_unchanged_program_cons SSA.ssa_unchanged_program_cons.
+    rewrite SSA.ssa_unchanged_program_cons SSALite.ssa_unchanged_program_cons.
     rewrite ssa2lite_instr_unchanged IH. reflexivity.
   Qed.
 
   Lemma ssa2lite_program_single_assignment p :
-    SSA.ssa_single_assignment (ssa2lite_program p) = SSAFull.ssa_single_assignment p.
+    SSALite.ssa_single_assignment (ssa2lite_program p) = SSA.ssa_single_assignment p.
   Proof.
     elim: p => [| i p IH] //=. rewrite ssa2lite_program_cons /=.
     rewrite ssa2lite_instr_lvs ssa2lite_program_unchanged IH. reflexivity.
@@ -981,15 +981,15 @@ Section SSA2Lite.
 
   Lemma ssa2lite_program_well_formed_ssa E p :
     program_is_lite p ->
-    SSA.well_formed_ssa_program E (ssa2lite_program p) =
-      SSAFull.well_formed_ssa_program E p.
+    SSALite.well_formed_ssa_program E (ssa2lite_program p) =
+      SSA.well_formed_ssa_program E p.
   Proof.
     elim: p E => [| i p IH] E //=.
     rewrite program_is_lite_cons; move/andP => [Hncai Hncap].
-    rewrite ssa2lite_program_cons /SSAFull.well_formed_ssa_program / SSA.well_formed_ssa_program /=.
+    rewrite ssa2lite_program_cons /SSA.well_formed_ssa_program / SSALite.well_formed_ssa_program /=.
     rewrite (ssa2lite_instr_well_formed _ Hncai).
     rewrite ssa2lite_instr_succ_typenv (ssa2lite_program_well_formed _ Hncap).
-    rewrite SSAFull.ssa_unchanged_program_cons SSA.ssa_unchanged_program_cons
+    rewrite SSA.ssa_unchanged_program_cons SSALite.ssa_unchanged_program_cons
             ssa2lite_instr_unchanged ssa2lite_program_unchanged.
     rewrite ssa2lite_instr_lvs ssa2lite_program_unchanged.
     rewrite ssa2lite_program_single_assignment. reflexivity.
@@ -997,22 +997,22 @@ Section SSA2Lite.
 
   Lemma ssa2lite_spec_well_formed s :
     spec_is_lite s ->
-    SSA.well_formed_spec (ssa2lite_spec s) = SSAFull.well_formed_spec s.
+    SSALite.well_formed_spec (ssa2lite_spec s) = SSA.well_formed_spec s.
   Proof.
-    case: s => E f p g. rewrite /spec_is_lite /SSAFull.well_formed_spec /SSA.well_formed_spec /=.
+    case: s => E f p g. rewrite /spec_is_lite /SSA.well_formed_spec /SSALite.well_formed_spec /=.
     move=> Hpl. rewrite ssa2lite_program_succ_typenv.
-    replace (SSA.well_formed_bexp E f) with (SSAFull.well_formed_bexp E f) by reflexivity.
-    replace (SSA.well_formed_bexp (program_succ_typenv p E) g) with
-      (SSAFull.well_formed_bexp (program_succ_typenv p E) g) by reflexivity.
+    replace (SSALite.well_formed_bexp E f) with (SSA.well_formed_bexp E f) by reflexivity.
+    replace (SSALite.well_formed_bexp (program_succ_typenv p E) g) with
+      (SSA.well_formed_bexp (program_succ_typenv p E) g) by reflexivity.
     rewrite (ssa2lite_program_well_formed _ Hpl) /=.
     reflexivity.
   Qed.
 
   Lemma ssa2lite_spec_well_formed_ssa s :
     spec_is_lite s ->
-    SSA.well_formed_ssa_spec (ssa2lite_spec s) = SSAFull.well_formed_ssa_spec s.
+    SSALite.well_formed_ssa_spec (ssa2lite_spec s) = SSA.well_formed_ssa_spec s.
   Proof.
-    case: s => E f p g. rewrite /SSAFull.well_formed_ssa_spec /SSA.well_formed_ssa_spec /=.
+    case: s => E f p g. rewrite /SSA.well_formed_ssa_spec /SSALite.well_formed_ssa_spec /=.
     move=> Hsl. rewrite (ssa2lite_spec_well_formed Hsl).
     rewrite ssa2lite_program_unchanged. rewrite ssa2lite_program_single_assignment.
     reflexivity.

@@ -1,3 +1,5 @@
+.DS_Store
+.lia.cache
 .coqdeps.d
 *.glob
 *.vo
