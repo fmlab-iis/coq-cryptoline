@@ -4736,6 +4736,20 @@ Section MakeSSA.
     assumption.
   Qed.
 
+  Lemma well_formed_ssa_unchanged_env_hd E i p :
+    well_formed_ssa_program E (i::p) -> ssa_vars_unchanged_instr (SSALite.vars_env E) i.
+  Proof.
+    move=> Hwf. rewrite /well_formed_ssa_program in Hwf.
+    caseb Hwf. move=> _ Hun _. exact: (proj1 (ssa_unchanged_program_cons1 Hun)).
+  Qed.
+
+  Lemma well_formed_ssa_submap_hd E i p :
+    well_formed_ssa_program E (i::p) -> SSATE.Lemmas.submap E (SSALite.instr_succ_typenv i E).
+  Proof.
+    move=> Hwf. apply: ssa_unchanged_instr_succ_typenv_submap.
+    exact: (well_formed_ssa_unchanged_env_hd Hwf).
+  Qed.
+
   Lemma well_formed_ssa_well_formed E p :
     well_formed_ssa_program E p -> SSALite.well_formed_program E p.
   Proof.

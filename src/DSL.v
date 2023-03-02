@@ -1,7 +1,7 @@
 
 (** Typed CryptoLine. *)
 
-From Coq Require Import List Ascii ZArith OrderedType String.
+From Coq Require Import List Ascii ZArith OrderedType String Btauto.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
@@ -2264,6 +2264,16 @@ Module MakeDSL
     - apply: ReflectF. move/negP: Hmem. by rewrite vars_env_mem.
   Qed.
 
+  Lemma submap_subset E1 E2 :
+    TELemmas.submap E1 E2 -> VS.subset (vars_env E1) (vars_env E2).
+  Proof.
+    rewrite /vars_env. move=> Hsub. apply: VS.subset_1. move=> x /VSLemmas.memP Hin1.
+    rewrite TEKS.mem_key_set in Hin1. move: (TELemmas.mem_find_some Hin1) => [ty Hfind1].
+    move: (Hsub _ _ Hfind1) => Hfind2. move: (TELemmas.find_some_mem Hfind2) => Hin2.
+    apply/VSLemmas.memP. rewrite TEKS.mem_key_set. assumption.
+  Qed.
+
+
   Definition well_defined_instr (te : TE.env) (i : instr) : bool :=
     match i with
     | Imov v a => are_defined (vars_atom a) te
@@ -2619,11 +2629,19 @@ Module MakeDSL
   Lemma well_formed_eexp_typed E e : well_formed_eexp E e -> well_typed_eexp E e.
   Proof. by move/andP=> [H1 H2]. Qed.
 
+  Lemma well_formed_eexp_defined_typedb E e :
+    well_formed_eexp E e = are_defined (vars_eexp e) E && well_typed_eexp E e.
+  Proof. reflexivity. Qed.
+
   Lemma well_formed_ebexp_defined E e : well_formed_ebexp E e -> are_defined (vars_ebexp e) E.
   Proof. by move/andP=> [H1 H2]. Qed.
 
   Lemma well_formed_ebexp_typed E e : well_formed_ebexp E e -> well_typed_ebexp E e.
   Proof. by move/andP=> [H1 H2]. Qed.
+
+  Lemma well_formed_ebexp_defined_typedb E e :
+    well_formed_ebexp E e = are_defined (vars_ebexp e) E && well_typed_ebexp E e.
+  Proof. reflexivity. Qed.
 
   Lemma well_formed_rexp_defined E e : well_formed_rexp E e -> are_defined (vars_rexp e) E.
   Proof. by move/andP=> [H1 H2]. Qed.
@@ -2651,6 +2669,15 @@ Module MakeDSL
     by rewrite (well_formed_eexp_typed Hwf1) (IH Hwf2).
   Qed.
 
+  Lemma well_formed_eexps_defined_typedb E es :
+    well_formed_eexps E es = are_defined (vars_eexps es) E && well_typed_eexps E es.
+  Proof.
+    elim: es => [| e es IH] //=.
+    - rewrite are_defined_empty. reflexivity.
+    - rewrite IH are_defined_union. rewrite well_formed_eexp_defined_typedb.
+      by btauto.
+  Qed.
+
   Lemma well_formed_eexps_defined_typed E es :
     well_formed_eexps E es <-> are_defined (vars_eexps es) E /\ well_typed_eexps E es.
   Proof.
@@ -2661,13 +2688,55 @@ Module MakeDSL
       by rewrite /well_formed_eexp Hdef1 Hwt1.
   Qed.
 
+  Lemma well_formed_eexp_eunopb E op e :
+    well_formed_eexp E (Eunop op e) = well_formed_eexp E e.
+  Proof. reflexivity. Qed.
+
+  Lemma well_formed_eexp_eunop E op e :
+    well_formed_eexp E (Eunop op e) <-> well_formed_eexp E e.
+  Proof. reflexivity. Qed.
+
+  Lemma well_formed_eexp_ebinopb E op e1 e2 :
+    well_formed_eexp E (Ebinop op e1 e2) = well_formed_eexp E e1 && well_formed_eexp E e2.
+  Proof.
+    rewrite /well_formed_eexp /=. rewrite are_defined_union. by btauto.
+  Qed.
+
+  Lemma well_formed_eexp_ebinop E op e1 e2 :
+    well_formed_eexp E (Ebinop op e1 e2) <-> well_formed_eexp E e1 /\ well_formed_eexp E e2.
+  Proof.
+    rewrite /well_formed_eexp /=. rewrite are_defined_union; split; by t_auto.
+  Qed.
+
+  Lemma well_formed_eexp_epowb E e n :
+    well_formed_eexp E (Epow e n) = well_formed_eexp E e.
+  Proof. reflexivity. Qed.
+
+  Lemma well_formed_eexp_epow E e n :
+    well_formed_eexp E (Epow e n) <-> well_formed_eexp E e.
+  Proof. reflexivity. Qed.
+
   Lemma well_formed_ebexp_etrue E : well_formed_ebexp E etrue.
   Proof. rewrite /well_formed_ebexp /=. by rewrite are_defined_empty. Qed.
+
+  Lemma well_formed_ebexp_eeqb E e1 e2 :
+    well_formed_ebexp E (Eeq e1 e2) = well_formed_eexp E e1 && well_formed_eexp E e2.
+  Proof.
+    rewrite /well_formed_ebexp /well_formed_eexp /=. rewrite are_defined_union. by btauto.
+  Qed.
 
   Lemma well_formed_ebexp_eeq E e1 e2 :
     well_formed_ebexp E (Eeq e1 e2) <-> well_formed_eexp E e1 /\ well_formed_eexp E e2.
   Proof.
     rewrite /well_formed_ebexp /well_formed_eexp /=. rewrite are_defined_union; split; by t_auto.
+  Qed.
+
+  Lemma well_formed_ebexp_eeqmodb E e1 e2 ms :
+    well_formed_ebexp E (Eeqmod e1 e2 ms) =
+      well_formed_eexp E e1 && well_formed_eexp E e2 && well_formed_eexps E ms.
+  Proof.
+    rewrite /well_formed_ebexp /well_formed_eexp /=. rewrite !are_defined_union.
+    rewrite well_formed_eexps_defined_typedb. by btauto.
   Qed.
 
   Lemma well_formed_ebexp_eeqmod E e1 e2 ms :
@@ -2680,6 +2749,12 @@ Module MakeDSL
     - move/well_formed_eexps_defined_typed: b; by t_auto.
   Qed.
 
+  Lemma well_formed_ebexp_eandb E e1 e2 :
+    well_formed_ebexp E (Eand e1 e2) = well_formed_ebexp E e1 && well_formed_ebexp E e2.
+  Proof.
+    rewrite /well_formed_ebexp /=. rewrite are_defined_union. by btauto.
+  Qed.
+
   Lemma well_formed_ebexp_eand E e1 e2 :
     well_formed_ebexp E (Eand e1 e2) <-> well_formed_ebexp E e1 /\ well_formed_ebexp E e2.
   Proof.
@@ -2689,6 +2764,15 @@ Module MakeDSL
   Lemma well_formed_rbexp_rtrue E : well_formed_rbexp E rtrue.
   Proof. rewrite /well_formed_rbexp /=. by rewrite are_defined_empty. Qed.
 
+  Lemma well_formed_rbexp_reqb E n e1 e2 :
+    well_formed_rbexp E (Req n e1 e2) =
+    well_formed_rexp E e1 && well_formed_rexp E e2 &&
+      (0 < n) && (size_of_rexp e1 E == n) && (size_of_rexp e2 E == n).
+  Proof.
+    rewrite /well_formed_rbexp /well_formed_rexp /=. rewrite are_defined_union.
+    by btauto.
+  Qed.
+
   Lemma well_formed_rbexp_req E n e1 e2 :
     well_formed_rbexp E (Req n e1 e2) ->
     well_formed_rexp E e1 /\ well_formed_rexp E e2 /\
@@ -2696,6 +2780,15 @@ Module MakeDSL
   Proof.
     rewrite /well_formed_rbexp /well_formed_rexp /=. rewrite are_defined_union.
     by t_auto.
+  Qed.
+
+  Lemma well_formed_rbexp_rcmpb E n op e1 e2 :
+    well_formed_rbexp E (Rcmp n op e1 e2) =
+    well_formed_rexp E e1 && well_formed_rexp E e2 &&
+      (0 < n) && (size_of_rexp e1 E == n) && (size_of_rexp e2 E == n).
+  Proof.
+    rewrite /well_formed_rbexp /well_formed_rexp /=. rewrite are_defined_union.
+    by btauto.
   Qed.
 
   Lemma well_formed_rbexp_rcmp E n op e1 e2 :
@@ -2707,14 +2800,30 @@ Module MakeDSL
     by t_auto.
   Qed.
 
+  Lemma well_formed_rbexp_rnegb E e :
+    well_formed_rbexp E (Rneg e) = well_formed_rbexp E e.
+  Proof. reflexivity. Qed.
+
   Lemma well_formed_rbexp_rneg E e :
     well_formed_rbexp E (Rneg e) <-> well_formed_rbexp E e.
-  Proof. rewrite /well_formed_rbexp /=. tauto. Qed.
+  Proof. reflexivity. Qed.
+
+  Lemma well_formed_rbexp_randb E e1 e2 :
+    well_formed_rbexp E (Rand e1 e2) = well_formed_rbexp E e1 && well_formed_rbexp E e2.
+  Proof.
+    rewrite /well_formed_rbexp /=. rewrite are_defined_union. by btauto.
+  Qed.
 
   Lemma well_formed_rbexp_rand E e1 e2 :
     well_formed_rbexp E (Rand e1 e2) <-> well_formed_rbexp E e1 /\ well_formed_rbexp E e2.
   Proof.
     rewrite /well_formed_rbexp /=. rewrite are_defined_union. split; by t_auto.
+  Qed.
+
+  Lemma well_formed_rbexp_rorb E e1 e2 :
+    well_formed_rbexp E (Ror e1 e2) = well_formed_rbexp E e1 && well_formed_rbexp E e2.
+  Proof.
+    rewrite /well_formed_rbexp /=. rewrite are_defined_union. by btauto.
   Qed.
 
   Lemma well_formed_rbexp_ror E e1 e2 :
@@ -2723,7 +2832,12 @@ Module MakeDSL
     rewrite /well_formed_rbexp /=. rewrite are_defined_union. split; by t_auto.
   Qed.
 
-  Lemma well_formed_rexp_unop E w op e :
+  Lemma well_formed_rexp_runopb E w op e :
+    well_formed_rexp E (Runop w op e) =
+    well_formed_rexp E e && (0 < w) && (size_of_rexp e E == w).
+  Proof. rewrite /well_formed_rexp /=. by btauto. Qed.
+
+  Lemma well_formed_rexp_runop E w op e :
     well_formed_rexp E (Runop w op e) ->
     well_formed_rexp E e /\ 0 < w /\ size_of_rexp e E = w.
   Proof.
@@ -2731,7 +2845,15 @@ Module MakeDSL
     split => //=. apply/andP; split; assumption.
   Qed.
 
-  Lemma well_formed_rexp_binop E w op e1 e2 :
+  Lemma well_formed_rexp_rbinopb E w op e1 e2 :
+    well_formed_rexp E (Rbinop w op e1 e2) =
+    well_formed_rexp E e1 && well_formed_rexp E e2 &&
+    (0 < w) && (size_of_rexp e1 E == w) && (size_of_rexp e2 E == w).
+  Proof.
+    rewrite /well_formed_rexp /=. rewrite are_defined_union. by btauto.
+  Qed.
+
+  Lemma well_formed_rexp_rbinop E w op e1 e2 :
     well_formed_rexp E (Rbinop w op e1 e2) ->
     well_formed_rexp E e1 /\ well_formed_rexp E e2 /\
     0 < w /\ size_of_rexp e1 E = w /\ size_of_rexp e2 E = w.
@@ -2742,7 +2864,12 @@ Module MakeDSL
     repeat split => //; (apply/andP; split; assumption).
   Qed.
 
-  Lemma well_formed_rexp_uext E w e n :
+  Lemma well_formed_rexp_ruextb E w e n :
+    well_formed_rexp E (Ruext w e n) =
+    well_formed_rexp E e && (0 < w) && (size_of_rexp e E == w).
+  Proof. rewrite /well_formed_rexp /=. by btauto. Qed.
+
+  Lemma well_formed_rexp_ruext E w e n :
     well_formed_rexp E (Ruext w e n) ->
     well_formed_rexp E e /\ 0 < w /\ size_of_rexp e E = w.
   Proof.
@@ -2750,58 +2877,17 @@ Module MakeDSL
     apply/andP; split; assumption.
   Qed.
 
-  Lemma well_formed_rexp_sext E w e n :
+  Lemma well_formed_rexp_rsextb E w e n :
+    well_formed_rexp E (Rsext w e n) =
+    well_formed_rexp E e && (0 < w) && (size_of_rexp e E == w).
+  Proof. rewrite /well_formed_rexp /=. by btauto. Qed.
+
+  Lemma well_formed_rexp_rsext E w e n :
     well_formed_rexp E (Rsext w e n) ->
     well_formed_rexp E e /\ 0 < w /\ size_of_rexp e E = w.
   Proof.
     move/andP=> /= [Hdef /andP [/andP [Hw Hwt] /eqP Hs]]. split=> //=.
     apply/andP; split; assumption.
-  Qed.
-
-  Lemma well_formed_rbexp_eq E w e1 e2 :
-    well_formed_rbexp E (Req w e1 e2) ->
-    well_formed_rexp E e1 /\ well_formed_rexp E e2 /\
-    0 < w /\ size_of_rexp e1 E = w /\ size_of_rexp e2 E = w.
-  Proof.
-    move/andP => /= [Hdef /andP [/andP [/andP [/andP [Hw Hwt1]
-                                                /eqP Hs1] Hwt2] /eqP Hs2]].
-    rewrite are_defined_union in Hdef. move/andP: Hdef => [Hdef1 Hdef2].
-    repeat split => //; (apply/andP; split; assumption).
-  Qed.
-
-  Lemma well_formed_rbexp_cmp E w op e1 e2 :
-    well_formed_rbexp E (Rcmp w op e1 e2) ->
-    well_formed_rexp E e1 /\ well_formed_rexp E e2 /\
-    0 < w /\ size_of_rexp e1 E = w /\ size_of_rexp e2 E = w.
-  Proof.
-    move/andP => /= [Hdef /andP [/andP [/andP [/andP [Hw Hwt1]
-                                                /eqP Hs1] Hwt2] /eqP Hs2]].
-    rewrite are_defined_union in Hdef. move/andP: Hdef => [Hdef1 Hdef2].
-    repeat split => //; (apply/andP; split; assumption).
-  Qed.
-
-  Lemma well_formed_rbexp_neg E e :
-    well_formed_rbexp E (Rneg e) -> well_formed_rbexp E e.
-  Proof.
-    move/andP=> /= [Hdef Hwt]. apply/andP; split; assumption.
-  Qed.
-
-  Lemma well_formed_rbexp_and E e1 e2 :
-    well_formed_rbexp E (Rand e1 e2) ->
-    well_formed_rbexp E e1 /\ well_formed_rbexp E e2.
-  Proof.
-    move/andP=> /= [Hdef /andP [Hwt1 Hwt2]].
-    rewrite are_defined_union in Hdef. move/andP: Hdef => [Hdef1 Hdef2].
-    split; apply/andP; split; assumption.
-  Qed.
-
-  Lemma well_formed_rbexp_or E e1 e2 :
-    well_formed_rbexp E (Ror e1 e2) ->
-    well_formed_rbexp E e1 /\ well_formed_rbexp E e2.
-  Proof.
-    move/andP=> /= [Hdef /andP [Hwt1 Hwt2]].
-    rewrite are_defined_union in Hdef. move/andP: Hdef => [Hdef1 Hdef2].
-    split; apply/andP; split; assumption.
   Qed.
 
   Lemma well_formed_instr_cut E e :
@@ -2992,6 +3078,11 @@ Module MakeDSL
     rewrite -(are_defined_subset_env te (rvs_instr i)). assumption.
   Qed.
 
+  Lemma well_formed_instr_defined_rvs E i :
+    well_formed_instr E i ->
+    are_defined (rvs_instr i) E.
+  Proof. move=> Hwf. apply/defsubP; exact: (well_formed_instr_subset_rvs Hwf). Qed.
+
   Lemma is_defined_submap k (te1 te2: TE.env):
     TELemmas.submap te1 te2 ->
     is_defined k te1 -> is_defined k te2.
@@ -3078,6 +3169,16 @@ Module MakeDSL
     asize a E1 = asize a E2.
   Proof.
     move=> H1 H2. rewrite /asize (atyp_submap H1 H2). reflexivity.
+  Qed.
+
+  Lemma well_typed_atom_notin_add E v t a :
+    ~~ VS.mem v (vars_atom a) ->
+    well_typed_atom (TE.add v t E) a = well_typed_atom E a.
+  Proof.
+    case: a => [ u | ty bs ] //=. move/VSLemmas.not_mem_singleton1 => /negP Hne.
+    rewrite /well_typed_atom /=. rewrite /well_sized_atom 2!andbT /=.
+    rewrite eq_sym in Hne. rewrite /asize /=. rewrite (TE.vtyp_add_neq Hne).
+    reflexivity.
   Qed.
 
   Lemma well_typed_atom_well_sized E a :

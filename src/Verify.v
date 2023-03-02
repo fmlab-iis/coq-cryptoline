@@ -192,6 +192,7 @@ Section Verification.
         exact: Hwfssa.
     - (* agree *)
       move: (cut_spec_agree_in (rewrite_mov_well_formed_ssa Hwf) Hin) => Hag.
+      rewrite (rewrite_mov_succ_typenv Hwf) in Hag.
       apply: (SSALite.MA.subset_set_agree _ Hag).
       apply: (SSAVS.Lemmas.subset_trans _ (SSA.remove_asserts_vars_subset _)).
       apply: (SSAVS.Lemmas.subset_trans _ (ssa2lite_spec_vars_subset _)).
@@ -230,6 +231,7 @@ Section Verification.
         exact: Hwfssa.
     - (* agree *)
       move: (cut_spec_agree_in (rewrite_mov_well_formed_ssa Hwf) Hin) => Hag.
+      rewrite (rewrite_mov_succ_typenv Hwf) in Hag.
       apply: (SSALite.MA.subset_set_agree _ Hag).
       apply: (SSAVS.Lemmas.subset_trans _ (SSA.remove_asserts_vars_subset _)).
       apply: (SSAVS.Lemmas.subset_trans _ (ssa2lite_spec_vars_subset _)).
@@ -272,6 +274,7 @@ Section Verification.
       move: (extract_asserts_agree_in Hwfc Hina) => Haga.
       move: (SSA.MA.subset_set_agree (SSA.extract_asserts_vars_subset Hina) Hagc) => {}Hagc.
       move: (SSA.MA.agree_trans Haga Hagc) => {Haga Hagc} Hag.
+      rewrite (rewrite_mov_succ_typenv Hwf) in Hag.
       apply: (SSALite.MA.subset_set_agree _ Hag).
       apply: (SSAVS.Lemmas.subset_trans _ (ssa2lite_spec_vars_subset _)).
       apply: (SSAVS.Lemmas.subset_trans _ (SSALite.vars_rspec_of_spec _)).
@@ -414,7 +417,9 @@ Section Verification.
         rewrite /sndconds in H. move/QFBV.valid_bexps_tflatten: H => H.
         apply: H. apply/in_In. apply: in_tmap. apply: in_tmap.
         apply: in_tmap. exact: Hincut.
-      - apply: (SSA.MA.subset_set_agree _ (cut_spec_agree_in Hwfrw Hincut)).
+      - move: (cut_spec_agree_in Hwfrw Hincut) => Hag.
+        rewrite (rewrite_mov_succ_typenv Hwf) in Hag.
+        apply: (SSA.MA.subset_set_agree _ Hag).
         apply: (SSAVS.Lemmas.subset_trans (algsnd_spec_vars_subset _ _)).
         apply: (SSAVS.Lemmas.subset_trans (ssa2lite_spec_vars_subset _)).
         exact: SSA.remove_asserts_vars_subset. }
@@ -436,7 +441,9 @@ Section Verification.
              rewrite /rngpost in H. move/QFBV.valid_bexps_tflatten: H => H.
              apply: H. apply/in_In. apply: in_tmap. apply: in_tmap.
              apply: in_tmap. exact: Hincut.
-          -- apply: (SSA.MA.subset_set_agree _ (cut_spec_agree_in Hwfrw Hincut)).
+          -- move: (cut_spec_agree_in Hwfrw Hincut) => Hag.
+             rewrite (rewrite_mov_succ_typenv Hwf) in Hag.
+             apply: (SSA.MA.subset_set_agree _ Hag).
              apply: (SSAVS.Lemmas.subset_trans (rngred_spec_vars_subset _ _)).
              apply: (SSAVS.Lemmas.subset_trans (ssa2lite_spec_vars_subset _)).
              exact: SSA.remove_asserts_vars_subset.
@@ -476,6 +483,7 @@ Section Verification.
              move: (cut_spec_agree_in Hwfrw Hincut) => Hag2.
              move: (SSA.MA.subset_set_agree (SSA.extract_asserts_vars_subset Hinoca) Hag2) => {}Hag2.
              move: (SSA.MA.agree_trans Hag1 Hag2) =>{Hag1 Hag2}.
+             rewrite (rewrite_mov_succ_typenv Hwf).
              apply: SSA.MA.subset_set_agree.
              apply: (SSAVS.Lemmas.subset_trans (rngred_spec_vars_subset _ _)).
              apply: (SSAVS.Lemmas.subset_trans (ssa2lite_spec_vars_subset _)).

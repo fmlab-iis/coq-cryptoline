@@ -872,15 +872,15 @@ Section Rspec2QFBV.
   Proof.
     elim: e => //=.
     - move=> n bs /andP /= [Hdef [/andP [Hw Hs]]]. apply/eqP. exact: Hs.
-    - move=> w op e IH Hwf. move: (well_formed_rexp_unop Hwf) => {Hwf} [Hwfe [Hw Hse]].
+    - move=> w op e IH Hwf. move: (well_formed_rexp_runop Hwf) => {Hwf} [Hwfe [Hw Hse]].
       move: (IH Hwfe) => {} IH. case: op => /=; rewrite IH; exact: Hse.
     - move=> w op e1 IH1 e2 IH2 Hwf.
-      move: (well_formed_rexp_binop Hwf) => {Hwf} [Hwf1 [Hwf2 [Hw [Hs1 Hs2]]]].
+      move: (well_formed_rexp_rbinop Hwf) => {Hwf} [Hwf1 [Hwf2 [Hw [Hs1 Hs2]]]].
       move: (IH1 Hwf1) (IH2 Hwf2) => {}IH1 {}IH2.
       case: op => /=; rewrite ?IH1 ?IH2 ?Hs1 ?Hs2 ?minnn ?maxnn; reflexivity.
-    - move=> w e IH n Hwf. move: (well_formed_rexp_uext Hwf) => {Hwf} [Hwfe [Hw Hse]].
+    - move=> w e IH n Hwf. move: (well_formed_rexp_ruext Hwf) => {Hwf} [Hwfe [Hw Hse]].
       move: (IH Hwfe) => {} IH. rewrite IH Hse. reflexivity.
-    - move=> w e IH n Hwf. move: (well_formed_rexp_sext Hwf) => {Hwf} [Hwfe [Hw Hse]].
+    - move=> w e IH n Hwf. move: (well_formed_rexp_rsext Hwf) => {Hwf} [Hwfe [Hw Hse]].
       move: (IH Hwfe) => {} IH. rewrite IH Hse. reflexivity.
   Qed.
 
@@ -2668,17 +2668,17 @@ Section Rngred.
       elim: e => //=.
       - move=> v Hwf. unfold_well_formed. rewrite are_defined_singleton in Hwf0.
         move/memdefP: Hwf0. by apply.
-      - move=> w op e IH Hwf. move: (well_formed_rexp_unop Hwf) => {Hwf} [Hwf [Hw Hs]].
+      - move=> w op e IH Hwf. move: (well_formed_rexp_runop Hwf) => {Hwf} [Hwf [Hw Hs]].
         move: (IH Hwf) => {IH Hwf} Hwf. case: op => /=; assumption.
       - move=> w op e1 IH1 e2 IH2 Hwf.
-        move: (well_formed_rexp_binop Hwf) => {Hwf} [Hwf1 [Hwf2 [Hw [Hs1 Hs2]]]].
+        move: (well_formed_rexp_rbinop Hwf) => {Hwf} [Hwf1 [Hwf2 [Hw [Hs1 Hs2]]]].
         move: (IH1 Hwf1) (IH2 Hwf2) => {IH1 IH2} Hqwf1 Hqwf2.
         case: op => /=; rewrite ?Hqwf1 ?Hqwf2 ?(size_exp_rexp Hwf1)
                       ?(size_exp_rexp Hwf2) ?Hs1 ?Hs2 eqxx !andbT !andTb;
                       by trivial.
-      - move=> w e IH n Hwf. move: (well_formed_rexp_uext Hwf) => {Hwf} [Hwf [Hw Hs]].
+      - move=> w e IH n Hwf. move: (well_formed_rexp_ruext Hwf) => {Hwf} [Hwf [Hw Hs]].
         exact: (IH Hwf).
-      - move=> w e IH n Hwf. move: (well_formed_rexp_sext Hwf) => {Hwf} [Hwf [Hw Hs]].
+      - move=> w e IH n Hwf. move: (well_formed_rexp_rsext Hwf) => {Hwf} [Hwf [Hw Hs]].
         exact: (IH Hwf).
     Qed.
 
@@ -2686,20 +2686,20 @@ Section Rngred.
       well_formed_rbexp E e -> QFBV.well_formed_bexp (bexp_rbexp e) E.
     Proof.
       elim: e => //=.
-      - move=> w e1 e2 Hwf. move: (well_formed_rbexp_eq Hwf) =>
+      - move=> w e1 e2 Hwf. move: (well_formed_rbexp_req Hwf) =>
                                   [Hwf1 [Hwf2 [Hw [Hs1 Hs2]]]].
         rewrite (well_formed_exp_rexp Hwf1) (well_formed_exp_rexp Hwf2).
         rewrite (size_exp_rexp Hwf1) Hs1 (size_exp_rexp Hwf2) Hs2.
         rewrite eqxx. exact: is_true_true.
       - move=> w op e1 e2 Hwf.
-        move: (well_formed_rbexp_cmp Hwf) => {Hwf} [Hwf1 [Hwf2 [Hw [Hs1 Hs2]]]].
+        move: (well_formed_rbexp_rcmp Hwf) => {Hwf} [Hwf1 [Hwf2 [Hw [Hs1 Hs2]]]].
         (case: op => /=);
         rewrite (well_formed_exp_rexp Hwf1) (well_formed_exp_rexp Hwf2)
           (size_exp_rexp Hwf1) Hs1 (size_exp_rexp Hwf2) Hs2 eqxx;
         exact: is_true_true.
-      - move=> e1 IH1 e2 IH2 Hwf. move: (well_formed_rbexp_and Hwf) => [Hwf1 Hwf2].
+      - move=> e1 IH1 e2 IH2 Hwf. move/well_formed_rbexp_rand: Hwf => [Hwf1 Hwf2].
         rewrite (IH1 Hwf1) (IH2 Hwf2). exact: is_true_true.
-      - move=> e1 IH1 e2 IH2 Hwf. move: (well_formed_rbexp_or Hwf) => [Hwf1 Hwf2].
+      - move=> e1 IH1 e2 IH2 Hwf. move/well_formed_rbexp_ror: Hwf => [Hwf1 Hwf2].
         rewrite (IH1 Hwf1) (IH2 Hwf2). exact: is_true_true.
     Qed.
 
