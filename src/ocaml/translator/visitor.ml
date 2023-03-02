@@ -337,7 +337,7 @@ let visit_instr m g i =
   (* Specifications *)
   | Ast.Cryptoline.Iassert e ->
      let (m', g', coq_e') = visit_bexp_prove_with m g e in
-     (m', g', [Extraction.DSL.DSL.Iassume coq_e'])
+     (m', g', [Extraction.DSL.DSL.Iassert coq_e'])
   | Ast.Cryptoline.Iassume e ->
      let (m', g', coq_e') = visit_bexp m g e in
      (m', g', [Extraction.DSL.DSL.Iassume coq_e'])
