@@ -797,11 +797,14 @@ let coq_term_of_string str =
     raise (ParseError (msg ^ " " ^ "Failed to parse term: " ^ str ^ "."))
 
 let run_singular ifile ofile =
+  let t1 = Unix.gettimeofday() in
   let _ = unix (!singular_path ^ " -q " ^ !Options.Std.algebra_solver_args ^ " " ^ ifile ^ " 1> " ^ ofile ^ " 2>&1") in
+  let t2 = Unix.gettimeofday() in
   let _ =
     trace "OUTPUT FROM SINGULAR:";
     trace_file ofile;
-    trace "" in
+    trace "";
+    trace ("Execution time of Singular: " ^ string_of_float (t2 -. t1) ^ " seconds") in
   ()
 
 let rec peo_list len =
