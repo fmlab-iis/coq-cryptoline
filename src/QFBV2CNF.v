@@ -3,7 +3,7 @@
 
 From Coq Require Import ZArith List.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
-From ssrlib Require Import Var Tactics Seqs.
+From ssrlib Require Import EqVar Tactics Seqs.
 From BitBlasting Require Import State QFBV TypEnv CNF.
 From BBCache Require Import Cache BitBlastingInit BitBlastingCacheDef BitBlastingCache.
 From BBCache Require Import CacheHash BitBlastingCacheHash.

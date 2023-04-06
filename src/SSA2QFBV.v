@@ -5,7 +5,7 @@
 
 From Coq Require Import Arith List OrderedType.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun prime.
-From ssrlib Require Import Var Tactics Seqs.
+From ssrlib Require Import EqVar Tactics Seqs.
 From Cryptoline Require Import Options DSLLite SSALite SSA2ZSSA.
 From BitBlasting Require Import State QFBV Typ TypEnv.
 From nbits Require Import NBits.

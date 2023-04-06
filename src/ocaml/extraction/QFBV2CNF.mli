@@ -3,11 +3,11 @@ open BitBlastingCacheHash
 open BitBlastingInit
 open CNF
 open CacheHash
+open EqVar
 open Options0
 open QFBVHash
 open SSA2QFBV
 open Seqs
-open Var
 open Eqtype
 
 val bb_hbexps_cache :

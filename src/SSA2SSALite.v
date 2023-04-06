@@ -3,7 +3,7 @@ From Coq Require Import List ZArith FSets OrderedType String Decimal DecimalStri
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
-From ssrlib Require Import Var SsrOrder FMaps ZAriths Tactics Lists FSets Seqs Strings.
+From ssrlib Require Import EqVar EqOrder EqFMaps ZAriths Tactics Lists EqFSets Seqs Strings.
 From Cryptoline Require Import Options DSLRaw SSA.
 
 Set Implicit Arguments.

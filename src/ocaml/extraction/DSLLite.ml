@@ -3,17 +3,18 @@ open BinNums
 open Bool
 open DSLRaw
 open Datatypes
-open FMaps
-open FSets
+open EqFMaps
+open EqFSets
+open EqStore
+open EqVar
 open NBitsDef
 open NBitsOp
 open Options0
 open Seqs
-open Store
+open State
 open String0
 open Strings
 open Typ
-open Var
 open Eqtype
 open Seq
 open Ssrnat
@@ -22,10 +23,10 @@ type __ = Obj.t
 let __ = let rec f _ = Obj.repr f in Obj.repr f
 
 module MakeDSL =
- functor (V:SsrOrder.SsrOrder) ->
+ functor (V:EqOrder.EqOrder) ->
  functor (VP:Printer with type t = V.t) ->
- functor (VS:SsrFSet with module SE = V) ->
- functor (VM:SsrFMap with module SE = V) ->
+ functor (VS:EqFSet with module SE = V) ->
+ functor (VM:EqFMap with module SE = V) ->
  functor (TE:TypEnv.TypEnv with module SE = V with type 'x t = 'x VM.t) ->
  functor (S:sig
   type t
@@ -411,7 +412,7 @@ module MakeDSL =
    end
  end) ->
  struct
-  module VSLemmas = SsrFSetLemmas(VS)
+  module VSLemmas = EqFSetLemmas(VS)
 
   module TELemmas = TypEnv.TypEnvLemmas(TE)
 
@@ -2560,7 +2561,7 @@ module MakeDSL =
     tmap (fun q -> { rsinputs = (rsinputs s); rspre = (rspre s); rsprog =
       (rsprog s); rspost = q }) (split_rand V.coq_T (rspost s))
 
-  module TSEQM = TStateEqmod(V)(State.BitsValueType)(S)(VS)
+  module TSEQM = TStateEqmod(V)(BitsValueType)(S)(VS)
 
   module MA = TypEnv.TypEnvAgree(V)(TE)(VS)
 
@@ -2961,5 +2962,4 @@ module MakeDSL =
     (slice_rprogram vs (rsprog s)); rspost = (rspost s) }
  end
 
-module DSLLite =
- MakeDSL(VarOrder)(VarOrderPrinter)(VS)(VM)(TypEnv.TE)(State.Store)
+module DSLLite = MakeDSL(VarOrder)(VarOrderPrinter)(VS)(VM)(TypEnv.TE)(Store)

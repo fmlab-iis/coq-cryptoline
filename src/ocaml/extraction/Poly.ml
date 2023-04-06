@@ -5,7 +5,8 @@ open BinaryString
 open Bool
 open DSLRaw
 open Datatypes
-open FSets
+open EqFSets
+open EqVar
 open Field_theory
 open Int0
 open List0
@@ -13,7 +14,6 @@ open Options0
 open Ring_polynom
 open Seqs
 open String0
-open Var
 open ZAriths
 open Eqtype
 open Seq
@@ -559,7 +559,7 @@ let imp_of_arep s =
   let (p0, ms) = zpexpr_of_conseq g_p t_p s.aconseq in
   let (p1, q) = p0 in (((p1, ps), ms), q)
 
-module PS = MakeTreeSet(PositiveOrder)
+module PS = MakeTreeSet(EqOrder.PositiveOrder)
 
 (** val vars_pexpr : 'a1 coq_PExpr -> PS.t **)
 

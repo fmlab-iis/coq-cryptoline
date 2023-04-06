@@ -5,7 +5,7 @@
 
 From Coq Require Import Classes.Morphisms List ZArith.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
-From ssrlib Require Import Var Types SsrOrder Nats ZAriths Store Tactics FMaps Seqs.
+From ssrlib Require Import EqVar Types EqOrder Nats ZAriths EqStore Tactics EqFMaps Seqs.
 From BitBlasting Require Import State Typ TypEnv.
 From Cryptoline Require Import Options DSLLite SSALite ZSSA.
 From nbits Require Import NBits.
@@ -1118,7 +1118,7 @@ Section AlgebraicReduction.
       apply: (avars_newer_than_equal
                 (SSAVS.Lemmas.P.equal_sym (vars_carry_constr c)));
       case: (add_carry_constraints o); solve_avars_newer_than
-    | H : is_true (?avn != Var.svar ?t) |- avars_newer_than_var ?avn _ ?t =>
+    | H : is_true (?avn != EqVar.svar ?t) |- avars_newer_than_var ?avn _ ?t =>
       left; rewrite eq_sym; assumption
     | H : svar_notin ?avn (vars_atom ?a) |-
       avars_newer_than ?avn ?g (vars_zexp (algred_atom ?a)) =>
@@ -2633,7 +2633,7 @@ Section SplitSpec.
     | Hneq : is_true (?vh != ?vl), Hupd : SSAStore.Upd2 ?vl ?el ?vh ?eh ?bs1 ?bs2 |-
       context f [acc2z ?E ?vl ?bs2] =>
       rewrite eq_sym in Hneq; rewrite (acc2z_Upd2_eq1 (eqxx vl) Hneq Hupd)
-    | Hni : svar_notin ?avn _, Hne : is_true (?avn != Var.svar ?v) |-
+    | Hni : svar_notin ?avn _, Hne : is_true (?avn != EqVar.svar ?v) |-
       context f [ZSSAStore.acc ?v (ZSSAStore.upd (?avn, _) _ _)] =>
       let H := fresh in
       rewrite ZSSAStore.acc_upd_neq;
@@ -3489,7 +3489,7 @@ Section SplitSpec.
        | H : context c [algred_join] |- _ => rewrite /algred_join /= in H
        | |- context c [algred_join] => rewrite /algred_join /=
        | H1 : store_pvareq ?avn _ ?t2,
-           H2 : is_true (?avn != Var.svar ?t) |-
+           H2 : is_true (?avn != EqVar.svar ?t) |-
            context c [ZSSAStore.acc _ ?t2] =>
            rewrite -(H1 t H2)
        | H : svar_notin ?avn (vars_atom ?a) |- _ =>
@@ -3501,7 +3501,7 @@ Section SplitSpec.
          |- context c [ZSSA.eval_zexp (algred_atom ?a) ?t2] =>
            rewrite -(store_pvareq_eval_zexp H2 H1)
        | H1 : store_pvareq ?avn ?s1 ?s2,
-           H2 : is_true (?avn != Var.svar ?t) |-
+           H2 : is_true (?avn != EqVar.svar ?t) |-
            context f [ZSSAStore.acc ?t (ZSSAStore.upd (?avn, ?g1) ?v ?s2)] =>
            rewrite -((store_pvareq_upd_r g1 v H1) t H2)
        |  H1 : store_pvareq ?avn ?s1 ?s2,

@@ -5,7 +5,7 @@ From Coq Require Import List Ascii ZArith OrderedType String Recdef Btauto.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
-From ssrlib Require Import Var SsrOrder ZAriths Store FSets FMaps Tactics Seqs Nats Strings.
+From ssrlib Require Import EqVar EqOrder ZAriths EqStore EqFSets EqFMaps Tactics Seqs Nats Strings.
 From Cryptoline Require Import Options.
 From Cryptoline Require Export DSLRaw.
 
@@ -15,16 +15,16 @@ Import Prenex Implicits.
 
 
 Module MakeDSL
-       (V : SsrOrder)
+       (V : EqOrder)
        (VP : Printer with Definition t := V.t)
-       (VS : SsrFSet with Module SE := V)
-       (VM : SsrFMap with Module SE := V)
+       (VS : EqFSet with Module SE := V)
+       (VM : EqFMap with Module SE := V)
        (TE : TypEnv with Module SE := V with Definition t := VM.t)
        (S : BitsStore V TE).
   Local Open Scope dsl.
   Local Open Scope bits.
 
-  Module VSLemmas := SsrFSetLemmas VS.
+  Module VSLemmas := EqFSetLemmas VS.
   Module TELemmas := TypEnvLemmas TE.
   Local Hint Immediate S.Upd_upd S.Upd2_upd2 : dsl.
 

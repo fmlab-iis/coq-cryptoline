@@ -5,7 +5,8 @@ open BinaryString
 open Bool
 open DSLRaw
 open Datatypes
-open FSets
+open EqFSets
+open EqVar
 open Field_theory
 open Int0
 open List0
@@ -13,7 +14,6 @@ open Options0
 open Ring_polynom
 open Seqs
 open String0
-open Var
 open ZAriths
 open Eqtype
 open Seq

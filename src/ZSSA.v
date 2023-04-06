@@ -3,7 +3,7 @@
 
 From Coq Require Import List ZArith.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
-From ssrlib Require Import Var Types SsrOrder ZAriths Store FSets FMaps Tactics.
+From ssrlib Require Import EqVar Types EqOrder ZAriths EqStore EqFSets EqFMaps Tactics.
 From BitBlasting Require Import State.
 From Cryptoline Require Import DSLLite SSALite.
 

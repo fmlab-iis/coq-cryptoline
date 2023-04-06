@@ -1,11 +1,11 @@
 open Bool
+open EqFSets
 open Equalities
-open FSets
 
 type __ = Obj.t
 
 module TStateEqmod :
- functor (X:SsrOrder.SsrOrder) ->
+ functor (X:EqOrder.EqOrder) ->
  functor (V:Typ) ->
  functor (Store:sig
   type t
@@ -16,7 +16,7 @@ module TStateEqmod :
 
   val upd2 : X.t -> V.t -> X.t -> V.t -> t -> t
  end) ->
- functor (VS:SsrFSet with module SE = X) ->
+ functor (VS:EqFSet with module SE = X) ->
  sig
   module VSLemmas :
    sig

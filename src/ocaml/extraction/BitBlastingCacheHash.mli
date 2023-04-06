@@ -8,9 +8,9 @@ open BBVar
 open BitBlastingCCacheDef
 open CNF
 open CacheHash
+open EqVar
 open QFBVHash
 open Seqs
-open Var
 open Seq
 
 val bit_blast_exp_hcache :

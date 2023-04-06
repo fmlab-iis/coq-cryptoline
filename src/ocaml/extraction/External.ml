@@ -4,9 +4,9 @@ open CNF
 open Poly
 open Ring_polynom
 open ExtrOcamlIntConv
-open Var
+open EqVar
 open ZAriths
-open FSets
+open EqFSets
 
 open Options.Std
 

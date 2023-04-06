@@ -2,10 +2,10 @@ open BinNat
 open BinNums
 open Bool
 open DSLRaw
+open EqVar
 open NBitsDef
 open State
 open Typ
-open Var
 open Eqtype
 open Seq
 

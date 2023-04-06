@@ -2,9 +2,9 @@ open BinInt
 open BinNat
 open BinNums
 open DSLRaw
+open EqVar
 open Options0
 open Typ
-open Var
 open Eqtype
 open Seq
 open Ssrnat

@@ -3,16 +3,17 @@ open BinNums
 open Bool
 open DSLRaw
 open Datatypes
-open FMaps
-open FSets
+open EqFMaps
+open EqFSets
+open EqStore
+open EqVar
 open NBitsDef
 open NBitsOp
 open Seqs
-open Store
+open State
 open String0
 open Strings
 open Typ
-open Var
 open Eqtype
 open Seq
 open Ssrnat
@@ -20,10 +21,10 @@ open Ssrnat
 type __ = Obj.t
 
 module MakeDSL :
- functor (V:SsrOrder.SsrOrder) ->
+ functor (V:EqOrder.EqOrder) ->
  functor (VP:Printer with type t = V.t) ->
- functor (VS:SsrFSet with module SE = V) ->
- functor (VM:SsrFMap with module SE = V) ->
+ functor (VS:EqFSet with module SE = V) ->
+ functor (VM:EqFMap with module SE = V) ->
  functor (TE:TypEnv.TypEnv with module SE = V with type 'x t = 'x VM.t) ->
  functor (S:sig
   type t
@@ -4609,7 +4610,7 @@ module DSL :
 
   val bv2z : typ -> bits -> coq_Z
 
-  val acc2z : TypEnv.TE.env -> VarOrder.t -> State.Store.t -> coq_Z
+  val acc2z : TypEnv.TE.env -> VarOrder.t -> Store.t -> coq_Z
 
   val instr_succ_typenv : instr -> TypEnv.TE.env -> TypEnv.TE.env
 
@@ -4625,15 +4626,15 @@ module DSL :
 
   val eval_rcmpop : rcmpop -> bits -> bits -> bool
 
-  val eval_eexp : eexp -> TypEnv.TE.env -> State.Store.t -> coq_Z
+  val eval_eexp : eexp -> TypEnv.TE.env -> Store.t -> coq_Z
 
-  val eval_eexps : eexp list -> TypEnv.TE.env -> State.Store.t -> coq_Z list
+  val eval_eexps : eexp list -> TypEnv.TE.env -> Store.t -> coq_Z list
 
-  val eval_rexp : rexp -> State.Store.t -> bits
+  val eval_rexp : rexp -> Store.t -> bits
 
-  val eval_rbexp : rbexp -> State.Store.t -> bool
+  val eval_rbexp : rbexp -> Store.t -> bool
 
-  val eval_atom : atom -> State.Store.t -> bits
+  val eval_atom : atom -> Store.t -> bits
 
   val well_typed_eexp : TypEnv.TE.env -> eexp -> bool
 
@@ -5367,10 +5368,9 @@ module DSL :
   val is_assume : instr -> bool
 
   val force_conform_vars :
-    TypEnv.TE.env -> VarOrder.t list -> State.Store.t -> State.Store.t
+    TypEnv.TE.env -> VarOrder.t list -> Store.t -> Store.t
 
-  val force_conform :
-    TypEnv.TE.env -> TypEnv.TE.env -> State.Store.t -> State.Store.t
+  val force_conform : TypEnv.TE.env -> TypEnv.TE.env -> Store.t -> Store.t
 
   module TSEQM :
    sig

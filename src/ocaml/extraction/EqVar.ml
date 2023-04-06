@@ -2,12 +2,11 @@ open BinNat
 open BinNums
 open Bool
 open Datatypes
-open FMaps
-open FSets
+open EqFMaps
+open EqFSets
 open Int0
 open String0
 open Strings
-open ZAriths
 open Eqtype
 
 type __ = Obj.t
@@ -19,24 +18,24 @@ module VarOrder =
   (** val coq_T : Equality.coq_type **)
 
   let coq_T =
-    NOrderMinimal.t
+    EqOrder.NOrderMinimal.t
 
   type t = Equality.sort
 
   (** val ltn : t -> t -> bool **)
 
   let ltn =
-    NOrderMinimal.ltn
+    EqOrder.NOrderMinimal.ltn
 
   (** val compare : t -> t -> t OrderedType.coq_Compare **)
 
   let compare =
-    NOrderMinimal.compare
+    EqOrder.NOrderMinimal.compare
 
   (** val eq_dec : t -> t -> bool **)
 
   let eq_dec =
-    NOrder.eq_dec
+    EqOrder.NOrder.eq_dec
 
   (** val succ : t -> t **)
 
@@ -63,7 +62,7 @@ module VS = MakeTreeSetWithNew(VarOrder)
 
 module VM = MakeTreeMapWithNew(VarOrder)
 
-module SSAVarOrder = SsrOrder.MakeProdOrderWithDefaultSucc(VarOrder)(VarOrder)
+module SSAVarOrder = EqOrder.MakeProdOrderWithDefaultSucc(VarOrder)(VarOrder)
 
 module SSAVarOrderPrinter =
  struct

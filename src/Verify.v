@@ -3,7 +3,7 @@
 
 From Coq Require Import List ZArith.
 From mathcomp Require Import ssreflect ssrbool ssrnat eqtype seq ssrfun.
-From ssrlib Require Import Var Types SsrOrder Lists Seqs Tactics.
+From ssrlib Require Import EqVar Types EqOrder Lists Seqs Tactics.
 From BitBlasting Require Import State QFBV Typ TypEnv.
 From Cryptoline Require Import Options DSLLite SSALite DSL SSA SSA2SSALite ZSSA SSA2QFBV SSA2ZSSA QFBV2CNF Poly VerifyLite.
 From Coq Require Import Ring_polynom.

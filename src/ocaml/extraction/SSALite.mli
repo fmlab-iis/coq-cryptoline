@@ -3,11 +3,11 @@ open BinNums
 open Bool
 open DSLRaw
 open Datatypes
+open EqVar
 open NBitsDef
 open Options0
 open State
 open Typ
-open Var
 open Eqtype
 open Seq
 

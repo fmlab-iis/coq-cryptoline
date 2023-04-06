@@ -1,8 +1,8 @@
 open DSLRaw
 open Datatypes
+open EqVar
 open Seqs
 open Typ
-open Var
 
 (** val eexp_of_atom : SSA.SSA.atom -> SSA.SSA.eexp **)
 

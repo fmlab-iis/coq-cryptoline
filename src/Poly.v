@@ -3,7 +3,7 @@
 
 From Coq Require Import List Arith ZArith String Lia BinaryString.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
-From ssrlib Require Import Var Types SsrOrder Nats ZAriths Seqs Store Tactics Compatibility FSets.
+From ssrlib Require Import EqVar Types EqOrder Nats ZAriths Seqs Store Tactics Compatibility EqFSets.
 From BitBlasting Require Import State.
 From Cryptoline Require Import Options DSLLite SSALite ZSSA.
 
@@ -2806,7 +2806,7 @@ Section REP2IMP.
 End REP2IMP.
 
 
-Module PS <: SsrFSet := FSets.MakeTreeSet PositiveOrder.
+Module PS <: EqFSet := EqFSets.MakeTreeSet PositiveOrder.
 
 Section PExprAux.
 
