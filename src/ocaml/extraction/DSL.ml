@@ -2250,13 +2250,6 @@ module MakeDSL =
   let are_defined vs te =
     VS.for_all (fun x -> is_defined x te) vs
 
-  (** val memenvP : TE.key -> typ TE.t -> reflect **)
-
-  let memenvP v e =
-    let _evar_0_ = fun _ -> ReflectT in
-    let _evar_0_0 = fun _ -> ReflectF in
-    if VS.mem v (vars_env e) then _evar_0_ __ else _evar_0_0 __
-
   (** val well_defined_instr : TE.env -> instr -> bool **)
 
   let well_defined_instr te = function
@@ -2391,27 +2384,6 @@ module MakeDSL =
       ((&&) (well_formed_bexp (sinputs s) (spre s))
         (well_formed_program (sinputs s) (sprog s)))
       (well_formed_bexp (program_succ_typenv (sprog s) (sinputs s)) (spost s))
-
-  (** val defmemP : V.t -> TE.env -> reflect **)
-
-  let defmemP v e =
-    let _evar_0_ = fun _ -> ReflectT in
-    let _evar_0_0 = fun _ -> ReflectF in
-    if TE.mem v e then _evar_0_ __ else _evar_0_0 __
-
-  (** val memdefP : TE.key -> typ TE.t -> reflect **)
-
-  let memdefP v e =
-    let _evar_0_ = fun _ -> ReflectT in
-    let _evar_0_0 = fun _ -> ReflectF in
-    if is_defined v e then _evar_0_ __ else _evar_0_0 __
-
-  (** val defsubP : VS.t -> TE.env -> reflect **)
-
-  let defsubP vs e =
-    let _evar_0_ = fun _ -> ReflectT in
-    let _evar_0_0 = fun _ -> ReflectF in
-    if VS.subset vs (vars_env e) then _evar_0_ __ else _evar_0_0 __
 
   (** val inputs_program_rec : VS.t -> program -> VS.t **)
 
@@ -2559,6 +2531,34 @@ module MakeDSL =
   let remove_asserts s =
     { sinputs = (sinputs s); spre = (spre s); sprog =
       (remove_asserts_program (sprog s)); spost = (spost s) }
+
+  (** val memenvP : TE.key -> typ TE.t -> reflect **)
+
+  let memenvP v e =
+    let _evar_0_ = fun _ -> ReflectT in
+    let _evar_0_0 = fun _ -> ReflectF in
+    if VS.mem v (vars_env e) then _evar_0_ __ else _evar_0_0 __
+
+  (** val defmemP : V.t -> TE.env -> reflect **)
+
+  let defmemP v e =
+    let _evar_0_ = fun _ -> ReflectT in
+    let _evar_0_0 = fun _ -> ReflectF in
+    if TE.mem v e then _evar_0_ __ else _evar_0_0 __
+
+  (** val memdefP : TE.key -> typ TE.t -> reflect **)
+
+  let memdefP v e =
+    let _evar_0_ = fun _ -> ReflectT in
+    let _evar_0_0 = fun _ -> ReflectF in
+    if is_defined v e then _evar_0_ __ else _evar_0_0 __
+
+  (** val defsubP : VS.t -> TE.env -> reflect **)
+
+  let defsubP vs e =
+    let _evar_0_ = fun _ -> ReflectT in
+    let _evar_0_0 = fun _ -> ReflectF in
+    if VS.subset vs (vars_env e) then _evar_0_ __ else _evar_0_0 __
  end
 
 module DSL = MakeDSL(VarOrder)(VarOrderPrinter)(VS)(VM)(TypEnv.TE)(Store)

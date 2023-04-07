@@ -2047,8 +2047,6 @@ module MakeDSL :
 
   val are_defined : VS.t -> TE.env -> bool
 
-  val memenvP : TE.key -> typ TE.t -> reflect
-
   val well_defined_instr : TE.env -> instr -> bool
 
   val well_formed_eexp : TE.env -> eexp -> bool
@@ -2070,12 +2068,6 @@ module MakeDSL :
   val find_non_well_formed_instr : TE.env -> program -> instr option
 
   val well_formed_spec : spec -> bool
-
-  val defmemP : V.t -> TE.env -> reflect
-
-  val memdefP : TE.key -> typ TE.t -> reflect
-
-  val defsubP : VS.t -> TE.env -> reflect
 
   val inputs_program_rec : VS.t -> program -> VS.t
 
@@ -3593,6 +3585,14 @@ module MakeDSL :
   val remove_asserts_program : program -> program
 
   val remove_asserts : spec -> spec
+
+  val memenvP : TE.key -> typ TE.t -> reflect
+
+  val defmemP : V.t -> TE.env -> reflect
+
+  val memdefP : TE.key -> typ TE.t -> reflect
+
+  val defsubP : VS.t -> TE.env -> reflect
  end
 
 module DSL :
@@ -5325,8 +5325,6 @@ module DSL :
 
   val are_defined : VS.t -> TypEnv.TE.env -> bool
 
-  val memenvP : TypEnv.TE.key -> typ TypEnv.TE.t -> reflect
-
   val well_defined_instr : TypEnv.TE.env -> instr -> bool
 
   val well_formed_eexp : TypEnv.TE.env -> eexp -> bool
@@ -5348,12 +5346,6 @@ module DSL :
   val find_non_well_formed_instr : TypEnv.TE.env -> program -> instr option
 
   val well_formed_spec : spec -> bool
-
-  val defmemP : VarOrder.t -> TypEnv.TE.env -> reflect
-
-  val memdefP : TypEnv.TE.key -> typ TypEnv.TE.t -> reflect
-
-  val defsubP : VS.t -> TypEnv.TE.env -> reflect
 
   val inputs_program_rec : VS.t -> program -> VS.t
 
@@ -6972,4 +6964,12 @@ module DSL :
   val remove_asserts_program : program -> program
 
   val remove_asserts : spec -> spec
+
+  val memenvP : TypEnv.TE.key -> typ TypEnv.TE.t -> reflect
+
+  val defmemP : VarOrder.t -> TypEnv.TE.env -> reflect
+
+  val memdefP : TypEnv.TE.key -> typ TypEnv.TE.t -> reflect
+
+  val defsubP : VS.t -> TypEnv.TE.env -> reflect
  end

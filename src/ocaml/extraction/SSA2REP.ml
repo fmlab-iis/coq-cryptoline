@@ -4,22 +4,11 @@ open BinNums
 open DSLRaw
 open EqVar
 open Options0
+open REP
 open Typ
 open Eqtype
 open Seq
 open Ssrnat
-
-(** val max_svar : SSAVS.t -> VarOrder.t **)
-
-let max_svar vs =
-  match SSAVS.max_elt vs with
-  | Some v -> SSALite.svar v
-  | None -> Obj.magic N0
-
-(** val new_svar : SSAVS.t -> VarOrder.t **)
-
-let new_svar vs =
-  Obj.magic N.succ (max_svar vs)
 
 (** val algred_atom : SSALite.SSALite.atom -> SSALite.SSALite.eexp **)
 
@@ -321,14 +310,13 @@ let new_svar_spec s =
           (SSALite.SSALite.vars_bexp (SSALite.SSALite.spost s)))))
 
 (** val algred_espec :
-    options -> VarOrder.t -> SSALite.SSALite.espec -> ZSSA.ZSSA.rep **)
+    options -> VarOrder.t -> SSALite.SSALite.espec -> rep **)
 
 let algred_espec o avn s =
   let (_, eprogs) =
     algred_program o (SSALite.SSALite.esinputs s) avn SSALite.initial_index
       (SSALite.SSALite.esprog s)
   in
-  { ZSSA.ZSSA.premise =
+  { premise =
   (SSALite.SSALite.eand (SSALite.SSALite.eqn_bexp (SSALite.SSALite.espre s))
-    (SSALite.SSALite.eands eprogs)); ZSSA.ZSSA.conseq =
-  (SSALite.SSALite.espost s) }
+    (SSALite.SSALite.eands eprogs)); conseq = (SSALite.SSALite.espost s) }

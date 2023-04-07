@@ -1,5 +1,5 @@
 
-(** SSA transformation. *)
+(** * SSA transformation *)
 
 From Coq Require Import List ZArith FSets OrderedType String Decimal DecimalString Btauto.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
@@ -20,11 +20,12 @@ Module M2SSA := Map2Map Store.M SSAStore.M.
 
 Module MdeSSA := Map2Map SSAStore.M Store.M.
 
-Section MakeSSA.
+Local Open Scope N_scope.
 
-  Variable o : options.
 
-  Open Scope N_scope.
+(** ** Definitions of SSA transformation *)
+
+Section MakeSSADefn.
 
   (* A map from a variable to its current index *)
   Definition vmap : Type := VM.t N.
@@ -53,24 +54,6 @@ Section MakeSSA.
 
   Definition svar (x : ssavar) := fst x.
   Definition sidx (x : ssavar) := snd x.
-  Hint Unfold svar sidx.
-
-  Lemma ssa_var_preserve m : M2.preserve (ssa_var m).
-  Proof.
-    move=> x y H.
-    rewrite (eqP H).
-    exact: eqxx.
-  Qed.
-
-  Lemma ssa_var_injective m : M2.injective (ssa_var m).
-  Proof.
-    move=> x y /eqP H.
-    case: H => H _.
-    rewrite H; exact: eqxx.
-  Qed.
-
-  Definition ssa_var_well m :=
-    M2.mkWellMap2 (ssa_var_preserve m) (ssa_var_injective (m:=m)).
 
   Definition ssa_vars (m : vmap) (vs : VS.t) : SSAVS.t :=
     M2.map2 (ssa_var m) vs.
@@ -302,6 +285,76 @@ Section MakeSSA.
        SSA.sprog := p;
        SSA.spost := g;
     |}.
+
+End MakeSSADefn.
+
+#[global]
+ Hint Unfold svar sidx : core.
+
+
+(** ** Definitions of well-formed SSA *)
+
+Section WellFormedSSA.
+
+  Definition ssa_var_unchanged_instr v i : bool :=
+    ~~ (SSAVS.mem v (SSA.lvs_instr i)).
+
+  Definition ssa_unchanged_instr_var i v : bool :=
+    ssa_var_unchanged_instr v i .
+
+  Definition ssa_vars_unchanged_instr vs i : bool :=
+    SSAVS.for_all (ssa_unchanged_instr_var i) vs .
+
+  Definition ssa_var_unchanged_program v p : bool :=
+    all (ssa_var_unchanged_instr v) p.
+
+  Definition ssa_unchanged_program_var p v : bool :=
+    all (ssa_var_unchanged_instr v) p .
+
+  Definition ssa_vars_unchanged_program vs p : bool :=
+    SSAVS.for_all (ssa_unchanged_program_var p) vs .
+
+  Fixpoint ssa_single_assignment (p : SSA.program) : bool :=
+    match p with
+    | [::] => true
+    | hd::tl =>
+      (ssa_vars_unchanged_program (SSA.lvs_instr hd) tl) &&
+                                                         (ssa_single_assignment tl)
+    end.
+
+  Definition well_formed_ssa_program (te: SSATE.env) (p : SSA.program) : bool :=
+    (SSA.well_formed_program te p)
+      && ssa_vars_unchanged_program (SSA.vars_env te) p
+      && ssa_single_assignment p.
+
+  Definition well_formed_ssa_spec (s : SSA.spec) : bool :=
+    (SSA.well_formed_spec s)
+      && ssa_vars_unchanged_program (SSA.vars_env (SSA.sinputs s)) (SSA.sprog s)
+      && ssa_single_assignment (SSA.sprog s).
+
+End WellFormedSSA.
+
+
+(** ** Basic lemmas of SSA transformation *)
+
+Section BasicLemmas.
+
+  Lemma ssa_var_preserve m : M2.preserve (ssa_var m).
+  Proof.
+    move=> x y H.
+    rewrite (eqP H).
+    exact: eqxx.
+  Qed.
+
+  Lemma ssa_var_injective m : M2.injective (ssa_var m).
+  Proof.
+    move=> x y /eqP H.
+    case: H => H _.
+    rewrite H; exact: eqxx.
+  Qed.
+
+  Definition ssa_var_well m :=
+    M2.mkWellMap2 (ssa_var_preserve m) (ssa_var_injective (m:=m)).
 
   Lemma ssa_program_empty : forall m, ssa_program m [::] = (m, [::]).
   Proof.
@@ -929,94 +982,6 @@ Section MakeSSA.
       assumption.
   Qed.
 
-  (** State equivalence *)
-
-  Definition state_equiv (m : vmap) (s :Store.t) (ss : SSAStore.t) : Prop :=
-    forall x, Store.acc x s = SSAStore.acc (x, get_index x m) ss.
-
-  Global Instance add_proper_state_equiv_store :
-    Proper (eq ==> Store.Equal ==> eq ==> iff) state_equiv.
-  Proof.
-    move=> m1 m2 ? s1 s2 Heq t1 t2 ?; subst. split.
-    - move=> H x. rewrite <- Heq. exact: (H x).
-    - move=> H x. rewrite -> Heq. exact: (H x).
-  Qed.
-
-  Global Instance add_proper_state_equiv_ssastore :
-    Proper (eq ==> eq ==> SSAStore.Equal ==> iff) state_equiv.
-  Proof.
-    move=> m1 m2 ? s1 s2 ? t1 t2 Heq; subst. split.
-    - move=> H x. rewrite <- Heq. exact: (H x).
-    - move=> H x. rewrite -> Heq. exact: (H x).
-  Qed.
-
-
-  (** Convert a DSL state to an SSA state. *)
-
-  Definition ssa_store_key (m : vmap) (v : var) : option ssavar := Some (ssa_var m v).
-
-  Definition ssa_store_value (v : var) (bs : bits) : bits := bs.
-
-  Lemma ssa_store_key_eq_none (m : vmap) :
-    forall k1 k2 : N, k1 == k2 -> ssa_store_key m k1 = None -> ssa_store_key m k2 = None.
-  Proof. move=> k1 k2 Heqk Hn. rewrite -(eqP Heqk). assumption. Qed.
-
-  Lemma ssa_store_key_eq_some (m : vmap) :
-    forall (k1 k2 : N) (fk1 : N * N),
-      k1 == k2 -> ssa_store_key m k1 = Some fk1 ->
-      exists fk2 : N * N, ssa_store_key m k2 = Some fk2 /\ fk1 == fk2.
-  Proof. move=> k1 k2 fk1 Heqk Hfk1. exists fk1. rewrite -(eqP Heqk). done. Qed.
-
-  Lemma ssa_store_key_some_inj (m : vmap) k1 k2 v :
-    ssa_store_key m k1 = Some v -> ssa_store_key m k2 = Some v -> k1 = k2.
-  Proof.
-    rewrite /ssa_store_key. case: v => [v i]. case=> ? ?; subst.
-    case=> ? ?; subst. reflexivity.
-  Qed.
-
-  Lemma ssa_store_key_neq_some (m : vmap) :
-    forall (k1 k2 : N) (fk1 fk2 : N * N),
-      ~ k1 == k2 -> ssa_store_key m k1 = Some fk1 -> ssa_store_key m k2 = Some fk2 ->
-      ~ fk1 == fk2.
-  Proof.
-    move=> k1 k2 fk1 fk2 Hneqk Hfk1 Hfk2 Heqk. rewrite (eqP Heqk) in Hfk1.
-    apply: Hneqk. apply/eqP. exact: (ssa_store_key_some_inj Hfk1 Hfk2).
-  Qed.
-
-  Lemma ssa_store_value_eq_key :
-    forall (k1 k2 : var) (v : bits),
-      k1 == k2 -> ssa_store_value k1 v = ssa_store_value k2 v.
-  Proof. move=> ? ? ? /eqP H; subst. reflexivity. Qed.
-
-  Definition ssa_state (m : vmap) (s : Store.t) : SSAStore.t :=
-    M2SSA.map2map (ssa_store_key m) ssa_store_value s.
-
-  Lemma acc_ssa_state_eq m s v i:
-    i == get_index v m ->
-    SSAStore.acc (v, i) (ssa_state m s) = Store.acc v s.
-  Proof.
-    move/eqP=> -> {i}. have Hfk: (ssa_store_key m v = Some (v, get_index v m)) by reflexivity.
-    rewrite /ssa_state /SSAStore.acc /Store.acc. case Hf: (Store.M.find v s).
-    - rewrite (M2SSA.map2map_find_some (@ssa_store_key_eq_none m)
-                                       (@ssa_store_key_eq_some m)
-                                       (@ssa_store_key_neq_some m)
-                                       ssa_store_value_eq_key Hfk Hf).
-      reflexivity.
-    - rewrite (M2SSA.map2map_find_none (@ssa_store_key_eq_none m)
-                                       (@ssa_store_key_eq_some m)
-                                       (@ssa_store_key_neq_some m)
-                                       ssa_store_value_eq_key Hfk Hf).
-      reflexivity.
-  Qed.
-
-  Lemma ssa_state_equiv m s:
-    state_equiv m s (ssa_state m s).
-  Proof.
-    move=> x. rewrite (acc_ssa_state_eq _ (eqxx (get_index x m))). reflexivity.
-  Qed.
-
-  (* Type Environment Equivalence *)
-
   Lemma pair_neq1 :
     forall (T : eqType) (a b c d : T),
       a != c -> (a, b) != (c, d).
@@ -1039,9 +1004,170 @@ Section MakeSSA.
     rewrite Hbd; exact: eqxx.
   Qed.
 
+  #[global]
+   Instance add_to_set_proper m:
+    Proper (TE.SE.eq ==> eq ==> SSATE.Equal ==> SSATE.Equal) (add_to_ste m).
+  Proof.
+    move=> x y Hxy a b -> s1 s2 Heq.
+    rewrite /add_to_ste.
+    rewrite Heq.
+    rewrite (eqP Hxy).
+    reflexivity.
+  Qed.
+
+  Lemma add_to_set_transpose_neqkey m:
+    DSL.TEKS.MLemmas.OP.P.transpose_neqkey SSATE.Equal (add_to_ste m).
+  Proof.
+    move=> x y a b s Hxy.
+    rewrite /add_to_ste.
+    rewrite /SSATE.Equal.
+    move=> z.
+    have Hnxy: (ssa_var m x) != (ssa_var m y).
+    {
+      rewrite pair_neq1.
+      done.
+        by move/idP: Hxy.
+    }
+    case H1: (z == ssa_var m x); case H2: (z == ssa_var m y).
+    - move/idP/eqP: H1 => H1. move/idP/eqP: H2 => H2.
+      rewrite -H1 -H2 in Hnxy.
+      move/eqP: Hnxy => Hnxy.
+        by destruct Hnxy.
+    - move/idP: H1 => H1. move/negP: H2 => H2.
+      rewrite (SSA.TEKS.MLemmas.find_add_eq H1).
+      rewrite (SSA.TEKS.MLemmas.find_add_neq H2).
+      rewrite (SSA.TEKS.MLemmas.find_add_eq H1).
+      reflexivity.
+    - move/idP: H2 => H2. move/negP: H1 => H1.
+      rewrite (SSA.TEKS.MLemmas.find_add_eq H2).
+      rewrite (SSA.TEKS.MLemmas.find_add_neq H1).
+      rewrite (SSA.TEKS.MLemmas.find_add_eq H2).
+      reflexivity.
+    - move/negP: H1 => H1. move/negP: H2 => H2.
+      rewrite (SSA.TEKS.MLemmas.find_add_neq H1).
+      rewrite (SSA.TEKS.MLemmas.find_add_neq H2).
+      rewrite (SSA.TEKS.MLemmas.find_add_neq H2).
+      rewrite (SSA.TEKS.MLemmas.find_add_neq H1).
+      reflexivity.
+  Qed.
+
+End BasicLemmas.
+
+
+(** ** State equivalence between Store.t and SSAStore.t *)
+
+Section StateEquiv.
+
+  Definition state_equiv (m : vmap) (s :Store.t) (ss : SSAStore.t) : Prop :=
+    forall x, Store.acc x s = SSAStore.acc (x, get_index x m) ss.
+
+  Global Instance add_proper_state_equiv_store :
+    Proper (eq ==> Store.Equal ==> eq ==> iff) state_equiv.
+  Proof.
+    move=> m1 m2 ? s1 s2 Heq t1 t2 ?; subst. split.
+    - move=> H x. rewrite <- Heq. exact: (H x).
+    - move=> H x. rewrite -> Heq. exact: (H x).
+  Qed.
+
+  Global Instance add_proper_state_equiv_ssastore :
+    Proper (eq ==> eq ==> SSAStore.Equal ==> iff) state_equiv.
+  Proof.
+    move=> m1 m2 ? s1 s2 ? t1 t2 Heq; subst. split.
+    - move=> H x. rewrite <- Heq. exact: (H x).
+    - move=> H x. rewrite -> Heq. exact: (H x).
+  Qed.
+
+  Lemma state_equiv_upd m s ss x v :
+    state_equiv m s ss ->
+    state_equiv (upd_index x m)
+                (Store.upd x v s)
+                (SSAStore.upd (ssa_var (upd_index x m) x) v ss).
+  Proof.
+    move=> Heq y.
+    case Hyx: (y == x) => /=.
+    - rewrite (Store.acc_upd_eq Hyx).
+      rewrite (eqP Hyx) (SSAStore.acc_upd_eq (eqxx (ssa_var _ x))).
+      reflexivity.
+    - move/idP/negP: Hyx => Hyx.
+      rewrite (Store.acc_upd_neq Hyx).
+      rewrite (SSAStore.acc_upd_neq (pair_neq1 _ _ Hyx)).
+      rewrite (get_upd_index_neq _ Hyx).
+      exact: Heq.
+  Qed.
+
+  Lemma state_equiv_Upd m s1 s2 ss1 ss2 x v :
+    state_equiv m s1 ss1 ->
+    Store.Upd x v s1 s2 ->
+    SSAStore.Upd (ssa_var (upd_index x m) x) v ss1 ss2 ->
+    state_equiv (upd_index x m) s2 ss2.
+  Proof.
+    move=> Heq Hupd Hsupd y.
+    case Hyx: (y == x) => /=.
+    - rewrite (Store.acc_Upd_eq Hyx Hupd).
+      rewrite (eqP Hyx) (SSAStore.acc_Upd_eq (eqxx (ssa_var _ x)) Hsupd).
+      reflexivity.
+    - move/idP/negP: Hyx => Hyx.
+      rewrite (Store.acc_Upd_neq Hyx Hupd).
+      rewrite (SSAStore.acc_Upd_neq (pair_neq1 _ _ Hyx) Hsupd).
+      rewrite (get_upd_index_neq _ Hyx).
+      exact: Heq.
+  Qed.
+
+  Lemma state_equiv_upd2 m s ss x vx y vy :
+    state_equiv m s ss ->
+    state_equiv (upd_index y (upd_index x m))
+                (Store.upd2 x vx y vy s)
+                (SSAStore.upd2
+                   (ssa_var (upd_index x m) x) vx
+                   (ssa_var (upd_index y (upd_index x m)) y) vy
+                   ss).
+  Proof.
+    move=> Heq z.
+    case Hzy: (z == y) => /=.
+    - rewrite (Store.acc_upd_eq Hzy).
+      rewrite (eqP Hzy) (SSAStore.acc_upd_eq (eqxx (ssa_var _ y))).
+      reflexivity.
+    - move/idP/negP: Hzy => Hzy.
+      rewrite (Store.acc_upd_neq Hzy).
+      rewrite (SSAStore.acc_upd_neq (pair_neq1 _ _ Hzy)).
+      rewrite (get_upd_index_neq _ Hzy).
+      exact: state_equiv_upd.
+  Qed.
+
+  Lemma state_equiv_Upd2 m s1 s2 ss1 ss2 x vx y vy :
+    state_equiv m s1 ss1 ->
+    Store.Upd2 x vx y vy s1 s2 ->
+    SSAStore.Upd2 (ssa_var (upd_index x m) x) vx
+                  (ssa_var (upd_index y (upd_index x m)) y) vy
+                  ss1 ss2 ->
+    state_equiv (upd_index y (upd_index x m)) s2 ss2.
+  Proof.
+    move=> Heq Hupd Hsupd z.
+    case Hzy: (z == y) => /=.
+    - rewrite (Store.acc_Upd_eq Hzy Hupd).
+      rewrite (eqP Hzy) (SSAStore.acc_Upd_eq (eqxx (ssa_var _ y)) Hsupd).
+      reflexivity.
+    - move/idP/negP: Hzy => Hzy.
+      rewrite (Store.acc_Upd_neq Hzy Hupd).
+      rewrite (SSAStore.acc_Upd_neq (pair_neq1 _ _ Hzy) Hsupd).
+      rewrite (get_upd_index_neq _ Hzy).
+      exact: state_equiv_Upd.
+  Qed.
+
+End StateEquiv.
+
+
+(** ** Equivalence between typing environments *)
+
+Section TypEnvEquiv.
+
+  (** Definition of equivalence between typing environments *)
+
   Definition typenv_equiv (m : vmap) (te : TE.env) (ste : SSATE.env) : Prop :=
     forall x, TE.vtyp x te = SSATE.vtyp (x, get_index x m) ste.
 
+
+  (** Properties of equivalence between typing environments *)
 
   Lemma ssa_typenv_equiv_add (m: vmap) (te: TE.env) (ste: SSATE.env) x typ:
     typenv_equiv m te ste ->
@@ -1101,51 +1227,52 @@ Section MakeSSA.
     reflexivity.
   Qed.
 
-  Instance add_to_set_proper m:
-    Proper (TE.SE.eq ==> eq ==> SSATE.Equal ==> SSATE.Equal) (add_to_ste m).
+  Lemma typenv_equiv_add m te ste x typ :
+    typenv_equiv m te ste ->
+    typenv_equiv (upd_index x m)
+                 (TE.add x typ te)
+                 (SSATE.add (ssa_var (upd_index x m) x) typ ste).
   Proof.
-    move=> x y Hxy a b -> s1 s2 Heq.
-    rewrite /add_to_ste.
-    rewrite Heq.
-    rewrite (eqP Hxy).
-    reflexivity.
+    move=> Heq y.
+    case Hyx: (y == x) => /=.
+    - rewrite (TE.vtyp_add_eq Hyx).
+      rewrite (eqP Hyx) (SSATE.vtyp_add_eq (eqxx (ssa_var _ x))).
+      reflexivity.
+    - move/idP/negP: Hyx => Hyx.
+      rewrite (TE.vtyp_add_neq Hyx).
+      rewrite (SSATE.vtyp_add_neq (pair_neq1 _ _ Hyx)).
+      rewrite (get_upd_index_neq _ Hyx).
+      exact: Heq.
   Qed.
 
-  Lemma add_to_set_transpose_neqkey m:
-    DSL.TEKS.MLemmas.OP.P.transpose_neqkey SSATE.Equal (add_to_ste m).
+  Lemma typenv_equiv_add2 m te ste x xtyp y ytyp:
+    typenv_equiv m te ste ->
+    typenv_equiv (upd_index y (upd_index x m))
+                 (TE.add y ytyp (TE.add x xtyp te))
+                 (SSATE.add (ssa_var (upd_index y (upd_index x m)) y) ytyp
+                            (SSATE.add (ssa_var (upd_index x m) x) xtyp ste)).
   Proof.
-    move=> x y a b s Hxy.
-    rewrite /add_to_ste.
-    rewrite /SSATE.Equal.
-    move=> z.
-    have Hnxy: (ssa_var m x) != (ssa_var m y).
-    {
-      rewrite pair_neq1.
-      done.
-        by move/idP: Hxy.
-    }
-    case H1: (z == ssa_var m x); case H2: (z == ssa_var m y).
-    - move/idP/eqP: H1 => H1. move/idP/eqP: H2 => H2.
-      rewrite -H1 -H2 in Hnxy.
-      move/eqP: Hnxy => Hnxy.
-        by destruct Hnxy.
-    - move/idP: H1 => H1. move/negP: H2 => H2.
-      rewrite (SSA.TEKS.MLemmas.find_add_eq H1).
-      rewrite (SSA.TEKS.MLemmas.find_add_neq H2).
-      rewrite (SSA.TEKS.MLemmas.find_add_eq H1).
+    move=> Heq z.
+    case Hzy: (z == y) => /=.
+    - rewrite (TE.vtyp_add_eq Hzy).
+      rewrite (eqP Hzy) (SSATE.vtyp_add_eq (eqxx (ssa_var _ y))).
       reflexivity.
-    - move/idP: H2 => H2. move/negP: H1 => H1.
-      rewrite (SSA.TEKS.MLemmas.find_add_eq H2).
-      rewrite (SSA.TEKS.MLemmas.find_add_neq H1).
-      rewrite (SSA.TEKS.MLemmas.find_add_eq H2).
-      reflexivity.
-    - move/negP: H1 => H1. move/negP: H2 => H2.
-      rewrite (SSA.TEKS.MLemmas.find_add_neq H1).
-      rewrite (SSA.TEKS.MLemmas.find_add_neq H2).
-      rewrite (SSA.TEKS.MLemmas.find_add_neq H2).
-      rewrite (SSA.TEKS.MLemmas.find_add_neq H1).
-      reflexivity.
+    - move/idP/negP: Hzy => Hzy.
+      rewrite (TE.vtyp_add_neq Hzy).
+      rewrite (SSATE.vtyp_add_neq (pair_neq1 _ _ Hzy)).
+      rewrite (get_upd_index_neq _ Hzy).
+      exact: typenv_equiv_add.
   Qed.
+
+End TypEnvEquiv.
+
+#[global]
+ Hint Resolve typenv_equiv_add typenv_equiv_add2 : core.
+
+
+(** ** Properties of ssa_typenv *)
+
+Section SSATypEnv.
 
   Lemma ssa_typenv_equiv (m: vmap) (te: TE.t typ):
     typenv_equiv m te (ssa_typenv m te).
@@ -1281,7 +1408,7 @@ Section MakeSSA.
     move: te.
     apply DSL.TEKS.MLemmas.OP.P.map_induction_bis.
     - move=> te te' Heq.
-      move: (DSL.TEKS.MLemmas.F.Equal_sym Heq) => {Heq} Heq.
+      move: (DSL.TEKS.MLemmas.F.Equal_sym Heq) => {} Heq.
       move=> H.
       case: H => H.
       + left.
@@ -1407,7 +1534,7 @@ Section MakeSSA.
     move: te.
     apply DSL.TEKS.MLemmas.OP.P.map_induction_bis.
     - move=> t te' Heq.
-      move: (DSL.TEKS.MLemmas.F.Equal_sym Heq) => {Heq} Heq.
+      move: (DSL.TEKS.MLemmas.F.Equal_sym Heq) => {} Heq.
       move=> H.
       case: H => H.
       + left.
@@ -1762,6 +1889,13 @@ Section MakeSSA.
       by rewrite TE.vtyp_vsize H.
   Qed.
 
+End SSATypEnv.
+
+
+(** ** Evaluation after SSA transformation *)
+
+Section SSAEval.
+
   Lemma ssa_eval_eunop :
     forall (op : eunop) (v : Z),
       SSA.eval_eunop op v = DSL.eval_eunop op v.
@@ -1944,122 +2078,6 @@ Section MakeSSA.
     move: (ssa_eval_bexp e Hseq Hteq) => [H1 H2].
     exact: (H2 He).
   Qed.
-
-  Lemma state_equiv_upd m s ss x v :
-    state_equiv m s ss ->
-    state_equiv (upd_index x m)
-                (Store.upd x v s)
-                (SSAStore.upd (ssa_var (upd_index x m) x) v ss).
-  Proof.
-    move=> Heq y.
-    case Hyx: (y == x) => /=.
-    - rewrite (Store.acc_upd_eq Hyx).
-      rewrite (eqP Hyx) (SSAStore.acc_upd_eq (eqxx (ssa_var _ x))).
-      reflexivity.
-    - move/idP/negP: Hyx => Hyx.
-      rewrite (Store.acc_upd_neq Hyx).
-      rewrite (SSAStore.acc_upd_neq (pair_neq1 _ _ Hyx)).
-      rewrite (get_upd_index_neq _ Hyx).
-      exact: Heq.
-  Qed.
-
-  Lemma state_equiv_Upd m s1 s2 ss1 ss2 x v :
-    state_equiv m s1 ss1 ->
-    Store.Upd x v s1 s2 ->
-    SSAStore.Upd (ssa_var (upd_index x m) x) v ss1 ss2 ->
-    state_equiv (upd_index x m) s2 ss2.
-  Proof.
-    move=> Heq Hupd Hsupd y.
-    case Hyx: (y == x) => /=.
-    - rewrite (Store.acc_Upd_eq Hyx Hupd).
-      rewrite (eqP Hyx) (SSAStore.acc_Upd_eq (eqxx (ssa_var _ x)) Hsupd).
-      reflexivity.
-    - move/idP/negP: Hyx => Hyx.
-      rewrite (Store.acc_Upd_neq Hyx Hupd).
-      rewrite (SSAStore.acc_Upd_neq (pair_neq1 _ _ Hyx) Hsupd).
-      rewrite (get_upd_index_neq _ Hyx).
-      exact: Heq.
-  Qed.
-
-  Lemma state_equiv_upd2 m s ss x vx y vy :
-    state_equiv m s ss ->
-    state_equiv (upd_index y (upd_index x m))
-                (Store.upd2 x vx y vy s)
-                (SSAStore.upd2
-                   (ssa_var (upd_index x m) x) vx
-                   (ssa_var (upd_index y (upd_index x m)) y) vy
-                   ss).
-  Proof.
-    move=> Heq z.
-    case Hzy: (z == y) => /=.
-    - rewrite (Store.acc_upd_eq Hzy).
-      rewrite (eqP Hzy) (SSAStore.acc_upd_eq (eqxx (ssa_var _ y))).
-      reflexivity.
-    - move/idP/negP: Hzy => Hzy.
-      rewrite (Store.acc_upd_neq Hzy).
-      rewrite (SSAStore.acc_upd_neq (pair_neq1 _ _ Hzy)).
-      rewrite (get_upd_index_neq _ Hzy).
-      exact: state_equiv_upd.
-  Qed.
-
-  Lemma state_equiv_Upd2 m s1 s2 ss1 ss2 x vx y vy :
-    state_equiv m s1 ss1 ->
-    Store.Upd2 x vx y vy s1 s2 ->
-    SSAStore.Upd2 (ssa_var (upd_index x m) x) vx
-                  (ssa_var (upd_index y (upd_index x m)) y) vy
-                  ss1 ss2 ->
-    state_equiv (upd_index y (upd_index x m)) s2 ss2.
-  Proof.
-    move=> Heq Hupd Hsupd z.
-    case Hzy: (z == y) => /=.
-    - rewrite (Store.acc_Upd_eq Hzy Hupd).
-      rewrite (eqP Hzy) (SSAStore.acc_Upd_eq (eqxx (ssa_var _ y)) Hsupd).
-      reflexivity.
-    - move/idP/negP: Hzy => Hzy.
-      rewrite (Store.acc_Upd_neq Hzy Hupd).
-      rewrite (SSAStore.acc_Upd_neq (pair_neq1 _ _ Hzy) Hsupd).
-      rewrite (get_upd_index_neq _ Hzy).
-      exact: state_equiv_Upd.
-  Qed.
-
-  Lemma typenv_equiv_add m te ste x typ :
-    typenv_equiv m te ste ->
-    typenv_equiv (upd_index x m)
-                 (TE.add x typ te)
-                 (SSATE.add (ssa_var (upd_index x m) x) typ ste).
-  Proof.
-    move=> Heq y.
-    case Hyx: (y == x) => /=.
-    - rewrite (TE.vtyp_add_eq Hyx).
-      rewrite (eqP Hyx) (SSATE.vtyp_add_eq (eqxx (ssa_var _ x))).
-      reflexivity.
-    - move/idP/negP: Hyx => Hyx.
-      rewrite (TE.vtyp_add_neq Hyx).
-      rewrite (SSATE.vtyp_add_neq (pair_neq1 _ _ Hyx)).
-      rewrite (get_upd_index_neq _ Hyx).
-      exact: Heq.
-  Qed.
-
-  Lemma typenv_equiv_add2 m te ste x xtyp y ytyp:
-    typenv_equiv m te ste ->
-    typenv_equiv (upd_index y (upd_index x m))
-                 (TE.add y ytyp (TE.add x xtyp te))
-                 (SSATE.add (ssa_var (upd_index y (upd_index x m)) y) ytyp
-                            (SSATE.add (ssa_var (upd_index x m) x) xtyp ste)).
-  Proof.
-    move=> Heq z.
-    case Hzy: (z == y) => /=.
-    - rewrite (TE.vtyp_add_eq Hzy).
-      rewrite (eqP Hzy) (SSATE.vtyp_add_eq (eqxx (ssa_var _ y))).
-      reflexivity.
-    - move/idP/negP: Hzy => Hzy.
-      rewrite (TE.vtyp_add_neq Hzy).
-      rewrite (SSATE.vtyp_add_neq (pair_neq1 _ _ Hzy)).
-      rewrite (get_upd_index_neq _ Hzy).
-      exact: typenv_equiv_add.
-  Qed.
-
-  Hint Resolve typenv_equiv_add typenv_equiv_add2.
 
   Lemma ssa_atyp m a te ste:
     typenv_equiv m te ste ->
@@ -2520,8 +2538,105 @@ Section MakeSSA.
              ++ apply: (ssa_program_succ_typenv Hsp_tl). assumption.
   Qed.
 
+End SSAEval.
 
-  (** Convert an SSA state to a DSL state. *)
+
+(** ** DSL state to SSA state *)
+
+Section DSL2SSA.
+
+  (** ** Conversion functions *)
+
+  Definition ssa_store_key (m : vmap) (v : var) : option ssavar := Some (ssa_var m v).
+
+  Definition ssa_store_value (v : var) (bs : bits) : bits := bs.
+
+  Definition ssa_state (m : vmap) (s : Store.t) : SSAStore.t :=
+    M2SSA.map2map (ssa_store_key m) ssa_store_value s.
+
+
+  (** ** Conversion properties *)
+
+  Lemma ssa_store_key_eq_none (m : vmap) :
+    forall k1 k2 : N, k1 == k2 -> ssa_store_key m k1 = None -> ssa_store_key m k2 = None.
+  Proof. move=> k1 k2 Heqk Hn. rewrite -(eqP Heqk). assumption. Qed.
+
+  Lemma ssa_store_key_eq_some (m : vmap) :
+    forall (k1 k2 : N) (fk1 : N * N),
+      k1 == k2 -> ssa_store_key m k1 = Some fk1 ->
+      exists fk2 : N * N, ssa_store_key m k2 = Some fk2 /\ fk1 == fk2.
+  Proof. move=> k1 k2 fk1 Heqk Hfk1. exists fk1. rewrite -(eqP Heqk). done. Qed.
+
+  Lemma ssa_store_key_some_inj (m : vmap) k1 k2 v :
+    ssa_store_key m k1 = Some v -> ssa_store_key m k2 = Some v -> k1 = k2.
+  Proof.
+    rewrite /ssa_store_key. case: v => [v i]. case=> ? ?; subst.
+    case=> ? ?; subst. reflexivity.
+  Qed.
+
+  Lemma ssa_store_key_neq_some (m : vmap) :
+    forall (k1 k2 : N) (fk1 fk2 : N * N),
+      ~ k1 == k2 -> ssa_store_key m k1 = Some fk1 -> ssa_store_key m k2 = Some fk2 ->
+      ~ fk1 == fk2.
+  Proof.
+    move=> k1 k2 fk1 fk2 Hneqk Hfk1 Hfk2 Heqk. rewrite (eqP Heqk) in Hfk1.
+    apply: Hneqk. apply/eqP. exact: (ssa_store_key_some_inj Hfk1 Hfk2).
+  Qed.
+
+  Lemma ssa_store_value_eq_key :
+    forall (k1 k2 : var) (v : bits),
+      k1 == k2 -> ssa_store_value k1 v = ssa_store_value k2 v.
+  Proof. move=> ? ? ? /eqP H; subst. reflexivity. Qed.
+
+  Lemma acc_ssa_state_eq m s v i:
+    i == get_index v m ->
+    SSAStore.acc (v, i) (ssa_state m s) = Store.acc v s.
+  Proof.
+    move/eqP=> -> {i}. have Hfk: (ssa_store_key m v = Some (v, get_index v m)) by reflexivity.
+    rewrite /ssa_state /SSAStore.acc /Store.acc. case Hf: (Store.M.find v s).
+    - rewrite (M2SSA.map2map_find_some (@ssa_store_key_eq_none m)
+                                       (@ssa_store_key_eq_some m)
+                                       (@ssa_store_key_neq_some m)
+                                       ssa_store_value_eq_key Hfk Hf).
+      reflexivity.
+    - rewrite (M2SSA.map2map_find_none (@ssa_store_key_eq_none m)
+                                       (@ssa_store_key_eq_some m)
+                                       (@ssa_store_key_neq_some m)
+                                       ssa_store_value_eq_key Hfk Hf).
+      reflexivity.
+  Qed.
+
+  Lemma ssa_state_equiv m s:
+    state_equiv m s (ssa_state m s).
+  Proof.
+    move=> x. rewrite (acc_ssa_state_eq _ (eqxx (get_index x m))). reflexivity.
+  Qed.
+
+  Lemma ssa_store_conform m s te:
+    Store.conform s te ->
+    SSAStore.conform (ssa_state m s) (ssa_typenv m te).
+  Proof.
+    rewrite /Store.conform /SSAStore.conform /= => Hconform. move=> x Hmem.
+    move: (ssa_typenv_exist Hmem) => [v]. move=> Hssa.
+    rewrite -Hssa in Hmem |- *. rewrite -ssa_typenv_mem in Hmem.
+    rewrite -ssa_typenv_size. rewrite (Hconform _ Hmem).
+    move: (ssa_state_equiv m s) => Hstate_equiv. rewrite (Hstate_equiv v).
+    reflexivity.
+  Qed.
+
+  Corollary ssa_store_conform_empty s te:
+    Store.conform s te ->
+    SSAStore.conform (ssa_state empty_vmap s) (ssa_typenv empty_vmap te).
+  Proof. exact: ssa_store_conform. Qed.
+
+End DSL2SSA.
+
+
+(** ** SSA state to DSL state *)
+
+Section SSA2DSL.
+
+  (** Definition of the conversion *)
 
   Definition dessa_store_key (m : vmap) (v : ssavar) : option var :=
     if get_index (svar v) m == sidx v
@@ -2529,6 +2644,9 @@ Section MakeSSA.
     else None.
 
   Definition dessa_store_value (v : ssavar) (bs : bits) : bits := bs.
+
+
+  (** Properties of the conversion *)
 
   Lemma dessa_store_key_get_index m v :
     dessa_store_key m (v, get_index v m) = Some v.
@@ -2607,23 +2725,6 @@ Section MakeSSA.
     move=> m s x. exact: acc_dessa_state.
   Qed.
 
-  Lemma ssa_store_conform m s te:
-    Store.conform s te ->
-    SSAStore.conform (ssa_state m s) (ssa_typenv m te).
-  Proof.
-    rewrite /Store.conform /SSAStore.conform /= => Hconform. move=> x Hmem.
-    move: (ssa_typenv_exist Hmem) => [v]. move=> Hssa.
-    rewrite -Hssa in Hmem |- *. rewrite -ssa_typenv_mem in Hmem.
-    rewrite -ssa_typenv_size. rewrite (Hconform _ Hmem).
-    move: (ssa_state_equiv m s) => Hstate_equiv. rewrite (Hstate_equiv v).
-    reflexivity.
-  Qed.
-
-  Corollary ssa_store_conform_empty s te:
-    Store.conform s te ->
-    SSAStore.conform (ssa_state empty_vmap s) (ssa_typenv empty_vmap te).
-  Proof. exact: ssa_store_conform. Qed.
-
   Lemma dessa_store_conform m ss te:
     SSAStore.conform ss (ssa_typenv m te) ->
     Store.conform (dessa_state m ss) te.
@@ -2639,131 +2740,100 @@ Section MakeSSA.
     Store.conform (dessa_state empty_vmap ss) te.
   Proof. exact: dessa_store_conform. Qed.
 
-  (** Soundness and completeness *)
-
-  Theorem ssa_spec_sound (s : DSL.spec) :
-    SSA.valid_spec (ssa_spec s) -> DSL.valid_spec s.
-  Proof.
-    destruct s as [input pre pg post].
-    rewrite /ssa_spec /=.
-    remember (ssa_typenv empty_vmap input) as sinput.
-    remember (ssa_bexp empty_vmap pre) as spre.
-    remember (ssa_program empty_vmap pg) as tmp.
-    destruct tmp as [m ssa_p].
-    remember (ssa_p) as sprog.
-    remember (ssa_bexp m post) as spost.
-    rewrite /SSA.valid_spec /DSL.valid_spec /=.
-    rewrite /SSA.valid_spec_ok /DSL.valid_spec_ok /=.
-    rewrite /SSA.valid_spec_err /DSL.valid_spec_err /=.
-    rewrite Heqsinput Heqspre Heqspost.
-    move=> [HsvalidOK HsvalidERR]. split.
-    - move=> s1 s2 Hconform Heval_bexp Heval_prog.
-      move: (ssa_state_equiv empty_vmap s1) => Heq_state.
-      move: (ssa_typenv_equiv empty_vmap input) => Heq_typenv.
-      move: (ssa_store_conform_empty Hconform) => Hsconform.
-      symmetry in Heqtmp.
-      remember (DSL.program_succ_typenv pg input) as tsucc.
-      symmetry in Heqtsucc.
-      move: (ssa_eval_program_succ Heqtmp Heq_state Heq_typenv Heval_prog Heqtsucc) => [ss2 [ste2 [Hsep [H]]]].
-      move: (HsvalidOK (ssa_state empty_vmap s1) ss2) => {HsvalidOK} HsvalidOK.
-      move: (HsvalidOK Hsconform) => {HsvalidOK} HsvalidOK.
-      move: (ssa_eval_bexp2 Heq_state Heq_typenv Heval_bexp) => Hsf.
-      move: (HsvalidOK Hsf) => {HsvalidOK} HsvalidOK.
-      move: (HsvalidOK Hsep) => {HsvalidOK} HsvalidOK.
-      move=> [Heq_state2 Heq_typenv2].
-      rewrite H in HsvalidOK.
-      exact: (ssa_eval_bexp1 Heq_state2 Heq_typenv2 HsvalidOK).
-    - move=> s Hco Hpre Herr.
-      move: (ssa_state_equiv empty_vmap s) => Heq_state.
-      move: (ssa_typenv_equiv empty_vmap input) => Heq_typenv.
-      move: (ssa_store_conform_empty Hco) => Hsco.
-      apply: (HsvalidERR _ Hsco (ssa_eval_bexp2 Heq_state Heq_typenv Hpre)).
-      move: (ssa_eval_program_succ_err (Logic.eq_sym Heqtmp) Heq_state Heq_typenv Herr) => [H _].
-      exact: H.
-  Qed.
-
-  Theorem ssa_spec_complete (s : DSL.spec) :
-    DSL.valid_spec s -> SSA.valid_spec (ssa_spec s).
-  Proof.
-    destruct s as [input pre pg post].
-    rewrite /ssa_spec /=.
-    remember (ssa_typenv empty_vmap input) as sinput.
-    remember (ssa_bexp empty_vmap pre) as spre.
-    remember (ssa_program empty_vmap pg) as tmp.
-    destruct tmp as [m ssa_p].
-    remember (ssa_p) as sprog.
-    remember (ssa_bexp m post) as spost.
-    rewrite /SSA.valid_spec /DSL.valid_spec /=.
-    rewrite /SSA.valid_spec_ok /DSL.valid_spec_ok /=.
-    rewrite /SSA.valid_spec_err /DSL.valid_spec_err /=.
-
-    rewrite Heqsinput Heqspre Heqspost.
-    move=> [HvalidOK HvalidERR]. split.
-    - move=> ss1 ss2 Hsconform Hseval_bexp Hseval_prog.
-      move: (dessa_state_equiv empty_vmap ss1) => Heq_state.
-      move: (ssa_typenv_equiv empty_vmap input) => Heq_typenv.
-      move: (dessa_store_conform_empty Hsconform) => Hconform.
-      symmetry in Heqtmp.
-      remember (SSA.program_succ_typenv sprog sinput) as tsucc.
-      symmetry in Heqtsucc.
-      rewrite Heqsinput in Heqtsucc.
-      move: (dessa_eval_program_succ Heqtmp Heq_state Heq_typenv Hseval_prog Heqtsucc)
-          => [s2 [ste2 [Hep [Hpst [Heq_state2 Heq_typenv2]]]]].
-      move: (HvalidOK (dessa_state empty_vmap ss1) s2) => {HvalidOK} HvalidOK.
-      move: (HvalidOK Hconform) => {HvalidOK} HvalidOK.
-      move: (ssa_eval_bexp1 Heq_state Heq_typenv Hseval_bexp) => Hsf.
-      move: (HvalidOK Hsf) => {HvalidOK} HvalidOK.
-      move: (HvalidOK Hep) => {HvalidOK} HvalidOK.
-      rewrite Hpst in HvalidOK.
-      rewrite Heqtsucc.
-      exact: (ssa_eval_bexp2 Heq_state2 Heq_typenv2 HvalidOK).
-    - move=> s Hco Hpre Herr.
-      move: (dessa_state_equiv empty_vmap s) => Heq_state.
-      move: (ssa_typenv_equiv empty_vmap input) => Heq_typenv.
-      move: (dessa_store_conform_empty Hco) => Hsco.
-      apply: (HvalidERR _ Hsco (ssa_eval_bexp1 Heq_state Heq_typenv Hpre)).
-      move: (dessa_eval_program_succ_err (Logic.eq_sym Heqtmp) Heq_state Heq_typenv Herr) => [H _].
-      exact: H.
-  Qed.
+End SSA2DSL.
 
 
-  (** Well-formed SSA *)
+(** ** Soundness and completeness *)
 
-  Definition ssa_var_unchanged_instr v i : bool :=
-    ~~ (SSAVS.mem v (SSA.lvs_instr i)).
+Theorem ssa_spec_sound (s : DSL.spec) :
+  SSA.valid_spec (ssa_spec s) -> DSL.valid_spec s.
+Proof.
+  destruct s as [input pre pg post].
+  rewrite /ssa_spec /=.
+  remember (ssa_typenv empty_vmap input) as sinput.
+  remember (ssa_bexp empty_vmap pre) as spre.
+  remember (ssa_program empty_vmap pg) as tmp.
+  destruct tmp as [m ssa_p].
+  remember (ssa_p) as sprog.
+  remember (ssa_bexp m post) as spost.
+  rewrite /SSA.valid_spec /DSL.valid_spec /=.
+  rewrite /SSA.valid_spec_ok /DSL.valid_spec_ok /=.
+  rewrite /SSA.valid_spec_err /DSL.valid_spec_err /=.
+  rewrite Heqsinput Heqspre Heqspost.
+  move=> [HsvalidOK HsvalidERR]. split.
+  - move=> s1 s2 Hconform Heval_bexp Heval_prog.
+    move: (ssa_state_equiv empty_vmap s1) => Heq_state.
+    move: (ssa_typenv_equiv empty_vmap input) => Heq_typenv.
+    move: (ssa_store_conform_empty Hconform) => Hsconform.
+    symmetry in Heqtmp.
+    remember (DSL.program_succ_typenv pg input) as tsucc.
+    symmetry in Heqtsucc.
+    move: (ssa_eval_program_succ Heqtmp Heq_state Heq_typenv Heval_prog Heqtsucc) => [ss2 [ste2 [Hsep [H]]]].
+    move: (HsvalidOK (ssa_state empty_vmap s1) ss2) => {} HsvalidOK.
+    move: (HsvalidOK Hsconform) => {} HsvalidOK.
+    move: (ssa_eval_bexp2 Heq_state Heq_typenv Heval_bexp) => Hsf.
+    move: (HsvalidOK Hsf) => {} HsvalidOK.
+    move: (HsvalidOK Hsep) => {} HsvalidOK.
+    move=> [Heq_state2 Heq_typenv2].
+    rewrite H in HsvalidOK.
+    exact: (ssa_eval_bexp1 Heq_state2 Heq_typenv2 HsvalidOK).
+  - move=> s Hco Hpre Herr.
+    move: (ssa_state_equiv empty_vmap s) => Heq_state.
+    move: (ssa_typenv_equiv empty_vmap input) => Heq_typenv.
+    move: (ssa_store_conform_empty Hco) => Hsco.
+    apply: (HsvalidERR _ Hsco (ssa_eval_bexp2 Heq_state Heq_typenv Hpre)).
+    move: (ssa_eval_program_succ_err (Logic.eq_sym Heqtmp) Heq_state Heq_typenv Herr) => [H _].
+    exact: H.
+Qed.
 
-  Definition ssa_unchanged_instr_var i v : bool :=
-    ssa_var_unchanged_instr v i .
+Theorem ssa_spec_complete (s : DSL.spec) :
+  DSL.valid_spec s -> SSA.valid_spec (ssa_spec s).
+Proof.
+  destruct s as [input pre pg post].
+  rewrite /ssa_spec /=.
+  remember (ssa_typenv empty_vmap input) as sinput.
+  remember (ssa_bexp empty_vmap pre) as spre.
+  remember (ssa_program empty_vmap pg) as tmp.
+  destruct tmp as [m ssa_p].
+  remember (ssa_p) as sprog.
+  remember (ssa_bexp m post) as spost.
+  rewrite /SSA.valid_spec /DSL.valid_spec /=.
+  rewrite /SSA.valid_spec_ok /DSL.valid_spec_ok /=.
+  rewrite /SSA.valid_spec_err /DSL.valid_spec_err /=.
 
-  Definition ssa_vars_unchanged_instr vs i : bool :=
-    SSAVS.for_all (ssa_unchanged_instr_var i) vs .
+  rewrite Heqsinput Heqspre Heqspost.
+  move=> [HvalidOK HvalidERR]. split.
+  - move=> ss1 ss2 Hsconform Hseval_bexp Hseval_prog.
+    move: (dessa_state_equiv empty_vmap ss1) => Heq_state.
+    move: (ssa_typenv_equiv empty_vmap input) => Heq_typenv.
+    move: (dessa_store_conform_empty Hsconform) => Hconform.
+    symmetry in Heqtmp.
+    remember (SSA.program_succ_typenv sprog sinput) as tsucc.
+    symmetry in Heqtsucc.
+    rewrite Heqsinput in Heqtsucc.
+    move: (dessa_eval_program_succ Heqtmp Heq_state Heq_typenv Hseval_prog Heqtsucc)
+        => [s2 [ste2 [Hep [Hpst [Heq_state2 Heq_typenv2]]]]].
+    move: (HvalidOK (dessa_state empty_vmap ss1) s2) => {} HvalidOK.
+    move: (HvalidOK Hconform) => {} HvalidOK.
+    move: (ssa_eval_bexp1 Heq_state Heq_typenv Hseval_bexp) => Hsf.
+    move: (HvalidOK Hsf) => {} HvalidOK.
+    move: (HvalidOK Hep) => {} HvalidOK.
+    rewrite Hpst in HvalidOK.
+    rewrite Heqtsucc.
+    exact: (ssa_eval_bexp2 Heq_state2 Heq_typenv2 HvalidOK).
+  - move=> s Hco Hpre Herr.
+    move: (dessa_state_equiv empty_vmap s) => Heq_state.
+    move: (ssa_typenv_equiv empty_vmap input) => Heq_typenv.
+    move: (dessa_store_conform_empty Hco) => Hsco.
+    apply: (HvalidERR _ Hsco (ssa_eval_bexp1 Heq_state Heq_typenv Hpre)).
+    move: (dessa_eval_program_succ_err (Logic.eq_sym Heqtmp) Heq_state Heq_typenv Herr) => [H _].
+    exact: H.
+Qed.
 
-  Definition ssa_var_unchanged_program v p : bool :=
-    all (ssa_var_unchanged_instr v) p.
 
-  Definition ssa_unchanged_program_var p v : bool :=
-    all (ssa_var_unchanged_instr v) p .
+(** [ssa_spec] produces well-formed SSA *)
 
-  Definition ssa_vars_unchanged_program vs p : bool :=
-    SSAVS.for_all (ssa_unchanged_program_var p) vs .
-
-  Fixpoint ssa_single_assignment (p : SSA.program) : bool :=
-    match p with
-    | [::] => true
-    | hd::tl =>
-      (ssa_vars_unchanged_program (SSA.lvs_instr hd) tl) &&
-                                                         (ssa_single_assignment tl)
-    end.
-
-  Definition well_formed_ssa_program (te: SSATE.env) (p : SSA.program) : bool :=
-    (SSA.well_formed_program te p)
-      && ssa_vars_unchanged_program (SSA.vars_env te) p
-      && ssa_single_assignment p.
-
-  Definition well_formed_ssa_spec (s : SSA.spec) : bool :=
-    (SSA.well_formed_spec s)
-      && ssa_vars_unchanged_program (SSA.vars_env (SSA.sinputs s)) (SSA.sprog s)
-      && ssa_single_assignment (SSA.sprog s).
+Section SSASpecWf.
 
   Ltac neq_store_upd_acc :=
     match goal with
@@ -2982,8 +3052,7 @@ Section MakeSSA.
     case Hmem: (SSAVS.mem v (SSA.lvs_program p)) => /= .
     - elim: p Hmem => /=.
       + done.
-      + move=> hd tl IH Hmem. case: (SSA.VSLemmas.mem_union1 Hmem) =>
-                              {Hmem} Hmem.
+      + move=> hd tl IH Hmem. case: (SSA.VSLemmas.mem_union1 Hmem) => {} Hmem.
         * rewrite /ssa_var_unchanged_instr Hmem. done.
         * rewrite (IH Hmem). by case: (ssa_var_unchanged_instr v hd).
     - move/negP/idP: Hmem => Hmem. elim: p Hmem => /=.
@@ -3045,12 +3114,12 @@ Section MakeSSA.
     ssa_vars_unchanged_program vs (hd::tl) ->
     ssa_vars_unchanged_instr vs hd /\ ssa_vars_unchanged_program vs tl.
   Proof.
-    move=> H. move: (ssa_unchanged_program_local H) => {H} H. split.
+    move=> H. move: (ssa_unchanged_program_local H) => {} H. split.
     - apply: ssa_unchanged_instr_global => v Hmem.
-      move: (H v Hmem) => {H} H.
+      move: (H v Hmem) => {} H.
       exact: (proj1 (ssa_var_unchanged_program_cons1 H)).
     - apply: ssa_unchanged_program_global => v Hmem.
-      move: (H v Hmem) => {H} H.
+      move: (H v Hmem) => {} H.
       exact: (proj2 (ssa_var_unchanged_program_cons1 H)).
   Qed.
 
@@ -3079,13 +3148,13 @@ Section MakeSSA.
     ssa_vars_unchanged_program vs [:: i] = ssa_vars_unchanged_instr vs i.
   Proof.
     case H: (ssa_vars_unchanged_program vs [:: i]).
-    - move: (ssa_unchanged_program_local H) => {H} H. symmetry.
-      apply: ssa_unchanged_instr_global. move=> v Hmem. move: (H v Hmem) => {H} H.
+    - move: (ssa_unchanged_program_local H) => {} H. symmetry.
+      apply: ssa_unchanged_instr_global. move=> v Hmem. move: (H v Hmem) => {} H.
       rewrite /ssa_unchanged_program_var /= andbT in H. assumption.
     - symmetry. apply/negP => Hi. move/negP: H; apply.
       move: (ssa_unchanged_instr_local Hi) => {Hi} H.
       apply/ssa_unchanged_program_global. move=> v Hmem.
-      move: (H v Hmem) => {H} H. rewrite /ssa_unchanged_program_var /=.
+      move: (H v Hmem) => {} H. rewrite /ssa_unchanged_program_var /=.
       by rewrite H.
   Qed.
 
@@ -3217,7 +3286,7 @@ Section MakeSSA.
     ssa_vars_unchanged_instr s1 i /\ ssa_vars_unchanged_instr s2 i.
   Proof.
     move=> Hun.
-    move: (ssa_unchanged_instr_local Hun) => {Hun} Hun.
+    move: (ssa_unchanged_instr_local Hun) => {} Hun.
     split; apply: ssa_unchanged_instr_global => v Hmem.
     - apply: Hun.
       exact: SSA.VSLemmas.mem_union2.
@@ -3230,7 +3299,7 @@ Section MakeSSA.
     ssa_vars_unchanged_program s1 p /\ ssa_vars_unchanged_program s2 p.
   Proof.
     move=> Hun.
-    move: (ssa_unchanged_program_local Hun) => {Hun} Hun.
+    move: (ssa_unchanged_program_local Hun) => {} Hun.
     split; apply: ssa_unchanged_program_global => v Hmem.
     - apply: Hun.
       exact: SSA.VSLemmas.mem_union2.
@@ -3244,7 +3313,7 @@ Section MakeSSA.
   Proof.
     move=> Hun1 Hun2.
     apply: ssa_unchanged_instr_global => x Hmem.
-    move: (SSA.VSLemmas.mem_union1 Hmem); case => {Hmem} Hmem.
+    move: (SSA.VSLemmas.mem_union1 Hmem); case => {} Hmem.
     - exact: (ssa_unchanged_instr_mem Hun1 Hmem).
     - exact: (ssa_unchanged_instr_mem Hun2 Hmem).
   Qed.
@@ -3255,7 +3324,7 @@ Section MakeSSA.
   Proof.
     move=> Hun1 Hun2.
     apply: ssa_unchanged_program_global => x Hmem.
-    move: (SSA.VSLemmas.mem_union1 Hmem); case => {Hmem} Hmem.
+    move: (SSA.VSLemmas.mem_union1 Hmem); case => {} Hmem.
     - exact: (ssa_unchanged_program_mem Hun1 Hmem).
     - exact: (ssa_unchanged_program_mem Hun2 Hmem).
   Qed.
@@ -3286,7 +3355,7 @@ Section MakeSSA.
     ssa_vars_unchanged_instr vs1 i.
   Proof.
     move=> Hun Hsub.
-    move: (ssa_unchanged_instr_local Hun) => {Hun} Hun.
+    move: (ssa_unchanged_instr_local Hun) => {} Hun.
     apply: ssa_unchanged_instr_global.
     move=> v Hmem; apply: Hun.
     exact: (SSA.VSLemmas.mem_subset Hmem Hsub).
@@ -3298,7 +3367,7 @@ Section MakeSSA.
     ssa_vars_unchanged_program vs1 p.
   Proof.
     move=> Hun Hsub.
-    move: (ssa_unchanged_program_local Hun) => {Hun} Hun.
+    move: (ssa_unchanged_program_local Hun) => {} Hun.
     apply: ssa_unchanged_program_global.
     move=> v Hmem; apply: Hun.
     exact: (SSA.VSLemmas.mem_subset Hmem Hsub).
@@ -3423,7 +3492,7 @@ Section MakeSSA.
     - apply: ssa_unchanged_instr_global => v Hmem .
       exact: (SSA.VSLemmas.mem_disjoint1 Hdisj Hmem) .
     - apply/negP => Hunch. move/negP: Hdisj; apply .
-      move: (ssa_unchanged_instr_local Hunch) => {Hunch} Hunch .
+      move: (ssa_unchanged_instr_local Hunch) => {} Hunch .
       exact: (SSA.VSLemmas.mem_disjoint3 Hunch) .
   Qed .
 
@@ -3439,7 +3508,7 @@ Section MakeSSA.
         * rewrite ssa_unchanged_instr_disjoint_lvs. exact: Hdisjhd.
         * exact: (IH _ Hdisjtl).
     - apply/negP => Hunch. move/negP: Hdisj; apply.
-      move: (ssa_unchanged_program_local Hunch) => {Hunch} Hunch.
+      move: (ssa_unchanged_program_local Hunch) => {} Hunch.
       apply: SSA.VSLemmas.mem_disjoint3. move=> x Hmem.
       move: (Hunch x Hmem). rewrite ssa_var_unchanged_program_not_mem. done.
   Qed.
@@ -3484,7 +3553,7 @@ Section MakeSSA.
     SSAStore.acc v s1 = SSAStore.acc v s2.
   Proof.
     move=> Hun Hei.
-    move: (ssa_unchanged_instr_singleton1 Hun) => {Hun} Hun.
+    move: (ssa_unchanged_instr_singleton1 Hun) => {} Hun.
     exact: (acc_unchanged_instr Hun Hei).
   Qed.
 
@@ -3554,7 +3623,7 @@ Section MakeSSA.
     SSAStore.acc v s1 = SSAStore.acc v s2.
   Proof.
     move=> Hun Hep.
-    move: (ssa_unchanged_program_singleton1 Hun) => {Hun} Hun.
+    move: (ssa_unchanged_program_singleton1 Hun) => {} Hun.
     exact: (acc_unchanged_program Hun Hep).
   Qed.
 
@@ -3936,7 +4005,7 @@ Section MakeSSA.
       apply: (@SSA.TELemmas.submap_trans _ (SSA.instr_succ_typenv i E)).
       + apply: ssa_unchanged_instr_succ_typenv_submap. exact: Hi.
       + apply: (IH _ _ Hssa_p). move: (SSA.vars_env_instr_succ_typenv i E) => Heq.
-        move: (SSAVS.Lemmas.P.equal_sym Heq) => {Heq} Heq.
+        move: (SSAVS.Lemmas.P.equal_sym Heq) => {} Heq.
         apply: (ssa_unchanged_program_replace Heq).
         rewrite ssa_unchanged_program_union Hp Hssa_i. done.
   Qed.
@@ -5664,12 +5733,12 @@ Section MakeSSA.
       let Hv := fresh in
       let Hi := fresh in
       (apply/negP => /= Hmem);
-      (move: (SSA.VSLemmas.mem_add1 Hmem); case => {Hmem} Hmem);
+      (move: (SSA.VSLemmas.mem_add1 Hmem); case => {} Hmem);
       [ (move/eqP: Hmem => [Hv Hi]); rewrite Hv Hi in H;
         apply: (@get_upd_index_leF (upd_index v2 m) v1);
         apply: (Nleq_trans H); exact: get_upd_index_le
       |
-      (move: (SSA.VSLemmas.mem_singleton1 Hmem) => {Hmem} Hmem);
+      (move: (SSA.VSLemmas.mem_singleton1 Hmem) => {} Hmem);
       (move/eqP: Hmem => [Hv Hi]); rewrite Hv Hi in H;
       exact: (@get_upd_index_leF m v2)
       ]
@@ -5700,7 +5769,7 @@ Section MakeSSA.
       apply/andP; split.
       + exact: (ssa_instr_le_unchanged Hle Hshd).
       + move: (ssa_instr_index_le v Hshd) => Hle2.
-        move: (Nleq_trans Hle Hle2) => {Hle Hle2} Hle.
+        move: (Nleq_trans Hle Hle2) => {Hle2} Hle.
         exact: (IH _ _ _ _ _ Hle Hstl).
   Qed.
 
@@ -5752,7 +5821,7 @@ Section MakeSSA.
     rewrite /DSL.are_defined /SSA.are_defined /=; split; move=> H.
     - rewrite (SSAVS.for_all_1 (SSA.are_defined_compat (ssa_typenv m te))).
       + done.
-      + move: (VS.for_all_2 (DSL.are_defined_compat te) H) => {H} H.
+      + move: (VS.for_all_2 (DSL.are_defined_compat te) H) => {} H.
         intros x Hin.
         move: (Hin) => Heq.
         rewrite -> SSA.VSLemmas.singleton_iff in Heq.
@@ -5766,7 +5835,7 @@ Section MakeSSA.
         exact: Ht.
     - rewrite (VS.for_all_1 (DSL.are_defined_compat te)).
       + done.
-      + move: (SSAVS.for_all_2 (SSA.are_defined_compat (ssa_typenv m te)) H) => {H} H.
+      + move: (SSAVS.for_all_2 (SSA.are_defined_compat (ssa_typenv m te)) H) => {} H.
         intros x Hin.
         move: (Hin) => Heq.
         rewrite -> DSL.VSLemmas.singleton_iff in Heq.
@@ -6235,7 +6304,7 @@ Section MakeSSA.
   Proof.
     rewrite ssa_vars_env_comm.
     move=> Hmem.
-    move: (ssa_vars_mem2 Hmem) => {Hmem} Hmem.
+    move: (ssa_vars_mem2 Hmem) => {} Hmem.
     destruct Hmem.
     inversion H.
     rewrite /ssa_var /= in H0.
@@ -6297,7 +6366,7 @@ Section MakeSSA.
     - move=> c m v i H. rewrite SSA.VSLemmas.mem_empty in H. discriminate.
     - move=> op e IH m v i Hmem. exact: IH.
     - move=> op e1 IH1 e2 IH2 m v i Hmem.
-      case: (SSA.VSLemmas.mem_union1 Hmem) => {Hmem} Hmem.
+      case: (SSA.VSLemmas.mem_union1 Hmem) => {} Hmem.
       + exact: IH1.
       + exact: IH2.
     - move=> e IH n m v i Hmem. exact: (IH _ _ _ Hmem).
@@ -6321,7 +6390,7 @@ Section MakeSSA.
     - move=> w c m v i H. rewrite SSA.VSLemmas.mem_empty in H. discriminate.
     - move=> w1 op e1 IH1 m v i Hmem. exact: IH1.
     - move=> w op e1 IH1 e2 IH2 m v i Hmem.
-      case: (SSA.VSLemmas.mem_union1 Hmem) => {Hmem} Hmem.
+      case: (SSA.VSLemmas.mem_union1 Hmem) => {} Hmem.
       + exact: IH1.
       + exact: IH2.
     - move=> w e IH p m v i Hmem. exact: IH.
@@ -6383,7 +6452,7 @@ Section MakeSSA.
     SSAVS.mem (v, i) (SSA.vars_bexp (ssa_bexp m e)) ->
     get_index v m = i.
   Proof.
-    move=> Hmem. case: (SSA.VSLemmas.mem_union1 Hmem) => {Hmem} Hmem.
+    move=> Hmem. case: (SSA.VSLemmas.mem_union1 Hmem) => {} Hmem.
     - exact: (ssa_ebexp_var_index Hmem).
     - exact: (ssa_rbexp_var_index Hmem).
   Qed.
@@ -6518,8 +6587,10 @@ Section MakeSSA.
     - exact: (ssa_program_single_assignment (Logic.eq_sym Hprog)).
   Qed.
 
-End MakeSSA.
+End SSASpecWf.
 
+
+(** ** Store equivalence between initial and final states  *)
 
 Section SSAStoreEq.
 

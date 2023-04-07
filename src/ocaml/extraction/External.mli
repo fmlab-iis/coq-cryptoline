@@ -2,7 +2,7 @@ open Datatypes
 open BinNums
 open CNF
 open NBitsDef
-open Poly
+open IMP
 open Ring_polynom
 
 (*

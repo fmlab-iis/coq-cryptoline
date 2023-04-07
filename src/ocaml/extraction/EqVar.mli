@@ -8899,3 +8899,9 @@ module SSAVM :
 
   val new_key : 'a1 M.t -> M.key
  end
+
+val svar : SSAVarOrder.t -> Equality.sort
+
+val max_svar : SSAVS.t -> VarOrder.t
+
+val new_svar : SSAVS.t -> VarOrder.t

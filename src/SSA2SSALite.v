@@ -1,21 +1,25 @@
 
+(** * Conversion from SSA to SSALite *)
+
 From Coq Require Import List ZArith FSets OrderedType String Decimal DecimalString Btauto.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.
 From BitBlasting Require Import Typ TypEnv State BBCommon.
 From ssrlib Require Import EqVar EqOrder EqFMaps ZAriths Tactics Lists EqFSets Seqs Strings.
-From Cryptoline Require Import Options DSLRaw SSA.
+From Cryptoline Require Import Options DSLRaw SSALite SSA.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
 
-(** Variable substitution for instructions *)
+(** ** Rewrite mov statements *)
 
-Section VarSubst.
+Section RewriteMov.
 
   Import SSA.
+
+  (** Variable substitution *)
 
   Definition eexp_of_atom (a : atom) : eexp :=
     match a with
@@ -131,6 +135,106 @@ Section VarSubst.
        sprog := subst_program m (sprog s);
        spost := subst_bexp m (spost s) |}.
 
+
+  (** Rewrite mov statements *)
+
+  Definition subst_map_instr (m : SSAVM.t atom) (i : instr) : SSAVM.t atom :=
+    match i with
+    | Imov v a =>
+        (* v <- a *)
+        match a with
+        | Avar u => match SSAVM.find u m with
+                    | None =>
+                        (* v <- u *)
+                        SSAVM.add v a m
+                    | Some ua =>
+                        (* v <- u <- ... <- ua *)
+                        SSAVM.add v ua m
+                    end
+        | Aconst _ _ => SSAVM.add v a m
+        end
+    | _ => m
+    end.
+
+  Fixpoint subst_map_program_rec (m : SSAVM.t atom) (p : program) : SSAVM.t atom :=
+    match p with
+    | [::] => m
+    | i::p => subst_map_program_rec (subst_map_instr m i) p
+    end.
+
+  Definition subst_map_program (p : program) : SSAVM.t atom :=
+    subst_map_program_rec (SSAVM.empty atom) p.
+
+  Definition subst_map_spec (s : spec) : SSAVM.t atom :=
+    subst_map_program (sprog s).
+
+  Definition rewrite_mov (s : spec) : spec :=
+    subst_spec (subst_map_spec s) s.
+
+End RewriteMov.
+
+
+(** ** Conversion from SSA.spec to SSALite.spec *)
+
+(** It is assumed that in the SSA specification, there is neither
+    cut, assert, nor assume statement. *)
+
+Section SSA2SSALite.
+
+  Import SSA.
+
+  Definition ssa2lite_instr (i : SSA.instr) : SSALite.instr :=
+    match i with
+    | Imov v a => SSALite.Imov v a
+    | Ishl v a n => SSALite.Ishl v a n
+    | Icshl v1 v2 a1 a2 n => SSALite.Icshl v1 v2 a1 a2 n
+    | Inondet v t => SSALite.Inondet v t
+    | Icmov v c a1 a2 => SSALite.Icmov v c a1 a2
+    | Inop => SSALite.Inop
+    | Inot v t a => SSALite.Inot v t a
+    | Iadd v a1 a2 => SSALite.Iadd v a1 a2
+    | Iadds c v a1 a2 => SSALite.Iadds c v a1 a2
+    | Iadc v a1 a2 y => SSALite.Iadc v a1 a2 y
+    | Iadcs c v a1 a2 y => SSALite.Iadcs c v a1 a2 y
+    | Isub v a1 a2 => SSALite.Isub v a1 a2
+    | Isubc c v a1 a2 => SSALite.Isubc c v a1 a2
+    | Isubb c v a1 a2 => SSALite.Isubb c v a1 a2
+    | Isbc v a1 a2 y => SSALite.Isbc v a1 a2 y
+    | Isbcs c v a1 a2 y => SSALite.Isbcs c v a1 a2 y
+    | Isbb v a1 a2 y => SSALite.Isbb v a1 a2 y
+    | Isbbs c v a1 a2 y => SSALite.Isbbs c v a1 a2 y
+    | Imul v a1 a2 => SSALite.Imul v a1 a2
+    | Imull vh vl a1 a2 => SSALite.Imull vh vl a1 a2
+    | Imulj v a1 a2 => SSALite.Imulj v a1 a2
+    | Isplit vh vl a n => SSALite.Isplit vh vl a n
+    | Iand v t a1 a2 => SSALite.Iand v t a1 a2
+    | Ior v t a1 a2 => SSALite.Ior v t a1 a2
+    | Ixor v t a1 a2 => SSALite.Ixor v t a1 a2
+    | Icast v t a => SSALite.Icast v t a
+    | Ivpc v t a => SSALite.Ivpc v t a
+    | Ijoin v ah al => SSALite.Ijoin v ah al
+    | Icut e => SSALite.Inop
+    | Iassert e => SSALite.Inop
+    | Iassume e => SSALite.Iassume e
+    end.
+
+  Definition ssa2lite_program (p : SSA.program) : SSALite.program :=
+    tmap ssa2lite_instr p.
+
+  Definition ssa2lite_spec (s : SSA.spec) : SSALite.spec :=
+    {| SSALite.sinputs := sinputs s;
+       SSALite.spre := spre s;
+       SSALite.sprog := ssa2lite_program (sprog s);
+       SSALite.spost := spost s |}.
+
+End SSA2SSALite.
+
+
+(** ** Properties of variable substitution *)
+
+Section VarSubst.
+
+  Import SSA.
 
   Lemma vars_eexp_of_atom a : vars_eexp (eexp_of_atom a) = vars_atom a.
   Proof. by case: a => [ v | ty bs ] //=. Qed.
@@ -645,45 +749,11 @@ Section VarSubst.
 End VarSubst.
 
 
-(* Rewrite mov statements in AST level - to be implemented for optimization *)
+(** ** Properties of rewriting mov statements *)
 
 Section RewriteMov.
 
   Import SSA.
-
-  Definition subst_map_instr (m : SSAVM.t atom) (i : instr) : SSAVM.t atom :=
-    match i with
-    | Imov v a =>
-        (* v <- a *)
-        match a with
-        | Avar u => match SSAVM.find u m with
-                    | None =>
-                        (* v <- u *)
-                        SSAVM.add v a m
-                    | Some ua =>
-                        (* v <- u <- ... <- ua *)
-                        SSAVM.add v ua m
-                    end
-        | Aconst _ _ => SSAVM.add v a m
-        end
-    | _ => m
-    end.
-
-  Fixpoint subst_map_program_rec (m : SSAVM.t atom) (p : program) : SSAVM.t atom :=
-    match p with
-    | [::] => m
-    | i::p => subst_map_program_rec (subst_map_instr m i) p
-    end.
-
-  Definition subst_map_program (p : program) : SSAVM.t atom :=
-    subst_map_program_rec (SSAVM.empty atom) p.
-
-  Definition subst_map_spec (s : spec) : SSAVM.t atom :=
-    subst_map_program (sprog s).
-
-  Definition rewrite_mov (s : spec) : spec :=
-    subst_spec (subst_map_spec s) s.
-
 
   Lemma subst_map_program_rec_cons m i p :
     subst_map_program_rec m (i::p) = subst_map_program_rec (subst_map_instr m i) p.
@@ -2684,6 +2754,8 @@ Section RewriteMov.
 End RewriteMov.
 
 
+(** ** Some properties about [cut_spec], [remove_asserts], and [extract_asserts] *)
+
 Section Extra.
 
   Import SSA.
@@ -3070,15 +3142,12 @@ Section Extra.
 End Extra.
 
 
-(* Convert SSAFull without Iassert and Icut statements to SSA *)
+(** Properties of the conversion from SSA to SSALite *)
 
-From Cryptoline Require SSALite.
-
-Section SSA2Lite.
+Section SSA2SSALite.
 
   Import SSALite.
   Import SSA.
-
 
   (* Programs containing neither cut nor assert statements *)
 
@@ -3203,52 +3272,7 @@ Section SSA2Lite.
   Qed.
 
 
-  (* Conversion from SSAFull to SSA *)
-
-  Definition ssa2lite_instr (i : SSA.instr) : SSALite.instr :=
-    match i with
-    | Imov v a => SSALite.Imov v a
-    | Ishl v a n => SSALite.Ishl v a n
-    | Icshl v1 v2 a1 a2 n => SSALite.Icshl v1 v2 a1 a2 n
-    | Inondet v t => SSALite.Inondet v t
-    | Icmov v c a1 a2 => SSALite.Icmov v c a1 a2
-    | Inop => SSALite.Inop
-    | Inot v t a => SSALite.Inot v t a
-    | Iadd v a1 a2 => SSALite.Iadd v a1 a2
-    | Iadds c v a1 a2 => SSALite.Iadds c v a1 a2
-    | Iadc v a1 a2 y => SSALite.Iadc v a1 a2 y
-    | Iadcs c v a1 a2 y => SSALite.Iadcs c v a1 a2 y
-    | Isub v a1 a2 => SSALite.Isub v a1 a2
-    | Isubc c v a1 a2 => SSALite.Isubc c v a1 a2
-    | Isubb c v a1 a2 => SSALite.Isubb c v a1 a2
-    | Isbc v a1 a2 y => SSALite.Isbc v a1 a2 y
-    | Isbcs c v a1 a2 y => SSALite.Isbcs c v a1 a2 y
-    | Isbb v a1 a2 y => SSALite.Isbb v a1 a2 y
-    | Isbbs c v a1 a2 y => SSALite.Isbbs c v a1 a2 y
-    | Imul v a1 a2 => SSALite.Imul v a1 a2
-    | Imull vh vl a1 a2 => SSALite.Imull vh vl a1 a2
-    | Imulj v a1 a2 => SSALite.Imulj v a1 a2
-    | Isplit vh vl a n => SSALite.Isplit vh vl a n
-    | Iand v t a1 a2 => SSALite.Iand v t a1 a2
-    | Ior v t a1 a2 => SSALite.Ior v t a1 a2
-    | Ixor v t a1 a2 => SSALite.Ixor v t a1 a2
-    | Icast v t a => SSALite.Icast v t a
-    | Ivpc v t a => SSALite.Ivpc v t a
-    | Ijoin v ah al => SSALite.Ijoin v ah al
-    | Icut e => SSALite.Inop
-    | Iassert e => SSALite.Inop
-    | Iassume e => SSALite.Iassume e
-    end.
-
-  Definition ssa2lite_program (p : SSA.program) : SSALite.program :=
-    tmap ssa2lite_instr p.
-
-  Definition ssa2lite_spec (s : SSA.spec) : SSALite.spec :=
-    {| SSALite.sinputs := sinputs s;
-       SSALite.spre := spre s;
-       SSALite.sprog := ssa2lite_program (sprog s);
-       SSALite.spost := spost s |}.
-
+  (* Conversion from SSA to SSALite *)
 
   Lemma ssa2lite_program_cons i p :
     ssa2lite_program (i::p) = ssa2lite_instr i::ssa2lite_program p.
@@ -3545,4 +3569,4 @@ Section SSA2Lite.
     reflexivity.
   Qed.
 
-End SSA2Lite.
+End SSA2SSALite.

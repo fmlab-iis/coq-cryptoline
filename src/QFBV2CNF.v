@@ -1,5 +1,5 @@
 
-(** Bit blast SMT QF_BV queries to CNF. *)
+(** * Range reduction to CNF *)
 
 From Coq Require Import ZArith List.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
@@ -7,14 +7,62 @@ From ssrlib Require Import EqVar Tactics Seqs.
 From BitBlasting Require Import State QFBV TypEnv CNF.
 From BBCache Require Import Cache BitBlastingInit BitBlastingCacheDef BitBlastingCache.
 From BBCache Require Import CacheHash BitBlastingCacheHash.
-From Cryptoline Require Import Options SSALite SSA2ZSSA SSA2QFBV.
+From Cryptoline Require Import Options SSALite SSA2REP SSA2QFBV.
 From nbits Require Import NBits.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
-Section QFBV2CNF.
+
+(** ** Definitions of the range reduction to CNF *)
+
+Section QFBV2CNFDefn.
+
+  Import SSALite.
+  Import QFBV.
+
+  (* Bit-blast range spec and safety conditions *)
+
+  Fixpoint bb_hbexps_cache E (es : seq QFBVHash.hbexp) :=
+    match es with
+    | [::] => (init_vm, init_hcache, init_gen, [::])
+    | e :: es' =>
+      let '(m, c, g, cnfs) := bb_hbexps_cache E es' in
+      let '(m', c', g', cs, lr) := bit_blast_bexp_hcache_tflatten
+                                     E m (CacheHash.reset_ct c) g e in
+      (m', c', g', (CNF.add_prelude ([::CNF.neg_lit lr]::cs))::cnfs)
+    end.
+
+  (* Simplify a sequence of QF_BV expressions *)
+
+  Definition simplify_bexps (es : seq QFBV.bexp) :=
+    tmap QFBV.simplify_bexp2 es.
+
+  (* Remove QFBV formulas that are trivially true *)
+
+  Definition bexp_is_not_true (e : QFBV.bexp) : bool :=
+    match e with
+    | Btrue => false
+    | _ => true
+    end.
+
+  Definition filter_not_true es := tfilter bexp_is_not_true es.
+
+  (** Range reduction to CNF *)
+
+  Definition bb_rngred_algsnd (o : options) (s : rspec) : seq QFBV.bexp :=
+    filter_not_true
+      (simplify_bexps
+         (if apply_slicing_rspec o then rngred_algsnd_slice_split_la o s
+          else rngred_algsnd_split_la s)).
+
+End QFBV2CNFDefn.
+
+
+(** ** Properties of the range reduction to CNF *)
+
+Section QFBV2CNFLemmas.
 
   Import SSALite.
   Import QFBV.
@@ -134,16 +182,6 @@ Section QFBV2CNF.
 
 
   (* Bit-blast range spec and safety conditions *)
-
-  Fixpoint bb_hbexps_cache E (es : seq QFBVHash.hbexp) :=
-    match es with
-    | [::] => (init_vm, init_hcache, init_gen, [::])
-    | e :: es' =>
-      let '(m, c, g, cnfs) := bb_hbexps_cache E es' in
-      let '(m', c', g', cs, lr) := bit_blast_bexp_hcache_tflatten
-                                     E m (CacheHash.reset_ct c) g e in
-      (m', c', g', (CNF.add_prelude ([::CNF.neg_lit lr]::cs))::cnfs)
-    end.
 
   Definition valid_bb_bexps_cache E (es : seq QFBV.bexp) :=
     forall m c g cnfs cnf,
@@ -275,10 +313,6 @@ Section QFBV2CNF.
 
   (* Simplify a sequence of QF_BV expressions *)
 
-  Definition simplify_bexps (es : seq QFBV.bexp) :=
-    tmap QFBV.simplify_bexp2 es.
-
-
   Lemma vars_simplify_bexps es :
     SSAVS.subset (QFBV.vars_bexps (simplify_bexps es)) (QFBV.vars_bexps es).
   Proof.
@@ -320,14 +354,6 @@ Section QFBV2CNF.
 
   (* Remove QFBV formulas that are trivially true *)
 
-  Definition bexp_is_not_true e :=
-    match e with
-    | Btrue => false
-    | _ => true
-    end.
-
-  Definition filter_not_true es := tfilter bexp_is_not_true es.
-
   Lemma vars_filter_not_true es :
     SSAVS.Equal (QFBV.vars_bexps (filter_not_true es)) (QFBV.vars_bexps es).
   Proof.
@@ -365,14 +391,7 @@ Section QFBV2CNF.
   Qed.
 
 
-  (* Apply range reduction, convert algebraic soundness conditions to QF_BV predicates, and
-     bit-blast QF_BV predicates *)
-
-  Definition bb_rngred_algsnd (o : options) (s : rspec) : seq QFBV.bexp :=
-    filter_not_true
-      (simplify_bexps
-         (if apply_slicing_rspec o then rngred_algsnd_slice_split_la o s
-          else rngred_algsnd_split_la s)).
+  (** Properties of range reduction to CNF *)
 
   Lemma bb_rngred_algsnd_well_formed o s :
     let fE := program_succ_typenv (rsprog s) (rsinputs s) in
@@ -417,4 +436,4 @@ Section QFBV2CNF.
     rewrite -simplify_bexps_valid. exact: (rngred_algsnd_split_la_complete Hrs Hwf Hrng Hsafe).
   Qed.
 
-End QFBV2CNF.
+End QFBV2CNFLemmas.

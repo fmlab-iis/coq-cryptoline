@@ -1,11 +1,12 @@
 open BinNums
 open CNF
+open IMP
 open Options0
-open Poly
 open QFBV2CNF
 open QFBVHash
+open REP
 open Ring_polynom
-open SSA2ZSSA
+open SSA2REP
 open Seqs
 open Eqtype
 open Seq
@@ -43,15 +44,15 @@ val validate_imp_answer_list :
 
 val verify_areps_list : options -> arep list -> bool
 
-val verify_rep : options -> ZSSA.ZSSA.rep -> bool
+val verify_rep : options -> rep -> bool
 
-val verify_reps_seq : options -> ZSSA.ZSSA.rep list -> bool
+val verify_reps_seq : options -> rep list -> bool
 
-val verify_reps_paral : options -> ZSSA.ZSSA.rep list -> bool
+val verify_reps_paral : options -> rep list -> bool
 
-val verify_reps : options -> ZSSA.ZSSA.rep list -> bool
+val verify_reps : options -> rep list -> bool
 
-val verify_rep1 : options -> ZSSA.ZSSA.rep -> bool
+val verify_rep1 : options -> rep -> bool
 
 val verify_espec : options -> SSALite.SSALite.spec -> bool
 

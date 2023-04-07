@@ -1,4 +1,6 @@
 
+(** * Common operators and expressions for DSL *)
+
 From Coq Require Import Ascii ZArith String.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
 From nbits Require Import NBits.

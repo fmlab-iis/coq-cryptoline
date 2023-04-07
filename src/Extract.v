@@ -1,4 +1,6 @@
 
+(** * Extraction of verification procedures *)
+
 (* Note: the file name cannot be Extraction.v. *)
 
 From Coq Require Import Extraction ExtrOcamlBasic ExtrOcamlString.
@@ -8,7 +10,7 @@ From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun prime.
 From ssrlib Require Import Var Tactics Seqs.
 From BitBlasting Require Import State QFBV TypEnv.
 From BBCache Require Import Cache.
-From Cryptoline Require Import DSLLite SSALite DSL SSA SSA2QFBV SSA2ZSSA VerifyLite Verify.
+From Cryptoline Require Import DSLLite SSALite DSL SSA SSA2QFBV SSA2REP VerifyLite Verify.
 From nbits Require Import NBits.
 
 Extraction Language OCaml.
@@ -31,10 +33,10 @@ Separate Extraction
          DSLLite.string_of_espec SSALite.string_of_espec
          DSLLite.string_of_rspec SSALite.string_of_rspec
          DSL.string_of_spec SSA.string_of_spec
-         Poly.string_of_azbexp Poly.string_of_zpexpr
+         REP.string_of_azbexp IMP.string_of_zpexpr
          (* Verification *)
          CNF.dimacs_cnf_with_header CNF.max_var_of_cnf CNF.num_clauses
-         Poly.zpexpr_is_zero SSALite.slice_espec SSALite.slice_rspec
+         ZPoly.zpexpr_is_zero SSALite.slice_espec SSALite.slice_rspec
          SSALite.split_espec SSALite.split_rspec
          DSLLite.well_formed_spec DSL.well_formed_spec
          VerifyLite.verify_dsllite Verify.verify_dsl.

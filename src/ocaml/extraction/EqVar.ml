@@ -81,3 +81,20 @@ type ssavar = SSAVarOrder.t
 module SSAVS = MakeTreeSetWithNew(SSAVarOrder)
 
 module SSAVM = MakeTreeMapWithNew(SSAVarOrder)
+
+(** val svar : SSAVarOrder.t -> Equality.sort **)
+
+let svar x =
+  fst (Obj.magic x)
+
+(** val max_svar : SSAVS.t -> VarOrder.t **)
+
+let max_svar vs =
+  match SSAVS.max_elt vs with
+  | Some v -> svar v
+  | None -> Obj.magic N0
+
+(** val new_svar : SSAVS.t -> VarOrder.t **)
+
+let new_svar vs =
+  Obj.magic N.succ (max_svar vs)

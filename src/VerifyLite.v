@@ -1,17 +1,19 @@
 
-(** Verification procedures *)
+(** * Verification procedures for SSALite and DSLLite *)
 
 From Coq Require Import List ZArith Btauto.
 From mathcomp Require Import ssreflect ssrbool ssrnat eqtype seq ssrfun.
 From ssrlib Require Import EqVar Types EqOrder Seqs Tactics.
 From BitBlasting Require Import State QFBV Typ TypEnv.
-From Cryptoline Require Import Options DSLLite SSALite ZSSA SSA2QFBV SSA2ZSSA QFBV2CNF Poly.
+From Cryptoline Require Import Options DSLLite SSALite REP SSA2QFBV SSA2REP QFBV2CNF IMP.
 From Coq Require Import Ring_polynom.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Import Prenex Implicits.
 
+
+(** ** Verification procedures *)
 
 Section Verification.
 
@@ -21,6 +23,150 @@ Section Verification.
 
   (* External SAT solver *)
   Parameter ext_all_unsat : seq cnf -> bool.
+
+  (* External computer algebra system.
+     Solve an ideal membership problems by the external computer algebra system.
+     An ideal membership problem is given as a tuple (ps, ms, q). The problem
+     is to check if q is in the ideal of ms++ps, i.e., there are cps and cms such
+     that q = cps * ps + cms * ms. ext_solve_imp returns such (cps, cms). *)
+  Parameter ext_solve_imp :
+    seq (PExpr Z) -> PExpr Z -> seq (PExpr Z) -> seq (PExpr Z) * seq (PExpr Z).
+
+  (* External computer algebra system.
+     Solve a sequence of ideal membership problems by the external computer
+     algebra system. An ideal membership problem is given as a tuple
+     (ps, ms, q). The problem is to check if q is in the ideal of ms++ps,
+     i.e., there are cps and cms such that q = cps * ps + cms * ms.
+     ext_solve_imp_list returns a sequence of (cps, cms). *)
+  Parameter ext_solve_imp_list :
+    seq (seq (PExpr Z) * PExpr Z * seq (PExpr Z)) -> seq (seq (PExpr Z) * seq (PExpr Z)).
+
+
+  (** Verify QF_BV predicates *)
+
+  Definition verify_qfbv_bexps fE (es : seq QFBV.bexp) : bool :=
+    let '(_, _, _, cnfs) := bb_hbexps_cache fE (tmap QFBVHash.hash_bexp es) in
+    ext_all_unsat cnfs.
+
+
+  (** Range reduction and algebraic soundness conditions *)
+
+  Definition verify_rspec_algsnd (o : options) (s : SSALite.spec) : bool :=
+    let rs := SSALite.rspec_of_spec s in
+    let fE := SSALite.program_succ_typenv (SSALite.rsprog rs) (SSALite.rsinputs rs) in
+    let es := bb_rngred_algsnd o rs in
+    verify_qfbv_bexps fE es.
+
+
+  (** Verify an atomic root entailment problem - sequential version *)
+
+  Definition polys_of_arep (o : options) (ps : arep) : seq (PExpr Z) * PExpr Z * seq (PExpr Z) :=
+    let '(_, _, ps, ms, q) := imp_of_arep ps in
+    let '(ps', q') :=
+      if rewrite_assignments_imp o then
+        if vars_cache_in_rewrite_assignments o then simplify_generator_vars_cache ps q
+        else simplify_generator ps q
+      else (ps, q) in
+    (ps', q', ms).
+
+  (* Verify an atomic root entailment problem by reducing the problem to an
+     ideal membership problem, solving the ideal membership problem by an
+     external computer algebra system, and validating the answer from the
+     computer algebra system. *)
+  Definition verify_arep (o : options) (ps : arep) : bool :=
+    let '(ps', q', ms) := polys_of_arep o ps in
+    let (cps, cms) := ext_solve_imp ps' q' ms in
+    validate_imp_answer ps' ms q' cps cms.
+
+  Definition verify_areps (o : options) (pss : seq arep) : bool := all (verify_arep o) pss.
+
+
+  (** Verify atomic root entailment problems - concurrent solving, sequential validating *)
+
+  Definition polys_of_areps (o : options) (pss : seq arep) :
+    seq (seq (PExpr Z) * PExpr Z * seq (PExpr Z)) :=
+    tmap (polys_of_arep o) pss.
+
+  Fixpoint validate_imp_answer_list polys coefs : bool :=
+    match polys, coefs with
+    | [::], [::] => true
+    | ((ps, q, ms)::tlp), ((cps, cms)::tlc) => if validate_imp_answer ps ms q cps cms
+                                               then validate_imp_answer_list tlp tlc
+                                               else false
+    | _, _ => false
+    end.
+
+  Definition verify_areps_list (o : options) (pss : seq arep) : bool :=
+    let poly_list := polys_of_areps o pss in
+    let coef_list := ext_solve_imp_list poly_list in
+    if size poly_list == size coef_list
+    then validate_imp_answer_list poly_list coef_list
+    else false.
+
+
+  (** Verify root entailment problems - sequential version *)
+
+  (* Verify a root entailment problem by reducing the problem to atomic
+     root entailment problems and then verifying the atomic problems
+     through verify_areps. *)
+  Definition verify_rep (o : options) (zs : REP.rep) : bool :=
+    if rewrite_assignments_arep o
+    then verify_areps o (areps_of_rep_simplified o zs)
+    else verify_areps o (areps_of_rep zs).
+
+  Definition verify_reps_seq (o : options) (zss : seq REP.rep) : bool :=
+    all (verify_rep o) zss.
+
+
+  (** Verify root entailment problems - concurrent version *)
+
+  Definition verify_reps_paral (o : options) (zss : seq REP.rep) : bool :=
+    if rewrite_assignments_arep o
+    then verify_areps_list o (tflatten (tmap (areps_of_rep_simplified o) zss))
+    else verify_areps_list o (tflatten (tmap areps_of_rep zss)).
+
+
+  (** Algebraic reduction *)
+
+  Definition verify_reps o (reps : seq REP.rep) : bool :=
+    if compute_coefficients_one_by_one o
+    then verify_reps_seq o reps
+    else verify_reps_paral o reps.
+
+  Definition verify_rep1 o (rep : REP.rep) : bool :=
+    if compute_coefficients_one_by_one o
+    then verify_rep o rep
+    else verify_reps_paral o [:: rep].
+
+  Definition verify_espec (o : options) (s : SSALite.spec) :=
+    let avn := new_svar_spec s in
+    let apply_algred s := algred_espec o avn s in
+    if apply_slicing_espec o
+    then let reps := tmap apply_algred
+                          (tmap (SSALite.slice_espec o) (SSALite.split_espec (SSALite.espec_of_spec s))) in
+         verify_reps o reps
+    else let rep := apply_algred (SSALite.espec_of_spec s) in
+         verify_rep1 o rep.
+
+
+  (** Verify specifications *)
+
+  Definition verify_ssalite (o : options) (s : SSALite.spec) :=
+    (verify_rspec_algsnd o s) && (verify_espec o s).
+
+  Definition verify_dsllite (o : options) (s : DSLLite.spec) :=
+    verify_ssalite o (ssa_spec s).
+
+End Verification.
+
+
+(** ** Properties of verification procedures *)
+
+Section VerificationLemmas.
+
+  Import CNF.
+
+  (** Assumed properties of external solvers *)
 
   Axiom all_unsat_sound :
     forall css : seq cnf,
@@ -32,25 +178,6 @@ Section Verification.
       (forall cs, cs \in css -> ~ sat cs) ->
       ext_all_unsat css.
 
-
-  (* External computer algebra system.
-     Solve an ideal membership problems by the external computer algebra system.
-     An ideal membership problem is given as a tuple (ps, ms, q). The problem
-     is to check if q is in the ideal of ms++ps, i.e., there are cps and cms such
-     that q = cps * ps + cms * ms. ext_solve_imp returns such (cps, cms). *)
-  Parameter ext_solve_imp :
-    seq (PExpr Z) -> PExpr Z -> seq (PExpr Z) -> seq (PExpr Z) * seq (PExpr Z).
-
-
-  (* External computer algebra system.
-     Solve a sequence of ideal membership problems by the external computer
-     algebra system. An ideal membership problem is given as a tuple
-     (ps, ms, q). The problem is to check if q is in the ideal of ms++ps,
-     i.e., there are cps and cms such that q = cps * ps + cms * ms.
-     ext_solve_imp_list returns a sequence of (cps, cms). *)
-  Parameter ext_solve_imp_list :
-    seq (seq (PExpr Z) * PExpr Z * seq (PExpr Z)) -> seq (seq (PExpr Z) * seq (PExpr Z)).
-
   Axiom ext_solve_imp_list_nil :
     ext_solve_imp_list [::] = [::].
 
@@ -60,13 +187,7 @@ Section Verification.
       (ext_solve_imp ps q ms)::(ext_solve_imp_list tl).
 
 
-  (** Verification procedures *)
-
-  (* Verify QF_BV predicates *)
-
-  Definition verify_qfbv_bexps fE (es : seq QFBV.bexp) : bool :=
-    let '(_, _, _, cnfs) := bb_hbexps_cache fE (tmap QFBVHash.hash_bexp es) in
-    ext_all_unsat cnfs.
+  (** Properties of verification procedures *)
 
   Lemma verify_qfbv_bexps_empty fE :
     verify_qfbv_bexps fE [::].
@@ -107,13 +228,6 @@ Section Verification.
 
   (* Range reduction and algebraic soundness conditions *)
 
-  Definition verify_rspec_algsnd (o : options) (s : SSALite.spec) : bool :=
-    let rs := SSALite.rspec_of_spec s in
-    let fE := SSALite.program_succ_typenv (SSALite.rsprog rs) (SSALite.rsinputs rs) in
-    let es := bb_rngred_algsnd o rs in
-    verify_qfbv_bexps fE es.
-
-
   Lemma verify_rspec_algsnd_sound o (s : SSALite.spec) :
     well_formed_ssa_spec s ->
     verify_rspec_algsnd o s ->
@@ -149,27 +263,6 @@ Section Verification.
 
   (* Verify an atomic root entailment problem - sequential version *)
 
-  Definition polys_of_arep (o : options) (ps : arep) : seq (PExpr Z) * PExpr Z * seq (PExpr Z) :=
-    let '(_, _, ps, ms, q) := imp_of_arep ps in
-    let '(ps', q') :=
-      if rewrite_assignments_imp o then
-        if vars_cache_in_rewrite_assignments o then simplify_generator_vars_cache ps q
-        else simplify_generator ps q
-      else (ps, q) in
-    (ps', q', ms).
-
-  (* Verify an atomic root entailment problem by reducing the problem to an
-     ideal membership problem, solving the ideal membership problem by an
-     external computer algebra system, and validating the answer from the
-     computer algebra system. *)
-  Definition verify_arep (o : options) (ps : arep) : bool :=
-    let '(ps', q', ms) := polys_of_arep o ps in
-    let (cps, cms) := ext_solve_imp ps' q' ms in
-    validate_imp_answer ps' ms q' cps cms.
-
-  Definition verify_areps (o : options) (pss : seq arep) : bool := all (verify_arep o) pss.
-
-
   Lemma verify_areps_rev o pss :
     verify_areps o (rev pss) = verify_areps o pss.
   Proof.
@@ -203,27 +296,6 @@ Section Verification.
 
 
   (* Verify atomic root entailment problems - concurrent solving, sequential validating *)
-
-  Definition polys_of_areps (o : options) (pss : seq arep) :
-    seq (seq (PExpr Z) * PExpr Z * seq (PExpr Z)) :=
-    tmap (polys_of_arep o) pss.
-
-  Fixpoint validate_imp_answer_list polys coefs : bool :=
-    match polys, coefs with
-    | [::], [::] => true
-    | ((ps, q, ms)::tlp), ((cps, cms)::tlc) => if validate_imp_answer ps ms q cps cms
-                                               then validate_imp_answer_list tlp tlc
-                                               else false
-    | _, _ => false
-    end.
-
-  Definition verify_areps_list (o : options) (pss : seq arep) : bool :=
-    let poly_list := polys_of_areps o pss in
-    let coef_list := ext_solve_imp_list poly_list in
-    if size poly_list == size coef_list
-    then validate_imp_answer_list poly_list coef_list
-    else false.
-
 
   Lemma polys_of_areps_nil o : polys_of_areps o [::] = [::].
   Proof. reflexivity. Qed.
@@ -335,18 +407,6 @@ Section Verification.
 
   (* Verify root entailment problems - sequential version *)
 
-  (* Verify a root entailment problem by reducing the problem to atomic
-     root entailment problems and then verifying the atomic problems
-     through verify_areps. *)
-  Definition verify_rep (o : options) (zs : ZSSA.rep) : bool :=
-    if rewrite_assignments_arep o
-    then verify_areps o (areps_of_rep_simplified o zs)
-    else verify_areps o (areps_of_rep zs).
-
-  Definition verify_reps_seq (o : options) (zss : seq ZSSA.rep) : bool :=
-    all (verify_rep o) zss.
-
-
   Lemma verify_reps_seq_in o zs zss :
     In zs zss -> verify_reps_seq o zss -> verify_rep o zs.
   Proof.
@@ -356,8 +416,8 @@ Section Verification.
     - move=> Hin. exact: (IH Hin Hvzss).
   Qed.
 
-  Lemma verify_rep_sound o (zs : ZSSA.rep) :
-    verify_rep o zs -> ZSSA.valid_rep zs.
+  Lemma verify_rep_sound o (zs : REP.rep) :
+    verify_rep o zs -> REP.valid_rep zs.
   Proof.
     rewrite /verify_rep. case: (rewrite_assignments_arep o) => Hv.
     - apply: (@areps_of_rep_simplified_sound o) => ps Hin.
@@ -366,23 +426,17 @@ Section Verification.
       exact: (verify_areps_in Hv Hin).
   Qed.
 
-  Lemma verify_reps_seq_sound o (zss : seq ZSSA.rep) :
-    verify_reps_seq o zss -> ZSSA.valid_reps zss.
+  Lemma verify_reps_seq_sound o (zss : seq REP.rep) :
+    verify_reps_seq o zss -> REP.valid_reps zss.
   Proof.
     elim: zss => [| zs zss IH] //=. move/andP=> [Hzs Hzss].
-    rewrite ZSSA.valid_reps_cons. split.
+    rewrite REP.valid_reps_cons. split.
     - exact: (verify_rep_sound Hzs).
     - exact: (IH Hzss).
   Qed.
 
 
   (* Verify root entailment problems - concurrent version *)
-
-  Definition verify_reps_paral (o : options) (zss : seq ZSSA.rep) : bool :=
-    if rewrite_assignments_arep o
-    then verify_areps_list o (tflatten (tmap (areps_of_rep_simplified o) zss))
-    else verify_areps_list o (tflatten (tmap areps_of_rep zss)).
-
 
   Lemma verify_reps_paral_nil o : verify_reps_paral o [::].
   Proof.
@@ -416,8 +470,8 @@ Section Verification.
     - rewrite verify_reps_paral_cons IH. reflexivity.
   Qed.
 
-  Lemma verify_reps_paral_sound o (zss : seq ZSSA.rep) :
-    verify_reps_paral o zss -> ZSSA.valid_reps zss.
+  Lemma verify_reps_paral_sound o (zss : seq REP.rep) :
+    verify_reps_paral o zss -> REP.valid_reps zss.
   Proof.
     rewrite /verify_reps_paral. case: (rewrite_assignments_arep o) => /= Hv.
     - move=> s Hs. apply: (@areps_of_rep_simplified_sound o) => ps Hin.
@@ -434,27 +488,6 @@ Section Verification.
 
 
   (* Algebraic reduction *)
-
-  Definition verify_reps o (reps : seq ZSSA.rep) : bool :=
-    if compute_coefficients_one_by_one o
-    then verify_reps_seq o reps
-    else verify_reps_paral o reps.
-
-  Definition verify_rep1 o (rep : ZSSA.rep) : bool :=
-    if compute_coefficients_one_by_one o
-    then verify_rep o rep
-    else verify_reps_paral o [:: rep].
-
-  Definition verify_espec (o : options) (s : SSALite.spec) :=
-    let avn := new_svar_spec s in
-    let apply_algred s := algred_espec o avn s in
-    if apply_slicing_espec o
-    then let reps := tmap apply_algred
-                          (tmap (SSALite.slice_espec o) (SSALite.split_espec (SSALite.espec_of_spec s))) in
-         verify_reps o reps
-    else let rep := apply_algred (SSALite.espec_of_spec s) in
-         verify_rep1 o rep.
-
 
   Lemma verify_reps_nil o : verify_reps o [::].
   Proof.
@@ -505,29 +538,22 @@ Section Verification.
 
   Lemma verify_reps_sound o reps :
     verify_reps o reps ->
-    ZSSA.valid_reps reps.
+    REP.valid_reps reps.
   Proof.
     rewrite /verify_reps. case_if; eauto using verify_reps_seq_sound, verify_reps_paral_sound.
   Qed.
 
   Lemma verify_rep1_sound o rep :
     verify_rep1 o rep ->
-    ZSSA.valid_rep rep.
+    REP.valid_rep rep.
   Proof.
     rewrite /verify_rep1. case_if.
     - exact: (verify_rep_sound H0).
-    - exact: (ZSSA.valid_reps_hd (verify_reps_paral_sound H0)).
+    - exact: (REP.valid_reps_hd (verify_reps_paral_sound H0)).
   Qed.
 
 
   (* Verify specifications *)
-
-  Definition verify_ssalite (o : options) (s : SSALite.spec) :=
-    (verify_rspec_algsnd o s) && (verify_espec o s).
-
-  Definition verify_dsllite (o : options) (s : DSLLite.spec) :=
-    verify_ssalite o (ssa_spec s).
-
 
   Theorem verify_ssalite_sound (o : options) (s : SSALite.spec) :
     well_formed_ssa_spec s -> verify_ssalite o s ->
@@ -561,4 +587,4 @@ Section Verification.
     exact: (ssa_spec_well_formed Hwf).
   Qed.
 
-End Verification.
+End VerificationLemmas.

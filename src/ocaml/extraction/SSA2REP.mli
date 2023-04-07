@@ -4,14 +4,11 @@ open BinNums
 open DSLRaw
 open EqVar
 open Options0
+open REP
 open Typ
 open Eqtype
 open Seq
 open Ssrnat
-
-val max_svar : SSAVS.t -> VarOrder.t
-
-val new_svar : SSAVS.t -> VarOrder.t
 
 val algred_atom : SSALite.SSALite.atom -> SSALite.SSALite.eexp
 
@@ -45,5 +42,4 @@ val algred_program :
 
 val new_svar_spec : SSALite.SSALite.spec -> VarOrder.t
 
-val algred_espec :
-  options -> VarOrder.t -> SSALite.SSALite.espec -> ZSSA.ZSSA.rep
+val algred_espec : options -> VarOrder.t -> SSALite.SSALite.espec -> rep

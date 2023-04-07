@@ -1,8 +1,9 @@
 open Options0
 open QFBV2CNF
+open REP
 open SSA2QFBV
+open SSA2REP
 open SSA2SSALite
-open SSA2ZSSA
 open Seqs
 open VerifyLite
 open Seq
@@ -29,8 +30,7 @@ let algsnd_spec o s =
        then algsnd_slice_la o rs
        else qfbv_spec_algsnd_la rs))
 
-(** val algred_spec :
-    options -> SSALite.SSALite.spec -> ZSSA.ZSSA.rep list **)
+(** val algred_spec : options -> SSALite.SSALite.spec -> rep list **)
 
 let algred_spec o s =
   let avn = new_svar_spec s in

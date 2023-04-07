@@ -1,4 +1,5 @@
 
+(** * Options *)
 
 Record options : Set :=
   mkOptions {

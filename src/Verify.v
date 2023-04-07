@@ -1,11 +1,11 @@
 
-(** Verification procedures *)
+(** * Verification procedures for DSL and SSA *)
 
 From Coq Require Import List ZArith.
 From mathcomp Require Import ssreflect ssrbool ssrnat eqtype seq ssrfun.
 From ssrlib Require Import EqVar Types EqOrder Lists Seqs Tactics.
 From BitBlasting Require Import State QFBV Typ TypEnv.
-From Cryptoline Require Import Options DSLLite SSALite DSL SSA SSA2SSALite ZSSA SSA2QFBV SSA2ZSSA QFBV2CNF Poly VerifyLite.
+From Cryptoline Require Import Options DSLLite SSALite DSL SSA SSA2SSALite REP SSA2QFBV SSA2REP QFBV2CNF IMP VerifyLite.
 From Coq Require Import Ring_polynom.
 
 Set Implicit Arguments.
@@ -13,7 +13,7 @@ Unset Strict Implicit.
 Import Prenex Implicits.
 
 
-(* Verify full specifications *)
+(** ** Verification procedures *)
 
 Section Verification.
 
@@ -35,13 +35,54 @@ Section Verification.
          (if apply_slicing_rspec o then algsnd_slice_la o rs
           else qfbv_spec_algsnd_la rs)).
 
-  Definition algred_spec (o : options) (s : SSALite.spec) : seq ZSSA.rep :=
+  Definition algred_spec (o : options) (s : SSALite.spec) : seq REP.rep :=
     let avn := new_svar_spec s in
     let apply_algred s := algred_espec o avn s in
     if apply_slicing_espec o
     then tmap apply_algred
               (tmap (SSALite.slice_espec o) (SSALite.split_espec (SSALite.espec_of_spec s)))
     else [:: apply_algred (SSALite.espec_of_spec s)].
+
+
+  (* Verification procedure *)
+
+  Definition verify_ssa (o : options) (s : SSA.spec) : bool :=
+    let fE := SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s) in
+    (* Rewrite mov statements before cutting the specification *)
+    let s := rewrite_mov s in
+    (* Split cuts *)
+    let cuts := SSA.cut_spec s in
+    (* Extract all assertions *)
+    let asserts := tflatten (tmap SSA.extract_asserts cuts) in
+    let asserts_ssa := tmap SSA2SSALite.ssa2lite_spec asserts in
+    (* Cuts without any assertions *)
+    let nacuts := tmap SSA.remove_asserts cuts in
+    let nacuts_ssa := tmap SSA2SSALite.ssa2lite_spec nacuts in
+    (* range reduction and algebraic soundness *)
+    let rngconds :=
+      (* QF_BV predicates for soundness conditions *)
+      let sndconds := tflatten (tmap (algsnd_spec o) nacuts_ssa) in
+      (* QF_BV predicates for range assertions *)
+      let rngasserts := tflatten (tmap (rngred_spec o) asserts_ssa) in
+      (* QF_BV predicates for range postcondition *)
+      let rngpost := tflatten (tmap (rngred_spec o) nacuts_ssa) in
+      catrev (rev sndconds) (catrev (rev rngasserts) rngpost) in
+    (* algebraic reduction *)
+    let reps :=
+      let algasserts := tflatten (tmap (algred_spec o) asserts_ssa) in
+      let algpost := tflatten (tmap (algred_spec o) nacuts_ssa) in
+      catrev (rev algasserts) algpost in
+    (verify_qfbv_bexps fE rngconds) && (verify_reps o reps).
+
+  Definition verify_dsl (o : options) (s : DSL.spec) :=
+    verify_ssa o (SSA.ssa_spec s).
+
+End Verification.
+
+
+(** ** Properties of verification procedures *)
+
+Section VerificationLemmas.
 
   Lemma algsnd_spec_vars_subset o s :
     SSAVS.subset (QFBV.vars_bexps (algsnd_spec o s)) (SSALite.vars_spec s).
@@ -119,48 +160,14 @@ Section Verification.
     SSALite.well_formed_ssa_spec s ->
     ssa_spec_algsnd (SSALite.rspec_of_spec s) ->
     SSALite.valid_rspec (SSALite.rspec_of_spec s) ->
-    ZSSA.valid_reps (algred_spec o s) ->
+    REP.valid_reps (algred_spec o s) ->
     SSALite.valid_spec s.
   Proof.
     move=> Hwf Hsnd Hvr. move: (fresh_var_spec_espec (new_svar_spec_fresh s)) => Havn.
     rewrite /algred_spec. case_if.
     - exact: (algred_spec_slice_sound Hwf Hsnd Havn Hvr H0).
-    - exact: (algred_spec_sound Hwf Hsnd Hvr Havn (ZSSA.valid_reps_hd H0)).
+    - exact: (algred_spec_sound Hwf Hsnd Hvr Havn (REP.valid_reps_hd H0)).
   Qed.
-
-
-  (* Verification procedure *)
-
-  Definition verify_ssa (o : options) (s : SSA.spec) : bool :=
-    let fE := SSA.program_succ_typenv (SSA.sprog s) (SSA.sinputs s) in
-    (* Rewrite mov statements before cutting the specification *)
-    let s := rewrite_mov s in
-    (* Split cuts *)
-    let cuts := SSA.cut_spec s in
-    (* Extract all assertions *)
-    let asserts := tflatten (tmap SSA.extract_asserts cuts) in
-    let asserts_ssa := tmap SSA2SSALite.ssa2lite_spec asserts in
-    (* Cuts without any assertions *)
-    let nacuts := tmap SSA.remove_asserts cuts in
-    let nacuts_ssa := tmap SSA2SSALite.ssa2lite_spec nacuts in
-    (* range reduction and algebraic soundness *)
-    let rngconds :=
-      (* QF_BV predicates for soundness conditions *)
-      let sndconds := tflatten (tmap (algsnd_spec o) nacuts_ssa) in
-      (* QF_BV predicates for range assertions *)
-      let rngasserts := tflatten (tmap (rngred_spec o) asserts_ssa) in
-      (* QF_BV predicates for range postcondition *)
-      let rngpost := tflatten (tmap (rngred_spec o) nacuts_ssa) in
-      catrev (rev sndconds) (catrev (rev rngasserts) rngpost) in
-    (* algebraic reduction *)
-    let reps :=
-      let algasserts := tflatten (tmap (algred_spec o) asserts_ssa) in
-      let algpost := tflatten (tmap (algred_spec o) nacuts_ssa) in
-      catrev (rev algasserts) algpost in
-    (verify_qfbv_bexps fE rngconds) && (verify_reps o reps).
-
-  Definition verify_dsl (o : options) (s : DSL.spec) :=
-    verify_ssa o (SSA.ssa_spec s).
 
 
   (* Soundness *)
@@ -366,7 +373,7 @@ Section Verification.
         rewrite -SSA.remove_asserts_program_cat in Has. exact: Has.
   Qed.
 
-  Lemma verify_ssa_sound o s :
+  Theorem verify_ssa_sound o s :
     SSA.well_formed_ssa_spec s ->
     verify_ssa o s ->
     SSA.valid_spec s.
@@ -499,7 +506,7 @@ Section Verification.
           exact: (in_tflatten_tmap Hincut Hinoca).
   Qed.
 
-  Lemma verify_dsl_sound o s :
+  Theorem verify_dsl_sound o s :
     DSL.well_formed_spec s ->
     verify_dsl o s ->
     DSL.valid_spec s.
@@ -508,4 +515,4 @@ Section Verification.
     exact: (verify_ssa_sound (ssa_spec_well_formed Hwf) Hv).
   Qed.
 
-End Verification.
+End VerificationLemmas.

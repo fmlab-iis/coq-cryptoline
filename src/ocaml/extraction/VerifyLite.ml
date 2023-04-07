@@ -1,11 +1,12 @@
 open BinNums
 open CNF
+open IMP
 open Options0
-open Poly
 open QFBV2CNF
 open QFBVHash
+open REP
 open Ring_polynom
-open SSA2ZSSA
+open SSA2REP
 open Seqs
 open Eqtype
 open Seq
@@ -106,33 +107,33 @@ let verify_areps_list o pss =
   then validate_imp_answer_list poly_list coef_list
   else false
 
-(** val verify_rep : options -> ZSSA.ZSSA.rep -> bool **)
+(** val verify_rep : options -> rep -> bool **)
 
 let verify_rep o zs =
   if o.rewrite_assignments_arep
   then verify_areps o (areps_of_rep_simplified o zs)
   else verify_areps o (areps_of_rep zs)
 
-(** val verify_reps_seq : options -> ZSSA.ZSSA.rep list -> bool **)
+(** val verify_reps_seq : options -> rep list -> bool **)
 
 let verify_reps_seq o zss =
   all (verify_rep o) zss
 
-(** val verify_reps_paral : options -> ZSSA.ZSSA.rep list -> bool **)
+(** val verify_reps_paral : options -> rep list -> bool **)
 
 let verify_reps_paral o zss =
   if o.rewrite_assignments_arep
   then verify_areps_list o (tflatten (tmap (areps_of_rep_simplified o) zss))
   else verify_areps_list o (tflatten (tmap areps_of_rep zss))
 
-(** val verify_reps : options -> ZSSA.ZSSA.rep list -> bool **)
+(** val verify_reps : options -> rep list -> bool **)
 
 let verify_reps o reps =
   if o.compute_coefficients_one_by_one
   then verify_reps_seq o reps
   else verify_reps_paral o reps
 
-(** val verify_rep1 : options -> ZSSA.ZSSA.rep -> bool **)
+(** val verify_rep1 : options -> rep -> bool **)
 
 let verify_rep1 o rep0 =
   if o.compute_coefficients_one_by_one

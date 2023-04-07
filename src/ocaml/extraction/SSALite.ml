@@ -2,7 +2,6 @@ open BinNat
 open BinNums
 open Bool
 open DSLRaw
-open Datatypes
 open EqVar
 open NBitsDef
 open Options0
@@ -51,11 +50,6 @@ let upd_index v m =
 
 let ssa_var m v =
   Obj.magic (v, (get_index v m))
-
-(** val svar : ssavar -> Equality.sort **)
-
-let svar x =
-  fst (Obj.magic x)
 
 (** val ssa_atom : vmap -> DSLLite.DSLLite.atom -> SSALite.atom **)
 

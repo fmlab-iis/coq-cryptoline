@@ -1,5 +1,5 @@
 
-(** Typed CryptoLine. *)
+(** * Typed CryptoLine language *)
 
 From Coq Require Import List Ascii ZArith OrderedType String Btauto.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun.
@@ -28,12 +28,16 @@ Module MakeDSL
   Module TELemmas := TypEnvLemmas TE.
   Local Hint Immediate S.Upd_upd S.Upd2_upd2 : dsl.
 
-  (* Variables *)
+
+  (** ** Definitions *)
+
+
+  (** Variables *)
 
   Local Notation var := V.t.
 
 
-  (* Algebraic Expressions *)
+  (** Algebraic expressions *)
 
   Definition eexp := eexp V.T.
 
@@ -74,18 +78,18 @@ Module MakeDSL
     eexp_eqP e1 e2.
 
   Definition eexp_eqMixin := EqMixin eexp_eqP.
-  Canonical eexp_eqType := Eval hnf in EqType eexp eexp_eqMixin.
+  #[global]
+   Canonical eexp_eqType := Eval hnf in EqType eexp eexp_eqMixin.
   Definition eexp_eqn := @eexp_eqn V.T.
 
 
-  (* Limbs *)
+  (** Limbs *)
 
   Definition limbsi (i : nat) (r : Z) (es : seq eexp) : eexp := limbsi i r es.
   Definition limbs (r : Z) (es : seq eexp) : eexp := limbsi 0 r es.
 
 
-
-  (* Range Expressions *)
+  (** Range expressions *)
 
   Definition rexp := rexp V.T.
 
@@ -136,18 +140,12 @@ Module MakeDSL
     rexp_eqP e1 e2.
 
   Definition rexp_eqMixin := EqMixin rexp_eqP.
-  Canonical rexp_eqType := Eval hnf in EqType rexp rexp_eqMixin.
+  #[global]
+   Canonical rexp_eqType := Eval hnf in EqType rexp rexp_eqMixin.
   Definition rexp_eqn := @rexp_eqn V.T.
 
-  Global Instance add_proper_size_of_rexp :
-    Proper (eq ==> TE.Equal ==> eq) size_of_rexp.
-  Proof.
-    move=> e1 e2 ? E1 E2 Heq; subst. case: e2 => //=.
-    move=> x. rewrite -> Heq. reflexivity.
-  Qed.
 
-
-  (* Algebraic Predicates *)
+  (** Algebraic predicates *)
 
   Definition ebexp : Type := ebexp V.T.
 
@@ -173,32 +171,12 @@ Module MakeDSL
     ebexp_eqP e1 e2.
 
   Definition ebexp_eqMixin := EqMixin ebexp_eqP.
-  Canonical ebexp_eqType := Eval hnf in EqType ebexp ebexp_eqMixin.
+  #[global]
+   Canonical ebexp_eqType := Eval hnf in EqType ebexp ebexp_eqMixin.
   Definition ebexp_eqn := @ebexp_eqn V.T.
 
-  Lemma vars_eands_cons e es :
-    VS.Equal (vars_ebexp (eands (e::es)))
-             (VS.union (vars_ebexp e) (vars_ebexp (eands es))).
-  Proof. reflexivity. Qed.
 
-  Lemma vars_eands_cat es1 es2 :
-    VS.Equal (vars_ebexp (eands (es1 ++ es2)))
-             (VS.union (vars_ebexp (eands es1)) (vars_ebexp (eands es2))).
-  Proof.
-    elim: es1 => [| e1 es1 IH1] //=.
-    - by VSLemmas.dp_Equal.
-    - rewrite IH1. by VSLemmas.dp_Equal.
-  Qed.
-
-  Lemma vars_eands_split_eand e :
-    VS.Equal (vars_ebexp (eands (split_eand e))) (vars_ebexp e).
-  Proof.
-    elim: e => /=; try (move=> *; by VSLemmas.dp_Equal).
-    move=> e1 IH1 e2 IH2. rewrite vars_eands_cat IH1 IH2. reflexivity.
-  Qed.
-
-
-  (* Range Predicates *)
+  (** Range Predicates *)
 
   Definition rbexp : Type := rbexp V.T.
 
@@ -238,11 +216,12 @@ Module MakeDSL
     rbexp_eqP e1 e2.
 
   Definition rbexp_eqMixin := EqMixin rbexp_eqP.
-  Canonical rbexp_eqType := Eval hnf in EqType rbexp rbexp_eqMixin.
+  #[global]
+   Canonical rbexp_eqType := Eval hnf in EqType rbexp rbexp_eqMixin.
   Definition rbexp_eqn := @rbexp_eqn V.T.
 
 
-  (* Predicates *)
+  (** Predicates *)
 
   Definition bexp : Type := ebexp * rbexp.
 
@@ -267,23 +246,8 @@ Module MakeDSL
   Definition vars_bexp (e : bexp) : VS.t :=
     VS.union (vars_ebexp (eqn_bexp e)) (vars_rbexp (rng_bexp e)).
 
-  Lemma vars_ebexp_subset e :
-    VS.subset (vars_ebexp (eqn_bexp e)) (vars_bexp e).
-  Proof.
-    apply: VSLemmas.subset_union1. exact: VSLemmas.subset_refl.
-  Qed.
 
-  Lemma vars_rbexp_subset e :
-    VS.subset (vars_rbexp (rng_bexp e)) (vars_bexp e).
-  Proof.
-    apply: VSLemmas.subset_union2. exact: VSLemmas.subset_refl.
-  Qed.
-
-  Lemma bands_singleton e : bands [:: e] = e.
-  Proof. by case: e => //=. Qed.
-
-
-  (* Atoms *)
+  (** Atoms *)
 
   Definition avar := @Avar V.T.
   Definition aconst := @Aconst V.T.
@@ -322,23 +286,11 @@ Module MakeDSL
   Qed.
 
   Definition atom_eqMixin := EqMixin atom_eqP.
-  Canonical atom_eqType := Eval hnf in EqType atom atom_eqMixin.
-
-  Global Instance add_proper_atyp : Proper (eq ==> TE.Equal ==> eq) atyp.
-  Proof.
-    move=> a1 a2 ? E1 E2 Heq; subst. rewrite /atyp. case: a2 => //=.
-    move=> x. move: (Heq x). case H2: (TE.find x E2) => H1.
-    - rewrite (TE.find_some_vtyp H1) (TE.find_some_vtyp H2). reflexivity.
-    - rewrite (TE.find_none_vtyp H1) (TE.find_none_vtyp H2). reflexivity.
-  Qed.
-
-  Global Instance add_proper_asize : Proper (eq ==> TE.Equal ==> eq) asize.
-  Proof.
-    move=> a1 a2 ? E1 E2 Heq; subst. rewrite /asize. rewrite Heq. reflexivity.
-  Qed.
+  #[global]
+   Canonical atom_eqType := Eval hnf in EqType atom atom_eqMixin.
 
 
-  (* Instructions and programs *)
+  (** Instructions and programs *)
 
   Inductive instr : Type :=
   (* Imov (v, a): v = a *)
@@ -465,7 +417,8 @@ Module MakeDSL
   Qed.
 
   Definition instr_eqMixin := EqMixin instr_eqP.
-  Canonical instr_eqType := Eval hnf in EqType instr instr_eqMixin.
+  #[global]
+   Canonical instr_eqType := Eval hnf in EqType instr instr_eqMixin.
 
 
   (** Variables in programs *)
@@ -620,123 +573,8 @@ Module MakeDSL
     | hd::tl => VS.union (rvs_instr hd) (rvs_program tl)
     end.
 
-  Lemma vars_instr_split i :
-    VS.Equal (vars_instr i) (VS.union (lvs_instr i) (rvs_instr i)).
-  Proof. case: i => /=; move=> *; by VSLemmas.dp_Equal. Qed.
 
-  Lemma mem_vars_instr1 v i :
-    VS.mem v (vars_instr i) -> VS.mem v (lvs_instr i) \/ VS.mem v (rvs_instr i).
-  Proof. rewrite vars_instr_split => H. exact: (VSLemmas.mem_union1 H). Qed.
-
-  Lemma mem_vars_instr2 v i : VS.mem v (lvs_instr i) -> VS.mem v (vars_instr i).
-  Proof. rewrite vars_instr_split => H. by apply: VSLemmas.mem_union2. Qed.
-
-  Lemma mem_vars_instr3 v i : VS.mem v (rvs_instr i) -> VS.mem v (vars_instr i).
-  Proof. rewrite vars_instr_split => H. by apply: VSLemmas.mem_union3. Qed.
-
-  Lemma lvs_instr_subset i : VS.subset (lvs_instr i) (vars_instr i).
-  Proof. rewrite vars_instr_split. exact: VSLemmas.union_subset_1. Qed.
-
-  Lemma rvs_instr_subset i : VS.subset (rvs_instr i) (vars_instr i).
-  Proof. rewrite vars_instr_split. exact: VSLemmas.union_subset_2. Qed.
-
-  Lemma vars_program_split p :
-    VS.Equal (vars_program p) (VS.union (lvs_program p) (rvs_program p)).
-  Proof.
-    elim: p => [| hd tl IH] /=.
-    - rewrite VSLemmas.union_emptyl. reflexivity.
-    - have: VS.Equal (VS.union (VS.union (lvs_instr hd) (lvs_program tl))
-                               (VS.union (rvs_instr hd) (rvs_program tl)))
-                     (VS.union (VS.union (lvs_instr hd) (rvs_instr hd))
-                               (VS.union (lvs_program tl) (rvs_program tl))) by
-          VSLemmas.dp_Equal.
-      move=> ->. rewrite -IH. rewrite -vars_instr_split. reflexivity.
-  Qed.
-
-  Lemma instr_mem_lvs i p :
-    i \in p -> VS.subset (lvs_instr i) (lvs_program p).
-  Proof.
-    elim: p => [| j p IH] //=. rewrite in_cons. case/orP.
-    - move/eqP=> ?; subst. by VSLemmas.dp_subset.
-    - move=> Hin. move: (IH Hin) => ?. by VSLemmas.dp_subset.
-  Qed.
-
-  Lemma instr_mem_rvs i p :
-    i \in p -> VS.subset (rvs_instr i) (rvs_program p).
-  Proof.
-    elim: p => [| j p IH] //=. rewrite in_cons. case/orP.
-    - move/eqP=> ?; subst. by VSLemmas.dp_subset.
-    - move=> Hin. move: (IH Hin) => ?. by VSLemmas.dp_subset.
-  Qed.
-
-  Lemma instr_mem_vars i p :
-    i \in p -> VS.subset (vars_instr i) (vars_program p).
-  Proof.
-    elim: p => [| j p IH] //=. rewrite in_cons. case/orP.
-    - move/eqP=> ?; subst. by VSLemmas.dp_subset.
-    - move=> Hin. move: (IH Hin) => ?. by VSLemmas.dp_subset.
-  Qed.
-
-  Lemma mem_vars_program1 v p :
-    VS.mem v (vars_program p) -> VS.mem v (lvs_program p) \/ VS.mem v (rvs_program p).
-  Proof. rewrite vars_program_split => H. exact: (VSLemmas.mem_union1 H). Qed.
-
-  Lemma mem_vars_program2 v p : VS.mem v (lvs_program p) -> VS.mem v (vars_program p).
-  Proof. rewrite vars_program_split => H. by apply: VSLemmas.mem_union2. Qed.
-
-  Lemma mem_vars_program3 v p : VS.mem v (rvs_program p) -> VS.mem v (vars_program p).
-  Proof. rewrite vars_program_split => H. by apply: VSLemmas.mem_union3. Qed.
-
-  Lemma lvs_program_subset p : VS.subset (lvs_program p) (vars_program p).
-  Proof. rewrite vars_program_split. exact: VSLemmas.union_subset_1. Qed.
-
-  Lemma rvs_program_subset p : VS.subset (rvs_program p) (vars_program p).
-  Proof. rewrite vars_program_split. exact: VSLemmas.union_subset_2. Qed.
-
-  Lemma vars_program_cat p1 p2 :
-    VS.Equal (vars_program (p1 ++ p2)) (VS.union (vars_program p1) (vars_program p2)).
-  Proof.
-    elim: p1 p2 => [| hd tl IH] p2 /=.
-    - rewrite VSLemmas.union_emptyl. reflexivity.
-    - rewrite IH VSLemmas.OP.P.union_assoc. reflexivity.
-  Qed.
-
-  Lemma lvs_program_cat p1 p2 :
-    VS.Equal (lvs_program (p1 ++ p2)) (VS.union (lvs_program p1) (lvs_program p2)).
-  Proof.
-    elim: p1 p2 => [| hd tl IH] p2 /=.
-    - rewrite VSLemmas.union_emptyl. reflexivity.
-    - rewrite IH VSLemmas.OP.P.union_assoc. reflexivity.
-  Qed.
-
-  Lemma vars_program_rcons p i :
-    VS.Equal (vars_program (rcons p i)) (VS.union (vars_program p) (vars_instr i)).
-  Proof.
-    rewrite -cats1 vars_program_cat /=. rewrite VSLemmas.union_emptyr. reflexivity.
-  Qed.
-
-  Lemma lvs_program_rcons p i :
-    VS.Equal (lvs_program (rcons p i)) (VS.union (lvs_program p) (lvs_instr i)).
-  Proof.
-    rewrite -cats1 lvs_program_cat /=. rewrite VSLemmas.union_emptyr. reflexivity.
-  Qed.
-
-  Lemma vars_program_rev p :
-    VS.Equal (vars_program (rev p)) (vars_program p).
-  Proof.
-    elim: p => [| i p IH] //=. rewrite rev_cons vars_program_rcons IH VSLemmas.P.union_sym.
-    reflexivity.
-  Qed.
-
-  Lemma lvs_program_rev p :
-    VS.Equal (lvs_program (rev p)) (lvs_program p).
-  Proof.
-    elim: p => [| i p IH] //=. rewrite rev_cons lvs_program_rcons IH VSLemmas.P.union_sym.
-    reflexivity.
-  Qed.
-
-
-  (* Specifications *)
+  (** Specifications *)
 
   Record spec : Type :=
     mkSpec { sinputs : TE.env;
@@ -872,7 +710,7 @@ Module MakeDSL
   End StringOutputs.
 
 
-  (* Conversion from bits to integer *)
+  (** Conversion from bits to Z *)
 
   Definition bv2z (t : typ) (bs : bits) : Z :=
     match t with
@@ -883,90 +721,8 @@ Module MakeDSL
   Definition acc2z (E : TE.env) (v : V.t) (s : S.t) : Z :=
     bv2z (TE.vtyp v E) (S.acc v s).
 
-  Global Instance add_proper_acc2z_env :
-    Proper (TE.Equal ==> eq ==> eq ==> eq) acc2z.
-  Proof.
-    move=> E1 E2 Heq v1 v2 ? s1 s2 ?; subst. rewrite /acc2z.
-    move: (Heq v2) => Hf. rewrite (TELemmas.find_same_vtyp Hf). reflexivity.
-  Qed.
 
-  Global Instance add_proper_acc2z_store :
-    Proper (eq ==> eq ==> S.Equal ==> eq) acc2z.
-  Proof.
-    move=> E1 E2 ? v1 v2 ? s1 s2 Heq; subst. rewrite /acc2z.
-    rewrite (S.add_proper_acc (erefl v2) Heq). reflexivity.
-  Qed.
-
-  Lemma acc2z_upd_eq {E x v bs sb} :
-    x == v ->
-    acc2z E x (S.upd v bs sb) = bv2z (TE.vtyp x E) bs.
-  Proof. rewrite /acc2z => Heq. rewrite (S.acc_upd_eq Heq). reflexivity. Qed.
-
-  Lemma acc2z_Upd_eq {E x v e s1 s2} :
-    x == v ->
-    S.Upd v e s1 s2 ->
-    acc2z E x s2 = bv2z (TE.vtyp x E) e.
-  Proof. rewrite /acc2z => Heq Hupd. rewrite (S.acc_Upd_eq Heq Hupd). reflexivity. Qed.
-
-  Lemma acc2z_upd_neq {E x v bs sb} :
-    x != v ->
-    acc2z E x (S.upd v bs sb) = acc2z E x sb.
-  Proof. rewrite /acc2z => Hne. rewrite (S.acc_upd_neq Hne). reflexivity. Qed.
-
-  Lemma acc2z_Upd_neq {E x v e s1 s2} :
-    x != v ->
-    S.Upd v e s1 s2 ->
-    acc2z E x s2 = acc2z E x s1.
-  Proof.
-    rewrite /acc2z => Hne Hupd. rewrite (S.acc_Upd_neq Hne Hupd). reflexivity.
-  Qed.
-
-  Lemma acc2z_upd2_eq1 {E x vl el vh eh s} :
-    x == vl -> x != vh ->
-    acc2z E x (S.upd2 vl el vh eh s) = bv2z (TE.vtyp x E) el.
-  Proof.
-    rewrite /acc2z => Heq Hne. rewrite (S.acc_upd2_eq1 Heq Hne). reflexivity.
-  Qed.
-
-  Lemma acc2z_Upd2_eq1 {E x vl el vh eh s1 s2} :
-    x == vl -> x != vh ->
-    S.Upd2 vl el vh eh s1 s2 ->
-    acc2z E x s2 = bv2z (TE.vtyp x E) el.
-  Proof.
-    rewrite /acc2z => Heq Hne Hupd. rewrite (S.acc_Upd2_eq1 Heq Hne Hupd). reflexivity.
-  Qed.
-
-  Lemma acc2z_upd2_eq2 {E x vl el vh eh s} :
-    x == vh ->
-    acc2z E x (S.upd2 vl el vh eh s) = bv2z (TE.vtyp x E) eh.
-  Proof. rewrite /acc2z => Heq. rewrite (S.acc_upd2_eq2 Heq). reflexivity. Qed.
-
-  Lemma acc2z_Upd2_eq2 {E x vl el vh eh s1 s2} :
-    x == vh ->
-    S.Upd2 vl el vh eh s1 s2 ->
-    acc2z E x s2 = bv2z (TE.vtyp x E) eh.
-  Proof.
-    rewrite /acc2z => Heq Hupd. rewrite (S.acc_Upd2_eq2 Heq Hupd). reflexivity.
-  Qed.
-
-  Lemma acc2z_upd2_neq {E x vl el vh eh s} :
-    x != vl -> x != vh ->
-    acc2z E x (S.upd2 vl el vh eh s) = acc2z E x s.
-  Proof.
-    rewrite /acc2z => Hne1 Hne2. rewrite (S.acc_upd2_neq Hne1 Hne2). reflexivity.
-  Qed.
-
-  Lemma acc2z_Upd2_neq {E x vl el vh eh s1 s2} :
-    x != vl -> x != vh ->
-    S.Upd2 vl el vh eh s1 s2 ->
-    acc2z E x s2 = acc2z E x s1.
-  Proof.
-    rewrite /acc2z => Hne1 Hne2 Hupd. rewrite (S.acc_Upd2_neq Hne1 Hne2 Hupd).
-    reflexivity.
-  Qed.
-
-
-  (* Update of typing environments *)
+  (** Update of typing environments *)
 
   (* Note: the correctness relies on well-formedness of instr *)
   Definition instr_succ_typenv (i : instr) (te : TE.env) : TE.env :=
@@ -1009,35 +765,8 @@ Module MakeDSL
   Definition program_succ_typenv (p : program) (te : TE.env) : TE.env :=
     foldl (fun te i => instr_succ_typenv i te) te p.
 
-  Global Instance add_proper_instr_succ_typenv :
-    Proper (eq ==> TE.Equal ==> TE.Equal) instr_succ_typenv.
-  Proof.
-    move=> i1 i2 ? E1 E2 Heq; subst. case: i2 => //=; intros; rewrite Heq; reflexivity.
-  Qed.
 
-  Global Instance add_proper_program_succ_typenv :
-    Proper (eq ==> TE.Equal ==> TE.Equal) program_succ_typenv.
-  Proof.
-    move=> p1 p2 ? E1 E2 Heq; subst. elim: p2 E1 E2 Heq => [| i p IH] E1 E2 Heq //=.
-    apply: (IH (instr_succ_typenv i E1) (instr_succ_typenv i E2)).
-    rewrite Heq. reflexivity.
-  Qed.
-
-  Lemma program_succ_typenv_cons E i p :
-    program_succ_typenv (i::p) E = program_succ_typenv p (instr_succ_typenv i E).
-  Proof. reflexivity. Qed.
-
-  Lemma program_succ_typenv_rcons E p i :
-    program_succ_typenv (rcons p i) E = instr_succ_typenv i (program_succ_typenv p E).
-  Proof. by elim: p E => [| hd tl IH] //=. Qed.
-
-  Lemma program_succ_typenv_cat E p1 p2 :
-    program_succ_typenv (p1 ++ p2) E =
-    program_succ_typenv p2 (program_succ_typenv p1 E).
-  Proof. by elim: p1 E => [| hd1 tl1 IH] //=. Qed.
-
-
-  (* Semantics *)
+  (** Semantics *)
 
   Definition eval_eunop (op : eunop) (v : Z) : Z :=
     match op with
@@ -1338,6 +1067,770 @@ Module MakeDSL
     | _, _ => False
     end.
 
+  Inductive eval_instrs (te : TE.env) : seq instr -> state -> state -> Prop :=
+  | Enil s t : state_equal s t -> eval_instrs te [::] s t
+  | Econs hd tl s t u : eval_instr te hd s t ->
+                  eval_instrs (instr_succ_typenv hd te) tl t u ->
+                  eval_instrs te (hd::tl) s u.
+
+  Definition eval_program (te : TE.env) p s t : Prop := eval_instrs te p s t.
+
+
+  (** Partial correctness *)
+
+  Definition valid_spec_ok (s : spec) : Prop :=
+    forall s1 s2,
+      S.conform s1 (sinputs s) ->
+      eval_bexp (spre s) (sinputs s) s1 ->
+      eval_program (sinputs s) (sprog s) (OK s1) (OK s2) ->
+      eval_bexp (spost s) (program_succ_typenv (sprog s) (sinputs s)) s2.
+
+  Definition valid_spec_err (s : spec) : Prop :=
+    forall s1,
+      S.conform s1 (sinputs s) ->
+      eval_bexp (spre s) (sinputs s) s1 ->
+      ~ eval_program (sinputs s) (sprog s) (OK s1) ERR.
+
+  Definition valid_spec (s : spec) : Prop :=
+    valid_spec_ok s /\ valid_spec_err s.
+
+
+  (** Well-typedness *)
+
+  (* Here we define well-typedness assuming all used variables are defined. *)
+  (* Note: we could also check the definedness of variables in well-typedness. *)
+
+  Fixpoint well_typed_eexp (te : TE.env) (e : eexp) : bool :=
+    match e with
+    | Evar v => true
+    | Econst n => true
+    | Eunop op e => well_typed_eexp te e
+    | Ebinop op e1 e2 => (well_typed_eexp te e1) && (well_typed_eexp te e2)
+    | Epow e _ => well_typed_eexp te e
+    end.
+
+  Fixpoint well_typed_eexps (te : TE.env) (es : seq eexp) : bool :=
+    match es with
+    | [::] => true
+    | e::es => (well_typed_eexp te e) && (well_typed_eexps te es)
+    end.
+
+  Fixpoint well_typed_rexp (te : TE.env) (e : rexp) : bool :=
+    match e with
+    | Rvar v => 0 < TE.vsize v te
+    | Rconst w n => (0 < w) && (size n == w)
+    | Runop w op e =>
+      (0 < w) && (well_typed_rexp te e) && (size_of_rexp e te == w)
+    | Rbinop w op e1 e2 =>
+      (0 < w) &&
+      (well_typed_rexp te e1) && (size_of_rexp e1 te == w) &&
+      (well_typed_rexp te e2) && (size_of_rexp e2 te == w)
+    | Ruext w e i
+    | Rsext w e i =>
+      (0 < w) && (well_typed_rexp te e) && (size_of_rexp e te == w)
+    end.
+
+  Fixpoint well_typed_ebexp (te : TE.env) (e : ebexp) : bool :=
+    match e with
+    | Etrue => true
+    | Eeq e1 e2 => (well_typed_eexp te e1) && (well_typed_eexp te e2)
+    | Eeqmod e1 e2 ms =>
+      (well_typed_eexp te e1) && (well_typed_eexp te e2) && (well_typed_eexps te ms)
+    | Eand e1 e2 => (well_typed_ebexp te e1) && (well_typed_ebexp te e2)
+    end.
+
+  Fixpoint well_typed_rbexp (te : TE.env) (e : rbexp) : bool :=
+    match e with
+    | Rtrue => true
+    | Req w e1 e2
+    | Rcmp w _ e1 e2 =>
+      (0 < w) &&
+      (well_typed_rexp te e1) && (size_of_rexp e1 te == w) &&
+      (well_typed_rexp te e2) && (size_of_rexp e2 te == w)
+    | Rneg e => well_typed_rbexp te e
+    | Rand e1 e2
+    | Ror e1 e2 => (well_typed_rbexp te e1) && (well_typed_rbexp te e2)
+    end.
+
+  Definition well_typed_bexp (te : TE.env) (e : bexp) : bool :=
+    (well_typed_ebexp te (eqn_bexp e)) && (well_typed_rbexp te (rng_bexp e)).
+
+  (* The size of an atom must be larger than 0. *)
+  Definition well_sized_atom E (a : atom) : bool :=
+    if is_unsigned (atyp a E) then 0 < asize a E
+    else 1 < asize a E.
+
+  (*
+   * If an atom is a constant, size of the constant must match
+   * the type of the atom.
+   *)
+  Definition size_matched_atom (a : atom) : bool :=
+    match a with
+    | Avar _ => true
+    | Aconst t n => size n == sizeof_typ t
+    end.
+
+  Definition well_typed_atom (E : TE.env) (a : atom) : bool :=
+    well_sized_atom E a && size_matched_atom a.
+
+  Definition well_typed_instr (E : TE.env) (i : instr) : bool :=
+    match i with
+    | Imov v a => well_typed_atom E a
+    | Ishl v a n => (well_typed_atom E a) && (n < asize a E)
+    | Icshl v1 v2 a1 a2 n => is_unsigned (atyp a2 E) &&
+                             compatible (atyp a1 E) (atyp a2 E) &&
+                             (well_typed_atom E a1) && (well_typed_atom E a2) &&
+                             (n <= asize a2 E)
+    | Inondet v t => true
+    | Icmov v c a1 a2 => (atyp c E == Tbit) && (atyp a1 E == atyp a2 E) &&
+                         (well_typed_atom E a1) && (well_typed_atom E a2) &&
+                         (well_typed_atom E c)
+    | Inop => true
+    | Inot v t a => compatible t (atyp a E) && (well_typed_atom E a)
+    | Iadd v a1 a2
+    | Iadds _ v a1 a2 => (atyp a1 E == atyp a2 E) && (well_typed_atom E a1) &&
+                         (well_typed_atom E a2)
+    | Iadc v a1 a2 y
+    | Iadcs _ v a1 a2 y => (atyp a1 E == atyp a2 E) && (atyp y E == Tbit) &&
+                           (well_typed_atom E a1) && (well_typed_atom E a2) &&
+                           (well_typed_atom E y)
+    | Isub v a1 a2
+    | Isubc _ v a1 a2
+    | Isubb _ v a1 a2 => (atyp a1 E == atyp a2 E) && (well_typed_atom E a1) &&
+                         (well_typed_atom E a2)
+    | Isbc v a1 a2 y
+    | Isbcs _ v a1 a2 y => (atyp a1 E == atyp a2 E) && (atyp y E == Tbit) &&
+                           (well_typed_atom E a1) && (well_typed_atom E a2) &&
+                           (well_typed_atom E y)
+    | Isbb v a1 a2 y
+    | Isbbs _ v a1 a2 y => (atyp a1 E == atyp a2 E) && (atyp y E == Tbit) &&
+                           (well_typed_atom E a1) && (well_typed_atom E a2) &&
+                           (well_typed_atom E y)
+    | Imul v a1 a2 => (atyp a1 E == atyp a2 E) &&
+                      (well_typed_atom E a1) && (well_typed_atom E a2)
+    | Imull vh vl a1 a2 => (atyp a1 E == atyp a2 E) &&
+                           (well_typed_atom E a1) && (well_typed_atom E a2)
+    | Imulj v a1 a2 => (atyp a1 E == atyp a2 E) &&
+                       (well_typed_atom E a1) && (well_typed_atom E a2)
+    | Isplit vh vl a n => (well_typed_atom E a) && (n < asize a E)
+    | Iand v t a1 a2
+    | Ior v t a1 a2
+    | Ixor v t a1 a2 =>
+      compatible t (atyp a1 E) && compatible t (atyp a2 E) &&
+      (well_typed_atom E a1) && (well_typed_atom E a2)
+    | Icast v t a
+    | Ivpc v t a => (well_typed_atom E a)
+    | Ijoin v ah al =>
+      is_unsigned (atyp al E) && compatible (atyp ah E) (atyp al E) &&
+      (well_typed_atom E ah) && (well_typed_atom E al)
+    | Icut e
+    | Iassert e
+    | Iassume e => well_typed_bexp E e
+    end.
+
+
+  (** Well-defined instructions *)
+
+  Module TEKS := MapKeySet V TE VS.
+
+  (* the set of defined variables *)
+  Definition vars_env (te : TE.env) := TEKS.key_set te.
+
+  (* Note: Use TE.mem v te to determine if v is defined *)
+  Definition is_defined (v : var) (te : TE.env) : bool :=
+    TE.mem v te.
+
+  Definition are_defined (vs : VS.t) (te : TE.env) : bool :=
+    VS.for_all (is_defined^~ te) vs.
+
+  Definition well_defined_instr (te : TE.env) (i : instr) : bool :=
+    match i with
+    | Imov v a => are_defined (vars_atom a) te
+    | Ishl v a _ => are_defined (vars_atom a) te
+    | Icshl v1 v2 a1 a2 _ =>
+      (v1 != v2) && are_defined (vars_atom a1) te
+                 && are_defined (vars_atom a2) te
+    | Inondet v t => true
+    | Icmov v c a1 a2 =>
+      (are_defined (vars_atom c) te) && are_defined (vars_atom a1) te
+                                       && are_defined (vars_atom a2) te
+    | Inop => true
+    | Inot v t a => are_defined (vars_atom a) te
+    | Iadd v a1 a2 =>
+      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
+    | Iadds c v a1 a2 =>
+      (c != v) && are_defined (vars_atom a1) te
+               && are_defined (vars_atom a2) te
+    | Iadc v a1 a2 y =>
+      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
+                  && are_defined (vars_atom y) te
+    | Iadcs c v a1 a2 y =>
+      (c != v) && are_defined (vars_atom a1) te
+               && are_defined (vars_atom a2) te
+               && are_defined (vars_atom y) te
+    | Isub v a1 a2 =>
+      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
+    | Isubc c v a1 a2
+    | Isubb c v a1 a2 =>
+      (c != v) && are_defined (vars_atom a1) te
+               && are_defined (vars_atom a2) te
+    | Isbc v a1 a2 y =>
+      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
+                  && are_defined (vars_atom y) te
+    | Isbcs c v a1 a2 y =>
+      (c != v) && are_defined (vars_atom a1) te
+               && are_defined (vars_atom a2) te
+               && are_defined (vars_atom y) te
+    | Isbb v a1 a2 y =>
+      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
+                  && are_defined (vars_atom y) te
+    | Isbbs c v a1 a2 y =>
+      (c != v) && are_defined (vars_atom a1) te
+               && are_defined (vars_atom a2) te
+               && are_defined (vars_atom y) te
+    | Imul v a1 a2 =>
+      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
+    | Imull vh vl a1 a2 =>
+      (vh != vl) && are_defined (vars_atom a1) te
+                 && are_defined (vars_atom a2) te
+    | Imulj v a1 a2 =>
+      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
+    | Isplit vh vl a n => (vh != vl) && are_defined (vars_atom a) te
+    | Iand v t a1 a2
+    | Ior v t a1 a2
+    | Ixor v t a1 a2 =>
+      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
+    | Icast v t a
+    | Ivpc v t a => are_defined (vars_atom a) te
+    | Ijoin v ah al =>
+        are_defined (vars_atom ah) te && are_defined (vars_atom al) te
+    | Icut e
+    | Iassert e
+    | Iassume e => are_defined (vars_bexp e) te
+    end.
+
+
+  (** Well-formedness *)
+
+  Definition well_formed_eexp (te : TE.env) (e : eexp) :=
+    are_defined (vars_eexp e) te && well_typed_eexp te e.
+
+  Fixpoint well_formed_eexps (te : TE.env) (es : seq eexp) :=
+    match es with
+    | [::] => true
+    | e::es => (well_formed_eexp te e) && (well_formed_eexps te es)
+    end.
+
+  Definition well_formed_rexp (te : TE.env) (e : rexp) :=
+    are_defined (vars_rexp e) te && well_typed_rexp te e.
+
+  Definition well_formed_ebexp (te : TE.env) (e : ebexp) :=
+    are_defined (vars_ebexp e) te && well_typed_ebexp te e.
+
+  Definition well_formed_rbexp (te : TE.env) (e : rbexp) :=
+    are_defined (vars_rbexp e) te && well_typed_rbexp te e.
+
+  Definition well_formed_bexp (te : TE.env) (e : bexp) :=
+    are_defined (vars_bexp e) te && well_typed_bexp te e.
+
+  Definition well_formed_instr (te : TE.env) (i : instr) : bool :=
+    well_defined_instr te i && well_typed_instr te i.
+
+  Fixpoint well_formed_program (te : TE.env) (p : program) : bool :=
+    match p with
+    | [::] => true
+    | hd::tl =>
+      well_formed_instr te hd &&
+      well_formed_program (instr_succ_typenv hd te) tl
+    end.
+
+  Fixpoint find_non_well_formed_instr (te : TE.env) (p : program) : option instr :=
+    match p with
+    | [::] => None
+    | hd::tl =>
+      if well_formed_instr te hd
+      then find_non_well_formed_instr (instr_succ_typenv hd te) tl
+      else Some hd
+    end.
+
+  Definition well_formed_spec (s : spec) : bool :=
+    well_formed_bexp (sinputs s) (spre s) &&
+    well_formed_program (sinputs s) (sprog s) &&
+    well_formed_bexp (program_succ_typenv (sprog s) (sinputs s)) (spost s).
+
+
+  (** Infer input variables *)
+
+  Fixpoint inputs_program_rec (defined : VS.t) (p : program) : VS.t :=
+    match p with
+    | [::] => VS.empty
+    | i::p => VS.union (VS.diff (rvs_instr i) defined)
+                       (inputs_program_rec (VS.union (lvs_instr i) defined) p)
+    end.
+
+  Definition inputs_program (p : program) : VS.t :=
+    inputs_program_rec VS.empty p.
+
+
+  (** Tests of instructions *)
+
+  Definition is_nondet (i : instr) : bool :=
+    match i with
+    | Inondet _ _ => true
+    | _ => false
+    end.
+
+  Definition is_cut (i : instr) : bool :=
+    match i with
+    | Icut _ => true
+    | _ => false
+    end.
+
+  Definition is_assert (i : instr) : bool :=
+    match i with
+    | Iassert _ => true
+    | _ => false
+    end.
+
+  Definition is_assume (i : instr) : bool :=
+    match i with
+    | Iassume _ => true
+    | _ => false
+    end.
+
+
+  (** Store equal under a typing environment *)
+
+  Definition bvs_eqi (E : TE.env) (s1 s2 : S.t) :=
+    forall x, TE.mem x E -> S.acc x s1 = S.acc x s2.
+
+
+  (** Make a store conform to a typing environment *)
+
+  (* Update state values according to an environment such that
+     it conforms to the environment *)
+
+  Fixpoint force_conform_vars E vs s :=
+    match vs with
+    | [::] => s
+    | v::vs => S.upd v (zeros (TE.vsize v E)) (force_conform_vars E vs s)
+    end.
+
+  Definition force_conform (E1 E2 : TE.env) (s : S.t) : S.t :=
+    force_conform_vars E2 (VS.elements (VS.diff (vars_env E2) (vars_env E1))) s.
+
+
+  (** Store equal under a set of variables *)
+
+  Module TSEQM := TStateEqmod V BitsValueType S VS.
+
+
+  (** Typing environments that agree the types of a set of variables *)
+
+  Module MA := TypEnvAgree V TE VS.
+
+
+  (** Split a specification at cuts *)
+
+  Section SplitCuts.
+
+    (* a procedure that splits a specification at cuts *)
+
+    Fixpoint cut_spec_rec visited_rev E f p g : seq spec :=
+      match p with
+      | [::] => [:: {| sinputs := E; spre := f; sprog := rev visited_rev; spost := g |}]
+      | i::p => match i with
+                | Icut e =>
+                    let visited := rev visited_rev in
+                    {| sinputs := E; spre := f; sprog := visited; spost := e |}
+                      :: cut_spec_rec [::] (program_succ_typenv visited E) e p g
+                | _ => cut_spec_rec (i::visited_rev) E f p g
+                end
+      end.
+
+    Definition cut_spec (s : spec) : seq spec :=
+      cut_spec_rec [::] (sinputs s) (spre s) (sprog s) (spost s).
+
+    Definition compose_spec (s1 s2 : spec) : spec :=
+      {| sinputs := sinputs s1;
+        spre := spre s1;
+        sprog := sprog s1 ++ Icut (spost s1) :: sprog s2;
+        spost := spost s2 |}.
+
+    Definition program_has_no_cut (p : program) : bool :=
+      ~~ has is_cut p.
+
+    Definition spec_has_no_cut (s : spec) : bool :=
+      program_has_no_cut (sprog s).
+
+  End SplitCuts.
+
+
+  (** Extract assertions and the postcondition as standalone specifications *)
+
+  Section CutAsserts.
+
+    Fixpoint cut_asserts_rec visited_rev E f p g : seq spec :=
+      match p with
+      | [::] => [:: {| sinputs := E; spre := f; sprog := rev visited_rev; spost := g |}]
+      | i::p => match i with
+                | Iassert e => {| sinputs := E; spre := f; sprog := rev visited_rev; spost := e |}
+                                 :: cut_asserts_rec visited_rev E f p g
+                | _ => cut_asserts_rec (i::visited_rev) E f p g
+                end
+      end.
+
+    Definition cut_asserts (s : spec) : seq spec :=
+      cut_asserts_rec [::] (sinputs s) (spre s) (sprog s) (spost s).
+
+    Definition program_has_no_assert (p : program) : bool :=
+      ~~ has is_assert p.
+
+    Definition spec_has_no_assert (s : spec) : bool :=
+      program_has_no_assert (sprog s).
+
+  End CutAsserts.
+
+
+  (** Extract assertions as standalone specifications *)
+
+  Section ExtractAsserts.
+
+    Fixpoint extract_asserts_rec visited_rev E f p : seq spec :=
+      match p with
+      | [::] => [::]
+      | i::p => match i with
+                | Iassert e => {| sinputs := E; spre := f; sprog := rev visited_rev; spost := e |}
+                                 :: extract_asserts_rec visited_rev E f p
+                | _ => extract_asserts_rec (i::visited_rev) E f p
+                end
+      end.
+
+    Definition extract_asserts (s : spec) : seq spec :=
+      extract_asserts_rec [::] (sinputs s) (spre s) (sprog s).
+
+  End ExtractAsserts.
+
+
+  (** Remove asserts *)
+
+  Section RemoveAsserts.
+
+    Definition remove_asserts_program (p : program) : program :=
+      filter (fun i => ~~ is_assert i) p.
+
+    Definition remove_asserts (s : spec) : spec :=
+      {| sinputs := sinputs s;
+        spre := spre s;
+        sprog := remove_asserts_program (sprog s);
+        spost := spost s |}.
+
+  End RemoveAsserts.
+
+
+
+  (* ------------------------------------------------------------------------ *)
+
+
+
+  (** ** Lemmas *)
+
+  (* Range expressions *)
+
+  Global Instance add_proper_size_of_rexp :
+    Proper (eq ==> TE.Equal ==> eq) size_of_rexp.
+  Proof.
+    move=> e1 e2 ? E1 E2 Heq; subst. case: e2 => //=.
+    move=> x. rewrite -> Heq. reflexivity.
+  Qed.
+
+  (* Algebraic predicates *)
+
+  Lemma vars_eands_cons e es :
+    VS.Equal (vars_ebexp (eands (e::es)))
+             (VS.union (vars_ebexp e) (vars_ebexp (eands es))).
+  Proof. reflexivity. Qed.
+
+  Lemma vars_eands_cat es1 es2 :
+    VS.Equal (vars_ebexp (eands (es1 ++ es2)))
+             (VS.union (vars_ebexp (eands es1)) (vars_ebexp (eands es2))).
+  Proof.
+    elim: es1 => [| e1 es1 IH1] //=.
+    - by VSLemmas.dp_Equal.
+    - rewrite IH1. by VSLemmas.dp_Equal.
+  Qed.
+
+  Lemma vars_eands_split_eand e :
+    VS.Equal (vars_ebexp (eands (split_eand e))) (vars_ebexp e).
+  Proof.
+    elim: e => /=; try (move=> *; by VSLemmas.dp_Equal).
+    move=> e1 IH1 e2 IH2. rewrite vars_eands_cat IH1 IH2. reflexivity.
+  Qed.
+
+  (* Predicates *)
+
+  Lemma vars_ebexp_subset e :
+    VS.subset (vars_ebexp (eqn_bexp e)) (vars_bexp e).
+  Proof.
+    apply: VSLemmas.subset_union1. exact: VSLemmas.subset_refl.
+  Qed.
+
+  Lemma vars_rbexp_subset e :
+    VS.subset (vars_rbexp (rng_bexp e)) (vars_bexp e).
+  Proof.
+    apply: VSLemmas.subset_union2. exact: VSLemmas.subset_refl.
+  Qed.
+
+  Lemma bands_singleton e : bands [:: e] = e.
+  Proof. by case: e => //=. Qed.
+
+  (* Atom *)
+
+  Global Instance add_proper_atyp : Proper (eq ==> TE.Equal ==> eq) atyp.
+  Proof.
+    move=> a1 a2 ? E1 E2 Heq; subst. rewrite /atyp. case: a2 => //=.
+    move=> x. move: (Heq x). case H2: (TE.find x E2) => H1.
+    - rewrite (TE.find_some_vtyp H1) (TE.find_some_vtyp H2). reflexivity.
+    - rewrite (TE.find_none_vtyp H1) (TE.find_none_vtyp H2). reflexivity.
+  Qed.
+
+  Global Instance add_proper_asize : Proper (eq ==> TE.Equal ==> eq) asize.
+  Proof.
+    move=> a1 a2 ? E1 E2 Heq; subst. rewrite /asize. rewrite Heq. reflexivity.
+  Qed.
+
+  (* Variables *)
+
+  Lemma vars_instr_split i :
+    VS.Equal (vars_instr i) (VS.union (lvs_instr i) (rvs_instr i)).
+  Proof. case: i => /=; move=> *; by VSLemmas.dp_Equal. Qed.
+
+  Lemma mem_vars_instr1 v i :
+    VS.mem v (vars_instr i) -> VS.mem v (lvs_instr i) \/ VS.mem v (rvs_instr i).
+  Proof. rewrite vars_instr_split => H. exact: (VSLemmas.mem_union1 H). Qed.
+
+  Lemma mem_vars_instr2 v i : VS.mem v (lvs_instr i) -> VS.mem v (vars_instr i).
+  Proof. rewrite vars_instr_split => H. by apply: VSLemmas.mem_union2. Qed.
+
+  Lemma mem_vars_instr3 v i : VS.mem v (rvs_instr i) -> VS.mem v (vars_instr i).
+  Proof. rewrite vars_instr_split => H. by apply: VSLemmas.mem_union3. Qed.
+
+  Lemma lvs_instr_subset i : VS.subset (lvs_instr i) (vars_instr i).
+  Proof. rewrite vars_instr_split. exact: VSLemmas.union_subset_1. Qed.
+
+  Lemma rvs_instr_subset i : VS.subset (rvs_instr i) (vars_instr i).
+  Proof. rewrite vars_instr_split. exact: VSLemmas.union_subset_2. Qed.
+
+  Lemma vars_program_split p :
+    VS.Equal (vars_program p) (VS.union (lvs_program p) (rvs_program p)).
+  Proof.
+    elim: p => [| hd tl IH] /=.
+    - rewrite VSLemmas.union_emptyl. reflexivity.
+    - have: VS.Equal (VS.union (VS.union (lvs_instr hd) (lvs_program tl))
+                               (VS.union (rvs_instr hd) (rvs_program tl)))
+                     (VS.union (VS.union (lvs_instr hd) (rvs_instr hd))
+                               (VS.union (lvs_program tl) (rvs_program tl))) by
+          VSLemmas.dp_Equal.
+      move=> ->. rewrite -IH. rewrite -vars_instr_split. reflexivity.
+  Qed.
+
+  Lemma instr_mem_lvs i p :
+    i \in p -> VS.subset (lvs_instr i) (lvs_program p).
+  Proof.
+    elim: p => [| j p IH] //=. rewrite in_cons. case/orP.
+    - move/eqP=> ?; subst. by VSLemmas.dp_subset.
+    - move=> Hin. move: (IH Hin) => ?. by VSLemmas.dp_subset.
+  Qed.
+
+  Lemma instr_mem_rvs i p :
+    i \in p -> VS.subset (rvs_instr i) (rvs_program p).
+  Proof.
+    elim: p => [| j p IH] //=. rewrite in_cons. case/orP.
+    - move/eqP=> ?; subst. by VSLemmas.dp_subset.
+    - move=> Hin. move: (IH Hin) => ?. by VSLemmas.dp_subset.
+  Qed.
+
+  Lemma instr_mem_vars i p :
+    i \in p -> VS.subset (vars_instr i) (vars_program p).
+  Proof.
+    elim: p => [| j p IH] //=. rewrite in_cons. case/orP.
+    - move/eqP=> ?; subst. by VSLemmas.dp_subset.
+    - move=> Hin. move: (IH Hin) => ?. by VSLemmas.dp_subset.
+  Qed.
+
+  Lemma mem_vars_program1 v p :
+    VS.mem v (vars_program p) -> VS.mem v (lvs_program p) \/ VS.mem v (rvs_program p).
+  Proof. rewrite vars_program_split => H. exact: (VSLemmas.mem_union1 H). Qed.
+
+  Lemma mem_vars_program2 v p : VS.mem v (lvs_program p) -> VS.mem v (vars_program p).
+  Proof. rewrite vars_program_split => H. by apply: VSLemmas.mem_union2. Qed.
+
+  Lemma mem_vars_program3 v p : VS.mem v (rvs_program p) -> VS.mem v (vars_program p).
+  Proof. rewrite vars_program_split => H. by apply: VSLemmas.mem_union3. Qed.
+
+  Lemma lvs_program_subset p : VS.subset (lvs_program p) (vars_program p).
+  Proof. rewrite vars_program_split. exact: VSLemmas.union_subset_1. Qed.
+
+  Lemma rvs_program_subset p : VS.subset (rvs_program p) (vars_program p).
+  Proof. rewrite vars_program_split. exact: VSLemmas.union_subset_2. Qed.
+
+  Lemma vars_program_cat p1 p2 :
+    VS.Equal (vars_program (p1 ++ p2)) (VS.union (vars_program p1) (vars_program p2)).
+  Proof.
+    elim: p1 p2 => [| hd tl IH] p2 /=.
+    - rewrite VSLemmas.union_emptyl. reflexivity.
+    - rewrite IH VSLemmas.OP.P.union_assoc. reflexivity.
+  Qed.
+
+  Lemma lvs_program_cat p1 p2 :
+    VS.Equal (lvs_program (p1 ++ p2)) (VS.union (lvs_program p1) (lvs_program p2)).
+  Proof.
+    elim: p1 p2 => [| hd tl IH] p2 /=.
+    - rewrite VSLemmas.union_emptyl. reflexivity.
+    - rewrite IH VSLemmas.OP.P.union_assoc. reflexivity.
+  Qed.
+
+  Lemma vars_program_rcons p i :
+    VS.Equal (vars_program (rcons p i)) (VS.union (vars_program p) (vars_instr i)).
+  Proof.
+    rewrite -cats1 vars_program_cat /=. rewrite VSLemmas.union_emptyr. reflexivity.
+  Qed.
+
+  Lemma lvs_program_rcons p i :
+    VS.Equal (lvs_program (rcons p i)) (VS.union (lvs_program p) (lvs_instr i)).
+  Proof.
+    rewrite -cats1 lvs_program_cat /=. rewrite VSLemmas.union_emptyr. reflexivity.
+  Qed.
+
+  Lemma vars_program_rev p :
+    VS.Equal (vars_program (rev p)) (vars_program p).
+  Proof.
+    elim: p => [| i p IH] //=. rewrite rev_cons vars_program_rcons IH VSLemmas.P.union_sym.
+    reflexivity.
+  Qed.
+
+  Lemma lvs_program_rev p :
+    VS.Equal (lvs_program (rev p)) (lvs_program p).
+  Proof.
+    elim: p => [| i p IH] //=. rewrite rev_cons lvs_program_rcons IH VSLemmas.P.union_sym.
+    reflexivity.
+  Qed.
+
+  (* acc2z and bv2z *)
+
+  Global Instance add_proper_acc2z_env :
+    Proper (TE.Equal ==> eq ==> eq ==> eq) acc2z.
+  Proof.
+    move=> E1 E2 Heq v1 v2 ? s1 s2 ?; subst. rewrite /acc2z.
+    move: (Heq v2) => Hf. rewrite (TELemmas.find_same_vtyp Hf). reflexivity.
+  Qed.
+
+  Global Instance add_proper_acc2z_store :
+    Proper (eq ==> eq ==> S.Equal ==> eq) acc2z.
+  Proof.
+    move=> E1 E2 ? v1 v2 ? s1 s2 Heq; subst. rewrite /acc2z.
+    rewrite (S.add_proper_acc (erefl v2) Heq). reflexivity.
+  Qed.
+
+  Lemma acc2z_upd_eq {E x v bs sb} :
+    x == v ->
+    acc2z E x (S.upd v bs sb) = bv2z (TE.vtyp x E) bs.
+  Proof. rewrite /acc2z => Heq. rewrite (S.acc_upd_eq Heq). reflexivity. Qed.
+
+  Lemma acc2z_Upd_eq {E x v e s1 s2} :
+    x == v ->
+    S.Upd v e s1 s2 ->
+    acc2z E x s2 = bv2z (TE.vtyp x E) e.
+  Proof. rewrite /acc2z => Heq Hupd. rewrite (S.acc_Upd_eq Heq Hupd). reflexivity. Qed.
+
+  Lemma acc2z_upd_neq {E x v bs sb} :
+    x != v ->
+    acc2z E x (S.upd v bs sb) = acc2z E x sb.
+  Proof. rewrite /acc2z => Hne. rewrite (S.acc_upd_neq Hne). reflexivity. Qed.
+
+  Lemma acc2z_Upd_neq {E x v e s1 s2} :
+    x != v ->
+    S.Upd v e s1 s2 ->
+    acc2z E x s2 = acc2z E x s1.
+  Proof.
+    rewrite /acc2z => Hne Hupd. rewrite (S.acc_Upd_neq Hne Hupd). reflexivity.
+  Qed.
+
+  Lemma acc2z_upd2_eq1 {E x vl el vh eh s} :
+    x == vl -> x != vh ->
+    acc2z E x (S.upd2 vl el vh eh s) = bv2z (TE.vtyp x E) el.
+  Proof.
+    rewrite /acc2z => Heq Hne. rewrite (S.acc_upd2_eq1 Heq Hne). reflexivity.
+  Qed.
+
+  Lemma acc2z_Upd2_eq1 {E x vl el vh eh s1 s2} :
+    x == vl -> x != vh ->
+    S.Upd2 vl el vh eh s1 s2 ->
+    acc2z E x s2 = bv2z (TE.vtyp x E) el.
+  Proof.
+    rewrite /acc2z => Heq Hne Hupd. rewrite (S.acc_Upd2_eq1 Heq Hne Hupd). reflexivity.
+  Qed.
+
+  Lemma acc2z_upd2_eq2 {E x vl el vh eh s} :
+    x == vh ->
+    acc2z E x (S.upd2 vl el vh eh s) = bv2z (TE.vtyp x E) eh.
+  Proof. rewrite /acc2z => Heq. rewrite (S.acc_upd2_eq2 Heq). reflexivity. Qed.
+
+  Lemma acc2z_Upd2_eq2 {E x vl el vh eh s1 s2} :
+    x == vh ->
+    S.Upd2 vl el vh eh s1 s2 ->
+    acc2z E x s2 = bv2z (TE.vtyp x E) eh.
+  Proof.
+    rewrite /acc2z => Heq Hupd. rewrite (S.acc_Upd2_eq2 Heq Hupd). reflexivity.
+  Qed.
+
+  Lemma acc2z_upd2_neq {E x vl el vh eh s} :
+    x != vl -> x != vh ->
+    acc2z E x (S.upd2 vl el vh eh s) = acc2z E x s.
+  Proof.
+    rewrite /acc2z => Hne1 Hne2. rewrite (S.acc_upd2_neq Hne1 Hne2). reflexivity.
+  Qed.
+
+  Lemma acc2z_Upd2_neq {E x vl el vh eh s1 s2} :
+    x != vl -> x != vh ->
+    S.Upd2 vl el vh eh s1 s2 ->
+    acc2z E x s2 = acc2z E x s1.
+  Proof.
+    rewrite /acc2z => Hne1 Hne2 Hupd. rewrite (S.acc_Upd2_neq Hne1 Hne2 Hupd).
+    reflexivity.
+  Qed.
+
+  (* instr_succ_typenv and program_succ_typenv *)
+
+  Global Instance add_proper_instr_succ_typenv :
+    Proper (eq ==> TE.Equal ==> TE.Equal) instr_succ_typenv.
+  Proof.
+    move=> i1 i2 ? E1 E2 Heq; subst. case: i2 => //=; intros; rewrite Heq; reflexivity.
+  Qed.
+
+  Global Instance add_proper_program_succ_typenv :
+    Proper (eq ==> TE.Equal ==> TE.Equal) program_succ_typenv.
+  Proof.
+    move=> p1 p2 ? E1 E2 Heq; subst. elim: p2 E1 E2 Heq => [| i p IH] E1 E2 Heq //=.
+    apply: (IH (instr_succ_typenv i E1) (instr_succ_typenv i E2)).
+    rewrite Heq. reflexivity.
+  Qed.
+
+  Lemma program_succ_typenv_cons E i p :
+    program_succ_typenv (i::p) E = program_succ_typenv p (instr_succ_typenv i E).
+  Proof. reflexivity. Qed.
+
+  Lemma program_succ_typenv_rcons E p i :
+    program_succ_typenv (rcons p i) E = instr_succ_typenv i (program_succ_typenv p E).
+  Proof. by elim: p E => [| hd tl IH] //=. Qed.
+
+  Lemma program_succ_typenv_cat E p1 p2 :
+    program_succ_typenv (p1 ++ p2) E =
+    program_succ_typenv p2 (program_succ_typenv p1 E).
+  Proof. by elim: p1 E => [| hd1 tl1 IH] //=. Qed.
+
+  (* state_equal *)
+
   Lemma state_equal_refl s : state_equal s s.
   Proof. case: s => //=. move=> s; reflexivity. Qed.
 
@@ -1360,15 +1853,7 @@ Module MakeDSL
   Lemma Equal_state_equal s t : S.Equal s t -> state_equal (OK s) (OK t).
   Proof. rewrite /=. by apply. Qed.
 
-
-  Inductive eval_instrs (te : TE.env) : seq instr -> state -> state -> Prop :=
-  | Enil s t : state_equal s t -> eval_instrs te [::] s t
-  | Econs hd tl s t u : eval_instr te hd s t ->
-                  eval_instrs (instr_succ_typenv hd te) tl t u ->
-                  eval_instrs te (hd::tl) s u.
-
-  Definition eval_program (te : TE.env) p s t : Prop := eval_instrs te p s t.
-
+  (* Evaluation *)
 
   Ltac eval_instr_elim :=
     match goal with
@@ -1952,158 +2437,7 @@ Module MakeDSL
     - move=> ? ?; by right.
   Qed.
 
-
-  (* Partial correctness *)
-
-  Definition valid_spec_ok (s : spec) : Prop :=
-    forall s1 s2,
-      S.conform s1 (sinputs s) ->
-      eval_bexp (spre s) (sinputs s) s1 ->
-      eval_program (sinputs s) (sprog s) (OK s1) (OK s2) ->
-      eval_bexp (spost s) (program_succ_typenv (sprog s) (sinputs s)) s2.
-
-  Definition valid_spec_err (s : spec) : Prop :=
-    forall s1,
-      S.conform s1 (sinputs s) ->
-      eval_bexp (spre s) (sinputs s) s1 ->
-      ~ eval_program (sinputs s) (sprog s) (OK s1) ERR.
-
-  Definition valid_spec (s : spec) : Prop :=
-    valid_spec_ok s /\ valid_spec_err s.
-
-
   (* Well-typedness *)
-
-  (* Here we define well-typedness assuming all used variables are defined. *)
-  (* Note: we could also check the definedness of variables in well-typedness. *)
-
-  Fixpoint well_typed_eexp (te : TE.env) (e : eexp) : bool :=
-    match e with
-    | Evar v => true
-    | Econst n => true
-    | Eunop op e => well_typed_eexp te e
-    | Ebinop op e1 e2 => (well_typed_eexp te e1) && (well_typed_eexp te e2)
-    | Epow e _ => well_typed_eexp te e
-    end.
-
-  Fixpoint well_typed_eexps (te : TE.env) (es : seq eexp) : bool :=
-    match es with
-    | [::] => true
-    | e::es => (well_typed_eexp te e) && (well_typed_eexps te es)
-    end.
-
-  Fixpoint well_typed_rexp (te : TE.env) (e : rexp) : bool :=
-    match e with
-    | Rvar v => 0 < TE.vsize v te
-    | Rconst w n => (0 < w) && (size n == w)
-    | Runop w op e =>
-      (0 < w) && (well_typed_rexp te e) && (size_of_rexp e te == w)
-    | Rbinop w op e1 e2 =>
-      (0 < w) &&
-      (well_typed_rexp te e1) && (size_of_rexp e1 te == w) &&
-      (well_typed_rexp te e2) && (size_of_rexp e2 te == w)
-    | Ruext w e i
-    | Rsext w e i =>
-      (0 < w) && (well_typed_rexp te e) && (size_of_rexp e te == w)
-    end.
-
-  Fixpoint well_typed_ebexp (te : TE.env) (e : ebexp) : bool :=
-    match e with
-    | Etrue => true
-    | Eeq e1 e2 => (well_typed_eexp te e1) && (well_typed_eexp te e2)
-    | Eeqmod e1 e2 ms =>
-      (well_typed_eexp te e1) && (well_typed_eexp te e2) && (well_typed_eexps te ms)
-    | Eand e1 e2 => (well_typed_ebexp te e1) && (well_typed_ebexp te e2)
-    end.
-
-  Fixpoint well_typed_rbexp (te : TE.env) (e : rbexp) : bool :=
-    match e with
-    | Rtrue => true
-    | Req w e1 e2
-    | Rcmp w _ e1 e2 =>
-      (0 < w) &&
-      (well_typed_rexp te e1) && (size_of_rexp e1 te == w) &&
-      (well_typed_rexp te e2) && (size_of_rexp e2 te == w)
-    | Rneg e => well_typed_rbexp te e
-    | Rand e1 e2
-    | Ror e1 e2 => (well_typed_rbexp te e1) && (well_typed_rbexp te e2)
-    end.
-
-  Definition well_typed_bexp (te : TE.env) (e : bexp) : bool :=
-    (well_typed_ebexp te (eqn_bexp e)) && (well_typed_rbexp te (rng_bexp e)).
-
-  (* The size of an atom must be larger than 0. *)
-  Definition well_sized_atom E (a : atom) : bool :=
-    if is_unsigned (atyp a E) then 0 < asize a E
-    else 1 < asize a E.
-
-  (*
-   * If an atom is a constant, size of the constant must match
-   * the type of the atom.
-   *)
-  Definition size_matched_atom (a : atom) : bool :=
-    match a with
-    | Avar _ => true
-    | Aconst t n => size n == sizeof_typ t
-    end.
-
-  Definition well_typed_atom (E : TE.env) (a : atom) : bool :=
-    well_sized_atom E a && size_matched_atom a.
-
-  Definition well_typed_instr (E : TE.env) (i : instr) : bool :=
-    match i with
-    | Imov v a => well_typed_atom E a
-    | Ishl v a n => (well_typed_atom E a) && (n < asize a E)
-    | Icshl v1 v2 a1 a2 n => is_unsigned (atyp a2 E) &&
-                             compatible (atyp a1 E) (atyp a2 E) &&
-                             (well_typed_atom E a1) && (well_typed_atom E a2) &&
-                             (n <= asize a2 E)
-    | Inondet v t => true
-    | Icmov v c a1 a2 => (atyp c E == Tbit) && (atyp a1 E == atyp a2 E) &&
-                         (well_typed_atom E a1) && (well_typed_atom E a2) &&
-                         (well_typed_atom E c)
-    | Inop => true
-    | Inot v t a => compatible t (atyp a E) && (well_typed_atom E a)
-    | Iadd v a1 a2
-    | Iadds _ v a1 a2 => (atyp a1 E == atyp a2 E) && (well_typed_atom E a1) &&
-                         (well_typed_atom E a2)
-    | Iadc v a1 a2 y
-    | Iadcs _ v a1 a2 y => (atyp a1 E == atyp a2 E) && (atyp y E == Tbit) &&
-                           (well_typed_atom E a1) && (well_typed_atom E a2) &&
-                           (well_typed_atom E y)
-    | Isub v a1 a2
-    | Isubc _ v a1 a2
-    | Isubb _ v a1 a2 => (atyp a1 E == atyp a2 E) && (well_typed_atom E a1) &&
-                         (well_typed_atom E a2)
-    | Isbc v a1 a2 y
-    | Isbcs _ v a1 a2 y => (atyp a1 E == atyp a2 E) && (atyp y E == Tbit) &&
-                           (well_typed_atom E a1) && (well_typed_atom E a2) &&
-                           (well_typed_atom E y)
-    | Isbb v a1 a2 y
-    | Isbbs _ v a1 a2 y => (atyp a1 E == atyp a2 E) && (atyp y E == Tbit) &&
-                           (well_typed_atom E a1) && (well_typed_atom E a2) &&
-                           (well_typed_atom E y)
-    | Imul v a1 a2 => (atyp a1 E == atyp a2 E) &&
-                      (well_typed_atom E a1) && (well_typed_atom E a2)
-    | Imull vh vl a1 a2 => (atyp a1 E == atyp a2 E) &&
-                           (well_typed_atom E a1) && (well_typed_atom E a2)
-    | Imulj v a1 a2 => (atyp a1 E == atyp a2 E) &&
-                       (well_typed_atom E a1) && (well_typed_atom E a2)
-    | Isplit vh vl a n => (well_typed_atom E a) && (n < asize a E)
-    | Iand v t a1 a2
-    | Ior v t a1 a2
-    | Ixor v t a1 a2 =>
-      compatible t (atyp a1 E) && compatible t (atyp a2 E) &&
-      (well_typed_atom E a1) && (well_typed_atom E a2)
-    | Icast v t a
-    | Ivpc v t a => (well_typed_atom E a)
-    | Ijoin v ah al =>
-      is_unsigned (atyp al E) && compatible (atyp ah E) (atyp al E) &&
-      (well_typed_atom E ah) && (well_typed_atom E al)
-    | Icut e
-    | Iassert e
-    | Iassume e => well_typed_bexp E e
-    end.
 
   Lemma well_typed_eexp_true E e : well_typed_eexp E e.
   Proof.
@@ -2195,20 +2529,7 @@ Module MakeDSL
     intros; by repeat rewrite -> Heq.
   Qed.
 
-
-  (* Well-defined instructions *)
-
-  Module TEKS := MapKeySet V TE VS.
-
-  (* the set of defined variables *)
-  Definition vars_env (te : TE.env) := TEKS.key_set te.
-
-  (* Note: Use TE.mem v te to determine if v is defined *)
-  Definition is_defined (v : var) (te : TE.env) : bool :=
-    TE.mem v te.
-
-  Definition are_defined (vs : VS.t) (te : TE.env) : bool :=
-    VS.for_all (is_defined^~ te) vs.
+  (* is_defined, are_defined, vars_env *)
 
   Lemma is_defined_compat_bool E : compat_bool VS.SE.eq (is_defined^~ E).
   Proof. move=> x y Hxy. rewrite Hxy. reflexivity. Qed.
@@ -2273,73 +2594,6 @@ Module MakeDSL
     apply/VSLemmas.memP. rewrite TEKS.mem_key_set. assumption.
   Qed.
 
-
-  Definition well_defined_instr (te : TE.env) (i : instr) : bool :=
-    match i with
-    | Imov v a => are_defined (vars_atom a) te
-    | Ishl v a _ => are_defined (vars_atom a) te
-    | Icshl v1 v2 a1 a2 _ =>
-      (v1 != v2) && are_defined (vars_atom a1) te
-                 && are_defined (vars_atom a2) te
-    | Inondet v t => true
-    | Icmov v c a1 a2 =>
-      (are_defined (vars_atom c) te) && are_defined (vars_atom a1) te
-                                       && are_defined (vars_atom a2) te
-    | Inop => true
-    | Inot v t a => are_defined (vars_atom a) te
-    | Iadd v a1 a2 =>
-      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
-    | Iadds c v a1 a2 =>
-      (c != v) && are_defined (vars_atom a1) te
-               && are_defined (vars_atom a2) te
-    | Iadc v a1 a2 y =>
-      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
-                  && are_defined (vars_atom y) te
-    | Iadcs c v a1 a2 y =>
-      (c != v) && are_defined (vars_atom a1) te
-               && are_defined (vars_atom a2) te
-               && are_defined (vars_atom y) te
-    | Isub v a1 a2 =>
-      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
-    | Isubc c v a1 a2
-    | Isubb c v a1 a2 =>
-      (c != v) && are_defined (vars_atom a1) te
-               && are_defined (vars_atom a2) te
-    | Isbc v a1 a2 y =>
-      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
-                  && are_defined (vars_atom y) te
-    | Isbcs c v a1 a2 y =>
-      (c != v) && are_defined (vars_atom a1) te
-               && are_defined (vars_atom a2) te
-               && are_defined (vars_atom y) te
-    | Isbb v a1 a2 y =>
-      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
-                  && are_defined (vars_atom y) te
-    | Isbbs c v a1 a2 y =>
-      (c != v) && are_defined (vars_atom a1) te
-               && are_defined (vars_atom a2) te
-               && are_defined (vars_atom y) te
-    | Imul v a1 a2 =>
-      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
-    | Imull vh vl a1 a2 =>
-      (vh != vl) && are_defined (vars_atom a1) te
-                 && are_defined (vars_atom a2) te
-    | Imulj v a1 a2 =>
-      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
-    | Isplit vh vl a n => (vh != vl) && are_defined (vars_atom a) te
-    | Iand v t a1 a2
-    | Ior v t a1 a2
-    | Ixor v t a1 a2 =>
-      are_defined (vars_atom a1) te && are_defined (vars_atom a2) te
-    | Icast v t a
-    | Ivpc v t a => are_defined (vars_atom a) te
-    | Ijoin v ah al =>
-        are_defined (vars_atom ah) te && are_defined (vars_atom al) te
-    | Icut e
-    | Iassert e
-    | Iassume e => are_defined (vars_bexp e) te
-    end.
-
   Global Instance add_proper_well_defined_instr :
     Proper (TE.Equal ==> eq ==> eq) well_defined_instr.
   Proof.
@@ -2347,49 +2601,7 @@ Module MakeDSL
     case: i2 => //=; intros; by repeat rewrite -> Heq.
   Qed.
 
-
-  (* Well-formedness *)
-
-  Definition well_formed_eexp (te : TE.env) (e : eexp) :=
-    are_defined (vars_eexp e) te && well_typed_eexp te e.
-
-  Fixpoint well_formed_eexps (te : TE.env) (es : seq eexp) :=
-    match es with
-    | [::] => true
-    | e::es => (well_formed_eexp te e) && (well_formed_eexps te es)
-    end.
-
-  Definition well_formed_rexp (te : TE.env) (e : rexp) :=
-    are_defined (vars_rexp e) te && well_typed_rexp te e.
-
-  Definition well_formed_ebexp (te : TE.env) (e : ebexp) :=
-    are_defined (vars_ebexp e) te && well_typed_ebexp te e.
-
-  Definition well_formed_rbexp (te : TE.env) (e : rbexp) :=
-    are_defined (vars_rbexp e) te && well_typed_rbexp te e.
-
-  Definition well_formed_bexp (te : TE.env) (e : bexp) :=
-    are_defined (vars_bexp e) te && well_typed_bexp te e.
-
-  Definition well_formed_instr (te : TE.env) (i : instr) : bool :=
-    well_defined_instr te i && well_typed_instr te i.
-
-  Fixpoint well_formed_program (te : TE.env) (p : program) : bool :=
-    match p with
-    | [::] => true
-    | hd::tl =>
-      well_formed_instr te hd &&
-      well_formed_program (instr_succ_typenv hd te) tl
-    end.
-
-  Fixpoint find_non_well_formed_instr (te : TE.env) (p : program) : option instr :=
-    match p with
-    | [::] => None
-    | hd::tl =>
-      if well_formed_instr te hd
-      then find_non_well_formed_instr (instr_succ_typenv hd te) tl
-      else Some hd
-    end.
+  (* well-formedness *)
 
   Ltac check_well_formedness te p :=
     let res := constr:(find_non_well_formed_instr te p) in
@@ -2399,12 +2611,6 @@ Module MakeDSL
         | Some ?i => idtac "The program is not well-formed,"
                            "caused by the following instruction."; idtac i
         end.
-
-  Definition well_formed_spec (s : spec) : bool :=
-    well_formed_bexp (sinputs s) (spre s) &&
-    well_formed_program (sinputs s) (sprog s) &&
-    well_formed_bexp (program_succ_typenv (sprog s) (sinputs s)) (spost s).
-
 
   Global Instance add_proper_well_formed_eexp :
     Proper (TE.Equal ==> eq ==> eq) well_formed_eexp.
@@ -2510,7 +2716,7 @@ Module MakeDSL
   Proof.
     move/(VS.for_all_2 (are_defined_compat E)) => Hdef.
     apply/(VS.for_all_1 (are_defined_compat _)) => y Hiny.
-    move: (Hdef y Hiny) => {Hdef} Hdef. by rewrite is_defined_add Hdef orbT.
+    move: (Hdef y Hiny) => {} Hdef. by rewrite is_defined_add Hdef orbT.
   Qed.
 
   Lemma are_defined_addr_not_mem vs x t E :
@@ -2519,7 +2725,7 @@ Module MakeDSL
   Proof.
     move/(VS.for_all_2 (are_defined_compat _)) => Hdef Hmem.
     apply/(VS.for_all_1 (are_defined_compat E)) => y Hiny.
-    move: (Hdef y Hiny) => {Hdef} Hdef. rewrite is_defined_add in Hdef. case/orP: Hdef.
+    move: (Hdef y Hiny) => {} Hdef. rewrite is_defined_add in Hdef. case/orP: Hdef.
     - move/eqP=> Heq. rewrite Heq in Hiny. move/VSLemmas.memP: Hiny => Hmemx.
       rewrite Hmemx in Hmem; discriminate.
     - by apply.
@@ -2553,7 +2759,7 @@ Module MakeDSL
   Proof.
     case H: (VS.mem x vs && are_defined (VS.remove x vs) E || are_defined vs E).
     - case/orP: H => H.
-      + move/andP: H=> [Hmem Hdef]. move: (are_defined_add2 x t Hdef) => {Hdef} Hdef.
+      + move/andP: H=> [Hmem Hdef]. move: (are_defined_add2 x t Hdef) => {} Hdef.
         apply: (are_defined_subset _ Hdef). move/VSLemmas.memP: Hmem => Hin.
           rewrite (VSLemmas.P.add_remove Hin). exact: VSLemmas.subset_refl.
       + exact: (are_defined_addr _ _ H).
@@ -2581,7 +2787,7 @@ Module MakeDSL
       rewrite /is_defined. move/VSLemmas.memP: Hin=> Hmem.
       move: (VSLemmas.mem_subset Hmem Hsub). by rewrite mem_vars_env.
     - apply/negP=> Hall. move/negP: Hsub; apply.
-      move: (VS.for_all_2 (are_defined_compat te) Hall) => {Hall} Hall.
+      move: (VS.for_all_2 (are_defined_compat te) Hall) => {} Hall.
       apply: VS.subset_1 => x Hin. move: (Hall x Hin) => Hdef.
       apply/VSLemmas.memP. rewrite mem_vars_env. exact: Hdef.
   Qed.
@@ -4120,19 +4326,7 @@ Module MakeDSL
     - reflexivity.
   Qed.
 
-
   (* Infer input variables *)
-
-  Fixpoint inputs_program_rec (defined : VS.t) (p : program) : VS.t :=
-    match p with
-    | [::] => VS.empty
-    | i::p => VS.union (VS.diff (rvs_instr i) defined)
-                       (inputs_program_rec (VS.union (lvs_instr i) defined) p)
-    end.
-
-  Definition inputs_program (p : program) : VS.t :=
-    inputs_program_rec VS.empty p.
-
 
   Global Instance add_proper_inputs_program_rec :
     Proper (VS.Equal ==> eq ==> VS.Equal) inputs_program_rec.
@@ -4212,32 +4406,7 @@ Module MakeDSL
     exact: inputs_program_rec_subset.
   Qed.
 
-
   (* Non-blocking *)
-
-  Definition is_nondet (i : instr) : bool :=
-    match i with
-    | Inondet _ _ => true
-    | _ => false
-    end.
-
-  Definition is_cut (i : instr) : bool :=
-    match i with
-    | Icut _ => true
-    | _ => false
-    end.
-
-  Definition is_assert (i : instr) : bool :=
-    match i with
-    | Iassert _ => true
-    | _ => false
-    end.
-
-  Definition is_assume (i : instr) : bool :=
-    match i with
-    | Iassume _ => true
-    | _ => false
-    end.
 
   (* Given a store, the evaluation of every instruction except assert and assume
      should result in a store *)
@@ -4291,8 +4460,6 @@ Module MakeDSL
     - (* Ivpc *) move=> ? ? ? _. eexists. apply: EIvpc. exact: S.Upd_upd.
     - (* Ijoin *) move=> ? ? ? _. eexists. apply: EIjoin. exact: S.Upd_upd.
   Qed.
-
-
 
   (* Lemmas about conform *)
 
@@ -4954,11 +5121,9 @@ Module MakeDSL
       + move=> H1 H2. apply: False_ind. exact: (eval_program_err_ok H2).
   Qed.
 
+  (* bvs_eqi *)
 
   Section BvsEqi.
-
-    Definition bvs_eqi (E : TE.env) (s1 s2 : S.t) :=
-      forall x, TE.mem x E -> S.acc x s1 = S.acc x s2.
 
     Lemma bvs_eqi_refl E s : bvs_eqi E s s.
     Proof. move=> *; reflexivity. Qed.
@@ -5234,16 +5399,11 @@ Module MakeDSL
 
   End BvsEqi.
 
+  (* force_conform *)
 
   (* Update state values according to an environment such that
      it conforms to the environment*)
   Section ForceConform.
-
-    Fixpoint force_conform_vars E vs s :=
-      match vs with
-      | [::] => s
-      | v::vs => S.upd v (zeros (TE.vsize v E)) (force_conform_vars E vs s)
-      end.
 
     Global Instance add_proper_force_conform_vars_env :
       Proper (TE.Equal ==> eq ==> eq ==> eq) force_conform_vars.
@@ -5309,9 +5469,6 @@ Module MakeDSL
       - rewrite vars_env_mem in Hmem. exact: (VSLemmas.mem_in_elements Hmem).
     Qed.
 
-
-    Definition force_conform (E1 E2 : TE.env) (s : S.t) : S.t :=
-      force_conform_vars E2 (VS.elements (VS.diff (vars_env E2) (vars_env E1))) s.
 
     Global Instance add_proper_force_conform_env1 :
       Proper (TE.Equal ==> eq ==> eq ==> S.Equal) force_conform.
@@ -5480,10 +5637,7 @@ Module MakeDSL
 
   End ForceConform.
 
-
-  (* State eqmod *)
-
-  Module TSEQM := TStateEqmod V BitsValueType S VS.
+  (* state_eqmod *)
 
   Section StateEqm.
 
@@ -5589,10 +5743,7 @@ Module MakeDSL
 
   End StateEqm.
 
-
-  (* Agree *)
-
-  Module MA := TypEnvAgree V TE VS.
+  (* agree *)
 
   Section Agree.
 
@@ -6075,8 +6226,7 @@ Module MakeDSL
 
   End Agree.
 
-
-  (** Split a specification at cuts *)
+  (* split cuts *)
 
   Section SplitCuts.
 
@@ -6129,37 +6279,6 @@ Module MakeDSL
           * inversion 1; subst. apply: H1. exact: (H1ok _ _ Hco Hevf Hevp1).
         + exact: (H1err _ Hco Hevf).
     Qed.
-
-
-    (* a procedure that splits a specification at cuts *)
-
-    Fixpoint cut_spec_rec visited_rev E f p g : seq spec :=
-      match p with
-      | [::] => [:: {| sinputs := E; spre := f; sprog := rev visited_rev; spost := g |}]
-      | i::p => match i with
-                | Icut e =>
-                    let visited := rev visited_rev in
-                    {| sinputs := E; spre := f; sprog := visited; spost := e |}
-                      :: cut_spec_rec [::] (program_succ_typenv visited E) e p g
-                | _ => cut_spec_rec (i::visited_rev) E f p g
-                end
-      end.
-
-    Definition cut_spec (s : spec) : seq spec :=
-      cut_spec_rec [::] (sinputs s) (spre s) (sprog s) (spost s).
-
-    Definition compose_spec (s1 s2 : spec) : spec :=
-      {| sinputs := sinputs s1;
-         spre := spre s1;
-         sprog := sprog s1 ++ Icut (spost s1) :: sprog s2;
-         spost := spost s2 |}.
-
-    Definition program_has_no_cut (p : program) : bool :=
-      ~~ has is_cut p.
-
-    Definition spec_has_no_cut (s : spec) : bool :=
-      program_has_no_cut (sprog s).
-
 
     Lemma program_has_no_cut_cons i p :
       program_has_no_cut (i::p) = (~~ is_cut i) && (program_has_no_cut p).
@@ -6292,30 +6411,9 @@ Module MakeDSL
 
   End SplitCuts.
 
-
-  (* Construct specifications to verify assertions and the postcondition. *)
+  (* Cut asserts *)
 
   Section CutAsserts.
-
-    Fixpoint cut_asserts_rec visited_rev E f p g : seq spec :=
-      match p with
-      | [::] => [:: {| sinputs := E; spre := f; sprog := rev visited_rev; spost := g |}]
-      | i::p => match i with
-                | Iassert e => {| sinputs := E; spre := f; sprog := rev visited_rev; spost := e |}
-                                 :: cut_asserts_rec visited_rev E f p g
-                | _ => cut_asserts_rec (i::visited_rev) E f p g
-                end
-      end.
-
-    Definition cut_asserts (s : spec) : seq spec :=
-      cut_asserts_rec [::] (sinputs s) (spre s) (sprog s) (spost s).
-
-    Definition program_has_no_assert (p : program) : bool :=
-      ~~ has is_assert p.
-
-    Definition spec_has_no_assert (s : spec) : bool :=
-      program_has_no_assert (sprog s).
-
 
     Lemma program_has_no_assert_singleton i :
       program_has_no_assert [:: i] = (~~ is_assert i).
@@ -6413,33 +6511,9 @@ Module MakeDSL
 
   End CutAsserts.
 
-
-  (* Construct specifications to verify assertions. *)
+  (* Extract asserts *)
 
   Section ExtractAsserts.
-
-    Fixpoint extract_asserts_rec visited_rev E f p : seq spec :=
-      match p with
-      | [::] => [::]
-      | i::p => match i with
-                | Iassert e => {| sinputs := E; spre := f; sprog := rev visited_rev; spost := e |}
-                                 :: extract_asserts_rec visited_rev E f p
-                | _ => extract_asserts_rec (i::visited_rev) E f p
-                end
-      end.
-
-    Definition extract_asserts (s : spec) : seq spec :=
-      extract_asserts_rec [::] (sinputs s) (spre s) (sprog s).
-
-    Definition remove_asserts_program (p : program) : program :=
-      filter (fun i => ~~ is_assert i) p.
-
-    Definition remove_asserts (s : spec) : spec :=
-      {| sinputs := sinputs s;
-         spre := spre s;
-         sprog := remove_asserts_program (sprog s);
-         spost := spost s |}.
-
 
     Lemma extract_asserts_rec_inputs visited_rev E f p a :
       In a (extract_asserts_rec visited_rev E f p) -> sinputs a = E.
@@ -6699,7 +6773,6 @@ Module MakeDSL
     Qed.
 
   End ExtractAsserts.
-
 
 End MakeDSL.
 

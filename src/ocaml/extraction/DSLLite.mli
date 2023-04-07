@@ -2084,8 +2084,6 @@ module MakeDSL :
 
   val are_defined : VS.t -> TE.env -> bool
 
-  val memenvP : TE.key -> typ TE.t -> reflect
-
   val well_defined_instr : TE.env -> instr -> bool
 
   val well_formed_eexp : TE.env -> eexp -> bool
@@ -2111,12 +2109,6 @@ module MakeDSL :
   val well_formed_espec : espec -> bool
 
   val well_formed_rspec : rspec -> bool
-
-  val defmemP : V.t -> TE.env -> reflect
-
-  val memdefP : TE.key -> typ TE.t -> reflect
-
-  val defsubP : VS.t -> TE.env -> reflect
 
   val inputs_program_rec : VS.t -> program -> VS.t
 
@@ -3714,6 +3706,14 @@ module MakeDSL :
   val slice_espec : options -> espec -> espec
 
   val slice_rspec : options -> rspec -> rspec
+
+  val memenvP : TE.key -> typ TE.t -> reflect
+
+  val defmemP : V.t -> TE.env -> reflect
+
+  val memdefP : TE.key -> typ TE.t -> reflect
+
+  val defsubP : VS.t -> TE.env -> reflect
  end
 
 module DSLLite :
@@ -5480,8 +5480,6 @@ module DSLLite :
 
   val are_defined : VS.t -> TypEnv.TE.env -> bool
 
-  val memenvP : TypEnv.TE.key -> typ TypEnv.TE.t -> reflect
-
   val well_defined_instr : TypEnv.TE.env -> instr -> bool
 
   val well_formed_eexp : TypEnv.TE.env -> eexp -> bool
@@ -5507,12 +5505,6 @@ module DSLLite :
   val well_formed_espec : espec -> bool
 
   val well_formed_rspec : rspec -> bool
-
-  val defmemP : VarOrder.t -> TypEnv.TE.env -> reflect
-
-  val memdefP : TypEnv.TE.key -> typ TypEnv.TE.t -> reflect
-
-  val defsubP : VS.t -> TypEnv.TE.env -> reflect
 
   val inputs_program_rec : VS.t -> program -> VS.t
 
@@ -7211,4 +7203,12 @@ module DSLLite :
   val slice_espec : options -> espec -> espec
 
   val slice_rspec : options -> rspec -> rspec
+
+  val memenvP : TypEnv.TE.key -> typ TypEnv.TE.t -> reflect
+
+  val defmemP : VarOrder.t -> TypEnv.TE.env -> reflect
+
+  val memdefP : TypEnv.TE.key -> typ TypEnv.TE.t -> reflect
+
+  val defsubP : VS.t -> TypEnv.TE.env -> reflect
  end

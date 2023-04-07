@@ -2,7 +2,6 @@ open BinNat
 open BinNums
 open Bool
 open DSLRaw
-open Datatypes
 open EqVar
 open NBitsDef
 open Options0
@@ -1844,8 +1843,6 @@ module SSALite :
 
   val are_defined : SSAVS.t -> TypEnv.SSATE.env -> bool
 
-  val memenvP : TypEnv.SSATE.key -> typ TypEnv.SSATE.t -> reflect
-
   val well_defined_instr : TypEnv.SSATE.env -> instr -> bool
 
   val well_formed_eexp : TypEnv.SSATE.env -> eexp -> bool
@@ -1871,12 +1868,6 @@ module SSALite :
   val well_formed_espec : espec -> bool
 
   val well_formed_rspec : rspec -> bool
-
-  val defmemP : SSAVarOrder.t -> TypEnv.SSATE.env -> reflect
-
-  val memdefP : TypEnv.SSATE.key -> typ TypEnv.SSATE.t -> reflect
-
-  val defsubP : SSAVS.t -> TypEnv.SSATE.env -> reflect
 
   val inputs_program_rec : SSAVS.t -> program -> SSAVS.t
 
@@ -3628,6 +3619,14 @@ module SSALite :
   val slice_espec : options -> espec -> espec
 
   val slice_rspec : options -> rspec -> rspec
+
+  val memenvP : TypEnv.SSATE.key -> typ TypEnv.SSATE.t -> reflect
+
+  val defmemP : SSAVarOrder.t -> TypEnv.SSATE.env -> reflect
+
+  val memdefP : TypEnv.SSATE.key -> typ TypEnv.SSATE.t -> reflect
+
+  val defsubP : SSAVS.t -> TypEnv.SSATE.env -> reflect
  end
 
 type vmap = coq_N VM.t
@@ -3643,8 +3642,6 @@ val get_index : var -> vmap -> coq_N
 val upd_index : var -> vmap -> vmap
 
 val ssa_var : vmap -> var -> ssavar
-
-val svar : ssavar -> Equality.sort
 
 val ssa_atom : vmap -> DSLLite.DSLLite.atom -> SSALite.atom
 

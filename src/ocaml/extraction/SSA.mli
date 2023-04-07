@@ -1808,8 +1808,6 @@ module SSA :
 
   val are_defined : SSAVS.t -> TypEnv.SSATE.env -> bool
 
-  val memenvP : TypEnv.SSATE.key -> typ TypEnv.SSATE.t -> reflect
-
   val well_defined_instr : TypEnv.SSATE.env -> instr -> bool
 
   val well_formed_eexp : TypEnv.SSATE.env -> eexp -> bool
@@ -1831,12 +1829,6 @@ module SSA :
   val find_non_well_formed_instr : TypEnv.SSATE.env -> program -> instr option
 
   val well_formed_spec : spec -> bool
-
-  val defmemP : SSAVarOrder.t -> TypEnv.SSATE.env -> reflect
-
-  val memdefP : TypEnv.SSATE.key -> typ TypEnv.SSATE.t -> reflect
-
-  val defsubP : SSAVS.t -> TypEnv.SSATE.env -> reflect
 
   val inputs_program_rec : SSAVS.t -> program -> SSAVS.t
 
@@ -3505,6 +3497,14 @@ module SSA :
   val remove_asserts_program : program -> program
 
   val remove_asserts : spec -> spec
+
+  val memenvP : TypEnv.SSATE.key -> typ TypEnv.SSATE.t -> reflect
+
+  val defmemP : SSAVarOrder.t -> TypEnv.SSATE.env -> reflect
+
+  val memdefP : TypEnv.SSATE.key -> typ TypEnv.SSATE.t -> reflect
+
+  val defsubP : SSAVS.t -> TypEnv.SSATE.env -> reflect
  end
 
 type vmap = coq_N VM.t

@@ -1,7 +1,7 @@
 open Datatypes
 open BinNums
 open CNF
-open Poly
+open IMP
 open Ring_polynom
 open ExtrOcamlIntConv
 open EqVar
@@ -960,7 +960,7 @@ let ext_solve_imp_impl gs p ms =
   let (c_ms, cs_gs) =
 	let vars = coq_vars_in_order (gs@ms@[p]) in
     let coefs =
-      if gs = [] && List.length ms = 1 && not (Poly.zpexpr_is_zero (List.hd ms))
+      if gs = [] && List.length ms = 1 && not (ZPoly.zpexpr_is_zero (List.hd ms))
       then coq_compute_coefficients_by_div (vars, p, List.hd ms)
       else coq_compute_coefficients_by_lift (vars, p, (List.rev_append (List.rev ms) gs)) in
     split_list_at coefs (List.length ms) in
@@ -1133,7 +1133,7 @@ let coq_compute_coefficients_lwt poly_with_id_list =
     let%lwt (cs_ms, cs_gs, running_time) =
 	  let%lwt vars = Lwt.return (coq_vars_in_order (gs@ms@[p])) in
       let%lwt (coefs, running_time) =
-        if gs = [] && List.length ms = 1 && not (Poly.zpexpr_is_zero (List.hd ms))
+        if gs = [] && List.length ms = 1 && not (ZPoly.zpexpr_is_zero (List.hd ms))
         then coq_compute_coefficients_by_div_lwt ["Polynomials #" ^ string_of_int id] (vars, p, List.hd ms)
         else coq_compute_coefficients_by_lift_lwt ["Polynomials #" ^ string_of_int id] (vars, p, (List.rev_append (List.rev ms) gs)) in
       let (cs1, cs2) = split_list_at coefs (List.length ms) in

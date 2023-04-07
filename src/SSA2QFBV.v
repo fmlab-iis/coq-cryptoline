@@ -1,12 +1,15 @@
 
-(** Range reduction.
-    Convert a range specification in SSA and algebraic soundness conditions
-    to SMT QF_BV queries. *)
+(** * Range reduction to QF_BV queries *)
+
+(**
+   Reduce the verification of a range specification in SSA, or an algebraic
+   soundness condition to SMT QF_BV queries.
+ *)
 
 From Coq Require Import Arith List OrderedType.
 From mathcomp Require Import ssreflect ssrnat ssrbool eqtype seq ssrfun prime.
 From ssrlib Require Import EqVar Tactics Seqs.
-From Cryptoline Require Import Options DSLLite SSALite SSA2ZSSA.
+From Cryptoline Require Import Options DSLLite SSALite SSA2REP.
 From BitBlasting Require Import State QFBV Typ TypEnv.
 From nbits Require Import NBits.
 
@@ -17,427 +20,9 @@ Unset Strict Implicit.
 Import Prenex Implicits.
 
 
-Section VarsRspecs.
+(** ** Definitions of the range specification reduction *)
 
-  Import SSALite.
-
-  Fixpoint vars_rspecs (rs : seq rspec) : SSAVS.t :=
-    match rs with
-    | [::] => SSAVS.empty
-    | s::rs => SSAVS.union (vars_rspec s) (vars_rspecs rs)
-    end.
-
-  Lemma vars_rspecs_cons r rs :
-    SSAVS.Equal (vars_rspecs (r::rs)) (SSAVS.union (vars_rspec r) (vars_rspecs rs)).
-  Proof. reflexivity. Qed.
-
-  Lemma vars_rspecs_rcons rs r :
-    SSAVS.Equal (vars_rspecs (rcons rs r)) (SSAVS.union (vars_rspecs rs) (vars_rspec r)).
-  Proof.
-    elim: rs => [| s rs IH] //=.
-    - by SSAVS.Lemmas.dp_Equal.
-    - rewrite IH. by SSAVS.Lemmas.dp_Equal.
-  Qed.
-
-  Lemma vars_rspecs_cat rs1 rs2 :
-    SSAVS.Equal (vars_rspecs (rs1 ++ rs2)) (SSAVS.union (vars_rspecs rs1) (vars_rspecs rs2)).
-  Proof.
-    elim: rs1 rs2 => [| r1 rs1 IH1] rs2 //=.
-    rewrite IH1. by SSAVS.Lemmas.dp_Equal.
-  Qed.
-
-  Lemma vars_rspecs_rev rs :
-    SSAVS.Equal (vars_rspecs (rev rs)) (vars_rspecs rs).
-  Proof.
-    elim: rs => [| r rs IH] //=. rewrite rev_cons vars_rspecs_rcons IH.
-    by SSAVS.Lemmas.dp_Equal.
-  Qed.
-
-  Lemma vars_split_rspec s :
-    SSAVS.subset (vars_rspecs (split_rspec s)) (vars_rspec s).
-  Proof.
-    rewrite /split_rspec /vars_rspec. case: s => E f p g /=.
-    rewrite tmap_map /=. elim: g E f p; intros; rewrite /= /vars_rspec /=.
-    - by SSAVS.Lemmas.dp_subset.
-    - by SSAVS.Lemmas.dp_subset.
-    - by SSAVS.Lemmas.dp_subset.
-    - by SSAVS.Lemmas.dp_subset.
-    - rewrite map_cat. rewrite vars_rspecs_cat. move: (H E f p) (H0 E f p) => Hsub1 Hsub2.
-      apply: SSAVS.Lemmas.subset_union3.
-      + apply: (SSAVS.Lemmas.subset_trans Hsub1). by SSAVS.Lemmas.dp_subset.
-      + apply: (SSAVS.Lemmas.subset_trans Hsub2). by SSAVS.Lemmas.dp_subset.
-    - by SSAVS.Lemmas.dp_subset.
-  Qed.
-
-  Lemma vars_slice_rspecs {o} rs :
-    SSAVS.subset (vars_rspecs (tmap (slice_rspec o) rs))
-                 (vars_rspecs rs).
-  Proof.
-    elim: rs => [| r rs IH] //=. rewrite tmap_map /= -tmap_map.
-    move: (slice_rspec_subset_rspec o r) => Hsub.
-    by SSAVS.Lemmas.dp_subset.
-  Qed.
-
-End VarsRspecs.
-
-
-Section ForceConformDiff.
-
-  Definition force_conform_diff (E : SSATE.env) (vs : SSAVS.t) (s : SSAStore.t) :=
-    force_conform_vars E (SSAVS.elements (SSAVS.diff (vars_env E) vs)) s.
-
-  Lemma force_conform_diff_notin E vs s v :
-    SSATE.mem v E -> ~~ SSAVS.mem v vs ->
-    SSAStore.acc v (force_conform_diff E vs s) = zeros (SSATE.vsize v E).
-  Proof.
-    move=> Hin Hnotin. rewrite /force_conform_diff.
-    rewrite force_conform_vars_in; first reflexivity.
-    apply: SSAVS.Lemmas.mem_in_elements. rewrite SSAVS.Lemmas.diff_b.
-    by rewrite mem_vars_env Hin Hnotin.
-  Qed.
-
-  Lemma force_conform_diff_in E vs s v :
-    SSAVS.mem v vs -> SSAStore.acc v (force_conform_diff E vs s) = SSAStore.acc v s.
-  Proof.
-    move=> Hmem. rewrite /force_conform_diff.
-    rewrite force_conform_vars_notin; first reflexivity.
-    apply/negP => Hin. move: (SSAVS.Lemmas.in_elements_mem Hin).
-    rewrite SSAVS.Lemmas.diff_b. rewrite Hmem andbF. discriminate.
-  Qed.
-
-  Lemma agree_force_conform_notin_valid_bexp E1 E2 vs s :
-    MA.agree vs E1 E2 -> SSAStore.conform s E1 ->
-    SSAStore.conform (force_conform_diff E2 vs s) E2.
-  Proof.
-    move=> Hag Hco x Hmemx. case Hmemxvs: (SSAVS.mem x vs).
-    - rewrite (force_conform_diff_in _ _ Hmemxvs). move: (Hag _ Hmemxvs) => Hfind.
-      rewrite -(SSALite.TELemmas.find_same_vsize Hfind). rewrite Hco; first reflexivity.
-      rewrite SSATE.Lemmas.mem_find_b Hfind. by move: (SSATE.Lemmas.mem_find_some Hmemx) => [y ->].
-    - move/idP/negP: Hmemxvs => Hmemxvs. rewrite (force_conform_diff_notin _ Hmemx Hmemxvs).
-      rewrite size_zeros. reflexivity.
-  Qed.
-
-  Lemma force_conform_diff_eval_exp vs E e s :
-    SSAVS.subset (QFBV.vars_exp e) vs ->
-    QFBV.eval_exp e (force_conform_diff E vs s) = QFBV.eval_exp e s
-  with force_conform_diff_eval_bexp vs E e s :
-    SSAVS.subset (QFBV.vars_bexp e) vs ->
-    QFBV.eval_bexp e (force_conform_diff E vs s) = QFBV.eval_bexp e s.
-  Proof.
-    (* force_conform_diff_eval_exp *)
-    - case: e => //=.
-      + move=> x Hsub. rewrite force_conform_diff_in; first reflexivity.
-        exact: (SSAVS.Lemmas.subset_singleton1 Hsub).
-      + move=> op e Hsub. rewrite (force_conform_diff_eval_exp _ _ _ _ Hsub). reflexivity.
-      + move=> op e1 e2. rewrite SSAVS.Lemmas.subset_union6.
-        move/andP=> [Hsub1 Hsub2]. rewrite (force_conform_diff_eval_exp _ _ _ _ Hsub1)
-                                     (force_conform_diff_eval_exp _ _ _ _ Hsub2). reflexivity.
-      + move=> b e1 e2. rewrite !SSAVS.Lemmas.subset_union6.
-        move/andP=> [Hsubb /andP [Hsub1 Hsub2]].
-        rewrite (force_conform_diff_eval_bexp _ _ _ _ Hsubb)
-          (force_conform_diff_eval_exp _ _ _ _ Hsub1)
-          (force_conform_diff_eval_exp _ _ _ _ Hsub2). reflexivity.
-    (* force_conform_diff_eval_bexp *)
-    - case: e => //=.
-      + move=> op e1 e2. rewrite SSAVS.Lemmas.subset_union6. move/andP=> [Hsub1 Hsub2].
-        rewrite (force_conform_diff_eval_exp _ _ _ _ Hsub1)
-          (force_conform_diff_eval_exp _ _ _ _ Hsub2). reflexivity.
-      + move=> e Hsub. rewrite (force_conform_diff_eval_bexp _ _ _ _ Hsub). reflexivity.
-      + move=> e1 e2. rewrite SSAVS.Lemmas.subset_union6. move/andP=> [Hsub1 Hsub2].
-        rewrite (force_conform_diff_eval_bexp _ _ _ _ Hsub1)
-          (force_conform_diff_eval_bexp _ _ _ _ Hsub2). reflexivity.
-      + move=> e1 e2. rewrite SSAVS.Lemmas.subset_union6. move/andP=> [Hsub1 Hsub2].
-        rewrite (force_conform_diff_eval_bexp _ _ _ _ Hsub1)
-          (force_conform_diff_eval_bexp _ _ _ _ Hsub2). reflexivity.
-  Qed.
-
-End ForceConformDiff.
-
-Lemma agree_valid_bexp E1 E2 e :
-  MA.agree (QFBV.vars_bexp e) E1 E2 ->
-  valid_bexp E1 e <-> valid_bexp E2 e.
-Proof.
-  move=> Hag; split.
-  - move=> Hv s Hco. move: (MA.agree_sym Hag) => {}Hag.
-    move: (Hv (force_conform_diff E1 (QFBV.vars_bexp e) s)
-             (agree_force_conform_notin_valid_bexp Hag Hco)).
-    rewrite (force_conform_diff_eval_bexp _ _ (SSAVS.Lemmas.subset_refl _)). by apply.
-  - move=> Hv s Hco. move: (Hv (force_conform_diff E2 (QFBV.vars_bexp e) s)
-                              (agree_force_conform_notin_valid_bexp Hag Hco)).
-    rewrite (force_conform_diff_eval_bexp _ _ (SSAVS.Lemmas.subset_refl _)). by apply.
-Qed.
-
-Lemma agree_valid_bexps E1 E2 es :
-  MA.agree (QFBV.vars_bexps es) E1 E2 ->
-  valid_bexps E1 es <-> valid_bexps E2 es.
-Proof.
-  elim: es => [| e es IH] //=. move/MA.agree_union_set => [Hag1 Hag2].
-  rewrite !valid_bexps_cons. rewrite (agree_valid_bexp Hag1) (IH Hag2). tauto.
-Qed.
-
-Lemma agree_exp_size E1 E2 e :
-  MA.agree (QFBV.vars_exp e) E1 E2 ->
-  exp_size e E1 = exp_size e E2.
-Proof.
-  elim: e => //=.
-  - move=> x H. apply: SSALite.TELemmas.find_same_vsize. apply: (H x).
-    apply: SSAVS.Lemmas.mem_singleton2. reflexivity.
-  - move=> op e IH Hag. rewrite (IH Hag). reflexivity.
-  - move=> op e1 IH1 e2 IH2 /MA.agree_union_set [Hag1 Hag2].
-    rewrite (IH1 Hag1) (IH2 Hag2). reflexivity.
-  - move=> b e1 IH1 e2 IH2 /MA.agree_union_set [Hagb /MA.agree_union_set [Hag1 Hag2]].
-    rewrite (IH1 Hag1) (IH2 Hag2). reflexivity.
-Qed.
-
-Lemma agree_well_formed_eexp E1 E2 e :
-  MA.agree (QFBV.vars_exp e) E1 E2 ->
-  well_formed_exp e E1 = well_formed_exp e E2
-with agree_well_formed_bexp E1 E2 e :
-  MA.agree (QFBV.vars_bexp e) E1 E2 ->
-  QFBV.well_formed_bexp e E1 = QFBV.well_formed_bexp e E2.
-Proof.
-  (* agree_well_formed_eexp *)
-  - case: e => //=.
-    + move=> x Hag. rewrite !SSATE.Lemmas.mem_find_b.
-      rewrite (Hag x); first reflexivity. apply: SSAVS.Lemmas.mem_singleton2. reflexivity.
-    + move=> _ e Hag. rewrite (agree_well_formed_eexp _ _ _ Hag). reflexivity.
-    + move=> op e1 e2 /MA.agree_union_set [Hag1 Hag2].
-      rewrite (agree_well_formed_eexp _ _ _ Hag1) (agree_well_formed_eexp _ _ _ Hag2).
-      rewrite (agree_exp_size Hag1) (agree_exp_size Hag2). reflexivity.
-    + move=> b e1 e2 /MA.agree_union_set [Hagb /MA.agree_union_set [Hag1 Hag2]].
-      rewrite (agree_well_formed_bexp _ _ _ Hagb)
-        (agree_well_formed_eexp _ _ _ Hag1) (agree_well_formed_eexp _ _ _ Hag2).
-      rewrite (agree_exp_size Hag1) (agree_exp_size Hag2). reflexivity.
-  (* agree_well_formed_bexp *)
-  - case: e => //=.
-    + move=> _ e1 e2 /MA.agree_union_set [Hag1 Hag2].
-      rewrite (agree_well_formed_eexp _ _ _ Hag1) (agree_well_formed_eexp _ _ _ Hag2).
-      rewrite (agree_exp_size Hag1) (agree_exp_size Hag2). reflexivity.
-    + move=> e Hag. rewrite (agree_well_formed_bexp _ _ _ Hag). reflexivity.
-    + move=> e1 e2 /MA.agree_union_set [Hag1 Hag2].
-      rewrite (agree_well_formed_bexp _ _ _ Hag1) (agree_well_formed_bexp _ _ _ Hag2).
-      reflexivity.
-    + move=> e1 e2 /MA.agree_union_set [Hag1 Hag2].
-      rewrite (agree_well_formed_bexp _ _ _ Hag1) (agree_well_formed_bexp _ _ _ Hag2).
-      reflexivity.
-Qed.
-
-Lemma agree_well_formed_bexps E1 E2 es :
-  MA.agree (QFBV.vars_bexps es) E1 E2 ->
-  QFBV.well_formed_bexps es E1 = QFBV.well_formed_bexps es E2.
-Proof.
-  elim: es => [| e es IH] //=. move/MA.agree_union_set => [Hag1 Hag2].
-  rewrite (agree_well_formed_bexp Hag1) (IH Hag2). reflexivity.
-Qed.
-
-
-(** Auxiliary lemmas *)
-
-Lemma from_nat_simple :
-  forall n, to_nat (NBitsDef.from_nat (trunc_log 2 n).+1 n) = n.
-Proof.
-  move => n.
-  rewrite to_nat_from_nat_bounded; first done.
-  by apply : trunc_log_ltn.
-Qed.
-
-Ltac rewrite_from_nat_simple :=
-  repeat
-  match goal with
-  | H : context f [(nat_of_bool (odd ?n) +
-                    (to_nat (trunc_log 2 ?n) -bits of (?n./2)).*2)%bits]
-    |- _ =>
-    let Hn := fresh in
-    move: (from_nat_simple n) => Hn; rewrite /= in Hn; rewrite Hn in H; clear Hn
-  | |- context f [(nat_of_bool (odd ?n) +
-                   (to_nat (trunc_log 2 ?n) -bits of (?n./2)).*2)%bits] =>
-    let Hn := fresh in
-    move: (from_nat_simple n) => Hn; rewrite /= in Hn; rewrite Hn; clear Hn
-  end.
-
-Lemma to_bool_bit_is_true :
-  forall bs,
-    size bs = 1 ->
-    to_bool bs ->
-    [:: true] == bs.
-Proof.
-  move => bs Hs1.
-  move : (size1 Hs1).
-  elim => Hbs; rewrite (eqP Hbs); done.
-Qed.
-
-Lemma not_to_bool_bit_is_false :
-  forall bs,
-    size bs = 1 ->
-    ~~ to_bool bs ->
-    [:: false] == bs.
-Proof.
-  move => bs Hs1.
-  move : (size1 Hs1).
-  elim => Hbs; rewrite (eqP Hbs); done.
-Qed.
-
-Lemma addB_nat p1 p2 :
-  addB p1 p2 =
-  from_nat (size (addB p1 p2)) (to_nat p1 + to_nat p2).
-Proof.
-  by rewrite /addB to_nat_adcB' size_from_nat.
-Qed.
-
-Lemma to_nat_zext_bool n bs :
-  size bs = 1 -> to_nat (zext n bs) == to_bool bs.
-Proof.
-  move => Hsz1; elim: (size1 Hsz1); move/eqP => -> /=;
-         by rewrite to_nat_zeros /=.
-Qed.
-
-Lemma from_nat_idem m n0 n1 n2 :
-  from_nat m (n0 + n1 + n2) ==
-  from_nat m (to_nat (from_nat m (n0 + n1)) + n2).
-Proof.
-  elim : m n0 n1 n2; first done.
-  move => m IH n0 n1 n2.
-  rewrite to_nat_from_nat.
-  move : (div.divn_eq (n0 + n1) (2 ^ m.+1)) => Hmod.
-  rewrite (addnC (div.modn (n0 + n1) (2 ^ m.+1)) n2).
-  rewrite (from_nat_wrapMany (m.+1)
-                             (div.divn (n0 + n1) (2 ^ m.+1))
-                             (n2 + div.modn (n0 + n1) (2 ^ m.+1))).
-  rewrite -(addnA n2 _ _) (addnC (div.modn (n0 + n1) (2 ^ m.+1)) _).
-  rewrite -Hmod.
-  rewrite (addnA n2) (addnC n2).
-  rewrite -(addnA n0 n2) (addnC n2) (addnA n0 n1).
-  done.
-Qed.
-
-Lemma atyp_asize E a0 a1 :
-  atyp a0 E = atyp a1 E -> asize a0 E == asize a1 E.
-Proof.
-  rewrite /asize. by move=> ->.
-Qed.
-
-Lemma eval_exp_if s b qfbv0 qfbv1 :
-  QFBV.eval_exp (if b then qfbv0 else qfbv1) s =
-  if b then QFBV.eval_exp qfbv0 s else QFBV.eval_exp qfbv1 s.
-Proof.
-  case b => /=; done.
-Qed.
-
-Lemma eval_bexp_if s b qfbv0 qfbv1 :
-  QFBV.eval_bexp (if b then qfbv0 else qfbv1) s =
-  if b then QFBV.eval_bexp qfbv0 s else QFBV.eval_bexp qfbv1 s.
-Proof.
-  case b => /=; done.
-Qed.
-
-Lemma not_mem_add x y s :
-  ~~ SSAVS.mem x (SSAVS.add y s) ->
-  x != y /\ ~~ SSAVS.mem x s.
-Proof.
-  move=> H. move: (SSAVS.Lemmas.not_mem_add1 H) => [/negP H1 H2]. done.
-Qed.
-
-Lemma size_exp_const E w n : QFBV.exp_size (QFBV.Econst (NBitsDef.from_nat w n)) E = w.
-Proof. rewrite /= size_from_nat. reflexivity. Qed.
-
-Lemma to_nat_from_nat_very_small w n : n <= w -> to_nat (from_nat w n) = n.
-Proof.
-  move=> H. rewrite to_nat_from_nat. apply: div.modn_small.
-  elim: w n H => [| w IH n H] //=. case: n H => [| n] H /=.
-  - exact: Nats.expn2_gt0.
-  - rewrite ltnS in H. move: (IH _ H) => {IH} H.
-    case: w H => [| w] H //=. rewrite -(addn1 n) expnS mul2n -addnn.
-    apply: (Nats.ltn_addn H). exact: Nats.expn2_gt1.
-Qed.
-
-
-(** Some tactics used across sections *)
-
-Ltac to_asize :=
-  repeat
-    match goal with
-    | Hsub : is_true (SSAVS.subset (vars_atom ?a) (vars_env ?E)),
-        Hco : SSAStore.conform ?s ?E,
-          Hsm : is_true (size_matched_atom ?a) |-
-        context f [size (eval_atom ?a ?s)] =>
-        rewrite (size_eval_atom_asize Hsub Hco Hsm)
-    | Hsub : is_true (SSAVS.subset (vars_atom ?a) (vars_env ?E)),
-        Hco : SSAStore.conform ?s ?E,
-          Hsm : is_true (size_matched_atom ?a),
-            H : context f [size (eval_atom ?a ?s)] |- _ =>
-        rewrite (size_eval_atom_asize Hsub Hco Hsm) in H
-    end.
-
-Ltac of_asize :=
-  repeat
-    match goal with
-    | Hsub : is_true (SSAVS.subset (vars_atom ?a) (vars_env ?E)),
-        Hco : SSAStore.conform ?s ?E,
-          Hsm : is_true (size_matched_atom ?a) |-
-        context f [asize ?a ?E] =>
-        rewrite -(size_eval_atom_asize Hsub Hco Hsm)
-    | Hsub : is_true (SSAVS.subset (vars_atom ?a) (vars_env ?E)),
-        Hco : SSAStore.conform ?s ?E,
-          Hsm : is_true (size_matched_atom ?a),
-            H : context f [asize ?a ?E] |- _ =>
-        rewrite -(size_eval_atom_asize Hsub Hco Hsm) in H
-    end.
-
-Ltac unfold_well_formed :=
-  repeat
-    match goal with
-    | H : is_true (well_formed_eexp _ _) |- _ =>
-        let H1 := fresh "Hwf" in
-        let H2 := fresh "Hwf" in
-        move/andP: H => /= [H1 H2]
-    | H : is_true (well_formed_ebexp _ _) |- _ =>
-        let H1 := fresh "Hwf" in
-        let H2 := fresh "Hwf" in
-        move/andP: H => /= [H1 H2]
-    | H : is_true (well_formed_rexp _ _) |- _ =>
-        let H1 := fresh "Hwf" in
-        let H2 := fresh "Hwf" in
-        move/andP: H => /= [H1 H2]
-    | H : is_true (well_formed_rbexp _ _) |- _ =>
-        let H1 := fresh "Hwf" in
-        let H2 := fresh "Hwf" in
-        move/andP: H => /= [H1 H2]
-    | H : is_true (well_formed_bexp _ _) |- _ =>
-        let H1 := fresh "Hwf" in
-        let H2 := fresh "Hwf" in
-        move/andP: H => /= [H1 H2]
-    | H : is_true (well_formed_instr _ _) |- _ =>
-        let H1 := fresh "Hwf" in
-        let H2 := fresh "Hwf" in
-        move/andP: H => /= [H1 H2]
-    | H : is_true (well_formed_program _ _) |- _ =>
-        let H1 := fresh "Hwf" in
-        let H2 := fresh "Hwf" in
-        move/andP: H => /= [H1 H2]
-    | H : is_true (well_formed_ssa_program _ _) |- _ =>
-        let H1 := fresh "Hwf" in
-        let H2 := fresh "Hwf" in
-        move/andP: H => /= [H1 H2]
-    | H : is_true (well_typed_atom _ _) |- _ =>
-        let H1 := fresh "Hwta" in
-        let H2 := fresh "Hwtqa" in
-        move/andP: H => /= [H1 H2]
-    | H : is_true (_ && _) |- _ =>
-        let H1 := fresh "Hwf" in
-        let H2 := fresh "Hwf" in
-        move/andP: H => [H1 H2]
-    end.
-
-Ltac intro_subset_from_are_defined :=
-  match goal with
-  | H : is_true (are_defined _ _) |- _ =>
-      let Hsub := fresh "Hsub" in
-      move: (H) => /defsubP Hsub; move: H; intro_subset_from_are_defined
-  | |- _ => intros
-  end.
-
-
-Section Rspec2QFBV.
+Section RangeSpecReduction.
 
   (** A bexp_spec is a specification in terms of QF_BV predicates *)
 
@@ -460,51 +45,6 @@ Section Rspec2QFBV.
       (SSAVS.union
          (QFBV.vars_bexps (bprog s))
          (QFBV.vars_bexp (bpost s))).
-
-
-  (** Relations between bvs_eqi and QFBV.eval_exp and between bvs_eqi and
-    QFBV.eval_bexp *)
-
-  Lemma bvs_eqi_qfbv_eval_exp E e s1 s2 :
-    are_defined (QFBV.vars_exp e) E -> bvs_eqi E s1 s2 ->
-    QFBV.eval_exp e s1 = QFBV.eval_exp e s2
-  with
-  bvs_eqi_qfbv_eval_bexp E e s1 s2 :
-    are_defined (QFBV.vars_bexp e) E -> bvs_eqi E s1 s2 ->
-    QFBV.eval_bexp e s1 = QFBV.eval_bexp e s2.
-  Proof.
-    (* bvs_eqi_qfbv_eval_eexp *)
-    case: e => //=.
-    - move=> x Hdef Heqi. rewrite are_defined_singleton in Hdef.
-      move/memdefP: Hdef => Hmem. exact: (Heqi x Hmem).
-    - move=> op e Hdef Heqi. rewrite (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef Heqi).
-      reflexivity.
-    - move=> op e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
-      move/andP: Hdef=> [Hdef1 Hdef2].
-      rewrite (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef1 Heqi)
-        (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef2 Heqi). reflexivity.
-    - move=> c e1 e2 Hdef Heqi. rewrite !are_defined_union in Hdef.
-      move/andP: Hdef=> [Hdefc /andP [Hdef1 Hdef2]].
-      rewrite (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef1 Heqi)
-        (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef2 Heqi).
-      rewrite (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdefc Heqi). reflexivity.
-      (* bvs_eqi_qfbv_eval_bexp *)
-      case: e => //=.
-    - move=> op e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
-      move/andP: Hdef=> [Hdef1 Hdef2].
-      rewrite (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef1 Heqi)
-        (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef2 Heqi). reflexivity.
-    - move=> e Hdef Heqi. rewrite (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdef Heqi).
-      reflexivity.
-    - move=> e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
-      move/andP: Hdef=> [Hdef1 Hdef2].
-      rewrite (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdef1 Heqi)
-        (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdef2 Heqi). reflexivity.
-    - move=> e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
-      move/andP: Hdef=> [Hdef1 Hdef2].
-      rewrite (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdef1 Heqi)
-        (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdef2 Heqi). reflexivity.
-  Qed.
 
 
   (** Conversion from rbexp to QFBV.bexp *)
@@ -556,45 +96,6 @@ Section Rspec2QFBV.
     | Ror e1 e2 =>
         qfbv_disj (bexp_rbexp e1) (bexp_rbexp e2)
     end.
-
-
-  (** Properties about the conversion from rbexp to QFBV.bexp *)
-
-  Lemma eval_exp_var v s :
-    QFBV.eval_exp (qfbv_var v) s = SSAStore.acc v s.
-  Proof.
-    reflexivity.
-  Qed.
-
-  Lemma eval_exp_const s w n :
-    QFBV.eval_exp (qfbv_const w n) s = from_nat w n.
-  Proof. reflexivity. Qed.
-
-  Lemma eval_exp_rexp (e : SSALite.rexp) s:
-    QFBV.eval_exp (exp_rexp e) s = eval_rexp e s.
-    elim: e => w /=.
-    - reflexivity.
-    - reflexivity.
-    - move=> op e IH. case: op => /=; rewrite IH; reflexivity.
-    - move=> op e1 IH1 e2 IH2. case: op => /=; rewrite IH1 IH2; reflexivity.
-    - move=> v IH n; rewrite IH. reflexivity.
-    - move=> v IH n; rewrite IH. reflexivity.
-  Qed.
-
-  Lemma eval_bexp_rbexp e s:
-    QFBV.eval_bexp (bexp_rbexp e) s <-> eval_rbexp e s.
-  Proof.
-    elim : e => /=.
-    - done.
-    - move => w e0 e1; split.
-      + move => /eqP Heq; rewrite -!eval_exp_rexp Heq //.
-      + move => Heq; rewrite !eval_exp_rexp Heq //.
-    - move => w op e0 e1;
-              elim : op => /=; rewrite -!eval_exp_rexp //.
-    - move => e H. by iffb_tac.
-    - move => e0 IH0 e1 IH1. by iffb_tac.
-    - move => e0 IH0 e1 IH1. by iffb_tac.
-  Qed.
 
 
   (** Conversion from programs to QFBV.bexp *)
@@ -833,6 +334,1053 @@ Section Rspec2QFBV.
     | [::] => [::]
     | hd::tl => (bexp_instr E hd)::(bexp_program (instr_succ_typenv hd E) tl)
     end.
+
+
+  (** Conversion from a rspec to bexp_spec *)
+
+  Definition bexp_of_rspec E (s : rspec) : bexp_spec :=
+    {| binputs := program_succ_typenv (rsprog s) E;
+      bpre := bexp_rbexp (rspre s);
+      bprog := bexp_program E (rsprog s);
+      bpost := bexp_rbexp (rspost s) |}.
+
+
+  (** Range reduction version 1:
+      a simple conversion from a range specification to a QF_BV query *)
+
+  Definition rngred_rspec (s : rspec) : QFBV.bexp :=
+    let bs := bexp_of_rspec (rsinputs s) s in
+    qfbv_imp (qfbv_conj (bpre bs) (qfbv_conjs (bprog bs)))
+             (bpost bs).
+
+  (** Range reduction version 2:
+      split range conditions and apply qfbv_conjs_la *)
+
+  Definition rngred_rspec_split_la (s : rspec) : seq QFBV.bexp :=
+    let bs := bexp_of_rspec (rsinputs s) s in
+    map (fun post => qfbv_imp (qfbv_conj (bpre bs) (qfbv_conjs_la (bprog bs))) post)
+        (split_conj (bpost bs)).
+
+  (** Range reduction version 3:
+    slice range specification, split range conditions, and apply qfbv_conjs_la *)
+
+  Definition rngred_rspec_split_las (rs : seq rspec) : seq QFBV.bexp :=
+    tflatten (tmap rngred_rspec_split_la rs).
+
+  Definition rngred_rspec_slice_split_la (o : options) (s : rspec) : seq QFBV.bexp :=
+    rngred_rspec_split_las (tmap (slice_rspec o) (SSALite.split_rspec s)).
+
+End RangeSpecReduction.
+
+
+(** ** Definitions of the algebraic soundness condition reduction *)
+
+Section AlgSndReduction.
+
+  (** Reduction for instructions *)
+
+  Definition bexp_atom_uaddB_algsnd a1 a2 : QFBV.bexp :=
+    match a1, a2 with
+    | Aconst _ bs1, Aconst _ bs2 => if Uaddo bs1 bs2 then qfbv_false else qfbv_true
+    | _, _ => qfbv_lneg (qfbv_uaddo (qfbv_atom a1) (qfbv_atom a2))
+    end.
+
+  Definition bexp_atom_saddB_algsnd a1 a2 : QFBV.bexp :=
+    match a1, a2 with
+    | Aconst _ bs1, Aconst _ bs2 => if Saddo bs1 bs2 then qfbv_false else qfbv_true
+    | _ , _ => qfbv_lneg (qfbv_saddo (qfbv_atom a1) (qfbv_atom a2))
+    end.
+
+  Definition bexp_atom_addB_algsnd E a1 a2 : QFBV.bexp :=
+    let 'a_typ := atyp a1 E in
+    if Typ.is_unsigned a_typ then bexp_atom_uaddB_algsnd a1 a2
+    else bexp_atom_saddB_algsnd a1 a2.
+
+  Definition bexp_atom_adds_algsnd E a1 a2 : QFBV.bexp :=
+    let 'a_typ := atyp a1 E in
+    if Typ.is_unsigned a_typ then QFBV.Btrue
+    else bexp_atom_saddB_algsnd a1 a2.
+
+  Definition bexp_atom_uadcB_algsnd a_size a1 a2 ac : QFBV.bexp :=
+    match a1, a2, ac with
+    | Aconst _ bs1, Aconst _ bs2, Aconst _ c =>
+        if Uaddo bs1 bs2 || Uaddo (addB bs1 bs2) (zext (a_size - 1) c)
+        then qfbv_false else qfbv_true
+    | Aconst _ bs1, Aconst _ bs2, Avar _ =>
+        if Uaddo bs1 bs2
+        then qfbv_false
+        else if Uaddo (addB bs1 bs2) (zext (a_size - 1) [::b1])
+             then qfbv_lneg (qfbv_uaddo (Econst (addB bs1 bs2)) (qfbv_zext (a_size - 1) (qfbv_atom ac)))
+             else qfbv_true
+    | _, _, _ => qfbv_conj
+                   (qfbv_lneg
+                      (qfbv_uaddo (qfbv_atom a1)
+                         (qfbv_atom a2)))
+                   (qfbv_lneg
+                      (qfbv_uaddo (qfbv_add (qfbv_atom a1)
+                                     (qfbv_atom a2))
+                         (qfbv_zext (a_size - 1) (qfbv_atom ac))))
+    end.
+
+  Definition bexp_atom_sadcB_algsnd a_size a1 a2 ac : QFBV.bexp :=
+    match a1, a2, ac with
+    | Aconst _ bs1, Aconst _ bs2, Aconst _ c =>
+        if Saddo bs1 bs2 || Saddo (addB bs1 bs2) (zext (a_size - 1) c)
+        then qfbv_false else qfbv_true
+    | Aconst _ bs1, Aconst _ bs2, Avar _ =>
+        if Saddo bs1 bs2
+        then qfbv_false
+        else if Saddo (addB bs1 bs2) (zext (a_size - 1) [::b1])
+             then qfbv_lneg (qfbv_saddo (Econst (addB bs1 bs2)) (qfbv_zext (a_size - 1) (qfbv_atom ac)))
+             else qfbv_true
+    | _, _, _ => qfbv_conj
+                   (qfbv_lneg
+                      (qfbv_saddo (qfbv_atom a1)
+                         (qfbv_atom a2)))
+                   (qfbv_lneg
+                      (qfbv_saddo (qfbv_add (qfbv_atom a1)
+                                     (qfbv_atom a2))
+                         (qfbv_zext (a_size - 1) (qfbv_atom ac))))
+    end.
+
+  Definition bexp_atom_adcB_algsnd E a1 a2 ac : QFBV.bexp :=
+    let a_typ := atyp a1 E in
+    let a_size := asize a1 E in
+    if Typ.is_unsigned a_typ then bexp_atom_uadcB_algsnd a_size a1 a2 ac
+    else bexp_atom_sadcB_algsnd a_size a1 a2 ac.
+
+  Definition bexp_atom_adcs_algsnd E a1 a2 ac : QFBV.bexp :=
+    let a_typ := atyp a1 E in
+    let a_size := asize a1 E in
+    if Typ.is_unsigned a_typ then QFBV.Btrue
+    else bexp_atom_sadcB_algsnd a_size a1 a2 ac.
+
+  Definition bexp_atom_usubB_algsnd a1 a2 : QFBV.bexp :=
+    match a1, a2 with
+    | Aconst _ bs1, Aconst _ bs2 => if borrow_subB bs1 bs2 then qfbv_false else qfbv_true
+    | _, _ => qfbv_lneg (qfbv_usubo (qfbv_atom a1) (qfbv_atom a2))
+    end.
+
+  Definition bexp_atom_ssubB_algsnd a1 a2 : QFBV.bexp :=
+    match a1, a2 with
+    | Aconst _ bs1, Aconst _ bs2 => if Ssubo bs1 bs2 then qfbv_false else qfbv_true
+    | _, _ => qfbv_lneg (qfbv_ssubo (qfbv_atom a1) (qfbv_atom a2))
+    end.
+
+  Definition bexp_atom_subB_algsnd E a1 a2 : QFBV.bexp :=
+    let 'a_typ := atyp a1 E in
+    if Typ.is_unsigned a_typ then bexp_atom_usubB_algsnd a1 a2
+    else bexp_atom_ssubB_algsnd a1 a2.
+
+  Definition bexp_atom_subc_algsnd E a1 a2 : QFBV.bexp :=
+    let 'a_typ := atyp a1 E in
+    if Typ.is_unsigned a_typ then QFBV.Btrue
+    else bexp_atom_ssubB_algsnd a1 a2.
+
+  Definition bexp_atom_subb_algsnd E a1 a2 : QFBV.bexp :=
+    let 'a_typ := atyp a1 E in
+    if Typ.is_unsigned a_typ then QFBV.Btrue
+    else bexp_atom_ssubB_algsnd a1 a2.
+
+  Definition bexp_atom_usbbB_algsnd a_size a1 a2 ab : QFBV.bexp :=
+    qfbv_conj
+      (qfbv_lneg
+         (qfbv_usubo (qfbv_atom a1)
+            (qfbv_atom a2)))
+      (qfbv_lneg
+         (qfbv_usubo (qfbv_sub (qfbv_atom a1)
+                        (qfbv_atom a2))
+            (qfbv_zext (a_size - 1) (qfbv_atom ab)))).
+
+  Definition bexp_atom_ssbbB_algsnd a_size a1 a2 ab : QFBV.bexp :=
+    qfbv_conj
+      (qfbv_lneg
+         (qfbv_ssubo (qfbv_atom a1)
+            (qfbv_atom a2)))
+      (qfbv_lneg
+         (qfbv_ssubo (qfbv_sub (qfbv_atom a1)
+                        (qfbv_atom a2))
+            (qfbv_zext (a_size - 1) (qfbv_atom ab)))).
+
+  Definition bexp_atom_sbbB_algsnd E a1 a2 ab : QFBV.bexp :=
+    let a_typ := atyp a1 E in
+    let a_size := asize a1 E in
+    if Typ.is_unsigned a_typ then bexp_atom_usbbB_algsnd a_size a1 a2 ab
+    else bexp_atom_ssbbB_algsnd a_size a1 a2 ab.
+
+  Definition bexp_atom_sbbs_algsnd E a1 a2 ab : QFBV.bexp :=
+    let a_typ := atyp a1 E in
+    let a_size := asize a1 E in
+    if Typ.is_unsigned a_typ then QFBV.Btrue
+    else bexp_atom_ssbbB_algsnd a_size a1 a2 ab.
+
+  Definition bexp_atom_usbcB_algsnd a_size a1 a2 ac : QFBV.bexp :=
+    qfbv_conj
+      (qfbv_lneg
+         (qfbv_usubo (qfbv_atom a1)
+            (qfbv_atom a2)))
+      (qfbv_lneg
+         (qfbv_usubo (qfbv_sub (qfbv_atom a1)
+                        (qfbv_atom a2))
+            (qfbv_zext (a_size - 1)
+               (qfbv_sub (qfbv_one 1) (qfbv_atom ac))))).
+
+  Definition bexp_atom_ssbcB_algsnd a_size a1 a2 ac : QFBV.bexp :=
+    qfbv_conj
+      (qfbv_lneg
+         (qfbv_ssubo (qfbv_atom a1)
+            (qfbv_atom a2)))
+      (qfbv_lneg
+         (qfbv_ssubo (qfbv_sub (qfbv_atom a1)
+                        (qfbv_atom a2))
+            (qfbv_zext (a_size - 1)
+               (qfbv_sub (qfbv_one 1) (qfbv_atom ac))))).
+
+  Definition bexp_atom_sbcB_algsnd E a1 a2 ac : QFBV.bexp :=
+    let a_typ := atyp a1 E in
+    let a_size := asize a1 E in
+    if Typ.is_unsigned a_typ then bexp_atom_usbcB_algsnd a_size a1 a2 ac
+    else bexp_atom_ssbcB_algsnd a_size a1 a2 ac.
+
+  Definition bexp_atom_sbcs_algsnd E a1 a2 ac : QFBV.bexp :=
+    let a_typ := atyp a1 E in
+    let a_size := asize a1 E in
+    if Typ.is_unsigned a_typ then QFBV.Btrue
+    else bexp_atom_ssbcB_algsnd a_size a1 a2 ac.
+
+  Definition bexp_atom_mulB_algsnd E a1 a2 : QFBV.bexp :=
+    let 'a_typ := atyp a1 E in
+    if Typ.is_unsigned a_typ then
+      qfbv_lneg (qfbv_umulo (qfbv_atom a1)
+                   (qfbv_atom a2))
+    else
+      qfbv_lneg (qfbv_smulo (qfbv_atom a1)
+                   (qfbv_atom a2)).
+
+  Definition bexp_atom_shl_algsnd E a n : QFBV.bexp :=
+    let 'a_typ := atyp a E in
+    if Typ.is_unsigned a_typ then
+      qfbv_eq (qfbv_high n (qfbv_atom a))
+        (qfbv_zero n)
+    else
+      qfbv_disj (qfbv_eq (qfbv_high (n + 1) (qfbv_atom a))
+                   (qfbv_zero (n + 1)))
+        (qfbv_eq (qfbv_high (n + 1) (qfbv_atom a))
+           (qfbv_not (qfbv_zero (n + 1)))).
+
+  Definition bexp_atom_cshl_algsnd E (a1 : atom) a2 n  : QFBV.bexp :=
+    let 'concatbv := qfbv_concat (qfbv_atom a1) (qfbv_atom a2) in
+    if Typ.is_unsigned (atyp a1 E) then
+      qfbv_eq (qfbv_high n concatbv) (qfbv_zero n)
+    else
+      qfbv_disj (qfbv_eq (qfbv_high (n + 1) concatbv)
+                   (qfbv_zero (n + 1)))
+        (qfbv_eq (qfbv_high (n + 1) concatbv)
+           (qfbv_not (qfbv_zero (n + 1)))).
+
+  Definition bexp_atom_vpc_algsnd E t a : QFBV.bexp :=
+    let 'a_typ := atyp a E in
+    let 'a_size := Typ.sizeof_typ a_typ in
+    let 't_size := Typ.sizeof_typ t in
+    if Typ.is_unsigned a_typ then
+      if Typ.is_unsigned t then
+        if Typ.sizeof_typ a_typ <= Typ.sizeof_typ t then
+          qfbv_true
+        else
+          qfbv_eq
+            (qfbv_high (Typ.sizeof_typ a_typ - Typ.sizeof_typ t)
+               (qfbv_atom a))
+            (qfbv_zero (Typ.sizeof_typ a_typ - Typ.sizeof_typ t))
+      else
+        if Typ.sizeof_typ a_typ < Typ.sizeof_typ t then
+          qfbv_true
+        else
+          qfbv_eq
+            (qfbv_high (Typ.sizeof_typ a_typ - Typ.sizeof_typ t + 1)
+               (qfbv_atom a))
+            (qfbv_zero (Typ.sizeof_typ a_typ - Typ.sizeof_typ t + 1))
+    else
+      if Typ.is_unsigned t then
+        if Typ.sizeof_typ a_typ - 1 <= Typ.sizeof_typ t then
+          qfbv_eq
+            (qfbv_high 1 (qfbv_atom a))
+            (qfbv_zero 1)
+        else
+          qfbv_eq
+            (qfbv_high (Typ.sizeof_typ a_typ - Typ.sizeof_typ t)
+               (qfbv_atom a))
+            (qfbv_zero (Typ.sizeof_typ a_typ - Typ.sizeof_typ t))
+      else
+        if Typ.sizeof_typ a_typ <= Typ.sizeof_typ t then
+          qfbv_true
+        else
+          qfbv_eq
+            (qfbv_sext (Typ.sizeof_typ a_typ - Typ.sizeof_typ t)
+               (qfbv_low (Typ.sizeof_typ t) (qfbv_atom a)))
+            (qfbv_atom a).
+
+  Definition bexp_instr_algsnd E (i : instr) : QFBV.bexp :=
+    match i with
+    | Iadd _ a1 a2 =>
+        bexp_atom_addB_algsnd E a1 a2
+    | Iadds _ _ a1 a2 =>
+        bexp_atom_adds_algsnd E a1 a2
+    | Iadc _ a1 a2 ac =>
+        bexp_atom_adcB_algsnd E a1 a2 ac
+    | Iadcs _ _ a1 a2 ac =>
+        bexp_atom_adcs_algsnd E a1 a2 ac
+    | Isub _ a1 a2 =>
+        bexp_atom_subB_algsnd E a1 a2
+    | Isubc _ _ a1 a2 =>
+        bexp_atom_subc_algsnd E a1 a2
+    | Isubb _ _ a1 a2 =>
+        bexp_atom_subb_algsnd E a1 a2
+    | Isbc _ a1 a2 ac =>
+        bexp_atom_sbcB_algsnd E a1 a2 ac
+    | Isbcs _ _ a1 a2 ac =>
+        bexp_atom_sbcs_algsnd E a1 a2 ac
+    | Isbb _ a1 a2 ab =>
+        bexp_atom_sbbB_algsnd E a1 a2 ab
+    | Isbbs _ _ a1 a2 ab =>
+        bexp_atom_sbbs_algsnd E a1 a2 ab
+    | Imul _ a1 a2 =>
+        bexp_atom_mulB_algsnd E a1 a2
+    | Ishl v a n =>
+        bexp_atom_shl_algsnd E a n
+    | Icshl h l a1 a2 n =>
+        bexp_atom_cshl_algsnd E a1 a2 n
+    | Ivpc _ t a =>
+        bexp_atom_vpc_algsnd E t a
+    | Inop
+    | Inondet _ _
+    | Imov _ _
+    | Icmov _ _ _ _
+    | Imull _ _ _ _
+    | Imulj _ _ _
+    | Inot _ _ _
+    | Iand _ _ _ _
+    | Ior _ _ _ _
+    | Ixor _ _ _ _
+    | Isplit _ _ _ _
+    | Ijoin _ _ _
+    | Icast _ _ _
+    | Iassume _ => qfbv_true
+    end.
+
+  (** Algebraic soundness version 1:
+      - fixed typing environment - initial typing environment
+      - a single QF_BV predicate *)
+
+  Fixpoint bexp_program_algsnd_fixed_init E p : QFBV.bexp :=
+    match p with
+    | [::] => qfbv_true
+    | hd::tl =>
+      qfbv_conj (bexp_instr_algsnd E hd)
+                (qfbv_disj
+                   (qfbv_lneg (bexp_instr E hd))
+                   (bexp_program_algsnd_fixed_init (instr_succ_typenv hd E) tl))
+    end.
+
+  (** Algebraic soundness version 2:
+      - varying typing environments
+      - one QF_BV predicate for one instruction *)
+
+  (* Construct safety conditions (full prefix information). *)
+
+  (*
+   * E: the typing environment after pre_is and before p
+   * pre_is: the prefix of instructions
+   * pre_es: the QFBV expressions encoding the prefix of instructions
+   * p: the remaining program to be converted
+   *)
+  Fixpoint bexp_program_algsnd_split_full_rec E pre_is (pre_es : seq QFBV.bexp) p :
+    seq (SSATE.env * seq instr * seq QFBV.bexp * instr * seq instr * QFBV.bexp) :=
+    match p with
+    | [::] => [::]
+    | hd::tl =>
+      (E, pre_is, pre_es, hd, tl, bexp_instr_algsnd E hd)
+        ::(bexp_program_algsnd_split_full_rec
+             (instr_succ_typenv hd E) (rcons pre_is hd)
+             (rcons pre_es (bexp_instr E hd)) tl)
+    end.
+
+  Definition bexp_program_algsnd_split_full E p :
+    seq (SSATE.env * seq instr * seq QFBV.bexp * instr * seq instr * QFBV.bexp) :=
+    bexp_program_algsnd_split_full_rec E [::] [::] p.
+
+  (* Construct safety conditions (less information). *)
+
+  Fixpoint bexp_program_algsnd_split_rec E (pre_es : seq QFBV.bexp) p :
+    seq (SSATE.env * seq QFBV.bexp * QFBV.bexp) :=
+    match p with
+    | [::] => [::]
+    | hd::tl =>
+      (E, pre_es, bexp_instr_algsnd E hd)
+        ::(bexp_program_algsnd_split_rec
+             (instr_succ_typenv hd E) (rcons pre_es (bexp_instr E hd)) tl)
+    end.
+
+  Definition bexp_program_algsnd_split E p : seq (SSATE.env * seq QFBV.bexp * QFBV.bexp) :=
+    bexp_program_algsnd_split_rec E [::] p.
+
+  (** Algebraic soundness version 3:
+      - fixed typing environment - final typing environment
+      - a single QF_BV predicate *)
+
+  (* use the final typing environment *)
+  Fixpoint bexp_program_algsnd_fixed_final E p : QFBV.bexp :=
+    match p with
+    | [::] => qfbv_true
+    | hd::tl =>
+      qfbv_conj (bexp_instr_algsnd E hd)
+                (qfbv_imp
+                   (bexp_instr E hd)
+                   (bexp_program_algsnd_fixed_final E tl))
+    end.
+
+  (** Algebraic soundness version 4:
+      - fixed typing environment - final typing environment
+      - one QF_BV predicate for one instruction
+      - use qfbv_conjs to make conjunctions *)
+
+  (*
+   * E: the final typing environment
+   * pre_is: the prefix of instructions
+   * pre_es: the QFBV expressions encoding the prefix of instructions
+   * p: the remaining program to be converted
+   *)
+  Fixpoint bexp_program_algsnd_split_fixed_final_full_rec
+           E pre_is (pre_es : seq QFBV.bexp) (p : program) :
+    seq (seq instr * seq QFBV.bexp * instr * seq instr * QFBV.bexp) :=
+    match p with
+    | [::] => [::]
+    | hd::tl =>
+      (pre_is, pre_es, hd, tl, bexp_instr_algsnd E hd)
+        ::(bexp_program_algsnd_split_fixed_final_full_rec
+             E (rcons pre_is hd)
+             (rcons pre_es (bexp_instr E hd)) tl)
+    end.
+
+  (*
+   * E: the final typing environment
+   * p: the remaining program to be converted
+   *)
+  Definition bexp_program_algsnd_split_fixed_final_full E p :=
+    bexp_program_algsnd_split_fixed_final_full_rec E [::] [::] p.
+
+  (* pre_es: encoding of instructions in QFBV *)
+  Fixpoint bexp_program_algsnd_split_fixed_final_rec E (pre_es : seq QFBV.bexp) p : seq (seq QFBV.bexp * QFBV.bexp) :=
+    match p with
+    | [::] => [::]
+    | hd::tl =>
+      (pre_es, bexp_instr_algsnd E hd)
+        ::(bexp_program_algsnd_split_fixed_final_rec
+             E (rcons pre_es (bexp_instr E hd)) tl)
+    end.
+
+  Definition bexp_program_algsnd_split_fixed_final E p :=
+    bexp_program_algsnd_split_fixed_final_rec E [::] p.
+
+  Fixpoint qfbv_spec_algsnd_rec f es :=
+    match es with
+    | [::] => [::]
+    | (pre_es, safe)::tl =>
+      (qfbv_imp (qfbv_conj f (qfbv_conjs pre_es)) safe)::(qfbv_spec_algsnd_rec f tl)
+    end.
+
+  Definition qfbv_spec_algsnd (s : rspec) : seq QFBV.bexp :=
+    let fE := program_succ_typenv (rsprog s) (rsinputs s) in
+    qfbv_spec_algsnd_rec (bexp_rbexp (rspre s))
+                         (bexp_program_algsnd_split_fixed_final fE (rsprog s)).
+
+  (** Algebraic soundness version 5:
+      - fixed typing environment - final typing environment
+      - one QF_BV predicate for one instruction
+      - use qfbv_conjs_la to make conjunctions *)
+
+  Fixpoint qfbv_spec_algsnd_la_rec (f : QFBV.bexp) (es : seq (seq QFBV.bexp * QFBV.bexp)) : seq QFBV.bexp :=
+    match es with
+    | [::] => [::]
+    | (pre_es, safe)::tl =>
+      (qfbv_imp (qfbv_conj f (qfbv_conjs_la pre_es))
+                safe)::(qfbv_spec_algsnd_la_rec f tl)
+    end.
+
+  Definition qfbv_spec_algsnd_la (s : rspec) : seq QFBV.bexp :=
+    let fE := program_succ_typenv (rsprog s) (rsinputs s) in
+    qfbv_spec_algsnd_la_rec (bexp_rbexp (rspre s))
+                            (bexp_program_algsnd_split_fixed_final fE (rsprog s)).
+
+  (** Algebraic soundness version 6:
+      - fixed typing environment - final typing environment
+      - one QF_BV predicate for one instruction
+      - use qfbv_conjs_la to make conjunctions
+      - apply slicing *)
+
+  Definition make_sndcond o fE f p i : QFBV.bexp :=
+    let es := bexp_instr_algsnd fE i in
+    if es == qfbv_true then qfbv_true
+    else let ef := bexp_rbexp f in
+         let vs := depvars_rpre_rprogram o (rvs_instr i) f p in
+         let ep := bexp_program fE (slice_rprogram vs p) in
+         qfbv_imp (qfbv_conj ef (qfbv_conjs_la ep)) es.
+
+  Fixpoint algsnd_slice_la_rec o fE (pre : program) (f : rbexp) (p : program) : seq QFBV.bexp :=
+    match p with
+    | [::] => [::]
+    | hd::tl => (make_sndcond o fE f pre hd)::
+                  (algsnd_slice_la_rec o fE (rcons pre hd) f tl)
+    end.
+
+  Definition algsnd_slice_la o (s : rspec) : seq QFBV.bexp :=
+    let fE := program_succ_typenv (rsprog s) (rsinputs s) in
+    algsnd_slice_la_rec o fE [::] (rspre s) (rsprog s).
+
+End AlgSndReduction.
+
+
+(** ** Combine range specification reduction and algebraic soundness condition reduction *)
+
+Section RngredAlgsnd.
+
+  (** Combine range reduction and algebraic soundness
+     (version 1, the simplest version) *)
+
+  Definition rngred_algsnd (s : rspec) :=
+    (rngred_rspec s)::(qfbv_spec_algsnd s).
+
+
+  (** Combine range reduction and algebraic soundness
+      (version 2, split range conditions and use qfbv_conjs_la) *)
+
+  Definition rngred_algsnd_split_la (s : rspec) : seq QFBV.bexp :=
+    (rngred_rspec_split_la s) ++ (qfbv_spec_algsnd_la s).
+
+
+  (** Combine range reduction and algebraic soundness
+      (version 3, apply slicing, split range conditions, and use qfbv_conjs_la) *)
+
+  Definition rngred_algsnd_slice_split_la (o : options) (s : rspec) : seq QFBV.bexp :=
+    (rngred_rspec_slice_split_la o s) ++ (algsnd_slice_la o s).
+
+End RngredAlgsnd.
+
+
+(** ** Computing variables of a sequence of range specifications *)
+
+Section VarsRspecs.
+
+  Import SSALite.
+
+  Fixpoint vars_rspecs (rs : seq rspec) : SSAVS.t :=
+    match rs with
+    | [::] => SSAVS.empty
+    | s::rs => SSAVS.union (vars_rspec s) (vars_rspecs rs)
+    end.
+
+  Lemma vars_rspecs_cons r rs :
+    SSAVS.Equal (vars_rspecs (r::rs)) (SSAVS.union (vars_rspec r) (vars_rspecs rs)).
+  Proof. reflexivity. Qed.
+
+  Lemma vars_rspecs_rcons rs r :
+    SSAVS.Equal (vars_rspecs (rcons rs r)) (SSAVS.union (vars_rspecs rs) (vars_rspec r)).
+  Proof.
+    elim: rs => [| s rs IH] //=.
+    - by SSAVS.Lemmas.dp_Equal.
+    - rewrite IH. by SSAVS.Lemmas.dp_Equal.
+  Qed.
+
+  Lemma vars_rspecs_cat rs1 rs2 :
+    SSAVS.Equal (vars_rspecs (rs1 ++ rs2)) (SSAVS.union (vars_rspecs rs1) (vars_rspecs rs2)).
+  Proof.
+    elim: rs1 rs2 => [| r1 rs1 IH1] rs2 //=.
+    rewrite IH1. by SSAVS.Lemmas.dp_Equal.
+  Qed.
+
+  Lemma vars_rspecs_rev rs :
+    SSAVS.Equal (vars_rspecs (rev rs)) (vars_rspecs rs).
+  Proof.
+    elim: rs => [| r rs IH] //=. rewrite rev_cons vars_rspecs_rcons IH.
+    by SSAVS.Lemmas.dp_Equal.
+  Qed.
+
+  Lemma vars_split_rspec s :
+    SSAVS.subset (vars_rspecs (split_rspec s)) (vars_rspec s).
+  Proof.
+    rewrite /split_rspec /vars_rspec. case: s => E f p g /=.
+    rewrite tmap_map /=. elim: g E f p; intros; rewrite /= /vars_rspec /=.
+    - by SSAVS.Lemmas.dp_subset.
+    - by SSAVS.Lemmas.dp_subset.
+    - by SSAVS.Lemmas.dp_subset.
+    - by SSAVS.Lemmas.dp_subset.
+    - rewrite map_cat. rewrite vars_rspecs_cat. move: (H E f p) (H0 E f p) => Hsub1 Hsub2.
+      apply: SSAVS.Lemmas.subset_union3.
+      + apply: (SSAVS.Lemmas.subset_trans Hsub1). by SSAVS.Lemmas.dp_subset.
+      + apply: (SSAVS.Lemmas.subset_trans Hsub2). by SSAVS.Lemmas.dp_subset.
+    - by SSAVS.Lemmas.dp_subset.
+  Qed.
+
+  Lemma vars_slice_rspecs {o} rs :
+    SSAVS.subset (vars_rspecs (tmap (slice_rspec o) rs))
+                 (vars_rspecs rs).
+  Proof.
+    elim: rs => [| r rs IH] //=. rewrite tmap_map /= -tmap_map.
+    move: (slice_rspec_subset_rspec o r) => Hsub.
+    by SSAVS.Lemmas.dp_subset.
+  Qed.
+
+End VarsRspecs.
+
+
+(** ** Force conformation of stores *)
+
+Section ForceConformDiff.
+
+  Definition force_conform_diff (E : SSATE.env) (vs : SSAVS.t) (s : SSAStore.t) :=
+    force_conform_vars E (SSAVS.elements (SSAVS.diff (vars_env E) vs)) s.
+
+  Lemma force_conform_diff_notin E vs s v :
+    SSATE.mem v E -> ~~ SSAVS.mem v vs ->
+    SSAStore.acc v (force_conform_diff E vs s) = zeros (SSATE.vsize v E).
+  Proof.
+    move=> Hin Hnotin. rewrite /force_conform_diff.
+    rewrite force_conform_vars_in; first reflexivity.
+    apply: SSAVS.Lemmas.mem_in_elements. rewrite SSAVS.Lemmas.diff_b.
+    by rewrite mem_vars_env Hin Hnotin.
+  Qed.
+
+  Lemma force_conform_diff_in E vs s v :
+    SSAVS.mem v vs -> SSAStore.acc v (force_conform_diff E vs s) = SSAStore.acc v s.
+  Proof.
+    move=> Hmem. rewrite /force_conform_diff.
+    rewrite force_conform_vars_notin; first reflexivity.
+    apply/negP => Hin. move: (SSAVS.Lemmas.in_elements_mem Hin).
+    rewrite SSAVS.Lemmas.diff_b. rewrite Hmem andbF. discriminate.
+  Qed.
+
+  Lemma agree_force_conform_notin_valid_bexp E1 E2 vs s :
+    MA.agree vs E1 E2 -> SSAStore.conform s E1 ->
+    SSAStore.conform (force_conform_diff E2 vs s) E2.
+  Proof.
+    move=> Hag Hco x Hmemx. case Hmemxvs: (SSAVS.mem x vs).
+    - rewrite (force_conform_diff_in _ _ Hmemxvs). move: (Hag _ Hmemxvs) => Hfind.
+      rewrite -(SSALite.TELemmas.find_same_vsize Hfind). rewrite Hco; first reflexivity.
+      rewrite SSATE.Lemmas.mem_find_b Hfind. by move: (SSATE.Lemmas.mem_find_some Hmemx) => [y ->].
+    - move/idP/negP: Hmemxvs => Hmemxvs. rewrite (force_conform_diff_notin _ Hmemx Hmemxvs).
+      rewrite size_zeros. reflexivity.
+  Qed.
+
+  Lemma force_conform_diff_eval_exp vs E e s :
+    SSAVS.subset (QFBV.vars_exp e) vs ->
+    QFBV.eval_exp e (force_conform_diff E vs s) = QFBV.eval_exp e s
+  with force_conform_diff_eval_bexp vs E e s :
+    SSAVS.subset (QFBV.vars_bexp e) vs ->
+    QFBV.eval_bexp e (force_conform_diff E vs s) = QFBV.eval_bexp e s.
+  Proof.
+    (* force_conform_diff_eval_exp *)
+    - case: e => //=.
+      + move=> x Hsub. rewrite force_conform_diff_in; first reflexivity.
+        exact: (SSAVS.Lemmas.subset_singleton1 Hsub).
+      + move=> op e Hsub. rewrite (force_conform_diff_eval_exp _ _ _ _ Hsub). reflexivity.
+      + move=> op e1 e2. rewrite SSAVS.Lemmas.subset_union6.
+        move/andP=> [Hsub1 Hsub2]. rewrite (force_conform_diff_eval_exp _ _ _ _ Hsub1)
+                                     (force_conform_diff_eval_exp _ _ _ _ Hsub2). reflexivity.
+      + move=> b e1 e2. rewrite !SSAVS.Lemmas.subset_union6.
+        move/andP=> [Hsubb /andP [Hsub1 Hsub2]].
+        rewrite (force_conform_diff_eval_bexp _ _ _ _ Hsubb)
+          (force_conform_diff_eval_exp _ _ _ _ Hsub1)
+          (force_conform_diff_eval_exp _ _ _ _ Hsub2). reflexivity.
+    (* force_conform_diff_eval_bexp *)
+    - case: e => //=.
+      + move=> op e1 e2. rewrite SSAVS.Lemmas.subset_union6. move/andP=> [Hsub1 Hsub2].
+        rewrite (force_conform_diff_eval_exp _ _ _ _ Hsub1)
+          (force_conform_diff_eval_exp _ _ _ _ Hsub2). reflexivity.
+      + move=> e Hsub. rewrite (force_conform_diff_eval_bexp _ _ _ _ Hsub). reflexivity.
+      + move=> e1 e2. rewrite SSAVS.Lemmas.subset_union6. move/andP=> [Hsub1 Hsub2].
+        rewrite (force_conform_diff_eval_bexp _ _ _ _ Hsub1)
+          (force_conform_diff_eval_bexp _ _ _ _ Hsub2). reflexivity.
+      + move=> e1 e2. rewrite SSAVS.Lemmas.subset_union6. move/andP=> [Hsub1 Hsub2].
+        rewrite (force_conform_diff_eval_bexp _ _ _ _ Hsub1)
+          (force_conform_diff_eval_bexp _ _ _ _ Hsub2). reflexivity.
+  Qed.
+
+End ForceConformDiff.
+
+
+(** ** Some auxiliary lemmas *)
+
+Section AuxLemmas.
+
+  Lemma agree_valid_bexp E1 E2 e :
+    MA.agree (QFBV.vars_bexp e) E1 E2 ->
+    valid_bexp E1 e <-> valid_bexp E2 e.
+  Proof.
+    move=> Hag; split.
+    - move=> Hv s Hco. move: (MA.agree_sym Hag) => {}Hag.
+      move: (Hv (force_conform_diff E1 (QFBV.vars_bexp e) s)
+                (agree_force_conform_notin_valid_bexp Hag Hco)).
+      rewrite (force_conform_diff_eval_bexp _ _ (SSAVS.Lemmas.subset_refl _)). by apply.
+    - move=> Hv s Hco. move: (Hv (force_conform_diff E2 (QFBV.vars_bexp e) s)
+                                 (agree_force_conform_notin_valid_bexp Hag Hco)).
+      rewrite (force_conform_diff_eval_bexp _ _ (SSAVS.Lemmas.subset_refl _)). by apply.
+  Qed.
+
+  Lemma agree_valid_bexps E1 E2 es :
+    MA.agree (QFBV.vars_bexps es) E1 E2 ->
+    valid_bexps E1 es <-> valid_bexps E2 es.
+  Proof.
+    elim: es => [| e es IH] //=. move/MA.agree_union_set => [Hag1 Hag2].
+    rewrite !valid_bexps_cons. rewrite (agree_valid_bexp Hag1) (IH Hag2). tauto.
+  Qed.
+
+  Lemma agree_exp_size E1 E2 e :
+    MA.agree (QFBV.vars_exp e) E1 E2 ->
+    exp_size e E1 = exp_size e E2.
+  Proof.
+    elim: e => //=.
+    - move=> x H. apply: SSALite.TELemmas.find_same_vsize. apply: (H x).
+      apply: SSAVS.Lemmas.mem_singleton2. reflexivity.
+    - move=> op e IH Hag. rewrite (IH Hag). reflexivity.
+    - move=> op e1 IH1 e2 IH2 /MA.agree_union_set [Hag1 Hag2].
+      rewrite (IH1 Hag1) (IH2 Hag2). reflexivity.
+    - move=> b e1 IH1 e2 IH2 /MA.agree_union_set [Hagb /MA.agree_union_set [Hag1 Hag2]].
+      rewrite (IH1 Hag1) (IH2 Hag2). reflexivity.
+  Qed.
+
+  Lemma agree_well_formed_eexp E1 E2 e :
+    MA.agree (QFBV.vars_exp e) E1 E2 ->
+    well_formed_exp e E1 = well_formed_exp e E2
+  with agree_well_formed_bexp E1 E2 e :
+    MA.agree (QFBV.vars_bexp e) E1 E2 ->
+    QFBV.well_formed_bexp e E1 = QFBV.well_formed_bexp e E2.
+  Proof.
+    (* agree_well_formed_eexp *)
+    - case: e => //=.
+      + move=> x Hag. rewrite !SSATE.Lemmas.mem_find_b.
+        rewrite (Hag x); first reflexivity. apply: SSAVS.Lemmas.mem_singleton2. reflexivity.
+      + move=> _ e Hag. rewrite (agree_well_formed_eexp _ _ _ Hag). reflexivity.
+      + move=> op e1 e2 /MA.agree_union_set [Hag1 Hag2].
+        rewrite (agree_well_formed_eexp _ _ _ Hag1) (agree_well_formed_eexp _ _ _ Hag2).
+        rewrite (agree_exp_size Hag1) (agree_exp_size Hag2). reflexivity.
+      + move=> b e1 e2 /MA.agree_union_set [Hagb /MA.agree_union_set [Hag1 Hag2]].
+        rewrite (agree_well_formed_bexp _ _ _ Hagb)
+                (agree_well_formed_eexp _ _ _ Hag1) (agree_well_formed_eexp _ _ _ Hag2).
+        rewrite (agree_exp_size Hag1) (agree_exp_size Hag2). reflexivity.
+    (* agree_well_formed_bexp *)
+    - case: e => //=.
+      + move=> _ e1 e2 /MA.agree_union_set [Hag1 Hag2].
+        rewrite (agree_well_formed_eexp _ _ _ Hag1) (agree_well_formed_eexp _ _ _ Hag2).
+        rewrite (agree_exp_size Hag1) (agree_exp_size Hag2). reflexivity.
+      + move=> e Hag. rewrite (agree_well_formed_bexp _ _ _ Hag). reflexivity.
+      + move=> e1 e2 /MA.agree_union_set [Hag1 Hag2].
+        rewrite (agree_well_formed_bexp _ _ _ Hag1) (agree_well_formed_bexp _ _ _ Hag2).
+        reflexivity.
+      + move=> e1 e2 /MA.agree_union_set [Hag1 Hag2].
+        rewrite (agree_well_formed_bexp _ _ _ Hag1) (agree_well_formed_bexp _ _ _ Hag2).
+        reflexivity.
+  Qed.
+
+  Lemma agree_well_formed_bexps E1 E2 es :
+    MA.agree (QFBV.vars_bexps es) E1 E2 ->
+    QFBV.well_formed_bexps es E1 = QFBV.well_formed_bexps es E2.
+  Proof.
+    elim: es => [| e es IH] //=. move/MA.agree_union_set => [Hag1 Hag2].
+    rewrite (agree_well_formed_bexp Hag1) (IH Hag2). reflexivity.
+  Qed.
+
+  Lemma from_nat_simple :
+    forall n, to_nat (NBitsDef.from_nat (trunc_log 2 n).+1 n) = n.
+  Proof.
+    move => n.
+    rewrite to_nat_from_nat_bounded; first done.
+    by apply : trunc_log_ltn.
+  Qed.
+
+  Ltac rewrite_from_nat_simple :=
+    repeat
+      match goal with
+      | H : context f [(nat_of_bool (odd ?n) +
+                          (to_nat (trunc_log 2 ?n) -bits of (?n./2)).*2)%bits]
+        |- _ =>
+          let Hn := fresh in
+          move: (from_nat_simple n) => Hn; rewrite /= in Hn; rewrite Hn in H; clear Hn
+      | |- context f [(nat_of_bool (odd ?n) +
+                         (to_nat (trunc_log 2 ?n) -bits of (?n./2)).*2)%bits] =>
+          let Hn := fresh in
+          move: (from_nat_simple n) => Hn; rewrite /= in Hn; rewrite Hn; clear Hn
+      end.
+
+  Lemma to_bool_bit_is_true :
+    forall bs,
+      size bs = 1 ->
+      to_bool bs ->
+      [:: true] == bs.
+  Proof.
+    move => bs Hs1.
+    move : (size1 Hs1).
+    elim => Hbs; rewrite (eqP Hbs); done.
+  Qed.
+
+  Lemma not_to_bool_bit_is_false :
+    forall bs,
+      size bs = 1 ->
+      ~~ to_bool bs ->
+      [:: false] == bs.
+  Proof.
+    move => bs Hs1.
+    move : (size1 Hs1).
+    elim => Hbs; rewrite (eqP Hbs); done.
+  Qed.
+
+  Lemma addB_nat p1 p2 :
+    addB p1 p2 =
+      from_nat (size (addB p1 p2)) (to_nat p1 + to_nat p2).
+  Proof.
+    by rewrite /addB to_nat_adcB' size_from_nat.
+  Qed.
+
+  Lemma to_nat_zext_bool n bs :
+    size bs = 1 -> to_nat (zext n bs) == to_bool bs.
+  Proof.
+    move => Hsz1; elim: (size1 Hsz1); move/eqP => -> /=;
+           by rewrite to_nat_zeros /=.
+  Qed.
+
+  Lemma from_nat_idem m n0 n1 n2 :
+    from_nat m (n0 + n1 + n2) ==
+      from_nat m (to_nat (from_nat m (n0 + n1)) + n2).
+  Proof.
+    elim : m n0 n1 n2; first done.
+    move => m IH n0 n1 n2.
+    rewrite to_nat_from_nat.
+    move : (div.divn_eq (n0 + n1) (2 ^ m.+1)) => Hmod.
+    rewrite (addnC (div.modn (n0 + n1) (2 ^ m.+1)) n2).
+    rewrite (from_nat_wrapMany (m.+1)
+                               (div.divn (n0 + n1) (2 ^ m.+1))
+                               (n2 + div.modn (n0 + n1) (2 ^ m.+1))).
+    rewrite -(addnA n2 _ _) (addnC (div.modn (n0 + n1) (2 ^ m.+1)) _).
+    rewrite -Hmod.
+    rewrite (addnA n2) (addnC n2).
+    rewrite -(addnA n0 n2) (addnC n2) (addnA n0 n1).
+    done.
+  Qed.
+
+  Lemma atyp_asize E a0 a1 :
+    atyp a0 E = atyp a1 E -> asize a0 E == asize a1 E.
+  Proof.
+    rewrite /asize. by move=> ->.
+  Qed.
+
+  Lemma eval_exp_if s b qfbv0 qfbv1 :
+    QFBV.eval_exp (if b then qfbv0 else qfbv1) s =
+      if b then QFBV.eval_exp qfbv0 s else QFBV.eval_exp qfbv1 s.
+  Proof.
+    case b => /=; done.
+  Qed.
+
+  Lemma eval_bexp_if s b qfbv0 qfbv1 :
+    QFBV.eval_bexp (if b then qfbv0 else qfbv1) s =
+      if b then QFBV.eval_bexp qfbv0 s else QFBV.eval_bexp qfbv1 s.
+  Proof.
+    case b => /=; done.
+  Qed.
+
+  Lemma not_mem_add x y s :
+    ~~ SSAVS.mem x (SSAVS.add y s) ->
+    x != y /\ ~~ SSAVS.mem x s.
+  Proof.
+    move=> H. move: (SSAVS.Lemmas.not_mem_add1 H) => [/negP H1 H2]. done.
+  Qed.
+
+  Lemma size_exp_const E w n : QFBV.exp_size (QFBV.Econst (NBitsDef.from_nat w n)) E = w.
+  Proof. rewrite /= size_from_nat. reflexivity. Qed.
+
+  Lemma to_nat_from_nat_very_small w n : n <= w -> to_nat (from_nat w n) = n.
+  Proof.
+    move=> H. rewrite to_nat_from_nat. apply: div.modn_small.
+    elim: w n H => [| w IH n H] //=. case: n H => [| n] H /=.
+    - exact: Nats.expn2_gt0.
+    - rewrite ltnS in H. move: (IH _ H) => {IH} H.
+      case: w H => [| w] H //=. rewrite -(addn1 n) expnS mul2n -addnn.
+      apply: (Nats.ltn_addn H). exact: Nats.expn2_gt1.
+  Qed.
+
+End AuxLemmas.
+
+
+(** ** Some tactics used across sections *)
+
+Ltac to_asize :=
+  repeat
+    match goal with
+    | Hsub : is_true (SSAVS.subset (vars_atom ?a) (vars_env ?E)),
+        Hco : SSAStore.conform ?s ?E,
+          Hsm : is_true (size_matched_atom ?a) |-
+        context f [size (eval_atom ?a ?s)] =>
+        rewrite (size_eval_atom_asize Hsub Hco Hsm)
+    | Hsub : is_true (SSAVS.subset (vars_atom ?a) (vars_env ?E)),
+        Hco : SSAStore.conform ?s ?E,
+          Hsm : is_true (size_matched_atom ?a),
+            H : context f [size (eval_atom ?a ?s)] |- _ =>
+        rewrite (size_eval_atom_asize Hsub Hco Hsm) in H
+    end.
+
+Ltac of_asize :=
+  repeat
+    match goal with
+    | Hsub : is_true (SSAVS.subset (vars_atom ?a) (vars_env ?E)),
+        Hco : SSAStore.conform ?s ?E,
+          Hsm : is_true (size_matched_atom ?a) |-
+        context f [asize ?a ?E] =>
+        rewrite -(size_eval_atom_asize Hsub Hco Hsm)
+    | Hsub : is_true (SSAVS.subset (vars_atom ?a) (vars_env ?E)),
+        Hco : SSAStore.conform ?s ?E,
+          Hsm : is_true (size_matched_atom ?a),
+            H : context f [asize ?a ?E] |- _ =>
+        rewrite -(size_eval_atom_asize Hsub Hco Hsm) in H
+    end.
+
+Ltac unfold_well_formed :=
+  repeat
+    match goal with
+    | H : is_true (well_formed_eexp _ _) |- _ =>
+        let H1 := fresh "Hwf" in
+        let H2 := fresh "Hwf" in
+        move/andP: H => /= [H1 H2]
+    | H : is_true (well_formed_ebexp _ _) |- _ =>
+        let H1 := fresh "Hwf" in
+        let H2 := fresh "Hwf" in
+        move/andP: H => /= [H1 H2]
+    | H : is_true (well_formed_rexp _ _) |- _ =>
+        let H1 := fresh "Hwf" in
+        let H2 := fresh "Hwf" in
+        move/andP: H => /= [H1 H2]
+    | H : is_true (well_formed_rbexp _ _) |- _ =>
+        let H1 := fresh "Hwf" in
+        let H2 := fresh "Hwf" in
+        move/andP: H => /= [H1 H2]
+    | H : is_true (well_formed_bexp _ _) |- _ =>
+        let H1 := fresh "Hwf" in
+        let H2 := fresh "Hwf" in
+        move/andP: H => /= [H1 H2]
+    | H : is_true (well_formed_instr _ _) |- _ =>
+        let H1 := fresh "Hwf" in
+        let H2 := fresh "Hwf" in
+        move/andP: H => /= [H1 H2]
+    | H : is_true (well_formed_program _ _) |- _ =>
+        let H1 := fresh "Hwf" in
+        let H2 := fresh "Hwf" in
+        move/andP: H => /= [H1 H2]
+    | H : is_true (well_formed_ssa_program _ _) |- _ =>
+        let H1 := fresh "Hwf" in
+        let H2 := fresh "Hwf" in
+        move/andP: H => /= [H1 H2]
+    | H : is_true (well_typed_atom _ _) |- _ =>
+        let H1 := fresh "Hwta" in
+        let H2 := fresh "Hwtqa" in
+        move/andP: H => /= [H1 H2]
+    | H : is_true (_ && _) |- _ =>
+        let H1 := fresh "Hwf" in
+        let H2 := fresh "Hwf" in
+        move/andP: H => [H1 H2]
+    end.
+
+Ltac intro_subset_from_are_defined :=
+  match goal with
+  | H : is_true (are_defined _ _) |- _ =>
+      let Hsub := fresh "Hsub" in
+      move: (H) => /defsubP Hsub; move: H; intro_subset_from_are_defined
+  | |- _ => intros
+  end.
+
+
+(** ** Properties of [bexp_of_rspec] *)
+
+Section Rspec2QFBV.
+
+  (** Relations between bvs_eqi and QFBV.eval_exp and between bvs_eqi and
+      QFBV.eval_bexp *)
+
+  Lemma bvs_eqi_qfbv_eval_exp E e s1 s2 :
+    are_defined (QFBV.vars_exp e) E -> bvs_eqi E s1 s2 ->
+    QFBV.eval_exp e s1 = QFBV.eval_exp e s2
+  with
+  bvs_eqi_qfbv_eval_bexp E e s1 s2 :
+    are_defined (QFBV.vars_bexp e) E -> bvs_eqi E s1 s2 ->
+    QFBV.eval_bexp e s1 = QFBV.eval_bexp e s2.
+  Proof.
+    (* bvs_eqi_qfbv_eval_eexp *)
+    case: e => //=.
+    - move=> x Hdef Heqi. rewrite are_defined_singleton in Hdef.
+      move/memdefP: Hdef => Hmem. exact: (Heqi x Hmem).
+    - move=> op e Hdef Heqi. rewrite (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef Heqi).
+      reflexivity.
+    - move=> op e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
+      move/andP: Hdef=> [Hdef1 Hdef2].
+      rewrite (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef1 Heqi)
+        (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef2 Heqi). reflexivity.
+    - move=> c e1 e2 Hdef Heqi. rewrite !are_defined_union in Hdef.
+      move/andP: Hdef=> [Hdefc /andP [Hdef1 Hdef2]].
+      rewrite (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef1 Heqi)
+        (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef2 Heqi).
+      rewrite (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdefc Heqi). reflexivity.
+      (* bvs_eqi_qfbv_eval_bexp *)
+      case: e => //=.
+    - move=> op e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
+      move/andP: Hdef=> [Hdef1 Hdef2].
+      rewrite (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef1 Heqi)
+        (bvs_eqi_qfbv_eval_exp _ _ _ _ Hdef2 Heqi). reflexivity.
+    - move=> e Hdef Heqi. rewrite (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdef Heqi).
+      reflexivity.
+    - move=> e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
+      move/andP: Hdef=> [Hdef1 Hdef2].
+      rewrite (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdef1 Heqi)
+        (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdef2 Heqi). reflexivity.
+    - move=> e1 e2 Hdef Heqi. rewrite are_defined_union in Hdef.
+      move/andP: Hdef=> [Hdef1 Hdef2].
+      rewrite (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdef1 Heqi)
+        (bvs_eqi_qfbv_eval_bexp _ _ _ _ Hdef2 Heqi). reflexivity.
+  Qed.
+
+
+  (** Properties about the conversion from rbexp to QFBV.bexp *)
+
+  Lemma eval_exp_var v s :
+    QFBV.eval_exp (qfbv_var v) s = SSAStore.acc v s.
+  Proof.
+    reflexivity.
+  Qed.
+
+  Lemma eval_exp_const s w n :
+    QFBV.eval_exp (qfbv_const w n) s = from_nat w n.
+  Proof. reflexivity. Qed.
+
+  Lemma eval_exp_rexp (e : SSALite.rexp) s:
+    QFBV.eval_exp (exp_rexp e) s = eval_rexp e s.
+    elim: e => w /=.
+    - reflexivity.
+    - reflexivity.
+    - move=> op e IH. case: op => /=; rewrite IH; reflexivity.
+    - move=> op e1 IH1 e2 IH2. case: op => /=; rewrite IH1 IH2; reflexivity.
+    - move=> v IH n; rewrite IH. reflexivity.
+    - move=> v IH n; rewrite IH. reflexivity.
+  Qed.
+
+  Lemma eval_bexp_rbexp e s:
+    QFBV.eval_bexp (bexp_rbexp e) s <-> eval_rbexp e s.
+  Proof.
+    elim : e => /=.
+    - done.
+    - move => w e0 e1; split.
+      + move => /eqP Heq; rewrite -!eval_exp_rexp Heq //.
+      + move => Heq; rewrite !eval_exp_rexp Heq //.
+    - move => w op e0 e1;
+              elim : op => /=; rewrite -!eval_exp_rexp //.
+    - move => e H. by iffb_tac.
+    - move => e0 IH0 e1 IH1. by iffb_tac.
+    - move => e0 IH0 e1 IH1. by iffb_tac.
+  Qed.
+
 
   Global Instance add_proper_bexp_instr : Proper (SSATE.Equal ==> eq ==> eq) bexp_instr.
   Proof.
@@ -1141,7 +1689,7 @@ Section Rspec2QFBV.
         (move : (SSAVS.Lemmas.subset_singleton1 Hsub) => {Hsub});
         rewrite VSLemmas.OP.P.Dec.F.union_b;
         (case /orP => Hsub);
-        move : (SSAVS.Lemmas.subset_singleton2 Hsub) => {Hsub} Hsub; unchanged_instr_subset
+        move : (SSAVS.Lemmas.subset_singleton2 Hsub) => {} Hsub; unchanged_instr_subset
     | Hsub0 : is_true (SSAVS.subset ?vs0 ?vs1),
         Hsub1 : is_true (SSAVS.subset ?vs1 ?vs2)
       |- _ =>
@@ -2018,7 +2566,7 @@ Section Rspec2QFBV.
           let H2 := fresh in
           intro_same_size a1 a2; to_size_atyp a1; to_size_atyp a2;
           (move=> H1); (move: (leq0n (asize a1 E)) => H2);
-          (move: (leq_add H2 Hs) => {H2} H2); (rewrite add0n in H2);
+          (move: (leq_add H2 Hs) => {} H2); (rewrite add0n in H2);
           rewrite (to_nat_from_nat_very_small H2) in H
       | Hs : is_true (?n < (asize ?a ?E)),
           H : context f [to_nat ((asize ?a ?E) -bits of (asize ?a ?E - ?n))%bits] |- _ =>
@@ -2553,12 +3101,6 @@ Section Rspec2QFBV.
 
   (** Conversion from a rspec to bexp_spec *)
 
-  Definition bexp_of_rspec E (s : rspec) : bexp_spec :=
-    {| binputs := program_succ_typenv (rsprog s) E;
-      bpre := bexp_rbexp (rspre s);
-      bprog := bexp_program E (rsprog s);
-      bpost := bexp_rbexp (rspost s) |}.
-
   Lemma vars_bexp_of_rspec E s :
     SSAVS.subset (vars_bexp_spec (bexp_of_rspec E s)) (vars_rspec s).
   Proof.
@@ -2608,15 +3150,9 @@ Section Rspec2QFBV.
 End Rspec2QFBV.
 
 
-(** Range reduction version 1:
-    a simple conversion from a range specification to a QF_BV query *)
+(** ** Properties of the range reduction version 1 ([rngred_rspec]) *)
 
 Section Rngred.
-
-  Definition rngred_rspec (s : rspec) : QFBV.bexp :=
-    let bs := bexp_of_rspec (rsinputs s) s in
-    qfbv_imp (qfbv_conj (bpre bs) (qfbv_conjs (bprog bs)))
-      (bpost bs).
 
   Definition valid_rngred_rspec (s : rspec) :=
     let fE := program_succ_typenv (rsprog s) (rsinputs s) in
@@ -2669,7 +3205,7 @@ Section Rngred.
       - move=> v Hwf. unfold_well_formed. rewrite are_defined_singleton in Hwf0.
         move/memdefP: Hwf0. by apply.
       - move=> w op e IH Hwf. move: (well_formed_rexp_runop Hwf) => {Hwf} [Hwf [Hw Hs]].
-        move: (IH Hwf) => {IH Hwf} Hwf. case: op => /=; assumption.
+        move: (IH Hwf) => {IH} Hwf. case: op => /=; assumption.
       - move=> w op e1 IH1 e2 IH2 Hwf.
         move: (well_formed_rexp_rbinop Hwf) => {Hwf} [Hwf1 [Hwf2 [Hw [Hs1 Hs2]]]].
         move: (IH1 Hwf1) (IH2 Hwf2) => {IH1 IH2} Hqwf1 Hqwf2.
@@ -2893,15 +3429,9 @@ Section Rngred.
 End Rngred.
 
 
-(** Range reduction version 2:
-    split range conditions and apply qfbv_conjs_la *)
+(** ** Properties of the range reduction version 2 ([rngred_rspec_split_la]) *)
 
 Section RngredSplitLeftAssoc.
-
-  Definition rngred_rspec_split_la (s : rspec) : seq QFBV.bexp :=
-    let bs := bexp_of_rspec (rsinputs s) s in
-    map (fun post => qfbv_imp (qfbv_conj (bpre bs) (qfbv_conjs_la (bprog bs))) post)
-      (split_conj (bpost bs)).
 
   Ltac mytac :=
     (repeat match goal with
@@ -3030,10 +3560,6 @@ Section RngredSplitLeftAssoc.
 
   (* Apply to a sequence of rspec *)
 
-  Definition rngred_rspec_split_las (rs : seq rspec) : seq QFBV.bexp :=
-    tflatten (tmap rngred_rspec_split_la rs).
-
-
   Lemma rngred_rspec_split_las_cons r rs :
     rngred_rspec_split_las (r::rs) = rngred_rspec_split_las rs ++ rev (rngred_rspec_split_la r).
   Proof.
@@ -3099,7 +3625,8 @@ Section RngredSplitLeftAssoc.
 End RngredSplitLeftAssoc.
 
 
-(* Some properties about [tmap slice_rspec (split_rspec s)] *)
+(** ** Some properties about [tmap slice_rspec (split_rspec s)] *)
+
 Section SliceRspecProperties.
 
   Variable o : options.
@@ -3163,8 +3690,7 @@ Section SliceRspecProperties.
 End SliceRspecProperties.
 
 
-(** Range reduction version 3:
-    slice range specification, split range conditions, and apply qfbv_conjs_la *)
+(** ** Properties of the range reduction version 3 ([rngred_rspec_slice_split_la]) *)
 
 Section RngredSlicing.
 
@@ -3172,8 +3698,7 @@ Section RngredSlicing.
 
   Import QFBV.
 
-  Definition rngred_rspec_slice_split_la (s : rspec) : seq QFBV.bexp :=
-    rngred_rspec_split_las (tmap (slice_rspec o) (SSALite.split_rspec s)).
+  Local Notation rngred_rspec_slice_split_la := (rngred_rspec_slice_split_la o).
 
   Definition valid_rngred_rspec_slice_split_la (s : rspec) :=
     let fE := program_succ_typenv (rsprog s) (rsinputs s) in
@@ -3240,298 +3765,9 @@ Section RngredSlicing.
 End RngredSlicing.
 
 
-(* Define the algebraic soundness condition in terms of a QF_BV predicate *)
+(** Properties of [bexp_instr_algsnd] *)
 
 Section AlgsndInstr.
-
-  Definition bexp_atom_uaddB_algsnd a1 a2 : QFBV.bexp :=
-    match a1, a2 with
-    | Aconst _ bs1, Aconst _ bs2 => if Uaddo bs1 bs2 then qfbv_false else qfbv_true
-    | _, _ => qfbv_lneg (qfbv_uaddo (qfbv_atom a1) (qfbv_atom a2))
-    end.
-
-  Definition bexp_atom_saddB_algsnd a1 a2 : QFBV.bexp :=
-    match a1, a2 with
-    | Aconst _ bs1, Aconst _ bs2 => if Saddo bs1 bs2 then qfbv_false else qfbv_true
-    | _ , _ => qfbv_lneg (qfbv_saddo (qfbv_atom a1) (qfbv_atom a2))
-    end.
-
-  Definition bexp_atom_addB_algsnd E a1 a2 : QFBV.bexp :=
-    let 'a_typ := atyp a1 E in
-    if Typ.is_unsigned a_typ then bexp_atom_uaddB_algsnd a1 a2
-    else bexp_atom_saddB_algsnd a1 a2.
-
-  Definition bexp_atom_adds_algsnd E a1 a2 : QFBV.bexp :=
-    let 'a_typ := atyp a1 E in
-    if Typ.is_unsigned a_typ then QFBV.Btrue
-    else bexp_atom_saddB_algsnd a1 a2.
-
-  Definition bexp_atom_uadcB_algsnd a_size a1 a2 ac : QFBV.bexp :=
-    match a1, a2, ac with
-    | Aconst _ bs1, Aconst _ bs2, Aconst _ c =>
-        if Uaddo bs1 bs2 || Uaddo (addB bs1 bs2) (zext (a_size - 1) c)
-        then qfbv_false else qfbv_true
-    | Aconst _ bs1, Aconst _ bs2, Avar _ =>
-        if Uaddo bs1 bs2
-        then qfbv_false
-        else if Uaddo (addB bs1 bs2) (zext (a_size - 1) [::b1])
-             then qfbv_lneg (qfbv_uaddo (Econst (addB bs1 bs2)) (qfbv_zext (a_size - 1) (qfbv_atom ac)))
-             else qfbv_true
-    | _, _, _ => qfbv_conj
-                   (qfbv_lneg
-                      (qfbv_uaddo (qfbv_atom a1)
-                         (qfbv_atom a2)))
-                   (qfbv_lneg
-                      (qfbv_uaddo (qfbv_add (qfbv_atom a1)
-                                     (qfbv_atom a2))
-                         (qfbv_zext (a_size - 1) (qfbv_atom ac))))
-    end.
-
-  Definition bexp_atom_sadcB_algsnd a_size a1 a2 ac : QFBV.bexp :=
-    match a1, a2, ac with
-    | Aconst _ bs1, Aconst _ bs2, Aconst _ c =>
-        if Saddo bs1 bs2 || Saddo (addB bs1 bs2) (zext (a_size - 1) c)
-        then qfbv_false else qfbv_true
-    | Aconst _ bs1, Aconst _ bs2, Avar _ =>
-        if Saddo bs1 bs2
-        then qfbv_false
-        else if Saddo (addB bs1 bs2) (zext (a_size - 1) [::b1])
-             then qfbv_lneg (qfbv_saddo (Econst (addB bs1 bs2)) (qfbv_zext (a_size - 1) (qfbv_atom ac)))
-             else qfbv_true
-    | _, _, _ => qfbv_conj
-                   (qfbv_lneg
-                      (qfbv_saddo (qfbv_atom a1)
-                         (qfbv_atom a2)))
-                   (qfbv_lneg
-                      (qfbv_saddo (qfbv_add (qfbv_atom a1)
-                                     (qfbv_atom a2))
-                         (qfbv_zext (a_size - 1) (qfbv_atom ac))))
-    end.
-
-  Definition bexp_atom_adcB_algsnd E a1 a2 ac : QFBV.bexp :=
-    let a_typ := atyp a1 E in
-    let a_size := asize a1 E in
-    if Typ.is_unsigned a_typ then bexp_atom_uadcB_algsnd a_size a1 a2 ac
-    else bexp_atom_sadcB_algsnd a_size a1 a2 ac.
-
-  Definition bexp_atom_adcs_algsnd E a1 a2 ac : QFBV.bexp :=
-    let a_typ := atyp a1 E in
-    let a_size := asize a1 E in
-    if Typ.is_unsigned a_typ then QFBV.Btrue
-    else bexp_atom_sadcB_algsnd a_size a1 a2 ac.
-
-  Definition bexp_atom_usubB_algsnd a1 a2 : QFBV.bexp :=
-    match a1, a2 with
-    | Aconst _ bs1, Aconst _ bs2 => if borrow_subB bs1 bs2 then qfbv_false else qfbv_true
-    | _, _ => qfbv_lneg (qfbv_usubo (qfbv_atom a1) (qfbv_atom a2))
-    end.
-
-  Definition bexp_atom_ssubB_algsnd a1 a2 : QFBV.bexp :=
-    match a1, a2 with
-    | Aconst _ bs1, Aconst _ bs2 => if Ssubo bs1 bs2 then qfbv_false else qfbv_true
-    | _, _ => qfbv_lneg (qfbv_ssubo (qfbv_atom a1) (qfbv_atom a2))
-    end.
-
-  Definition bexp_atom_subB_algsnd E a1 a2 : QFBV.bexp :=
-    let 'a_typ := atyp a1 E in
-    if Typ.is_unsigned a_typ then bexp_atom_usubB_algsnd a1 a2
-    else bexp_atom_ssubB_algsnd a1 a2.
-
-  Definition bexp_atom_subc_algsnd E a1 a2 : QFBV.bexp :=
-    let 'a_typ := atyp a1 E in
-    if Typ.is_unsigned a_typ then QFBV.Btrue
-    else bexp_atom_ssubB_algsnd a1 a2.
-
-  Definition bexp_atom_subb_algsnd E a1 a2 : QFBV.bexp :=
-    let 'a_typ := atyp a1 E in
-    if Typ.is_unsigned a_typ then QFBV.Btrue
-    else bexp_atom_ssubB_algsnd a1 a2.
-
-  Definition bexp_atom_usbbB_algsnd a_size a1 a2 ab : QFBV.bexp :=
-    qfbv_conj
-      (qfbv_lneg
-         (qfbv_usubo (qfbv_atom a1)
-            (qfbv_atom a2)))
-      (qfbv_lneg
-         (qfbv_usubo (qfbv_sub (qfbv_atom a1)
-                        (qfbv_atom a2))
-            (qfbv_zext (a_size - 1) (qfbv_atom ab)))).
-
-  Definition bexp_atom_ssbbB_algsnd a_size a1 a2 ab : QFBV.bexp :=
-    qfbv_conj
-      (qfbv_lneg
-         (qfbv_ssubo (qfbv_atom a1)
-            (qfbv_atom a2)))
-      (qfbv_lneg
-         (qfbv_ssubo (qfbv_sub (qfbv_atom a1)
-                        (qfbv_atom a2))
-            (qfbv_zext (a_size - 1) (qfbv_atom ab)))).
-
-  Definition bexp_atom_sbbB_algsnd E a1 a2 ab : QFBV.bexp :=
-    let a_typ := atyp a1 E in
-    let a_size := asize a1 E in
-    if Typ.is_unsigned a_typ then bexp_atom_usbbB_algsnd a_size a1 a2 ab
-    else bexp_atom_ssbbB_algsnd a_size a1 a2 ab.
-
-  Definition bexp_atom_sbbs_algsnd E a1 a2 ab : QFBV.bexp :=
-    let a_typ := atyp a1 E in
-    let a_size := asize a1 E in
-    if Typ.is_unsigned a_typ then QFBV.Btrue
-    else bexp_atom_ssbbB_algsnd a_size a1 a2 ab.
-
-  Definition bexp_atom_usbcB_algsnd a_size a1 a2 ac : QFBV.bexp :=
-    qfbv_conj
-      (qfbv_lneg
-         (qfbv_usubo (qfbv_atom a1)
-            (qfbv_atom a2)))
-      (qfbv_lneg
-         (qfbv_usubo (qfbv_sub (qfbv_atom a1)
-                        (qfbv_atom a2))
-            (qfbv_zext (a_size - 1)
-               (qfbv_sub (qfbv_one 1) (qfbv_atom ac))))).
-
-  Definition bexp_atom_ssbcB_algsnd a_size a1 a2 ac : QFBV.bexp :=
-    qfbv_conj
-      (qfbv_lneg
-         (qfbv_ssubo (qfbv_atom a1)
-            (qfbv_atom a2)))
-      (qfbv_lneg
-         (qfbv_ssubo (qfbv_sub (qfbv_atom a1)
-                        (qfbv_atom a2))
-            (qfbv_zext (a_size - 1)
-               (qfbv_sub (qfbv_one 1) (qfbv_atom ac))))).
-
-  Definition bexp_atom_sbcB_algsnd E a1 a2 ac : QFBV.bexp :=
-    let a_typ := atyp a1 E in
-    let a_size := asize a1 E in
-    if Typ.is_unsigned a_typ then bexp_atom_usbcB_algsnd a_size a1 a2 ac
-    else bexp_atom_ssbcB_algsnd a_size a1 a2 ac.
-
-  Definition bexp_atom_sbcs_algsnd E a1 a2 ac : QFBV.bexp :=
-    let a_typ := atyp a1 E in
-    let a_size := asize a1 E in
-    if Typ.is_unsigned a_typ then QFBV.Btrue
-    else bexp_atom_ssbcB_algsnd a_size a1 a2 ac.
-
-  Definition bexp_atom_mulB_algsnd E a1 a2 : QFBV.bexp :=
-    let 'a_typ := atyp a1 E in
-    if Typ.is_unsigned a_typ then
-      qfbv_lneg (qfbv_umulo (qfbv_atom a1)
-                   (qfbv_atom a2))
-    else
-      qfbv_lneg (qfbv_smulo (qfbv_atom a1)
-                   (qfbv_atom a2)).
-
-  Definition bexp_atom_shl_algsnd E a n : QFBV.bexp :=
-    let 'a_typ := atyp a E in
-    if Typ.is_unsigned a_typ then
-      qfbv_eq (qfbv_high n (qfbv_atom a))
-        (qfbv_zero n)
-    else
-      qfbv_disj (qfbv_eq (qfbv_high (n + 1) (qfbv_atom a))
-                   (qfbv_zero (n + 1)))
-        (qfbv_eq (qfbv_high (n + 1) (qfbv_atom a))
-           (qfbv_not (qfbv_zero (n + 1)))).
-
-  Definition bexp_atom_cshl_algsnd E (a1 : atom) a2 n  : QFBV.bexp :=
-    let 'concatbv := qfbv_concat (qfbv_atom a1) (qfbv_atom a2) in
-    if Typ.is_unsigned (atyp a1 E) then
-      qfbv_eq (qfbv_high n concatbv) (qfbv_zero n)
-    else
-      qfbv_disj (qfbv_eq (qfbv_high (n + 1) concatbv)
-                   (qfbv_zero (n + 1)))
-        (qfbv_eq (qfbv_high (n + 1) concatbv)
-           (qfbv_not (qfbv_zero (n + 1)))).
-
-  Definition bexp_atom_vpc_algsnd E t a : QFBV.bexp :=
-    let 'a_typ := atyp a E in
-    let 'a_size := Typ.sizeof_typ a_typ in
-    let 't_size := Typ.sizeof_typ t in
-    if Typ.is_unsigned a_typ then
-      if Typ.is_unsigned t then
-        if Typ.sizeof_typ a_typ <= Typ.sizeof_typ t then
-          qfbv_true
-        else
-          qfbv_eq
-            (qfbv_high (Typ.sizeof_typ a_typ - Typ.sizeof_typ t)
-               (qfbv_atom a))
-            (qfbv_zero (Typ.sizeof_typ a_typ - Typ.sizeof_typ t))
-      else
-        if Typ.sizeof_typ a_typ < Typ.sizeof_typ t then
-          qfbv_true
-        else
-          qfbv_eq
-            (qfbv_high (Typ.sizeof_typ a_typ - Typ.sizeof_typ t + 1)
-               (qfbv_atom a))
-            (qfbv_zero (Typ.sizeof_typ a_typ - Typ.sizeof_typ t + 1))
-    else
-      if Typ.is_unsigned t then
-        if Typ.sizeof_typ a_typ - 1 <= Typ.sizeof_typ t then
-          qfbv_eq
-            (qfbv_high 1 (qfbv_atom a))
-            (qfbv_zero 1)
-        else
-          qfbv_eq
-            (qfbv_high (Typ.sizeof_typ a_typ - Typ.sizeof_typ t)
-               (qfbv_atom a))
-            (qfbv_zero (Typ.sizeof_typ a_typ - Typ.sizeof_typ t))
-      else
-        if Typ.sizeof_typ a_typ <= Typ.sizeof_typ t then
-          qfbv_true
-        else
-          qfbv_eq
-            (qfbv_sext (Typ.sizeof_typ a_typ - Typ.sizeof_typ t)
-               (qfbv_low (Typ.sizeof_typ t) (qfbv_atom a)))
-            (qfbv_atom a).
-
-  Definition bexp_instr_algsnd E (i : instr) : QFBV.bexp :=
-    match i with
-    | Iadd _ a1 a2 =>
-        bexp_atom_addB_algsnd E a1 a2
-    | Iadds _ _ a1 a2 =>
-        bexp_atom_adds_algsnd E a1 a2
-    | Iadc _ a1 a2 ac =>
-        bexp_atom_adcB_algsnd E a1 a2 ac
-    | Iadcs _ _ a1 a2 ac =>
-        bexp_atom_adcs_algsnd E a1 a2 ac
-    | Isub _ a1 a2 =>
-        bexp_atom_subB_algsnd E a1 a2
-    | Isubc _ _ a1 a2 =>
-        bexp_atom_subc_algsnd E a1 a2
-    | Isubb _ _ a1 a2 =>
-        bexp_atom_subb_algsnd E a1 a2
-    | Isbc _ a1 a2 ac =>
-        bexp_atom_sbcB_algsnd E a1 a2 ac
-    | Isbcs _ _ a1 a2 ac =>
-        bexp_atom_sbcs_algsnd E a1 a2 ac
-    | Isbb _ a1 a2 ab =>
-        bexp_atom_sbbB_algsnd E a1 a2 ab
-    | Isbbs _ _ a1 a2 ab =>
-        bexp_atom_sbbs_algsnd E a1 a2 ab
-    | Imul _ a1 a2 =>
-        bexp_atom_mulB_algsnd E a1 a2
-    | Ishl v a n =>
-        bexp_atom_shl_algsnd E a n
-    | Icshl h l a1 a2 n =>
-        bexp_atom_cshl_algsnd E a1 a2 n
-    | Ivpc _ t a =>
-        bexp_atom_vpc_algsnd E t a
-    | Inop
-    | Inondet _ _
-    | Imov _ _
-    | Icmov _ _ _ _
-    | Imull _ _ _ _
-    | Imulj _ _ _
-    | Inot _ _ _
-    | Iand _ _ _ _
-    | Ior _ _ _ _
-    | Ixor _ _ _ _
-    | Isplit _ _ _ _
-    | Ijoin _ _ _
-    | Icast _ _ _
-    | Iassume _ => qfbv_true
-    end.
-
 
   Ltac unfold_bexp_atoms :=
     rewrite /bexp_atom_shl_algsnd /bexp_atom_cshl_algsnd
@@ -3986,21 +4222,9 @@ Section AlgsndInstr.
 End AlgsndInstr.
 
 
-(* Algebraic soundness version 1:
-   - fixed typing environment - initial typing environment
-   - a single QF_BV predicate *)
+(** ** Properties of the algebraic soundness condition reduction version 1 ([bexp_program_algsnd_fixed_init]) *)
 
 Section AlgsndFixedInit.
-
-  Fixpoint bexp_program_algsnd_fixed_init E p : QFBV.bexp :=
-    match p with
-    | [::] => qfbv_true
-    | hd::tl =>
-      qfbv_conj (bexp_instr_algsnd E hd)
-                (qfbv_disj
-                   (qfbv_lneg (bexp_instr E hd))
-                   (bexp_program_algsnd_fixed_init (instr_succ_typenv hd E) tl))
-    end.
 
   Lemma eval_bexp_program_algsnd_fixed_init1 E pre p :
     well_formed_rbexp E pre ->
@@ -4091,7 +4315,7 @@ Section AlgsndFixedInit.
 End AlgsndFixedInit.
 
 
-(* Evaluation of algebraic soundness conditions one by one with varying typing environments *)
+(** ** Evaluation of algebraic soundness conditions one by one with varying typing environments *)
 
 Section AlgsndVarying.
 
@@ -4215,36 +4439,13 @@ Section AlgsndVarying.
 End AlgsndVarying.
 
 
-(* Algebraic soundness version 2:
-   - varying typing environments
-   - one QF_BV predicate for one instruction *)
+(** ** Properties of the algebraic soundness condition reduction version 2 ([bexp_program_algsnd_split]) *)
 
 Section AlgsndSplitVarying.
 
   Import QFBV.
 
   (* Construct safety conditions (full prefix information). *)
-
-  (*
-   * E: the typing environment after pre_is and before p
-   * pre_is: the prefix of instructions
-   * pre_es: the QFBV expressions encoding the prefix of instructions
-   * p: the remaining program to be converted
-   *)
-  Fixpoint bexp_program_algsnd_split_full_rec E pre_is (pre_es : seq QFBV.bexp) p :
-    seq (SSATE.env * seq instr * seq QFBV.bexp * instr * seq instr * QFBV.bexp) :=
-    match p with
-    | [::] => [::]
-    | hd::tl =>
-      (E, pre_is, pre_es, hd, tl, bexp_instr_algsnd E hd)
-        ::(bexp_program_algsnd_split_full_rec
-             (instr_succ_typenv hd E) (rcons pre_is hd)
-             (rcons pre_es (bexp_instr E hd)) tl)
-    end.
-
-  Definition bexp_program_algsnd_split_full E p :
-    seq (SSATE.env * seq instr * seq QFBV.bexp * instr * seq instr * QFBV.bexp) :=
-    bexp_program_algsnd_split_full_rec E [::] [::] p.
 
   Lemma bexp_program_algsnd_split_full_rec_env E pre_is pre_es p :
     forall E' pre_is' pre_es' hd tl safe,
@@ -4668,19 +4869,6 @@ Section AlgsndSplitVarying.
 
   (* Construct safety conditions with less prefix information. *)
 
-  Fixpoint bexp_program_algsnd_split_rec E (pre_es : seq QFBV.bexp) p :
-    seq (SSATE.env * seq QFBV.bexp * QFBV.bexp) :=
-    match p with
-    | [::] => [::]
-    | hd::tl =>
-      (E, pre_es, bexp_instr_algsnd E hd)
-        ::(bexp_program_algsnd_split_rec
-             (instr_succ_typenv hd E) (rcons pre_es (bexp_instr E hd)) tl)
-    end.
-
-  Definition bexp_program_algsnd_split E p : seq (SSATE.env * seq QFBV.bexp * QFBV.bexp) :=
-    bexp_program_algsnd_split_rec E [::] p.
-
   Lemma bexp_program_algsnd_split_rec_full_partial E pre_is pre_es p :
     forall E' pre_is' pre_es' hd tl safe,
       List.In (E', pre_is', pre_es', hd, tl, safe)
@@ -4960,24 +5148,11 @@ Section AlgsndSplitVarying.
 End AlgsndSplitVarying.
 
 
-(* Algebraic soundness version 3:
-   - fixed typing environment - final typing environment
-   - a single QF_BV predicate *)
+(** ** Properties of the algebraic soundness condition reduction version 3 ([bexp_program_algsnd_fixed_final]) *)
 
 Section AlgsndFixedFinal.
 
   Import QFBV.
-
-  (* use the final typing environment *)
-  Fixpoint bexp_program_algsnd_fixed_final E p : QFBV.bexp :=
-    match p with
-    | [::] => qfbv_true
-    | hd::tl =>
-      qfbv_conj (bexp_instr_algsnd E hd)
-                (qfbv_imp
-                   (bexp_instr E hd)
-                   (bexp_program_algsnd_fixed_final E tl))
-    end.
 
   Lemma eval_bexp_program_algsnd_fixed_final1 E pre p :
     let fE := (program_succ_typenv p E) in
@@ -5192,40 +5367,16 @@ Section AlgsndFixedFinal.
 End AlgsndFixedFinal.
 
 
-(* Algebraic soundness of programs:
-   - fixed typing environment - final typing environment
-   - one QF_BV predicate for one instruction *)
+(** ** Algebraic soundness of programs *)
+
+(** Fixed typing environment (final typing environment),
+    one QF_BV predicate for one instruction *)
 
 Section AlgsndSplitFixedFinal.
 
   Import QFBV.
 
   (* Construct safety conditions. *)
-
-  (*
-   * E: the final typing environment
-   * pre_is: the prefix of instructions
-   * pre_es: the QFBV expressions encoding the prefix of instructions
-   * p: the remaining program to be converted
-   *)
-  Fixpoint bexp_program_algsnd_split_fixed_final_full_rec
-           E pre_is (pre_es : seq QFBV.bexp) (p : program) :
-    seq (seq instr * seq QFBV.bexp * instr * seq instr * QFBV.bexp) :=
-    match p with
-    | [::] => [::]
-    | hd::tl =>
-      (pre_is, pre_es, hd, tl, bexp_instr_algsnd E hd)
-        ::(bexp_program_algsnd_split_fixed_final_full_rec
-             E (rcons pre_is hd)
-             (rcons pre_es (bexp_instr E hd)) tl)
-    end.
-
-  (*
-   * E: the final typing environment
-   * p: the remaining program to be converted
-   *)
-  Definition bexp_program_algsnd_split_fixed_final_full E p :=
-    bexp_program_algsnd_split_fixed_final_full_rec E [::] [::] p.
 
   Lemma bexp_program_algsnd_split_fixed_final_full_rec_is E pre_is pre_es p :
     forall pre_is' pre_es' hd tl safe,
@@ -5404,7 +5555,7 @@ Section AlgsndSplitFixedFinal.
       rewrite ssa_unchanged_program_union.
       rewrite Hun_Ep Hun_ip. exact: is_true_true. }
     move: (env_unchanged_program_succ_equal Hdef_pre_is Heun_pre_is) => Heq.
-    move: (TELemmas.Equal_sym Heq) => {Heq} Heq.
+    move: (TELemmas.Equal_sym Heq) => {} Heq.
     move: (well_formed_instr_submap
              Hwf_Ei (TELemmas.submap_trans Hsub_EiE Hsub_iEpiE)) => Hwf_piEi.
     case: Hin.
@@ -5512,19 +5663,6 @@ Section AlgsndSplitFixedFinal.
 
   (* Construct safety conditions with less prefix information. *)
 
-  (* pre_es: encoding of instructions in QFBV *)
-  Fixpoint bexp_program_algsnd_split_fixed_final_rec E (pre_es : seq QFBV.bexp) p : seq (seq bexp * bexp) :=
-    match p with
-    | [::] => [::]
-    | hd::tl =>
-      (pre_es, bexp_instr_algsnd E hd)
-        ::(bexp_program_algsnd_split_fixed_final_rec
-             E (rcons pre_es (bexp_instr E hd)) tl)
-    end.
-
-  Definition bexp_program_algsnd_split_fixed_final E p :=
-    bexp_program_algsnd_split_fixed_final_rec E [::] p.
-
 
   Fixpoint vars_sndcond_pi (es : seq (seq bexp * bexp)) : SSAVS.t :=
     match es with
@@ -5605,7 +5743,7 @@ Section AlgsndSplitFixedFinal.
 
     move=> Hpre_es Hdef_pre_is Heun_pre_is.
     move: (env_unchanged_program_succ_equal Hdef_pre_is Heun_pre_is) => Heq.
-    move: (TELemmas.Equal_sym Heq) => {Heq} Heq.
+    move: (TELemmas.Equal_sym Heq) => {} Heq.
     move: (well_formed_instr_submap
              Hwf_Ei (TELemmas.submap_trans Hsub_EiE Hsub_iEpiE)) => Hwf_piEi.
 
@@ -5754,7 +5892,7 @@ Section AlgsndSplitFixedFinal.
     rewrite !andbT.
     move/andP: (Hwf_ssa_Ep) => [/andP [Hwf_Ep Hun_Ep] Hssa_p].
     move: (ssa_unchanged_program_succ_typenv_submap Hun_Ep Hssa_p) => Hsub_EpE.
-    move: (well_formed_bexp_rbexp Hwf_Ef) => {Hwf_Ef} Hwf_Ef.
+    move: (well_formed_bexp_rbexp Hwf_Ef) => {} Hwf_Ef.
     rewrite (well_formed_bexp_submap Hsub_EpE Hwf_Ef).
     exact: is_true_true.
   Qed.
@@ -5823,28 +5961,14 @@ End AlgsndSplitFixedFinal.
 Import QFBV.
 
 
-(* Algebraic soundness version 4:
-   - fixed typing environment - final typing environment
-   - one QF_BV predicate for one instruction
-   - use qfbv_conjs to make conjunctions *)
+(** ** Properties of the algebraic soundness condition reduction version 4 ([qfbv_spec_algsnd]) *)
 
 Section AlgsndSplitFixedFinal.
-
-  Fixpoint qfbv_spec_algsnd_rec f es :=
-    match es with
-    | [::] => [::]
-    | (pre_es, safe)::tl =>
-      (qfbv_imp (qfbv_conj f (qfbv_conjs pre_es)) safe)::(qfbv_spec_algsnd_rec f tl)
-    end.
-
-  Definition qfbv_spec_algsnd (s : rspec) : seq QFBV.bexp :=
-    let fE := program_succ_typenv (rsprog s) (rsinputs s) in
-    qfbv_spec_algsnd_rec (bexp_rbexp (rspre s))
-                         (bexp_program_algsnd_split_fixed_final fE (rsprog s)).
 
   Definition valid_qfbv_spec_algsnd (s : rspec) : Prop :=
     let fE := program_succ_typenv (rsprog s) (rsinputs s) in
     valid_bexps fE (qfbv_spec_algsnd s).
+
   Lemma qfbv_spec_algsnd_rec_format E f p e :
     (e \in (qfbv_spec_algsnd_rec
               f
@@ -5923,7 +6047,7 @@ Section AlgsndSplitFixedFinal.
     move: Hrng Hwf Hq. rewrite /valid_qfbv_spec_algsnd /ssa_spec_algsnd_qfbv_fixed_final.
     rewrite /qfbv_spec_algsnd. case: s => [E f p g] /=.
     move=> Hrng Hwf Hq. move: (well_formed_ssa_rspec_program Hwf) => /= Hwf_ssa_Ep.
-    move: (bexp_program_algsnd_split_fixed_final_complete Hwf_ssa_Ep Hq) => {Hq} Hq.
+    move: (bexp_program_algsnd_split_fixed_final_complete Hwf_ssa_Ep Hq) => {} Hq.
     move=> s Hco. apply/allP => e Hin. move: (qfbv_spec_algsnd_rec_format Hin) => [pre_es [safe He]].
     rewrite He in Hin *. apply: (Hq _ _ _ _ Hco).
     apply/qfbv_spec_algsnd_rec_in. exact: Hin.
@@ -5932,30 +6056,13 @@ Section AlgsndSplitFixedFinal.
 End AlgsndSplitFixedFinal.
 
 
-(* Algebraic soundness version 5:
-   - fixed typing environment - final typing environment
-   - one QF_BV predicate for one instruction
-   - use qfbv_conjs_la to make conjunctions *)
+(** ** Properties of the algebraic soundness condition reduction version 5 ([qfbv_spec_algsnd_la]) *)
 
 Section AlgsndSplitFixedFinalLeftAssoc.
-
-  Fixpoint qfbv_spec_algsnd_la_rec (f : bexp) (es : seq (seq bexp * bexp)) : seq bexp :=
-    match es with
-    | [::] => [::]
-    | (pre_es, safe)::tl =>
-      (qfbv_imp (qfbv_conj f (qfbv_conjs_la pre_es))
-                safe)::(qfbv_spec_algsnd_la_rec f tl)
-    end.
-
-  Definition qfbv_spec_algsnd_la (s : rspec) : seq QFBV.bexp :=
-    let fE := program_succ_typenv (rsprog s) (rsinputs s) in
-    qfbv_spec_algsnd_la_rec (bexp_rbexp (rspre s))
-                            (bexp_program_algsnd_split_fixed_final fE (rsprog s)).
 
   Definition valid_qfbv_spec_algsnd_la (s : rspec) : Prop :=
     let fE := program_succ_typenv (rsprog s) (rsinputs s) in
     valid_bexps fE (qfbv_spec_algsnd_la s).
-
 
   Lemma vars_qfbv_spec_algsnd_la_rec f es :
     SSAVS.subset (QFBV.vars_bexps (qfbv_spec_algsnd_la_rec f es))
@@ -6101,15 +6208,15 @@ Section AlgsndSplitFixedFinalLeftAssoc.
 End AlgsndSplitFixedFinalLeftAssoc.
 
 
-(* Algebraic soundness version 6:
-   - fixed typing environment - final typing environment
-   - one QF_BV predicate for one instruction
-   - use qfbv_conjs_la to make conjunctions
-   - apply slicing *)
+(** ** Properties of the algebraic soundness condition reduction version 6 ([algsnd_slice_la]) *)
 
 Section AlgsndSliceSplitFixedFinalLeftAssoc.
 
   Variable o : options.
+
+  Local Notation make_sndcond := (make_sndcond o).
+  Local Notation algsnd_slice_la_rec := (algsnd_slice_la_rec o).
+  Local Notation algsnd_slice_la := (algsnd_slice_la o).
 
   (* algsnd_after *)
 
@@ -6121,26 +6228,6 @@ Section AlgsndSliceSplitFixedFinalLeftAssoc.
 
 
   (* Algebraic soundness with slicing *)
-
-  Definition make_sndcond fE f p i : QFBV.bexp :=
-    let es := bexp_instr_algsnd fE i in
-    if es == qfbv_true then qfbv_true
-    else let ef := bexp_rbexp f in
-         let vs := depvars_rpre_rprogram o (rvs_instr i) f p in
-         let ep := bexp_program fE (slice_rprogram vs p) in
-         qfbv_imp (qfbv_conj ef (qfbv_conjs_la ep)) es.
-
-  Fixpoint algsnd_slice_la_rec fE (pre : program) (f : rbexp) (p : program) : seq QFBV.bexp :=
-    match p with
-    | [::] => [::]
-    | hd::tl => (make_sndcond fE f pre hd)::
-                  (algsnd_slice_la_rec fE (rcons pre hd) f tl)
-    end.
-
-  Definition algsnd_slice_la (s : rspec) : seq QFBV.bexp :=
-    let fE := program_succ_typenv (rsprog s) (rsinputs s) in
-    algsnd_slice_la_rec fE [::] (rspre s) (rsprog s).
-
 
   Lemma vars_make_sndcond fE f p i :
     SSAVS.subset (QFBV.vars_bexp (make_sndcond fE f p i))
@@ -6370,15 +6457,9 @@ End AlgsndSliceSplitFixedFinalLeftAssoc.
 
 
 
-(* Combine range reduction and algebraic soundness
-   (version 1, the simplest version) *)
+(** ** Properties of the combination version 1 ([rngred_algsnd]) *)
 
 Section RngredAlgsnd.
-
-  (* Combine range spec and safety conditions for bit-blasting *)
-
-  Definition rngred_algsnd (s : rspec) :=
-    (rngred_rspec s)::(qfbv_spec_algsnd s).
 
   Lemma valid_rngred_algsnd_rngred fE s :
     valid_bexps fE (rngred_algsnd s) -> QFBV.valid fE (rngred_rspec s).
@@ -6444,15 +6525,9 @@ Section RngredAlgsnd.
 End RngredAlgsnd.
 
 
-(* Combine range reduction and algebraic soundness
-   (version 2, split range conditions and use qfbv_conjs_la) *)
+(** ** Properties of the combination version 2 ([rngred_algsnd_split_la]) *)
 
 Section RngredAlgsndLeftAssoc.
-
-  (* Combine range spec and safety conditions for bit-blasting *)
-
-  Definition rngred_algsnd_split_la (s : rspec) : seq QFBV.bexp :=
-    (rngred_rspec_split_la s) ++ (qfbv_spec_algsnd_la s).
 
   Lemma valid_rngred_algsnd_split_la_rngred fE s :
     valid_bexps fE (rngred_algsnd_split_la s) -> valid_bexps fE (rngred_rspec_split_la s).
@@ -6516,17 +6591,13 @@ Section RngredAlgsndLeftAssoc.
 End RngredAlgsndLeftAssoc.
 
 
-(* Combine range reduction and algebraic soundness
-   (version 3, apply slicing, split range conditions, and use qfbv_conjs_la) *)
+(** ** Properties of the combination version 3 ([rngred_algsnd_slice_split_la]) *)
 
 Section RngredAlgsndSlicing.
 
-  (* Combine range spec and safety conditions for bit-blasting *)
-
   Variable o : options.
 
-  Definition rngred_algsnd_slice_split_la (s : rspec) : seq QFBV.bexp :=
-    (rngred_rspec_slice_split_la o s) ++ (algsnd_slice_la o s).
+  Local Notation rngred_algsnd_slice_split_la := (rngred_algsnd_slice_split_la o).
 
   Lemma valid_rngred_algsnd_slice_split_la_rngred fE s :
     valid_bexps fE (rngred_algsnd_slice_split_la s) ->
