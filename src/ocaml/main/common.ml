@@ -23,7 +23,7 @@ let args_io =
   ]
 
 (* Do not use -c or -instr below. *)
-let args_verifier =
+let _args_verifier =
   [
     ("-algebra_args", String (fun str -> algebra_solver_args := str),
      mk_arg_desc(["ARGS"; "Specify additional arguments passed to the algebra solver."]));
@@ -44,7 +44,7 @@ let args_verifier =
                   "format. The default algebra solver is " ^ Options.Std.string_of_algebra_solver Options.Std.default_algebra_solver ^ "."]));
     ("-br", Set use_binary_repr, mk_arg_desc(["       Always use binary representation in SMTLIB outputs. Otherwise,"; "hexadecimal representation is used if applicable."]));
     ("-btor", Set use_btor, mk_arg_desc(["     Output btor format to Boolector"]));
-    (*    ("-disable_rewriting", Clear apply_rewriting, mk_arg_desc([""; "Disable rewriting of assignments (at program level) and equalities"; "(at polynomial level)."])); *) (* REDEFINED FOR COQCRYPTOLINE *)
+    ("-disable_rewriting", Clear apply_rewriting, mk_arg_desc([""; "Disable rewriting of assignments (at program level) and equalities"; "(at polynomial level)."]));
     ("-expand-poly", Set Options.Std.expand_poly, mk_arg_desc([""; "Expand polynomials before sending them to computer algebra systems"; "(experimental)"]));
     ("-isafety", Set incremental_safety, mk_arg_desc(["  Verify program safety incrementally."]));
     ("-isafety_timeout", Int (fun i -> incremental_safety_timeout := i), mk_arg_desc(["INT"; "Set initial timeout for incremental verification of program safety."]));
@@ -138,6 +138,35 @@ let find_output_vars p vnames =
                  with Not_found ->
                    find_output_var tl vname) in
   tmap (find_output_var p) vnames
+
+let args_verifier =
+  [
+    ("-algebra_args", String (fun str -> algebra_solver_args := str),
+     mk_arg_desc(["ARGS"; "Specify additional arguments passed to the algebra solver."]));
+    ("-algebra_solver",
+     String (fun str -> algebra_solver := Options.Std.parse_algebra_solver str),
+     mk_arg_desc(["";
+                  "Specify the algebra solver, which can be "
+                  ^ Options.Std.string_of_algebra_solver Options.Std.Singular ^ ", or "
+                  ^ Options.Std.string_of_algebra_solver Options.Std.Magma ^ ". ";
+                  "The default algebra solver is " ^ Options.Std.string_of_algebra_solver Options.Std.default_algebra_solver ^ "."]));
+    ("-magma", String (fun str -> magma_path := str; algebra_solver := Magma),
+     mk_arg_desc(["PATH"; "Use Magma at the specified path."]));
+    ("-magma_path", String (fun str -> magma_path := str),
+     mk_arg_desc(["PATH"; "Set the path to Magma."]));
+    ("-no_carry_constraint", Clear carry_constraint, mk_arg_desc([""; "Do not add carry constraints."]));
+    ("-singular", String (fun str -> singular_path := str; algebra_solver := Singular),
+     mk_arg_desc(["PATH"; "Use Singular at the specified path."]));
+    ("-singular_path", String (fun str -> singular_path := str),
+     mk_arg_desc(["PATH"; "Set the path to Singular."]));
+    ("-vo", Symbol (["lex"; "appearing"; "rev_lex"; "rev_appearing"],
+                    (fun str ->
+                      try
+                        variable_ordering := parse_variable_ordering str
+                      with Not_found ->
+                        failwith ("Unknown variable ordering: " ^ str))),
+     mk_arg_desc([""; "Set variable ordering in algebra solver (default is " ^ string_of_variable_ordering !variable_ordering ^ ")."]))
+  ]
 
 
 
