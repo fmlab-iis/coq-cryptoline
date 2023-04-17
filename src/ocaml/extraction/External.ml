@@ -15,9 +15,11 @@ exception ParseError of string
 
 (** Options *)
 
-let keep_temp_files = ref false
 let temp_file_prefix = "coqcryptoline_temp"
 let use_fork = ref false
+let singular_output_sep = "--"
+let magma_ring_name = "R"
+let magma_const_poly n = magma_ring_name ^ "!" ^ n
 
 
 (** Auxiliary string functions *)
@@ -695,6 +697,29 @@ let rec coq_singular_of_pexpr e =
   | PEpow (e', n) ->
 	  (if coq_is_atomic e' then coq_singular_of_pexpr e' else " (" ^ coq_singular_of_pexpr e' ^ ")") ^ "^" ^ string_of_int (int_of_n n)
 
+let rec coq_magma_of_pexpr e =
+  match e with
+  | PEO -> magma_const_poly "0"
+  | PEI -> magma_const_poly "1"
+  | PEc c -> Z.to_string (z_of_coq_z c)
+  | PEX v -> coq_pexpr_string_of_var v
+  | PEadd (e1, e2) ->
+	  (if not (coq_is_opp e1) then coq_magma_of_pexpr e1 else "(" ^ coq_magma_of_pexpr e1 ^ ")")
+      ^ " + "
+      ^ (if not (coq_is_opp e2) && not (coq_is_sub e2) then coq_magma_of_pexpr e2 else "(" ^ coq_magma_of_pexpr e2 ^ ")")
+  | PEsub (e1, e2) ->
+	  (if not (coq_is_opp e1) then coq_magma_of_pexpr e1 else "(" ^ coq_magma_of_pexpr e1 ^ ")")
+      ^ " - "
+      ^ (if not (coq_is_opp e2) && not (coq_is_add e2) && not (coq_is_sub e2) then coq_magma_of_pexpr e2 else "(" ^ coq_magma_of_pexpr e2 ^ ")")
+  | PEmul (e1, e2) ->
+	  (if coq_is_atomic e1 || coq_is_mul e1 || coq_is_pow e1 then coq_magma_of_pexpr e1 else "(" ^ coq_magma_of_pexpr e1 ^ ")")
+      ^ " * "
+      ^ (if coq_is_atomic e2 || coq_is_mul e2 || coq_is_pow e2 then coq_magma_of_pexpr e2 else "(" ^ coq_magma_of_pexpr e2 ^ ")")
+  | PEopp e' ->
+	  "-" ^ (if coq_is_atomic e' then coq_magma_of_pexpr e' else " (" ^ coq_magma_of_pexpr e' ^ ")")
+  | PEpow (e', n) ->
+	  (if coq_is_atomic e' then coq_magma_of_pexpr e' else " (" ^ coq_magma_of_pexpr e' ^ ")") ^ "^" ^ string_of_int (int_of_n n)
+
 module PosOrder = struct
   type t = positive
   let compare = Pervasives.compare
@@ -744,17 +769,20 @@ let split_regexp rexp s =
 let replace e x s =
   Str.global_replace (Str.regexp e) x s
 
+(* Assume there is no space in the input string *)
 let coq_atomic_of_string str =
   let mk_const c = PEc (coq_z_of_z c) in
   let mk_pow t p =
 	if p = 1 then t
 	else PEpow (t, n_of_int p) in
   let mk_var vi = PEX (pos_of_z (Z.of_string vi)) in
+  (* Separate exponent *)
   let (v, e) =
     match (split_regexp "\\^" str) with
     | [v] -> (v, 1)
     | [v; e] -> (v, int_of_string e)
     | _ -> raise (ParseError ("Failed to parse atomic: " ^ str)) in
+  (* Parse base *)
   let (c, v, e) : Z.t * string * int =
     try
       let _ = Str.search_forward (Str.regexp "\\-*[0-9]+") v 0 in
@@ -780,6 +808,7 @@ let coq_mul_terms ts =
   | [] -> PEO
   | t::ts -> List.fold_left (fun res t -> PEmul (res, t)) t ts
 
+(* Assume there is no space in the input string *)
 let coq_mon_of_string str =
   try
     let t = split_regexp "[\\*]" str in
@@ -789,6 +818,8 @@ let coq_mon_of_string str =
     raise (ParseError (msg ^ " " ^ "Failed to parse monomial: " ^ str ^ "."))
 
 let coq_term_of_string str =
+  (* Remove spaces *)
+  let str = replace " " "" str in
   try
     let str = replace "-" "+-" str in
     let mons = List.rev_map (coq_mon_of_string) (split_regexp "[\\+]" str) in
@@ -807,28 +838,153 @@ let run_singular ifile ofile =
     trace ("Execution time of Singular: " ^ string_of_float (t2 -. t1) ^ " seconds") in
   ()
 
+let run_magma ifile ofile =
+  let t1 = Unix.gettimeofday() in
+  let _ = unix (!magma_path ^ " -b " ^ !Options.Std.algebra_solver_args ^ " " ^ ifile ^ " 1> " ^ ofile ^ " 2>&1") in
+  let t2 = Unix.gettimeofday() in
+  let _ =
+    trace "OUTPUT FROM MAGMA:";
+    trace_file ofile;
+    trace "";
+    trace ("Execution time of Magma: " ^ string_of_float (t2 -. t1) ^ " seconds") in
+  ()
+
 let rec peo_list len =
   if len = 0 then []
   else PEO::peo_list (len - 1)
 
-let coq_compute_coefficients_by_div (vars, p, g) =
+let prepare_singular_input_by_div vars p g =
+  let varseq =
+	match vars with
+	| [] -> "x"
+	| _ -> String.concat "," (List.map coq_pexpr_string_of_var vars) in
+  let generator = coq_singular_of_pexpr g in
+  let poly = coq_singular_of_pexpr p in
+  "ring r = integer, (" ^ varseq ^ "), lp;\n"
+  ^ "poly g = " ^ generator ^ ";\n"
+  ^ "poly p = " ^ poly ^ ";\n"
+  ^ "poly c = p / g;\n"
+  ^ "\"" ^ singular_output_sep ^ "\";\n"
+  ^ "c;\n"
+  ^ "exit;\n"
+
+let prepare_magma_input_by_div vars p g =
+  let varseq =
+	match vars with
+	| [] -> "x"
+	| _ -> String.concat "," (List.map coq_pexpr_string_of_var vars) in
+  let varlen = max 1 (List.length vars) in
+  let generator = coq_magma_of_pexpr g in
+  let poly = coq_magma_of_pexpr p in
+  "Z := IntegerRing();\n"
+  ^ "R<" ^ varseq ^ "> := PolynomialRing(Z, " ^ string_of_int varlen ^ ");\n"
+  ^ "g := " ^ generator ^ ";\n"
+  ^ "p := " ^ poly ^ ";\n"
+  ^ "try\n"
+  ^ "  p div g;\n"
+  ^ "catch e\n"
+  ^ "  0;\n"
+  ^ "end try;"
+  ^ "exit;\n"
+
+let prepare_singular_input_by_lift vars p gs =
+  let varseq =
+	match vars with
+	| [] -> "x"
+	| _ -> String.concat "," (List.map coq_pexpr_string_of_var vars) in
+  let generator = if List.length gs = 0 then "0" else (String.concat ",\n  " (List.map coq_singular_of_pexpr gs)) in
+  let poly = coq_singular_of_pexpr p in
+  "ring r = integer, (" ^ varseq ^ "), lp;\n"
+  ^ "ideal gs' = " ^ generator ^ ";\n"
+  ^ "poly p' = " ^ poly ^ ";\n"
+  ^ "\"// First reducing\";\n"
+  ^ "poly q' = reduce(p', gs');\n"
+  ^ "if (q' != 0) {\n"
+  ^ "  \"// Computing Groebner basis\";\n"
+  ^ "  ideal I' = groebner(gs');\n"
+  ^ "  \"// Second reducing\";\n"
+  ^ "  q' = reduce(p', I');\n"
+  ^ "}\n"
+  ^ "q';\n"
+  ^ "if (q' == 0) {\n"
+  ^ "  \"" ^ singular_output_sep ^ "\";\n"
+  ^ "  \"// Lifting\";\n"
+  ^ "  lift(gs', p');\n"
+  ^ "}\n"
+  ^ "exit;\n"
+
+let prepare_magma_input_by_lift vars p gs =
+  let varseq =
+	match vars with
+	| [] -> "x"
+	| _ -> String.concat "," (List.map coq_pexpr_string_of_var vars) in
+  let varlen = max 1 (List.length vars) in
+  let generator = if List.length gs = 0 then magma_const_poly "0" else (String.concat ",\n  " (List.map coq_magma_of_pexpr gs)) in
+  let poly = coq_magma_of_pexpr p in
+  "Z := IntegerRing();\n"
+  ^ magma_ring_name ^ "<" ^ varseq ^ "> := PolynomialRing(Z, " ^ string_of_int varlen ^ ");\n"
+  ^ "G := [" ^ generator ^ "];\n"
+  ^ "p := " ^ poly ^ ";\n"
+  ^ "I := IdealWithFixedBasis(G);\n"
+  ^ "res := p in I;\n"
+  ^ "res;\n"
+  ^ "if res then\n"
+  ^ "  Coordinates(I, p);\n"
+  ^ "end if;\n"
+  ^ "exit;\n"
+
+let read_lines_from_file file =
+  let lines_rev = ref [] in
+  let ch = open_in file in
+  let _ =
+    try
+      while true do
+        let line = String.trim (input_line ch) in
+        if not (line = "" || starts_with line "//") then lines_rev := line::!lines_rev
+      done
+    with
+      End_of_file -> ()
+    | _ -> failwith "Failed to read the output file" in
+  let _ = close_in ch in
+  List.rev !lines_rev
+
+let parse_singular_output_by_div lines =
+  let rec split (coefs, sep_found) lines =
+    match lines with
+    | [] -> coefs
+    | hd::tl when hd = singular_output_sep -> split (coefs, true) tl
+    | hd::tl -> if sep_found then split (hd::coefs, sep_found) tl
+                else split (coefs, sep_found) tl in
+  split ([], false) lines
+
+let parse_magma_output_by_div lines = lines
+
+let parse_singular_output_by_lift lines =
+  let after_eq_sign str =
+    let i = String.index str '=' + 1 in
+    String.sub str i (String.length str - i) in
+  let rec split (is_in_ideal, p_coef_gs, i) lines =
+    match lines with
+    | [] -> (is_in_ideal, List.rev p_coef_gs)
+    | hd::tl when hd = singular_output_sep -> split (is_in_ideal, p_coef_gs, i + 1) tl
+    | hd::tl -> if i = 0 then split (hd = "0", p_coef_gs, i) tl
+                else split (is_in_ideal, (after_eq_sign hd)::p_coef_gs, i) tl in
+  split (false, [], 0) lines
+
+let parse_magma_output_by_lift lines =
+  let rec split (is_in_ideal, p_coef_gs, i) lines =
+    match lines with
+    | [] -> (is_in_ideal, List.rev p_coef_gs)
+    | hd::tl when hd = "[" -> split (is_in_ideal, p_coef_gs, i + 1) tl
+    | hd::tl when hd = "]" -> split (is_in_ideal, p_coef_gs, i) tl
+    | hd::tl -> if i = 0 then split (hd = "true", p_coef_gs, i) tl
+                else split (is_in_ideal, hd::p_coef_gs, i) tl in
+  split (false, [], 0) lines
+
+let coq_compute_coefficients_by_div_singular (vars, p, g) =
   let _ = trace "by div" in
-  let singular_output_sep = "--" in
   let write_to_singular file =
-    let input_text =
-      let varseq =
-		match vars with
-		| [] -> "x"
-		| _ -> String.concat "," (List.map coq_pexpr_string_of_var vars) in
-      let generator = coq_singular_of_pexpr g in
-      let poly = coq_singular_of_pexpr p in
-      "ring r = integer, (" ^ varseq ^ "), lp;\n"
-      ^ "poly g = " ^ generator ^ ";\n"
-      ^ "poly p = " ^ poly ^ ";\n"
-      ^ "poly c = p / g;\n"
-      ^ "\"" ^ singular_output_sep ^ "\";\n"
-      ^ "c;\n"
-      ^ "exit;\n" in
+    let input_text = prepare_singular_input_by_div vars p g in
     let ch = open_out file in
     let _ = output_string ch input_text; close_out ch in
     let _ =
@@ -836,64 +992,50 @@ let coq_compute_coefficients_by_div (vars, p, g) =
       trace_file file;
       trace "" in
     () in
-  let read_singular_output file =
-    let rec split (coefs, sep_found) lines =
-      match lines with
-      | [] -> coefs
-      | hd::tl when hd = singular_output_sep -> split (coefs, true) tl
-      | hd::tl -> if sep_found then split (hd::coefs, sep_found) tl
-                  else split (coefs, sep_found) tl in
-    let lines = ref [] in
-    let ch = open_in file in
-    let _ =
-      try
-        while true do
-	      lines := String.trim (input_line ch)::!lines
-        done
-      with
-        End_of_file -> ()
-      | _ -> failwith "Failed to read the output file" in
-    let _ = close_in ch in
-    split ([], false) (List.rev !lines) in
   let ifile = tmpfile "inputfgb_" "" in
   let ofile = tmpfile "outputfgb_" "" in
   let _ = write_to_singular ifile in
   let _ = run_singular ifile ofile in
-  let coefs = read_singular_output ofile in
+  let coefs = parse_singular_output_by_div (read_lines_from_file ofile) in
   let _ = cleanup [ifile; ofile] in
   match coefs with
   | c::[] -> [coq_term_of_string c]
   | _ -> peo_list 1
 
-let coq_compute_coefficients_by_lift (vars, p, gs) =
+let coq_compute_coefficients_by_div_magma (vars, p, g) =
+  let _ = trace "by div" in
+  let write_to_magma file =
+    let input_text = prepare_magma_input_by_div vars p g in
+    let ch = open_out file in
+    let _ = output_string ch input_text; close_out ch in
+    let _ =
+      trace "INPUT TO MAGMA:";
+      trace_file file;
+      trace "" in
+    () in
+  let ifile = tmpfile "inputfgb_" "" in
+  let ofile = tmpfile "outputfgb_" "" in
+  let _ = write_to_magma ifile in
+  let _ = run_magma ifile ofile in
+  let coefs = parse_magma_output_by_div (read_lines_from_file ofile) in
+  let _ = cleanup [ifile; ofile] in
+  match coefs with
+  | [] -> peo_list 1
+  | _ ->
+     (* Magma may print a polynomial as several lines depending on the screen width *)
+     let c = String.concat " " coefs in
+     [coq_term_of_string c]
+
+let coq_compute_coefficients_by_div (vars, p, g) =
+  match !algebra_solver with
+  | Singular -> coq_compute_coefficients_by_div_singular (vars, p, g)
+  | Magma -> coq_compute_coefficients_by_div_magma (vars, p, g)
+  | _ -> failwith ("Unsupported algebra solver " ^ string_of_algebra_solver !algebra_solver)
+
+let coq_compute_coefficients_by_lift_singular (vars, p, gs) =
   let _ = trace "by lift" in
-  let singular_output_sep = "--" in
   let write_to_singular file =
-    let input_text =
-      let varseq =
-		match vars with
-		| [] -> "x"
-		| _ -> String.concat "," (List.map coq_pexpr_string_of_var vars) in
-      let generator = if List.length gs = 0 then "0" else (String.concat ",\n  " (List.map coq_singular_of_pexpr gs)) in
-      let poly = coq_singular_of_pexpr p in
-      "ring r = integer, (" ^ varseq ^ "), lp;\n"
-      ^ "ideal gs' = " ^ generator ^ ";\n"
-      ^ "poly p' = " ^ poly ^ ";\n"
-      ^ "\"// First reducing\";\n"
-      ^ "poly q' = reduce(p', gs');\n"
-      ^ "if (q' != 0) {\n"
-      ^ "  \"// Computing Groebner basis\";\n"
-      ^ "  ideal I' = groebner(gs');\n"
-      ^ "  \"// Second reducing\";\n"
-      ^ "  q' = reduce(p', I');\n"
-      ^ "}\n"
-      ^ "q';\n"
-      ^ "if (q' == 0) {\n"
-      ^ "  \"" ^ singular_output_sep ^ "\";\n"
-      ^ "  \"// Lifting\";\n"
-      ^ "  lift(gs', p');\n"
-      ^ "}\n"
-      ^ "exit;\n" in
+    let input_text = prepare_singular_input_by_lift vars p gs in
     let ch = open_out file in
     let _ = output_string ch input_text; close_out ch in
     let _ =
@@ -901,41 +1043,50 @@ let coq_compute_coefficients_by_lift (vars, p, gs) =
       trace_file file;
       trace "" in
     () in
-  let read_singular_output file =
-    let rec split (is_in_ideal, p_coef_gs, i) lines =
-      match lines with
-      | [] -> (is_in_ideal, List.rev p_coef_gs)
-      | hd::tl when hd = singular_output_sep -> split (is_in_ideal, p_coef_gs, i + 1) tl
-      | hd::tl -> if i = 0 then split (hd = "0", p_coef_gs, i) tl
-                  else split (is_in_ideal, hd::p_coef_gs, i) tl in
-    let lines = ref [] in
-    let ch = open_in file in
-    let _ =
-      try
-        while true do
-          let line = String.trim (input_line ch) in
-          if not (line = "" || starts_with line "//") then lines := line::!lines
-        done
-      with
-        End_of_file -> ()
-      | _ -> failwith "Failed to read the output file" in
-    let _ = close_in ch in
-    split (false, [], 0) (List.rev !lines) in
-  let after_eq_sign str =
-    let i = String.index str '=' + 1 in
-    String.sub str i (String.length str - i) in
   let ifile = tmpfile "inputfgb_" "" in
   let ofile = tmpfile "outputfgb_" "" in
   let _ = write_to_singular ifile in
   let _ = run_singular ifile ofile in
-  let (is_in_ideal, p_coef_gs) = read_singular_output ofile in
+  let (is_in_ideal, p_coef_gs) = parse_singular_output_by_lift (read_lines_from_file ofile) in
   let _ = cleanup [ifile; ofile] in
   let _ = trace("= in ideal? =\n" ^ string_of_bool is_in_ideal) in
   if is_in_ideal then
-    let p_coef_gs = List.map (fun t -> coq_term_of_string (after_eq_sign t)) p_coef_gs in
+    let p_coef_gs = List.map (fun t -> coq_term_of_string t) p_coef_gs in
     (true, p_coef_gs)
   else
     (false, peo_list (List.length gs))
+
+let coq_compute_coefficients_by_lift_magma (vars, p, gs) =
+  let _ = trace "by lift" in
+  let write_to_magma file =
+    let input_text = prepare_magma_input_by_lift vars p gs in
+    let ch = open_out file in
+    let _ = output_string ch input_text; close_out ch in
+    let _ =
+      trace "INPUT TO MAGMA:";
+      trace_file file;
+      trace "" in
+    () in
+  let ifile = tmpfile "inputfgb_" "" in
+  let ofile = tmpfile "outputfgb_" "" in
+  let _ = write_to_magma ifile in
+  let _ = run_magma ifile ofile in
+  let (is_in_ideal, p_coef_gs) = parse_magma_output_by_lift (read_lines_from_file ofile) in
+  let _ = cleanup [ifile; ofile] in
+  let _ = trace("= in ideal? =\n" ^ string_of_bool is_in_ideal) in
+  if is_in_ideal then
+    (* Magma may print a polymonial as several lines *)
+    let p_coef_gs = String.concat " " p_coef_gs |> split_regexp "," in
+    let p_coef_gs = List.map coq_term_of_string p_coef_gs in
+    (true, p_coef_gs)
+  else
+    (false, peo_list (List.length gs))
+
+let coq_compute_coefficients_by_lift (vars, p, gs) =
+  match !algebra_solver with
+  | Singular -> coq_compute_coefficients_by_lift_singular (vars, p, gs)
+  | Magma -> coq_compute_coefficients_by_lift_magma (vars, p, gs)
+  | _ -> failwith("Unsupported algebra solver " ^ string_of_algebra_solver !algebra_solver)
 
 let coq_compute_coefficients_by_lift (vars, p, gs) =
   let _ = trace ("Try #0") in
@@ -993,49 +1144,53 @@ let run_singular_lwt header ifile ofile =
   let _ = Options.WithLwt.log_unlock () in
   Lwt.return_unit
 
+let run_magma_lwt header ifile ofile =
+  let t1 = Unix.gettimeofday() in
+  let%lwt _ =
+    Options.WithLwt.unix (!magma_path ^ " -b " ^ !Options.Std.algebra_solver_args ^ " \"" ^ ifile ^ "\" 1> \"" ^ ofile ^ "\" 2>&1") in
+  let t2 = Unix.gettimeofday() in
+  let%lwt _ = Options.WithLwt.log_lock () in
+  let%lwt _ = write_header_to_log header in
+  let%lwt _ = Options.WithLwt.trace "INPUT TO MAGMA:" in
+  let%lwt _ = Options.WithLwt.trace_file ifile in
+  let%lwt _ = Options.WithLwt.trace "" in
+  let%lwt _ = Options.WithLwt.trace ("Execution time of Magma: " ^ string_of_float (t2 -. t1) ^ " seconds") in
+  let%lwt _ = Options.WithLwt.trace "OUTPUT FROM MAGMA:" in
+  let%lwt _ = Options.WithLwt.trace_file ofile in
+  let%lwt _ = Options.WithLwt.trace "" in
+  let _ = Options.WithLwt.log_unlock () in
+  Lwt.return_unit
+
+let write_text_to_file_lwt text file =
+  let%lwt ifd = Lwt_unix.openfile file
+                  [Lwt_unix.O_WRONLY; Lwt_unix.O_CREAT; Lwt_unix.O_TRUNC]
+                  0o600 in
+  let ch = Lwt_io.of_fd ~mode:Lwt_io.output ifd in
+  let%lwt _ = Lwt_io.write ch text in
+  let%lwt _ = Lwt_io.close ch in
+  Lwt.return_unit
+
+let read_lines_from_file_lwt file =
+  let%lwt ofd = Lwt_unix.openfile file [Lwt_unix.O_RDONLY] 0o600 in
+  let ch = Lwt_io.of_fd ~mode:Lwt_io.input ofd in
+  let%lwt lines =
+    try%lwt
+          Lwt.return (Lwt_io.read_lines ch)
+    with _ -> failwith "Failed to read the output file" in
+  let%lwt lines = Lwt_stream.to_list lines in
+  let%lwt _ = Lwt_io.close ch in
+  Lwt.return lines
+
 let coq_compute_coefficients_by_div_lwt header (vars, p, g) =
   let _ = trace "by div" in
-  let singular_output_sep = "--" in
   let ifile = tmpfile "inputfgb_" "" in
   let ofile = tmpfile "outputfgb_" "" in
   let write_to_singular file =
-    let input_text =
-      let varseq =
-		match vars with
-		| [] -> "x"
-		| _ -> String.concat "," (List.map coq_pexpr_string_of_var vars) in
-      let generator = coq_singular_of_pexpr g in
-      let poly = coq_singular_of_pexpr p in
-      "ring r = integer, (" ^ varseq ^ "), lp;\n"
-      ^ "poly g = " ^ generator ^ ";\n"
-      ^ "poly p = " ^ poly ^ ";\n"
-      ^ "poly c = p / g;\n"
-      ^ "\"" ^ singular_output_sep ^ "\";\n"
-      ^ "c;\n"
-      ^ "exit;\n" in
-    let%lwt ifd = Lwt_unix.openfile file
-                    [Lwt_unix.O_WRONLY; Lwt_unix.O_CREAT; Lwt_unix.O_TRUNC]
-                    0o600 in
-    let ch = Lwt_io.of_fd ~mode:Lwt_io.output ifd in
-    let%lwt _ = Lwt_io.write ch input_text in
-    let%lwt _ = Lwt_io.close ch in
-    Lwt.return_unit in
-  let read_singular_output ofile =
-    let rec split (coefs, sep_found) lines =
-      match lines with
-      | [] -> coefs
-      | hd::tl when hd = singular_output_sep -> split (coefs, true) tl
-      | hd::tl -> if sep_found then split (hd::coefs, sep_found) tl
-                  else split (coefs, sep_found) tl in
-    let%lwt ofd = Lwt_unix.openfile ofile [Lwt_unix.O_RDONLY] 0o600 in
-    let ch = Lwt_io.of_fd ~mode:Lwt_io.input ofd in
-    let%lwt lines =
-      try%lwt
-            Lwt.return (Lwt_io.read_lines ch)
-      with _ -> failwith "Failed to read the output file" in
-    let%lwt lines = Lwt_stream.to_list lines in
-    let%lwt _ = Lwt_io.close ch in
-    Lwt.return (split ([], false) lines) in
+    let input_text = prepare_singular_input_by_div vars p g in
+    write_text_to_file_lwt input_text file in
+  let read_singular_output file =
+    let%lwt lines = read_lines_from_file_lwt file in
+    Lwt.return (parse_singular_output_by_div lines) in
   let t1 = Unix.gettimeofday() in
   let%lwt _ = write_to_singular ifile in
   let%lwt _ = run_singular_lwt header ifile ofile in
@@ -1050,64 +1205,14 @@ let coq_compute_coefficients_by_div_lwt header (vars, p, g) =
 
 let coq_compute_coefficients_by_lift_lwt header (vars, p, gs) =
   let _ = trace "by lift" in
-  let singular_output_sep = "--" in
   let ifile = tmpfile "inputfgb_" "" in
   let ofile = tmpfile "outputfgb_" "" in
   let write_to_singular file =
-    let input_text =
-      let varseq =
-		match vars with
-		| [] -> "x"
-		| _ -> String.concat "," (List.map coq_pexpr_string_of_var vars) in
-      let generator = if List.length gs = 0 then "0" else (String.concat ",\n  " (List.map coq_singular_of_pexpr gs)) in
-      let poly = coq_singular_of_pexpr p in
-      "ring r = integer, (" ^ varseq ^ "), lp;\n"
-      ^ "ideal gs' = " ^ generator ^ ";\n"
-      ^ "poly p' = " ^ poly ^ ";\n"
-      ^ "\"// First reducing\";\n"
-      ^ "poly q' = reduce(p', gs');\n"
-      ^ "if (q' != 0) {\n"
-      ^ "  \"// Computing Groebner basis\";\n"
-      ^ "  ideal I' = groebner(gs');\n"
-      ^ "  \"// Second reducing\";\n"
-      ^ "  q' = reduce(p', I');\n"
-      ^ "}\n"
-      ^ "q';\n"
-      ^ "if (q' == 0) {\n"
-      ^ "  \"" ^ singular_output_sep ^ "\";\n"
-      ^ "  \"// Lifting\";\n"
-      ^ "  lift(gs', p');\n"
-      ^ "}\n"
-      ^ "exit;\n" in
-    let%lwt ifd = Lwt_unix.openfile file
-                    [Lwt_unix.O_WRONLY; Lwt_unix.O_CREAT; Lwt_unix.O_TRUNC]
-                    0o600 in
-    let ch = Lwt_io.of_fd ~mode:Lwt_io.output ifd in
-    let%lwt _ = Lwt_io.write ch input_text in
-    let%lwt _ = Lwt_io.close ch in
-    Lwt.return_unit in
-  let read_singular_output ofile =
-    let rec split (is_in_ideal, p_coef_gs, i) lines =
-      match lines with
-      | [] -> (is_in_ideal, List.rev p_coef_gs)
-      | hd::tl when hd = singular_output_sep -> split (is_in_ideal, p_coef_gs, i + 1) tl
-      | hd::tl ->
-         let hd = String.trim hd in
-         if hd = "" || starts_with hd "//" then split (is_in_ideal, p_coef_gs, i) tl (* skip empty lines and comments *)
-         else if i = 0 then split (hd = "0", p_coef_gs, i) tl
-         else split (is_in_ideal, hd::p_coef_gs, i) tl in
-    let%lwt ofd = Lwt_unix.openfile ofile [Lwt_unix.O_RDONLY] 0o600 in
-    let ch = Lwt_io.of_fd ~mode:Lwt_io.input ofd in
-    let%lwt lines =
-      try%lwt
-            Lwt.return (Lwt_io.read_lines ch)
-      with _ -> failwith "Failed to read the output file" in
-    let%lwt lines = Lwt_stream.to_list lines in
-    let%lwt _ = Lwt_io.close ch in
-    Lwt.return (split (false, [], 0) lines) in
-  let after_eq_sign str =
-    let i = String.index str '=' + 1 in
-    String.sub str i (String.length str - i) in
+    let input_text = prepare_singular_input_by_lift vars p gs in
+    write_text_to_file_lwt input_text file in
+  let read_singular_output file =
+    let%lwt lines = read_lines_from_file_lwt file in
+    Lwt.return (parse_singular_output_by_lift lines) in
   let t1 = Unix.gettimeofday() in
   let%lwt _ = write_to_singular ifile in
   let%lwt _ = run_singular_lwt header ifile ofile in
@@ -1115,7 +1220,7 @@ let coq_compute_coefficients_by_lift_lwt header (vars, p, gs) =
   let%lwt _ = cleanup_lwt [ifile; ofile] in
   let%lwt res =
     if is_in_ideal then
-      let%lwt p_coef_gs = Lwt_list.map_s (fun t -> Lwt.return (coq_term_of_string (after_eq_sign t))) p_coef_gs in
+      let%lwt p_coef_gs = Lwt_list.map_s (fun t -> Lwt.return (coq_term_of_string t)) p_coef_gs in
       Lwt.return (true, p_coef_gs)
     else
       Lwt.return (false, (peo_list (List.length gs))) in

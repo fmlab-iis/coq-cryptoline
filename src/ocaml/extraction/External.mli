@@ -21,7 +21,6 @@ val string_of_char_list : char list -> string
 val string_of_coq_eexp : SSA.SSA.eexp -> string
 val string_of_coq_ebexp : SSA.SSA.ebexp -> string
 
-val keep_temp_files : bool ref
 val use_fork : bool ref
 
 val ext_all_unsat_impl : cnf list -> bool
