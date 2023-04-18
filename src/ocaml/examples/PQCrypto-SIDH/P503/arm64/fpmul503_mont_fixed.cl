@@ -1804,9 +1804,7 @@ mov c7 L0xffffffffe9f0;
         limbs 64 [b0, b1, b2, b3, b4, b5, b6, b7]
         limbs 64 [m0, m1, m2, m3, m4, m5, m6, m7]
 &&
-(*
   limbs 64 [c0, c1, c2, c3, c4, c5, c6, c7] <u
   2@512 * limbs 64 [m0, m1, m2, m3, m4, m5, m6, m7]
-*)
 }
 
