@@ -948,6 +948,10 @@ let read_lines_from_file file =
   let _ = close_in ch in
   List.rev !lines_rev
 
+(* Remove unused output lines *)
+let preprocess_singular_outputs lines =
+  List.map String.trim lines |> List.filter (fun line -> not (line = "" || starts_with line "//"))
+
 let parse_singular_output_by_div lines =
   let rec split (coefs, sep_found) lines =
     match lines with
@@ -955,9 +959,11 @@ let parse_singular_output_by_div lines =
     | hd::tl when hd = singular_output_sep -> split (coefs, true) tl
     | hd::tl -> if sep_found then split (hd::coefs, sep_found) tl
                 else split (coefs, sep_found) tl in
-  split ([], false) lines
+  preprocess_singular_outputs lines |> split ([], false)
 
-let parse_magma_output_by_div lines = lines
+let parse_magma_output_by_div lines =
+  (* Magma may print a polynomial as several lines depending on the screen width *)
+  [replace "[\\| ]" "" (String.concat " " lines)]
 
 let parse_singular_output_by_lift lines =
   let after_eq_sign str =
@@ -968,8 +974,9 @@ let parse_singular_output_by_lift lines =
     | [] -> (is_in_ideal, List.rev p_coef_gs)
     | hd::tl when hd = singular_output_sep -> split (is_in_ideal, p_coef_gs, i + 1) tl
     | hd::tl -> if i = 0 then split (hd = "0", p_coef_gs, i) tl
-                else split (is_in_ideal, (after_eq_sign hd)::p_coef_gs, i) tl in
-  split (false, [], 0) lines
+                else try split (is_in_ideal, (after_eq_sign hd)::p_coef_gs, i) tl
+                     with Not_found -> split (is_in_ideal, p_coef_gs, i) tl in
+  preprocess_singular_outputs lines |> split (false, [], 0)
 
 let parse_magma_output_by_lift lines =
   let rec split (is_in_ideal, p_coef_gs, i) lines =
@@ -979,7 +986,9 @@ let parse_magma_output_by_lift lines =
     | hd::tl when hd = "]" -> split (is_in_ideal, p_coef_gs, i) tl
     | hd::tl -> if i = 0 then split (hd = "true", p_coef_gs, i) tl
                 else split (is_in_ideal, hd::p_coef_gs, i) tl in
-  split (false, [], 0) lines
+  let (is_in_ideal, p_coef_gs) = split (false, [], 0) lines in
+  (* Magma may print a polynomial as several lines depending on the screen width *)
+  (is_in_ideal, String.concat " " p_coef_gs |> replace "[\\| ]" "" |> split_regexp ",")
 
 let coq_compute_coefficients_by_div_singular (vars, p, g) =
   let _ = trace "by div" in
@@ -1020,11 +1029,8 @@ let coq_compute_coefficients_by_div_magma (vars, p, g) =
   let coefs = parse_magma_output_by_div (read_lines_from_file ofile) in
   let _ = cleanup [ifile; ofile] in
   match coefs with
-  | [] -> peo_list 1
-  | _ ->
-     (* Magma may print a polynomial as several lines depending on the screen width *)
-     let c = String.concat " " coefs in
-     [coq_term_of_string c]
+  | c::[] -> [coq_term_of_string c]
+  | _ -> peo_list 1
 
 let coq_compute_coefficients_by_div (vars, p, g) =
   match !algebra_solver with
@@ -1050,11 +1056,8 @@ let coq_compute_coefficients_by_lift_singular (vars, p, gs) =
   let (is_in_ideal, p_coef_gs) = parse_singular_output_by_lift (read_lines_from_file ofile) in
   let _ = cleanup [ifile; ofile] in
   let _ = trace("= in ideal? =\n" ^ string_of_bool is_in_ideal) in
-  if is_in_ideal then
-    let p_coef_gs = List.map (fun t -> coq_term_of_string t) p_coef_gs in
-    (true, p_coef_gs)
-  else
-    (false, peo_list (List.length gs))
+  if is_in_ideal then (true, List.map coq_term_of_string p_coef_gs)
+  else (false, peo_list (List.length gs))
 
 let coq_compute_coefficients_by_lift_magma (vars, p, gs) =
   let _ = trace "by lift" in
@@ -1074,13 +1077,8 @@ let coq_compute_coefficients_by_lift_magma (vars, p, gs) =
   let (is_in_ideal, p_coef_gs) = parse_magma_output_by_lift (read_lines_from_file ofile) in
   let _ = cleanup [ifile; ofile] in
   let _ = trace("= in ideal? =\n" ^ string_of_bool is_in_ideal) in
-  if is_in_ideal then
-    (* Magma may print a polymonial as several lines *)
-    let p_coef_gs = String.concat " " p_coef_gs |> split_regexp "," in
-    let p_coef_gs = List.map coq_term_of_string p_coef_gs in
-    (true, p_coef_gs)
-  else
-    (false, peo_list (List.length gs))
+  if is_in_ideal then (true, List.map coq_term_of_string p_coef_gs)
+  else (false, peo_list (List.length gs))
 
 let coq_compute_coefficients_by_lift (vars, p, gs) =
   match !algebra_solver with
@@ -1181,8 +1179,8 @@ let read_lines_from_file_lwt file =
   let%lwt _ = Lwt_io.close ch in
   Lwt.return lines
 
-let coq_compute_coefficients_by_div_lwt header (vars, p, g) =
-  let _ = trace "by div" in
+let coq_compute_coefficients_by_div_lwt_singular header (vars, p, g) =
+  let%lwt _ = Options.WithLwt.trace "by div" in
   let ifile = tmpfile "inputfgb_" "" in
   let ofile = tmpfile "outputfgb_" "" in
   let write_to_singular file =
@@ -1203,8 +1201,36 @@ let coq_compute_coefficients_by_div_lwt header (vars, p, g) =
   let t2 = Unix.gettimeofday() in
   Lwt.return (res, string_of_running_time t1 t2)
 
-let coq_compute_coefficients_by_lift_lwt header (vars, p, gs) =
-  let _ = trace "by lift" in
+let coq_compute_coefficients_by_div_lwt_magma header (vars, p, g) =
+  let%lwt _ = Options.WithLwt.trace "by div" in
+  let ifile = tmpfile "inputfgb_" "" in
+  let ofile = tmpfile "outputfgb_" "" in
+  let write_to_magma file =
+    let input_text = prepare_magma_input_by_div vars p g in
+    write_text_to_file_lwt input_text file in
+  let read_magma_output file =
+    let%lwt lines = read_lines_from_file_lwt file in
+    Lwt.return (parse_magma_output_by_div lines) in
+  let t1 = Unix.gettimeofday() in
+  let%lwt _ = write_to_magma ifile in
+  let%lwt _ = run_magma_lwt header ifile ofile in
+  let%lwt coefs = read_magma_output ofile in
+  let%lwt _ = cleanup_lwt [ifile; ofile] in
+  let%lwt res =
+    Lwt.return (match coefs with
+                | c::[] -> [coq_term_of_string c]
+                | _ -> peo_list 1) in
+  let t2 = Unix.gettimeofday() in
+  Lwt.return (res, string_of_running_time t1 t2)
+
+let coq_compute_coefficients_by_div_lwt header (vars, p, g) =
+  match !algebra_solver with
+  | Singular -> coq_compute_coefficients_by_div_lwt_singular header (vars, p, g)
+  | Magma -> coq_compute_coefficients_by_div_lwt_magma header (vars, p, g)
+  | _ -> failwith ("Unsupported algebra solver " ^ string_of_algebra_solver !algebra_solver)
+
+let coq_compute_coefficients_by_lift_lwt_singular header (vars, p, gs) =
+  let%lwt _ = Options.WithLwt.trace "by lift" in
   let ifile = tmpfile "inputfgb_" "" in
   let ofile = tmpfile "outputfgb_" "" in
   let write_to_singular file =
@@ -1226,6 +1252,36 @@ let coq_compute_coefficients_by_lift_lwt header (vars, p, gs) =
       Lwt.return (false, (peo_list (List.length gs))) in
   let t2 = Unix.gettimeofday() in
   Lwt.return (res, string_of_running_time t1 t2)
+
+let coq_compute_coefficients_by_lift_lwt_magma header (vars, p, gs) =
+  let%lwt _ = Options.WithLwt.trace "by lift" in
+  let ifile = tmpfile "inputfgb_" "" in
+  let ofile = tmpfile "outputfgb_" "" in
+  let write_to_magma file =
+    let input_text = prepare_magma_input_by_lift vars p gs in
+    write_text_to_file_lwt input_text file in
+  let read_magma_output file =
+    let%lwt lines = read_lines_from_file_lwt file in
+    Lwt.return (parse_magma_output_by_lift lines) in
+  let t1 = Unix.gettimeofday() in
+  let%lwt _ = write_to_magma ifile in
+  let%lwt _ = run_magma_lwt header ifile ofile in
+  let%lwt (is_in_ideal, p_coef_gs) = read_magma_output ofile in
+  let%lwt _ = cleanup_lwt [ifile; ofile] in
+  let%lwt res =
+    if is_in_ideal then
+      let%lwt p_coef_gs = Lwt_list.map_s (fun t -> Lwt.return (coq_term_of_string t)) p_coef_gs in
+      Lwt.return (true, p_coef_gs)
+    else
+      Lwt.return (false, (peo_list (List.length gs))) in
+  let t2 = Unix.gettimeofday() in
+  Lwt.return (res, string_of_running_time t1 t2)
+
+let coq_compute_coefficients_by_lift_lwt header (vars, p, g) =
+  match !algebra_solver with
+  | Singular -> coq_compute_coefficients_by_lift_lwt_singular header (vars, p, g)
+  | Magma -> coq_compute_coefficients_by_lift_lwt_magma header (vars, p, g)
+  | _ -> failwith ("Unsupported algebra solver " ^ string_of_algebra_solver !algebra_solver)
 
 let coq_compute_coefficients_by_lift_lwt header (vars, p, gs) =
   let%lwt ((in_ideal, _), time) = coq_compute_coefficients_by_lift_lwt header (vars, p, []) in
