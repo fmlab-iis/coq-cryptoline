@@ -31,7 +31,12 @@ let ext_solve_imp_list = External.ext_solve_imp_list_impl
     TypEnv.SSATE.env -> QFBV.QFBV.bexp list -> bool **)
 
 let verify_qfbv_bexps fE es =
-  let (_, cnfs) = bb_hbexps_cache fE (tmap hash_bexp es) in ext_all_unsat cnfs
+  let t1 = Unix.gettimeofday() in
+  let (_, cnfs) = bb_hbexps_cache fE (tmap hash_bexp es) in
+  let res = ext_all_unsat cnfs in
+  let t2 = Unix.gettimeofday() in
+  let _ = print_endline (Printf.sprintf "Time in CoqQFBV:\t\t\t\t\t%f seconds" (t2 -. t1)) in
+  res
 
 (** val verify_rspec_algsnd : options -> SSALite.SSALite.spec -> bool **)
 
