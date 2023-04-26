@@ -27,62 +27,12 @@ let args_verifier =
   [
     ("-algebra_args", String (fun str -> algebra_solver_args := str),
      mk_arg_desc(["ARGS"; "Specify additional arguments passed to the algebra solver."]));
-    ("-algebra_smt_expn_op", String (fun str -> native_smtlib_expn_operator := Some str),
-     mk_arg_desc(["OP"; "Specify the exponential operator nativelly supported by SMT solver"; "(specified by -algebra_solver) for algebraic properties."]));
-    ("-algebra_solver",
-     String (fun str -> algebra_solver := Options.Std.parse_algebra_solver str),
-     mk_arg_desc(["";
-                  "Specify the algebra solver, which can be "
-                  ^ Options.Std.string_of_algebra_solver Options.Std.Singular ^ ", "
-                  ^ Options.Std.string_of_algebra_solver Options.Std.Sage ^ ", "
-                  ^ Options.Std.string_of_algebra_solver Options.Std.Magma ^ ",";
-                  Options.Std.string_of_algebra_solver Options.Std.Mathematica ^ ", "
-                  ^ Options.Std.string_of_algebra_solver Options.Std.Macaulay2 ^ ", "
-                  ^ Options.Std.string_of_algebra_solver Options.Std.Maple ^ ", or "
-                  ^ "smt:SMT_SOLVER where SMT_SOLVER";
-                  "is the name of the SMT solver which accepts inputs in SMTLIB";
-                  "format. The default algebra solver is " ^ Options.Std.string_of_algebra_solver Options.Std.default_algebra_solver ^ "."]));
-    ("-br", Set use_binary_repr, mk_arg_desc(["       Always use binary representation in SMTLIB outputs. Otherwise,"; "hexadecimal representation is used if applicable."]));
-    ("-btor", Set use_btor, mk_arg_desc(["     Output btor format to Boolector"]));
-    (*    ("-disable_rewriting", Clear apply_rewriting, mk_arg_desc([""; "Disable rewriting of assignments (at program level) and equalities"; "(at polynomial level)."])); *) (* REDEFINED FOR COQCRYPTOLINE *)
-    ("-expand-poly", Set Options.Std.expand_poly, mk_arg_desc([""; "Expand polynomials before sending them to computer algebra systems"; "(experimental)"]));
-    ("-isafety", Set incremental_safety, mk_arg_desc(["  Verify program safety incrementally."]));
-    ("-isafety_timeout", Int (fun i -> incremental_safety_timeout := i), mk_arg_desc(["INT"; "Set initial timeout for incremental verification of program safety."]));
-    ("-macaulay2", String (fun str -> macaulay2_path := str; algebra_solver := Macaulay2),
-     mk_arg_desc(["PATH"; "Use Macaulay2 at the specified path."]));
-    ("-macaulay2_path", String (fun str -> macaulay2_path := str),
-     mk_arg_desc(["PATH"; "Set the path to Macaulay2."]));
-    ("-magma", String (fun str -> magma_path := str; algebra_solver := Magma),
-     mk_arg_desc(["PATH"; "Use Magma at the specified path."]));
-    ("-magma_path", String (fun str -> magma_path := str),
-     mk_arg_desc(["PATH"; "Set the path to Magma."]));
-    ("-maple", String (fun str -> maple_path := str; algebra_solver := Maple),
-     mk_arg_desc(["PATH"; "Use Maple at the specified path."]));
-    ("-maple_path", String (fun str -> maple_path := str),
-     mk_arg_desc(["PATH"; "Set the path to Maple."]));
-    ("-mathematica", String (fun str -> mathematica_path := str; algebra_solver := Mathematica),
-     mk_arg_desc(["PATH"; "Use Mathematica command-line script interpreter at the specified"; "path."]));
-    ("-mathematica_path", String (fun str -> mathematica_path := str),
-     mk_arg_desc(["PATH"; "Set the path to Mathematica command-line script interpreter."]));
     ("-no_carry_constraint", Clear carry_constraint, mk_arg_desc([""; "Do not add carry constraints."]));
-    ("-qfbv_args", String (fun str -> range_solver_args := str),
-     mk_arg_desc(["ARGS"; "Specify additional arguments passed to the QF_BV solver."]));
-    ("-qfbv_solver", String (fun str -> range_solver := str),
-     mk_arg_desc(["PATH"; "Specify the QF_BV solver (default is " ^ default_range_solver ^ "). The QF_BV solver";
-                  "must output one of \"sat\", \"unsat\", or \"unknown\" for any QF_BV";
-                  "query in SMTLIB format."]));
-    ("-re", Set polys_rewrite_replace_eexp, mk_arg_desc(["\t     Replace expressions rather than variables in the rewriting of"; "polynomials (experimental)."]));
-    ("-sage", String (fun str -> sage_path := str; algebra_solver := Sage),
-     mk_arg_desc(["PATH"; "Use Sage at the specified path."]));
-    ("-sage_path", String (fun str -> sage_path := str),
-     mk_arg_desc(["PATH"; "Set the path to Sage."]));
     ("-singular", String (fun str -> singular_path := str; algebra_solver := Singular),
      mk_arg_desc(["PATH"; "Use Singular at the specified path."]));
     ("-singular_path", String (fun str -> singular_path := str),
      mk_arg_desc(["PATH"; "Set the path to Singular."]));
     ("-slicing", Set apply_slicing, mk_arg_desc(["  Enable slicing."]));
-    ("-track-split", Set track_split, mk_arg_desc([""; "Track splits of atoms."]));
-    ("-two_phase_rewriting", Set two_phase_rewriting, mk_arg_desc [""; "Use two-phase rewriting in verifying algebraic specifications."; "Note that single-phase rewriting is still used when -cli is"; "enabled."]);
     ("-vo", Symbol (["lex"; "appearing"; "rev_lex"; "rev_appearing"],
                     (fun str ->
                       try
