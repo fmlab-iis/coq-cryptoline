@@ -20,9 +20,19 @@ let args = List.sort (fun (argname1, _, _) (argname2, _, _) -> Stdlib.compare ar
 
 let usage = "Usage: coqcryptoline.exe OPTIONS FILE\n"
 
+let check_supported_by_coqcryptoline s =
+  let only_ecut_or_rcut i =
+    match i with
+    | Icut (_::_, []) -> true
+    | Icut ([], _::_) -> true
+    | _ -> false in
+  if List.exists only_ecut_or_rcut s.sprog then failwith("Ecut and rcut instructions are not supported by CoqCryptoLine.")
+  else ()
+
 let parse_and_check file =
   let (vs, s) = Common.parse_and_check file in
   let vs = VS.of_list vs in
+  let _ = check_supported_by_coqcryptoline s in
   let coq_spec = Translator.Visitor.visit_spec vs s in
   if Extraction.DSL.DSL.well_formed_spec coq_spec then (vs, s, coq_spec)
   else failwith ("The program is not well-formed.")
